@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>MCPhoto.Firebase</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MVP 1차: 서비스 계정(Admin SDK) 직결. 인터페이스 추상화로 배포 시 규칙 준수 경로 전환 (architecture §6.4) -->
+    <PackageReference Include="FirebaseAdmin" Version="3.1.0" />
+    <PackageReference Include="Google.Cloud.Firestore" Version="3.9.0" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.10.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MCPhoto.Core\MCPhoto.Core.csproj" />
+  </ItemGroup>
+
+</Project>

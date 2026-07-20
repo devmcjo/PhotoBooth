@@ -1,0 +1,18 @@
+<Project>
+  <!-- 전 프로젝트 공통 빌드 속성 (WBS Step 1) -->
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- 변경 프로젝트 warning 0 원칙(build-verify Step3). 경고를 명시적으로 감시 -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- 어셈블리 메타데이터 -->
+    <Company>MCPhoto</Company>
+    <Product>MC포토</Product>
+    <NeutralLanguage>ko-KR</NeutralLanguage>
+    <!-- 결정적 빌드 -->
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,28 @@
+<Window x:Class="MCPhoto.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MCPhoto.App"
+        mc:Ignorable="d"
+        Title="MC포토" Height="720" Width="1280"
+        MinHeight="720" MinWidth="1280"
+        Background="#141018"
+        PreviewMouseDown="OnAnyUserActivity"
+        PreviewKeyDown="OnAnyUserActivity">
+    <Grid x:Name="RootGrid">
+        <!-- 상태별 화면 스왑(CurrentViewModel → DataTemplate로 View 해결) -->
+        <ContentControl Content="{Binding CurrentViewModel}"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch" />
+
+        <!-- 좌상단 3초 롱프레스 → 관리자 진입(투명 히트 영역) -->
+        <Border x:Name="AdminCorner"
+                Width="80" Height="80"
+                HorizontalAlignment="Left" VerticalAlignment="Top"
+                Background="Transparent"
+                PreviewMouseLeftButtonDown="OnAdminCornerDown"
+                PreviewMouseLeftButtonUp="OnAdminCornerUp"
+                MouseLeave="OnAdminCornerUp" />
+    </Grid>
+</Window>

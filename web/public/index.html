@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>MC포토 다운로드</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1 class="app__title">MC포토</h1>
+      </header>
+
+      <!-- 로딩 -->
+      <section id="state-loading" class="state" aria-live="polite">
+        <div class="spinner" role="status" aria-label="불러오는 중"></div>
+        <p class="state__msg">결과물을 불러오는 중…</p>
+      </section>
+
+      <!-- 성공 -->
+      <section id="state-success" class="state" hidden>
+        <!-- 사진 -->
+        <div id="photo-section" class="media">
+          <h2 class="media__title">사진</h2>
+          <img
+            id="photo-preview"
+            class="media__preview"
+            alt="촬영한 사진 미리보기"
+            loading="eager"
+          />
+          <p id="photo-error" class="media__error" hidden>
+            사진을 불러올 수 없습니다. (만료되었을 수 있습니다)
+          </p>
+          <a id="photo-download" class="btn btn--primary" download="mcphoto.jpg">
+            사진 다운로드
+          </a>
+          <p id="photo-hint" class="media__hint">
+            저장이 안 되면 이미지를 길게 눌러(모바일)/우클릭(PC) 저장하세요.
+          </p>
+        </div>
+
+        <!-- 영상 (timelapseUrl 이 null 이면 JS 가 숨김) -->
+        <div id="video-section" class="media" hidden>
+          <h2 class="media__title">영상</h2>
+          <video
+            id="video-preview"
+            class="media__preview"
+            controls
+            playsinline
+            preload="metadata"
+          ></video>
+          <p id="video-error" class="media__error" hidden>
+            영상을 불러올 수 없습니다. (만료되었을 수 있습니다)
+          </p>
+          <a id="video-download" class="btn btn--primary" download="mcphoto.mp4">
+            영상 다운로드
+          </a>
+          <p id="video-hint" class="media__hint">
+            저장이 안 되면 영상을 길게 눌러(모바일)/우클릭(PC) 저장하세요.
+          </p>
+        </div>
+
+        <p id="expiry-notice" class="notice"></p>
+      </section>
+
+      <!-- 만료 -->
+      <section id="state-expired" class="state" hidden>
+        <div class="state__icon" aria-hidden="true">⏳</div>
+        <h2 class="state__heading">보관 기간이 지나 만료되었습니다</h2>
+        <p class="state__msg">
+          사진·영상의 보관 기간이 지나 더 이상 내려받을 수 없습니다.<br />
+          필요하시면 다시 촬영해 주세요.
+        </p>
+      </section>
+
+      <!-- 오류 -->
+      <section id="state-error" class="state" hidden>
+        <div class="state__icon" aria-hidden="true">⚠️</div>
+        <h2 class="state__heading">일시적인 오류가 발생했습니다</h2>
+        <p class="state__msg">잠시 후 다시 시도해 주세요.</p>
+        <button id="retry-btn" type="button" class="btn btn--primary">다시 시도</button>
+      </section>
+
+      <footer class="app__footer">
+        <p>MC포토</p>
+      </footer>
+    </main>
+  </body>
+</html>

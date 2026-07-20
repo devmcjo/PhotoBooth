@@ -1,0 +1,47 @@
+<UserControl x:Class="MCPhoto.App.Views.CaptureView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
+    <Grid Background="Black">
+        <!-- 프리뷰 -->
+        <Image x:Name="PreviewImage" Stretch="Uniform"
+               RenderOptions.BitmapScalingMode="LowQuality" />
+
+        <!-- 카메라 미연결 -->
+        <TextBlock Text="{Binding StatusMessage}" Foreground="#DDDDDD" FontSize="22"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
+
+        <!-- 컷 진행 표시 -->
+        <Border Background="#88000000" CornerRadius="6" Padding="14,8"
+                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding CurrentCut}" Foreground="White" FontSize="20" FontWeight="Bold" />
+                <TextBlock Text=" / " Foreground="#BBBBBB" FontSize="20" />
+                <TextBlock Text="{Binding TotalCuts}" Foreground="#BBBBBB" FontSize="20" />
+            </StackPanel>
+        </Border>
+
+        <!-- 카운트다운 -->
+        <Viewbox VerticalAlignment="Center" HorizontalAlignment="Center" Height="220">
+            <TextBlock Text="{Binding RemainingSeconds}" Foreground="#F5F0FA" FontWeight="Bold"
+                       Opacity="0.85" />
+        </Viewbox>
+
+        <!-- 바로 촬영 -->
+        <Button Content="바로 촬영" Command="{Binding ShootNowCommand}"
+                FontSize="24" Padding="40,16" Background="#C44B9B" Foreground="White"
+                BorderThickness="0" Cursor="Hand"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,48" />
+
+        <!-- 취소 -->
+        <Button Content="취소" Command="{Binding CancelCommand}"
+                FontSize="15" Background="#66000000" Foreground="#DDDDDD" BorderThickness="0"
+                Padding="16,8" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="20" Cursor="Hand" />
+
+        <!-- 플래시 오버레이 -->
+        <Border x:Name="FlashOverlay" Background="White" Opacity="0"
+                Visibility="{Binding FlashActive, Converter={StaticResource BoolToVis}}" />
+    </Grid>
+</UserControl>

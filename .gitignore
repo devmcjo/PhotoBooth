@@ -1,0 +1,63 @@
+# === MC포토 .gitignore (WBS Step 1) ===
+
+# 빌드 산출물
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+*.dll
+*.exe
+*.pdb
+
+# .NET / Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+_ReSharper*/
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+packages/
+.nuget/
+
+# 테스트 결과
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+*.coveragexml
+
+# === 보안: 서비스 계정 키 절대 커밋 금지 (architecture §6.4) ===
+*serviceaccount*.json
+*service-account*.json
+*firebase*credentials*.json
+*firebase-adminsdk*.json
+serviceAccountKey.json
+google-services.json
+*.pem
+*.key
+
+# ffmpeg 바이너리 (라이선스·용량, 인스톨러가 별도 번들)
+tools/ffmpeg/*.exe
+tools/ffmpeg/*.dll
+
+# 로컬 런타임 데이터
+result/
+*.log
+*.ini
+!appsettings.ini.sample
+
+# publish 산출물(인스톨러 소스, 재생성 가능)
+publish/
+installer/Output/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

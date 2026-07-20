@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>MCPhoto</AssemblyName>
+    <RootNamespace>MCPhoto.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageReference Include="Serilog" Version="4.0.2" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MCPhoto.Core\MCPhoto.Core.csproj" />
+    <ProjectReference Include="..\MCPhoto.Capture\MCPhoto.Capture.csproj" />
+    <ProjectReference Include="..\MCPhoto.Firebase\MCPhoto.Firebase.csproj" />
+  </ItemGroup>
+
+  <!-- ffmpeg 번들: 존재할 때만 출력 tools/ffmpeg/로 복사(바이너리 부재 시 빌드는 통과). architecture §1.2 -->
+  <ItemGroup>
+    <None Include="$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffmpeg.exe"
+          Condition="Exists('$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffmpeg.exe')"
+          Link="tools\ffmpeg\ffmpeg.exe"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffprobe.exe"
+          Condition="Exists('$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffprobe.exe')"
+          Link="tools\ffmpeg\ffprobe.exe"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- 번들 기본 프레임(Frame/): 출력 Frame/으로 복사(§9 #11 우선순위 ②) -->
+  <ItemGroup>
+    <None Include="$(MSBuildProjectDirectory)\..\..\Frame\**\*.*"
+          Link="Frame\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

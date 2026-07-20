@@ -1,0 +1,47 @@
+<UserControl x:Class="MCPhoto.App.Views.QrPopupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
+    <Grid Background="#141018">
+        <Border Background="#241E30" CornerRadius="12" Padding="48"
+                HorizontalAlignment="Center" VerticalAlignment="Center" Width="440">
+            <StackPanel>
+                <TextBlock Text="QR을 스캔하세요" Foreground="#F5F0FA" FontSize="26" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,24"
+                           Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}" />
+
+                <!-- 업로드 중 -->
+                <TextBlock Text="업로드 중..." Foreground="#B9A7D0" FontSize="20"
+                           HorizontalAlignment="Center"
+                           Visibility="{Binding IsUploading, Converter={StaticResource BoolToVis}}" />
+
+                <!-- QR (업로드 성공 후에만) -->
+                <Border Background="White" Padding="16" CornerRadius="8"
+                        HorizontalAlignment="Center" Margin="0,0,0,20"
+                        Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}">
+                    <Image Source="{Binding QrImage}" Width="240" Height="240" />
+                </Border>
+
+                <TextBlock Text="{Binding ExpiryNotice}" Foreground="#8574A0" FontSize="14"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                           Margin="0,0,0,20"
+                           Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}" />
+
+                <!-- 실패 안내 -->
+                <TextBlock Text="{Binding StatusMessage}" Foreground="#FF7B7B" FontSize="16"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                           Margin="0,0,0,16" />
+                <Button Content="다시 시도" Command="{Binding RetryCommand}"
+                        FontSize="16" Padding="24,10" Background="#332B3E" Foreground="#E8DEF2"
+                        BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" Margin="0,0,0,12"
+                        Visibility="{Binding UploadSucceeded, Converter={StaticResource InverseBoolToVis}}" />
+
+                <Button Content="홈으로" Command="{Binding GoHomeCommand}"
+                        FontSize="18" Padding="40,12" Background="#C44B9B" Foreground="White"
+                        BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

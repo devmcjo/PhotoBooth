@@ -1,0 +1,55 @@
+<Application x:Class="MCPhoto.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:MCPhoto.App"
+             xmlns:conv="clr-namespace:MCPhoto.App.Converters"
+             xmlns:vm="clr-namespace:MCPhoto.App.ViewModels"
+             xmlns:views="clr-namespace:MCPhoto.App.Views">
+    <Application.Resources>
+        <!-- 공용 컨버터 -->
+        <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
+        <conv:InverseBoolConverter x:Key="InverseBool" />
+        <conv:BoolToBrushConverter x:Key="BoolToBrush" />
+        <conv:NullToVisibilityConverter x:Key="NullToVis" />
+        <conv:SlotCountIndexConverter x:Key="SlotCountIndex" />
+
+        <!-- VM → View DataTemplate 매핑(상태머신 화면 스왑) -->
+        <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+            <views:HomeView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LoginGuestViewModel}">
+            <views:LoginGuestView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:FrameSelectViewModel}">
+            <views:FrameSelectView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:GuideViewModel}">
+            <views:GuideView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:CaptureViewModel}">
+            <views:CaptureView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:CutSelectViewModel}">
+            <views:CutSelectView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ResultViewModel}">
+            <views:ResultView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:QrPopupViewModel}">
+            <views:QrPopupView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:DoneViewModel}">
+            <views:DoneView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:FrameEditorViewModel}">
+            <views:FrameEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AdminViewModel}">
+            <views:AdminView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:UserMgmtViewModel}">
+            <views:UserMgmtView />
+        </DataTemplate>
+    </Application.Resources>
+</Application>
