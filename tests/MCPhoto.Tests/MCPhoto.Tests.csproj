@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\src\MCPhoto.Core\MCPhoto.Core.csproj" />
     <ProjectReference Include="..\..\src\MCPhoto.Capture\MCPhoto.Capture.csproj" />
     <ProjectReference Include="..\..\src\MCPhoto.Firebase\MCPhoto.Firebase.csproj" />
+    <!-- XAML 리소스 해석 회귀 테스트(테마 딕셔너리·View 인스턴스화)를 위해 App 참조 -->
+    <ProjectReference Include="..\..\src\MCPhoto.App\MCPhoto.App.csproj" />
   </ItemGroup>
 
 </Project>

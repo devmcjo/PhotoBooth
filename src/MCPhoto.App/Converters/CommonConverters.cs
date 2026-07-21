@@ -55,14 +55,45 @@ public sealed class SlotCountIndexConverter : IValueConverter
         => value is int index ? index + 1 : 4;
 }
 
-/// <summary>선택 상태 → 테두리 색(true=강조).</summary>
+/// <summary>선택 상태 → 테두리 색(true=강조 로즈, 테마 토큰). (it3: 하드코딩 제거)</summary>
 public sealed class BoolToBrushConverter : IValueConverter
 {
-    private static readonly Brush Selected = new SolidColorBrush(Color.FromRgb(0xC4, 0x4B, 0x9B));
-    private static readonly Brush Unselected = Brushes.Transparent;
-
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is true ? Selected : Unselected;
+        => value is true
+            ? (Application.Current?.TryFindResource("Brush.Accent") as Brush ?? Brushes.DeepPink)
+            : Brushes.Transparent;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// 저장 안내 색: true(오류)=Brush.Danger, false(성공)=Brush.Success. 테마 토큰 참조. (it3 §3)
+/// </summary>
+public sealed class BoolToNoticeBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var key = value is true ? "Brush.Danger" : "Brush.Success";
+        return Application.Current?.TryFindResource(key) as Brush
+               ?? (value is true ? Brushes.Red : Brushes.Green);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// CameraLoadState → Visibility. ConverterParameter로 지정한 상태명과 일치하면 Visible. (it3 §7 U4)
+/// 예: ConverterParameter=Initializing → 로딩 오버레이, =Failed → 오류 메시지.
+/// </summary>
+public sealed class CameraStateToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var target = parameter?.ToString();
+        return value?.ToString() == target ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();

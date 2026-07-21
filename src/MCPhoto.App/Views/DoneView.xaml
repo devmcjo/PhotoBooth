@@ -4,15 +4,16 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="#141018">
+    <Grid Background="{StaticResource Brush.Bg}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-            <TextBlock Text="감사합니다!" Foreground="#F5F0FA" FontSize="48" FontWeight="Bold"
+            <TextBlock Text="감사합니다!" Style="{StaticResource Text.Display}" FontSize="48"
                        HorizontalAlignment="Center" />
-            <TextBlock Text="즐거운 추억 되세요" Foreground="#B9A7D0" FontSize="22"
+            <TextBlock Text="즐거운 추억 되세요" Style="{StaticResource Text.H2}"
+                       Foreground="{StaticResource Brush.Text.Tertiary}"
                        HorizontalAlignment="Center" Margin="0,12,0,40" />
             <Button Content="처음으로" Command="{Binding GoHomeCommand}"
-                    FontSize="22" Padding="48,16" Background="#C44B9B" Foreground="White"
-                    BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" />
+                    Style="{StaticResource Button.Primary}"
+                    Padding="48,0" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>
 </UserControl>

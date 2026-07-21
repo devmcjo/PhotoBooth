@@ -4,13 +4,17 @@ using MCPhoto.Core.Models;
 namespace MCPhoto.App;
 
 /// <summary>
-/// 한 키오스크 세션의 공유 상태(프레임 선택 → 촬영 → 합성 → 결과). 세션 종료 시 폐기.
-/// 화면 VM들이 이 컨텍스트를 통해 데이터를 주고받는다.
+/// 한 키오스크 세션의 공유 상태(프레임 선택 → 촬영 → 합성 → 결과) + 계정 단일 소스. 싱글턴.
+/// 계정(CurrentUser)은 촬영 세션보다 상위 수명(앱 사용 동안 유지) — Login/Logout으로만 변경. (it3 §2)
+/// 화면 VM·셸·상단바가 이 컨텍스트를 유일한 계정 진실 소스로 구독한다.
 /// </summary>
 public sealed class SessionContext
 {
-    /// <summary>로그인 사용자(게스트면 null).</summary>
-    public User? CurrentUser { get; set; }
+    /// <summary>로그인 사용자(게스트면 null). 진입점은 Login/Logout/Reset(clearUser)만 — 직접 set 금지.</summary>
+    public User? CurrentUser { get; private set; }
+
+    /// <summary>계정 변경(로그인/로그아웃) 통지. 셸·설정·상단바가 구독해 자동 갱신. (it3 §2.2)</summary>
+    public event EventHandler? CurrentUserChanged;
 
     /// <summary>선택된 프레임(촬영 전 고정).</summary>
     public FrameTemplate? SelectedFrame { get; set; }
@@ -39,10 +43,27 @@ public sealed class SessionContext
     /// <summary>세션 작업 폴더(임시 산출물).</summary>
     public string? WorkFolder { get; set; }
 
-    /// <summary>새 세션 시작(이전 데이터 폐기).</summary>
-    public void Reset()
+    /// <summary>로그인. CurrentUser 설정 + 변경 통지.</summary>
+    public void Login(User user)
     {
+        CurrentUser = user;
+        CurrentUserChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>명시적 로그아웃. CurrentUser 해제 + 변경 통지.</summary>
+    public void Logout()
+    {
+        if (CurrentUser is null) return;
         CurrentUser = null;
+        CurrentUserChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 촬영 세션 데이터 폐기(새 세션 시작). 계정은 기본 보존(clearUser=false).
+    /// clearUser=true는 유휴 타임아웃·세션 완료(다음 손님)에서만 — 그때만 로그아웃 통지. (it3 §2.2)
+    /// </summary>
+    public void Reset(bool clearUser = false)
+    {
         SelectedFrame = null;
         Capture.Discard();
         Filter = FilterKind.None;
@@ -53,6 +74,9 @@ public sealed class SessionContext
         SessionTime = DateTime.Now;
         TryCleanupWorkFolder();
         WorkFolder = null;
+
+        if (clearUser)
+            Logout();
     }
 
     private void TryCleanupWorkFolder()

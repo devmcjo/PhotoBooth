@@ -82,7 +82,7 @@ internal static class ServiceRegistration
         services.AddTransient<QrPopupViewModel>();
         services.AddTransient<DoneViewModel>();
         services.AddTransient<FrameEditorViewModel>();
-        services.AddTransient<AdminViewModel>();
+        services.AddTransient<SettingsViewModel>();
         services.AddTransient<UserMgmtViewModel>();
     }
 }

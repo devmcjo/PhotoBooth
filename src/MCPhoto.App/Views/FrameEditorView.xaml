@@ -4,39 +4,37 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="#141018">
+    <Grid Background="{StaticResource Brush.Bg}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="300" />
+            <ColumnDefinition Width="320" />
         </Grid.ColumnDefinitions>
 
         <!-- 편집 캔버스(프레임 이미지 + 슬롯 오버레이) -->
-        <Border Grid.Column="0" Margin="40" Background="#241E30" CornerRadius="8">
+        <Border Grid.Column="0" Margin="40,88,20,40" Style="{StaticResource Card}" Padding="16">
             <Grid x:Name="EditorArea">
-                <Image x:Name="FramePreview" Source="{Binding FrameImage}" Stretch="Uniform" Margin="16" />
+                <Image x:Name="FramePreview" Source="{Binding FrameImage}" Stretch="Uniform" />
                 <Canvas x:Name="SlotCanvas" Background="Transparent" />
                 <TextBlock Text="프레임 이미지를 불러오세요"
-                           Foreground="#8574A0" FontSize="18"
+                           Style="{StaticResource Text.Body}" Foreground="{StaticResource Brush.Text.Muted}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Visibility="{Binding FrameImage, Converter={StaticResource NullToVis}}" />
             </Grid>
         </Border>
 
         <!-- 컨트롤 패널 -->
-        <StackPanel Grid.Column="1" Margin="0,40,40,40">
-            <TextBlock Text="프레임 편집" Foreground="#F5F0FA" FontSize="24" FontWeight="Bold" Margin="0,0,0,20" />
+        <StackPanel Grid.Column="1" Margin="0,88,40,40">
+            <TextBlock Text="프레임 편집" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
 
             <Button Content="이미지 불러오기" Click="OnLoadImage"
-                    FontSize="16" Padding="0,12" Background="#332B3E" Foreground="#E8DEF2"
-                    BorderThickness="0" Cursor="Hand" Margin="0,0,0,20" />
+                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,20" />
 
-            <TextBlock Text="프레임 이름" Foreground="#B9A7D0" FontSize="14" Margin="0,0,0,4" />
-            <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="16" Padding="8" Margin="0,0,0,20" />
+            <TextBlock Text="프레임 이름" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+            <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20" />
 
-            <TextBlock Text="슬롯 개수" Foreground="#B9A7D0" FontSize="14" Margin="0,0,0,4" />
+            <TextBlock Text="슬롯 개수" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
             <ComboBox SelectedIndex="{Binding SlotCount, Converter={StaticResource SlotCountIndex}}"
-                      FontSize="16" Padding="8" Margin="0,0,0,20">
+                      Margin="0,0,0,20">
                 <ComboBoxItem Content="1개" />
                 <ComboBoxItem Content="2개" />
                 <ComboBoxItem Content="3개" />
@@ -45,15 +43,13 @@
                 <ComboBoxItem Content="6개" />
             </ComboBox>
 
-            <TextBlock Text="{Binding StatusMessage}" Foreground="#FF7B7B" FontSize="13"
-                       TextWrapping="Wrap" Margin="0,0,0,16" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
+                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,16" />
 
             <Button Content="저장" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}"
-                    FontSize="18" Padding="0,14" Background="#C44B9B" Foreground="White"
-                    BorderThickness="0" Cursor="Hand" Margin="0,0,0,12" />
+                    Style="{StaticResource Button.Primary}" HorizontalAlignment="Stretch" Margin="0,0,0,12" />
             <Button Content="취소" Command="{Binding CancelCommand}"
-                    FontSize="15" Background="Transparent" Foreground="#8574A0"
-                    BorderThickness="0" Cursor="Hand" />
+                    Style="{StaticResource Button.Ghost}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>
 </UserControl>

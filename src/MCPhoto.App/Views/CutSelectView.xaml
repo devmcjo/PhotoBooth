@@ -4,21 +4,21 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="#141018">
+    <Grid Background="{StaticResource Brush.Bg}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,28,0,12">
-            <TextBlock Text="컷 선택" Foreground="#F5F0FA" FontSize="30" FontWeight="Bold"
-                       HorizontalAlignment="Center" />
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,88,0,12">
+            <TextBlock Text="컷 선택" Style="{StaticResource Text.H1}" HorizontalAlignment="Center" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
-                <TextBlock Text="{Binding SelectedCount}" Foreground="#C44B9B" FontSize="20" FontWeight="Bold" />
-                <TextBlock Text=" / " Foreground="#B9A7D0" FontSize="20" />
-                <TextBlock Text="{Binding SlotCount}" Foreground="#B9A7D0" FontSize="20" />
-                <TextBlock Text=" 장 선택" Foreground="#B9A7D0" FontSize="20" />
+                <TextBlock Text="{Binding SelectedCount}" Foreground="{StaticResource Brush.Accent.Text}"
+                           FontSize="20" FontWeight="Bold" />
+                <TextBlock Text=" / " Style="{StaticResource Text.Body}" FontSize="20" />
+                <TextBlock Text="{Binding SlotCount}" Style="{StaticResource Text.Body}" FontSize="20" />
+                <TextBlock Text=" 장 선택" Style="{StaticResource Text.Body}" FontSize="20" />
             </StackPanel>
         </StackPanel>
 
@@ -30,15 +30,17 @@
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <Border Width="220" Height="165" Margin="8" CornerRadius="6"
-                            BorderThickness="4"
-                            BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToBrush}}">
+                    <Border Width="220" Height="165" Margin="8" CornerRadius="12"
+                            BorderThickness="3"
+                            BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToBrush}}"
+                            Effect="{StaticResource Shadow.Sm}">
                         <Grid>
                             <Image Source="{Binding Image}" Stretch="UniformToFill" />
-                            <Border Background="#C44B9B" CornerRadius="14" Width="28" Height="28"
+                            <Border Background="{StaticResource Brush.Accent}" CornerRadius="14" Width="28" Height="28"
                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
                                     Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="{Binding SelectionOrder}" Foreground="White"
+                                <!-- 로즈 배경 위 작은 텍스트라 Ink 사용(대비 5.05:1, §2.3.1) -->
+                                <TextBlock Text="{Binding SelectionOrder}" Foreground="{StaticResource Brush.Text.Primary}"
                                            FontSize="15" FontWeight="Bold"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
@@ -50,14 +52,11 @@
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,28">
             <Button Content="다시 촬영" Command="{Binding RetakeCommand}"
-                    FontSize="18" Padding="28,14" Margin="8,0" Background="#332B3E" Foreground="#E8DEF2"
-                    BorderThickness="0" Cursor="Hand" />
+                    Style="{StaticResource Button.Secondary}" Margin="8,0" />
             <Button Content="다음" Command="{Binding NextCommand}" IsEnabled="{Binding CanProceed}"
-                    FontSize="20" Padding="48,14" Margin="8,0" Background="#C44B9B" Foreground="White"
-                    BorderThickness="0" Cursor="Hand" />
+                    Style="{StaticResource Button.Primary}" Padding="48,0" Margin="8,0" />
             <Button Content="취소" Command="{Binding CancelCommand}"
-                    FontSize="16" Padding="20,14" Margin="8,0" Background="Transparent" Foreground="#8574A0"
-                    BorderThickness="0" Cursor="Hand" />
+                    Style="{StaticResource Button.Ghost}" Margin="8,0" />
         </StackPanel>
     </Grid>
 </UserControl>

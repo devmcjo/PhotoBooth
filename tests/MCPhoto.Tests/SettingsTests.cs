@@ -58,7 +58,7 @@ public class SettingsTests : IDisposable
         s.WindowBounds.Top = 50;
         s.WindowBounds.Width = 1600;
         s.WindowBounds.Height = 900;
-        svc.Save();
+        Assert.True(svc.Save()); // it3: 성공 시 true 반환
 
         Assert.True(File.Exists(_tempPath));
 
@@ -80,6 +80,28 @@ public class SettingsTests : IDisposable
         Assert.Equal("mcphoto.firebasestorage.app", s2.StorageBucket);
         Assert.Equal(100, s2.WindowBounds.Left);
         Assert.Equal(1600, s2.WindowBounds.Width);
+    }
+
+    [Fact]
+    public void Save_Returns_Bool_Not_Void()
+    {
+        // it3 §3: Save()가 성공 여부를 반환(성공 오인 방지). 정상 임시 경로 → true.
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        svc.Load();
+        bool ok = svc.Save();
+        Assert.True(ok);
+    }
+
+    [Fact]
+    public void Save_Invalid_Primary_Path_Falls_Back_No_Crash()
+    {
+        // 잘못된 명시 경로(존재하지 않는 드라이브) 주입 → 폴백 체인(실행경로/LocalAppData)으로
+        // 저장 성공(true) 하거나 최소한 크래시 없이 bool 반환. 성공 오인 대신 정직한 결과. (it3 §3.2)
+        var badPath = @"Z:\nonexistent_drive_mcphoto\MCPhoto.ini";
+        var svc = new IniSettingsService(iniPath: badPath);
+        svc.Load();
+        var ex = Record.Exception(() => svc.Save());
+        Assert.Null(ex); // 예외로 크래시하지 않음(폴백 또는 false)
     }
 
     [Fact]

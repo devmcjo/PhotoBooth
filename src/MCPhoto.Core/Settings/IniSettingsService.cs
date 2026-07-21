@@ -11,7 +11,7 @@ public sealed class IniSettingsService : ISettingsService
     private const string Section = "MCPhoto";
 
     private readonly ILogger<IniSettingsService>? _logger;
-    private readonly string _iniPath;
+    private string _iniPath; // 폴백 성공 경로로 승격될 수 있음(it3 §3.2)
     private AppSettings? _current;
 
     /// <param name="iniPath">테스트/커스텀용 명시 경로. null이면 기본 위치 자동 결정.</param>
@@ -47,23 +47,64 @@ public sealed class IniSettingsService : ISettingsService
         return settings;
     }
 
-    public void Save()
+    public bool Save()
     {
         var settings = _current ?? new AppSettings();
         settings.Clamp();
+
+        var ini = new IniFile();
+        WriteFrom(settings, ini);
+        var content = ini.ToString();
+
+        // 쓰기 폴백 체인(it3 §3.2): 현재 경로 → 실행 경로 → %LocalAppData%\MCPhoto\.
+        // 성공한 경로를 _iniPath로 승격해 다음 저장·로드가 같은 위치를 쓰게 한다.
+        foreach (var candidate in FallbackPaths())
+        {
+            if (TryWrite(candidate, content))
+            {
+                if (!string.Equals(candidate, _iniPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger?.LogInformation("설정 저장 경로 폴백 성공: {Path}", candidate);
+                    _iniPath = candidate;
+                }
+                return true;
+            }
+        }
+
+        _logger?.LogError("설정 저장 실패(모든 폴백 경로 쓰기 불가)");
+        return false;
+    }
+
+    private IEnumerable<string> FallbackPaths()
+    {
+        yield return _iniPath;
+
+        var exeDir = AppContext.BaseDirectory;
+        var exePath = Path.Combine(exeDir, "MCPhoto.ini");
+        if (!string.Equals(exePath, _iniPath, StringComparison.OrdinalIgnoreCase))
+            yield return exePath;
+
+        var localApp = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MCPhoto");
+        var localPath = Path.Combine(localApp, "MCPhoto.ini");
+        if (!string.Equals(localPath, _iniPath, StringComparison.OrdinalIgnoreCase))
+            yield return localPath;
+    }
+
+    private bool TryWrite(string path, string content)
+    {
         try
         {
-            var dir = Path.GetDirectoryName(_iniPath);
+            var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
-
-            var ini = new IniFile();
-            WriteFrom(settings, ini);
-            File.WriteAllText(_iniPath, ini.ToString());
+            File.WriteAllText(path, content);
+            return true;
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "설정 저장 실패: {Path}", _iniPath);
+            _logger?.LogWarning(ex, "설정 저장 경로 쓰기 실패(다음 폴백 시도): {Path}", path);
+            return false;
         }
     }
 

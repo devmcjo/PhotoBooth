@@ -106,5 +106,5 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task Back() => await _shell.NavigateAsync(AppState.Admin);
+    private async Task Back() => await _shell.NavigateAsync(AppState.Settings);
 }

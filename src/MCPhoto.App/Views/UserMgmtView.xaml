@@ -4,50 +4,49 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="#141018" Margin="40,24">
+    <Grid Background="{StaticResource Brush.Bg}" Margin="40,88,40,24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="사용자 관리" Foreground="#F5F0FA" FontSize="28" FontWeight="Bold"
-                   Margin="0,0,0,16" />
+        <TextBlock Grid.Row="0" Text="사용자 관리" Style="{StaticResource Text.H1}" Margin="0,0,0,16" />
 
-        <ListView Grid.Row="1" ItemsSource="{Binding Users}" Background="#241E30" BorderThickness="0"
-                  Foreground="#E8DEF2">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="아이디" Width="200" DisplayMemberBinding="{Binding Id}" />
-                    <GridViewColumn Header="역할" Width="120" DisplayMemberBinding="{Binding Role}" />
-                    <GridViewColumn Header="작업" Width="420">
-                        <GridViewColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Content="삭제" Margin="0,0,6,0" Padding="12,4" Cursor="Hand"
-                                            Command="{Binding DataContext.DeleteUserCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}" />
-                                    <Button Content="pw 초기화" Margin="0,0,6,0" Padding="12,4" Cursor="Hand"
-                                            Command="{Binding DataContext.ResetUserPasswordCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}" />
-                                    <Button Content="manager 지정" Padding="12,4" Cursor="Hand"
-                                            Visibility="{Binding DataContext.IsAdmin, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"
-                                            Command="{Binding DataContext.PromoteToManagerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </GridViewColumn.CellTemplate>
-                    </GridViewColumn>
-                </GridView>
-            </ListView.View>
-        </ListView>
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="8">
+            <ListView ItemsSource="{Binding Users}" Background="Transparent" BorderThickness="0"
+                      Foreground="{StaticResource Brush.Text.Primary}">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="아이디" Width="220" DisplayMemberBinding="{Binding Id}" />
+                        <GridViewColumn Header="역할" Width="140" DisplayMemberBinding="{Binding Role}" />
+                        <GridViewColumn Header="작업" Width="440">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="삭제" Style="{StaticResource Button.Danger}" Margin="0,0,6,0"
+                                                Command="{Binding DataContext.DeleteUserCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
+                                        <Button Content="pw 초기화" Style="{StaticResource Button.Secondary}" Margin="0,0,6,0" MinWidth="0"
+                                                Command="{Binding DataContext.ResetUserPasswordCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
+                                        <Button Content="manager 지정" Style="{StaticResource Button.Ghost}"
+                                                Visibility="{Binding DataContext.IsAdmin, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.PromoteToManagerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </Border>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,16,0,0">
-            <TextBlock Text="{Binding StatusMessage}" Foreground="#7BE6A0" FontSize="14"
-                       VerticalAlignment="Center" Margin="0,0,20,0" />
-            <Button Content="뒤로" Command="{Binding BackCommand}"
-                    FontSize="16" Padding="24,10" Background="#332B3E" Foreground="#E8DEF2"
-                    BorderThickness="0" Cursor="Hand" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Success}"
+                       Style="{StaticResource Text.Body}" VerticalAlignment="Center" Margin="0,0,20,0" />
+            <Button Content="뒤로" Command="{Binding BackCommand}" Style="{StaticResource Button.Secondary}" />
         </StackPanel>
     </Grid>
 </UserControl>

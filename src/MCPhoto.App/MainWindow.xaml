@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         Title="MC포토" Height="720" Width="1280"
         MinHeight="720" MinWidth="1280"
-        Background="#141018"
+        Background="{StaticResource Brush.Bg}"
         PreviewMouseDown="OnAnyUserActivity"
         PreviewKeyDown="OnAnyUserActivity">
     <Grid x:Name="RootGrid">
@@ -16,13 +16,53 @@
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Stretch" />
 
-        <!-- 좌상단 3초 롱프레스 → 관리자 진입(투명 히트 영역) -->
-        <Border x:Name="AdminCorner"
-                Width="80" Height="80"
-                HorizontalAlignment="Left" VerticalAlignment="Top"
-                Background="Transparent"
-                PreviewMouseLeftButtonDown="OnAdminCornerDown"
-                PreviewMouseLeftButtonUp="OnAdminCornerUp"
-                MouseLeave="OnAdminCornerUp" />
+        <!-- 상단 바 오버레이(it2 §3): 좌=로그인/계정, 우=설정. 촬영·QR에서 숨김. -->
+        <Grid x:Name="TopBar" Height="72" VerticalAlignment="Top"
+              Background="Transparent"
+              Visibility="{Binding IsTopBarVisible, Converter={StaticResource BoolToVis}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 좌: 로그인/계정 버튼 -->
+            <Button Grid.Column="0" Margin="16,8"
+                    Style="{StaticResource Button.Icon.Pill}"
+                    Command="{Binding OpenAccountCommand}"
+                    Content="{Binding AccountLabel}"
+                    AutomationProperties.Name="로그인 또는 계정" />
+
+            <!-- 우: 설정 버튼(gear 글리프) -->
+            <Button Grid.Column="2" Margin="16,8"
+                    Style="{StaticResource Button.Icon}"
+                    Command="{Binding OpenSettingsCommand}"
+                    Content="⚙"
+                    FontSize="22"
+                    AutomationProperties.Name="설정" />
+
+            <!-- 계정 팝오버 -->
+            <Popup IsOpen="{Binding IsAccountPopupOpen}" PlacementTarget="{Binding ElementName=TopBar}"
+                   Placement="Bottom" HorizontalOffset="16" VerticalOffset="-8"
+                   StaysOpen="False" AllowsTransparency="True">
+                <Border Style="{StaticResource Card}" Effect="{StaticResource Shadow.Pop}" MinWidth="220">
+                    <StackPanel>
+                        <TextBlock Text="{Binding AccountLabel}" Style="{StaticResource Text.Title}" />
+                        <TextBlock Text="계정" Style="{StaticResource Text.Caption}" Margin="0,0,0,12" />
+                        <Button Content="비밀번호 변경" Style="{StaticResource Button.Ghost}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Command="{Binding OpenAccountSettingsCommand}" />
+                        <!-- power(admin/manager)용 관리자 설정 바로가기(설정 페이지의 관리자 섹션, it2 §3.2) -->
+                        <Button Content="관리자 설정" Style="{StaticResource Button.Ghost}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Visibility="{Binding IsPower, Converter={StaticResource BoolToVis}}"
+                                Command="{Binding OpenAccountSettingsCommand}" />
+                        <Button Content="로그아웃" Style="{StaticResource Button.Ghost}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Command="{Binding LogoutCommand}" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+        </Grid>
     </Grid>
 </Window>

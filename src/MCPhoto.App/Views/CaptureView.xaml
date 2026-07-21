@@ -4,44 +4,75 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="Black">
-        <!-- 프리뷰 -->
+    <!-- 촬영 화면은 프리뷰 몰입 위해 예외적 다크 배경(Brush.CaptureBg, §부록 A). 오버레이 텍스트는 다크 위라 밝게 유지. -->
+    <Grid Background="{StaticResource Brush.CaptureBg}">
         <Image x:Name="PreviewImage" Stretch="Uniform"
                RenderOptions.BitmapScalingMode="LowQuality" />
 
-        <!-- 카메라 미연결 -->
-        <TextBlock Text="{Binding StatusMessage}" Foreground="#DDDDDD" FontSize="22"
+        <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.OnAccent}" FontSize="22"
                    HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
 
         <!-- 컷 진행 표시 -->
-        <Border Background="#88000000" CornerRadius="6" Padding="14,8"
+        <Border Background="{StaticResource Brush.Scrim}" CornerRadius="6" Padding="14,8"
                 HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding CurrentCut}" Foreground="White" FontSize="20" FontWeight="Bold" />
-                <TextBlock Text=" / " Foreground="#BBBBBB" FontSize="20" />
-                <TextBlock Text="{Binding TotalCuts}" Foreground="#BBBBBB" FontSize="20" />
+                <TextBlock Text="{Binding CurrentCut}" Foreground="{StaticResource Brush.OnAccent}" FontSize="20" FontWeight="Bold" />
+                <TextBlock Text=" / " Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.7" />
+                <TextBlock Text="{Binding TotalCuts}" Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.7" />
             </StackPanel>
         </Border>
 
-        <!-- 카운트다운 -->
-        <Viewbox VerticalAlignment="Center" HorizontalAlignment="Center" Height="220">
-            <TextBlock Text="{Binding RemainingSeconds}" Foreground="#F5F0FA" FontWeight="Bold"
-                       Opacity="0.85" />
+        <!-- 카운트다운(펄스 애니메이션) -->
+        <Viewbox VerticalAlignment="Center" HorizontalAlignment="Center" Height="220" RenderTransformOrigin="0.5,0.5">
+            <TextBlock x:Name="CountdownText" Text="{Binding RemainingSeconds}"
+                       Foreground="{StaticResource Brush.OnAccent}" FontWeight="Bold" Opacity="0.9" />
         </Viewbox>
 
-        <!-- 바로 촬영 -->
-        <Button Content="바로 촬영" Command="{Binding ShootNowCommand}"
-                FontSize="24" Padding="40,16" Background="#C44B9B" Foreground="White"
-                BorderThickness="0" Cursor="Hand"
-                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,48" />
+        <!-- 바로 촬영 셔터 버튼 + 라벨(U5, it3 §8) -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,40">
+            <Button Style="{StaticResource Button.Shutter}" Command="{Binding ShootNowCommand}"
+                    HorizontalAlignment="Center" AutomationProperties.Name="바로 촬영" />
+            <TextBlock Text="바로 촬영" Foreground="{StaticResource Brush.OnAccent}" Opacity="0.85"
+                       FontSize="13" HorizontalAlignment="Center" Margin="0,8,0,0" />
+        </StackPanel>
 
         <!-- 취소 -->
         <Button Content="취소" Command="{Binding CancelCommand}"
-                FontSize="15" Background="#66000000" Foreground="#DDDDDD" BorderThickness="0"
-                Padding="16,8" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="20" Cursor="Hand" />
+                FontSize="15" Foreground="{StaticResource Brush.OnAccent}" Background="{StaticResource Brush.Scrim}"
+                BorderThickness="0" Padding="16,8" Cursor="Hand"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="20" />
 
-        <!-- 플래시 오버레이 -->
-        <Border x:Name="FlashOverlay" Background="White" Opacity="0"
+        <!-- 플래시 오버레이(흰 화면 펄스) -->
+        <Border x:Name="FlashOverlay" Background="{StaticResource Brush.OnAccent}" Opacity="0"
                 Visibility="{Binding FlashActive, Converter={StaticResource BoolToVis}}" />
+
+        <!-- 카메라 로딩 오버레이(U4): CameraState==Initializing일 때만. 스피너 + 안내. (it3 §7.2) -->
+        <Grid Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding CameraState, Converter={StaticResource CameraStateToVis}, ConverterParameter=Initializing}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <!-- 회전 스피너(링) — Storyboard 무한 회전, 코드비하인드 없음 -->
+                <Ellipse Width="56" Height="56" HorizontalAlignment="Center"
+                         Stroke="{StaticResource Brush.Accent}" StrokeThickness="5"
+                         StrokeDashArray="4 2" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <RotateTransform x:Name="SpinnerRotate" Angle="0" />
+                    </Ellipse.RenderTransform>
+                    <Ellipse.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                     Storyboard.TargetProperty="Angle"
+                                                     From="0" To="360" Duration="0:0:1"
+                                                     RepeatBehavior="Forever" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Ellipse.Triggers>
+                </Ellipse>
+                <TextBlock Text="카메라 준비 중…" Foreground="{StaticResource Brush.OnAccent}"
+                           FontSize="18" HorizontalAlignment="Center" Margin="0,20,0,0" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

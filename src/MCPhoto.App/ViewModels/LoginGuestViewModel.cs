@@ -6,7 +6,10 @@ using Microsoft.Extensions.Logging;
 
 namespace MCPhoto.App.ViewModels;
 
-/// <summary>로그인/게스트 선택. 게스트=기본 프레임만, 로그인=기본+커스텀. (PRD §F8)</summary>
+/// <summary>
+/// 로그인 전용 화면. 촬영 게스트 직행(it2 §5)으로 "게스트로 계속" 버튼은 폐지.
+/// 상단 바 로그인·프레임 선택의 커스텀 유도로 진입하며, 성공 시 직전 화면으로 복귀. (it2 §3.3)
+/// </summary>
 public sealed partial class LoginGuestViewModel : ViewModelBase
 {
     private readonly AppShellViewModel _shell;
@@ -25,15 +28,7 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
         _logger = logger;
     }
 
-    /// <summary>게스트로 진행(기본 프레임만).</summary>
-    [RelayCommand]
-    private async Task ContinueAsGuest()
-    {
-        _shell.Session.CurrentUser = null;
-        await _shell.NavigateAsync(AppState.FrameSelect);
-    }
-
-    /// <summary>id/pw 로그인.</summary>
+    /// <summary>id/pw 로그인. 성공 시 계정 반영 후 직전 화면 복귀(오버레이).</summary>
     [RelayCommand]
     private async Task Login()
     {
@@ -48,8 +43,9 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
                 ErrorMessage = "아이디 또는 비밀번호가 올바르지 않습니다.";
                 return;
             }
-            _shell.Session.CurrentUser = user;
-            await _shell.NavigateAsync(AppState.FrameSelect);
+            _shell.Session.Login(user); // 단일 소스 로그인 + CurrentUserChanged 통지(상단 바 자동 갱신)
+            // 상단 바 진입 시 원 화면, 프레임 선택 유도 시 FrameSelect 재진입(커스텀 프레임 로드)으로 복귀
+            await _shell.ReturnFromOverlay();
         }
         catch (Exception ex)
         {
@@ -60,5 +56,5 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void Cancel() => _shell.ReturnHome("로그인 취소");
+    private async Task Cancel() => await _shell.ReturnFromOverlay();
 }

@@ -5,53 +5,52 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:cap="clr-namespace:MCPhoto.Core.Capture;assembly=MCPhoto.Core"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="#141018">
+    <Grid Background="{StaticResource Brush.Bg}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="320" />
+            <ColumnDefinition Width="340" />
         </Grid.ColumnDefinitions>
 
         <!-- 미리보기 -->
-        <Border Grid.Column="0" Margin="40" Background="#241E30" CornerRadius="8">
+        <Border Grid.Column="0" Margin="40,88,20,40" Style="{StaticResource Card}" Padding="16">
             <Grid>
-                <Image Source="{Binding Preview}" Stretch="Uniform" Margin="16" />
-                <TextBlock Text="{Binding StatusMessage}" Foreground="#E8DEF2" FontSize="20"
+                <Image Source="{Binding Preview}" Stretch="Uniform" />
+                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource Text.Body}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
             </Grid>
         </Border>
 
         <!-- 필터 + 액션 -->
-        <StackPanel Grid.Column="1" Margin="0,40,40,40">
-            <TextBlock Text="필터" Foreground="#F5F0FA" FontSize="22" FontWeight="Bold" Margin="0,0,0,16" />
+        <StackPanel Grid.Column="1" Margin="0,88,40,40">
+            <TextBlock Text="필터" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
 
-            <Button Content="원본" Margin="0,0,0,8" Padding="0,12" Cursor="Hand"
-                    Background="#332B3E" Foreground="#E8DEF2" BorderThickness="0"
+            <Button Content="원본" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                     Command="{Binding SetFilterCommand}">
                 <Button.CommandParameter><cap:FilterKind>None</cap:FilterKind></Button.CommandParameter>
             </Button>
-            <Button Content="흑백" Margin="0,0,0,8" Padding="0,12" Cursor="Hand"
-                    Background="#332B3E" Foreground="#E8DEF2" BorderThickness="0"
+            <Button Content="흑백" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                     Command="{Binding SetFilterCommand}">
                 <Button.CommandParameter><cap:FilterKind>Grayscale</cap:FilterKind></Button.CommandParameter>
             </Button>
-            <Button Content="밝게" Margin="0,0,0,8" Padding="0,12" Cursor="Hand"
-                    Background="#332B3E" Foreground="#E8DEF2" BorderThickness="0"
+            <Button Content="밝게" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                     Command="{Binding SetFilterCommand}">
                 <Button.CommandParameter><cap:FilterKind>Brightness</cap:FilterKind></Button.CommandParameter>
             </Button>
-            <Button Content="뷰티" Margin="0,0,0,24" Padding="0,12" Cursor="Hand"
-                    Background="#332B3E" Foreground="#E8DEF2" BorderThickness="0"
+            <Button Content="뷰티" Style="{StaticResource Button.Filter}" Margin="0,0,0,24"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                     Command="{Binding SetFilterCommand}">
                 <Button.CommandParameter><cap:FilterKind>Beauty</cap:FilterKind></Button.CommandParameter>
             </Button>
 
-            <Button Content="다음" Command="{Binding NextCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
-                    FontSize="22" Padding="0,16" Background="#C44B9B" Foreground="White"
-                    BorderThickness="0" Cursor="Hand" Margin="0,0,0,12" />
+            <Button Content="다음" Command="{Binding NextCommand}"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                    Style="{StaticResource Button.Primary}" HorizontalAlignment="Stretch" Margin="0,0,0,12" />
             <Button Content="취소" Command="{Binding CancelCommand}"
-                    FontSize="15" Background="Transparent" Foreground="#8574A0"
-                    BorderThickness="0" Cursor="Hand" />
+                    Style="{StaticResource Button.Ghost}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>
 </UserControl>

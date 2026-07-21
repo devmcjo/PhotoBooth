@@ -6,13 +6,21 @@
              xmlns:vm="clr-namespace:MCPhoto.App.ViewModels"
              xmlns:views="clr-namespace:MCPhoto.App.Views">
     <Application.Resources>
-        <!-- 공용 컨버터 -->
-        <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <ResourceDictionary>
+            <!-- 디자인 시스템(Direction A 라이트) 병합 -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- 공용 컨버터 -->
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
         <conv:InverseBoolConverter x:Key="InverseBool" />
         <conv:BoolToBrushConverter x:Key="BoolToBrush" />
         <conv:NullToVisibilityConverter x:Key="NullToVis" />
         <conv:SlotCountIndexConverter x:Key="SlotCountIndex" />
+        <conv:BoolToNoticeBrushConverter x:Key="BoolToNoticeBrush" />
+        <conv:CameraStateToVisibilityConverter x:Key="CameraStateToVis" />
 
         <!-- VM → View DataTemplate 매핑(상태머신 화면 스왑) -->
         <DataTemplate DataType="{x:Type vm:HomeViewModel}">
@@ -45,11 +53,12 @@
         <DataTemplate DataType="{x:Type vm:FrameEditorViewModel}">
             <views:FrameEditorView />
         </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:AdminViewModel}">
-            <views:AdminView />
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:UserMgmtViewModel}">
             <views:UserMgmtView />
         </DataTemplate>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

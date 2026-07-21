@@ -30,8 +30,8 @@ public enum AppState
     /// <summary>완료/감사.</summary>
     Done,
 
-    /// <summary>관리자 모드.</summary>
-    Admin,
+    /// <summary>설정 페이지(앱 설정·계정·관리자 섹션). 관리자 모드를 흡수. (it2 §4)</summary>
+    Settings,
 
     /// <summary>사용자 관리(power).</summary>
     UserMgmt,

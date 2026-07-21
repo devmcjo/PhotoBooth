@@ -5,17 +5,16 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DesignHeight="720" d:DesignWidth="1280"
-             Background="#111111">
+             Background="{StaticResource Brush.CaptureBg}">
+    <!-- 프리뷰 몰입 배경은 예외적 다크(Brush.CaptureBg, §부록 A). 오버레이 텍스트는 다크 위라 밝게 유지. -->
     <Grid>
-        <!-- 프리뷰 이미지: 재사용 WriteableBitmap을 코드비하인드에서 Source로 설정 -->
         <Image x:Name="PreviewImage"
                Stretch="Uniform"
                RenderOptions.BitmapScalingMode="LowQuality"
                RenderOptions.EdgeMode="Aliased" />
 
-        <!-- 카메라 미연결 안내 -->
         <TextBlock x:Name="StatusText"
-                   Foreground="#DDDDDD"
+                   Foreground="{StaticResource Brush.OnAccent}"
                    FontSize="24"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
@@ -23,15 +22,14 @@
                    TextAlignment="Center"
                    Visibility="Collapsed" />
 
-        <!-- 진단 fps -->
-        <Border Background="#88000000"
+        <Border Background="{StaticResource Brush.Scrim}"
                 CornerRadius="4"
                 Padding="8,4"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Margin="12">
             <TextBlock x:Name="FpsText"
-                       Foreground="#AAFFAA"
+                       Foreground="{StaticResource Brush.OnAccent}"
                        FontFamily="Consolas"
                        FontSize="13"
                        Text="-- fps" />

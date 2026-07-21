@@ -62,10 +62,118 @@ public class AppStateTests
         Assert.True(SessionStateMachine.IsSessionActive(AppState.Result));
         Assert.True(SessionStateMachine.IsSessionActive(AppState.FrameEditor));
 
-        // Home·Done·Admin은 유휴 감시 비대상
+        // Home·Done은 유휴 감시 비대상
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Home));
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Done));
-        Assert.False(SessionStateMachine.IsSessionActive(AppState.Admin));
+        // it2: Settings·Login도 유휴 감시 비대상(설정 조작 중 홈복귀 방지, §5.2)
+        Assert.False(SessionStateMachine.IsSessionActive(AppState.Settings));
+        Assert.False(SessionStateMachine.IsSessionActive(AppState.Login));
+    }
+
+    // ── it2 §5.2: Settings/Login 오버레이 특례 + 촬영 게스트 직행 ──
+
+    [Fact]
+    public void Settings_Reachable_From_Anywhere()
+    {
+        foreach (AppState from in Enum.GetValues<AppState>())
+        {
+            if (from == AppState.Settings) continue;
+            Assert.True(SessionStateMachine.CanTransition(from, AppState.Settings),
+                $"{from}→Settings 는 어디서든 합법이어야 함");
+        }
+    }
+
+    [Fact]
+    public void Login_Reachable_From_Anywhere()
+    {
+        foreach (AppState from in Enum.GetValues<AppState>())
+        {
+            if (from == AppState.Login) continue;
+            Assert.True(SessionStateMachine.CanTransition(from, AppState.Login),
+                $"{from}→Login 은 어디서든 합법이어야 함");
+        }
+    }
+
+    [Fact]
+    public void Home_To_FrameSelect_Legal()
+    {
+        // 게스트 촬영 직행(홈 [촬영하기] → 프레임 선택)
+        Assert.True(SessionStateMachine.CanTransition(AppState.Home, AppState.FrameSelect));
+    }
+
+    [Fact]
+    public void UserMgmt_Back_To_Settings_Legal()
+    {
+        Assert.True(SessionStateMachine.CanTransition(AppState.UserMgmt, AppState.Settings));
+    }
+
+    // ── it2 리뷰 사이클1 Major 회귀: 오버레이 복귀 방향 ──
+    // 버그: ReturnFromOverlay가 CanTransition(Settings, _returnState)에 막혀 세션 화면 복귀 실패.
+    // 근본 원인은 복귀 방향(Settings→세션화면)이 전이표에 없다는 것 — 이는 의도된 설계다
+    // (진입만 특례, 복귀는 저장된 상태로 검증 면제 복귀). 아래 테스트는 그 전제를 고정한다.
+
+    [Theory]
+    [InlineData(AppState.Guide)]
+    [InlineData(AppState.CutSelect)]
+    [InlineData(AppState.Result)]
+    [InlineData(AppState.Done)]
+    public void Overlay_Return_Direction_Not_Forward_Legal(AppState sessionState)
+    {
+        // 복귀 방향(Settings→세션화면)은 전이표상 불법이다(특례 아님).
+        // 따라서 ReturnFromOverlay는 반드시 검증을 면제해야 복귀가 성립한다.
+        // 이 값이 True로 바뀌면(전이표에 세션 화면이 Settings.forward로 추가되면) 설계 위반이므로 실패로 잡는다.
+        // (FrameSelect는 Login.forward에 정상 포함되므로 이 케이스에서 제외 — Settings 기준만 검증)
+        Assert.False(SessionStateMachine.CanTransition(AppState.Settings, sessionState),
+            $"Settings→{sessionState}는 전이표상 불법이어야 하며, 복귀는 검증 면제 경로로만 이뤄져야 한다");
+    }
+
+    [Fact]
+    public void Overlay_Return_To_FrameSelect_Needs_Bypass_From_Settings()
+    {
+        // 프레임 선택 복귀도 Settings 기준으론 전이표상 불법(Settings.forward에 없음) → 검증 면제 필요.
+        Assert.False(SessionStateMachine.CanTransition(AppState.Settings, AppState.FrameSelect));
+    }
+
+    [Fact]
+    public void Overlay_Entry_Direction_Is_Legal_From_Session_States()
+    {
+        // 진입 방향(세션화면→Settings/Login)은 특례로 항상 합법이어야 한다.
+        foreach (var s in new[] { AppState.FrameSelect, AppState.Guide, AppState.CutSelect, AppState.Result, AppState.Done })
+        {
+            Assert.True(SessionStateMachine.CanTransition(s, AppState.Settings), $"{s}→Settings 합법");
+            Assert.True(SessionStateMachine.CanTransition(s, AppState.Login), $"{s}→Login 합법");
+        }
+    }
+
+    [Fact]
+    public void Capture_Flow_Unchanged()
+    {
+        // 촬영 흐름은 변경되지 않음(기존 유지)
+        Assert.True(SessionStateMachine.CanTransition(AppState.Guide, AppState.Capture));
+        Assert.True(SessionStateMachine.CanTransition(AppState.Capture, AppState.CutSelect));
+        Assert.True(SessionStateMachine.CanTransition(AppState.CutSelect, AppState.Result));
+        // Home→Capture는 여전히 불가(특례 아님)
+        Assert.False(SessionStateMachine.CanTransition(AppState.Home, AppState.Capture));
+    }
+
+    // ── it2 §3.1: 상단 바 가시성 ──
+
+    [Fact]
+    public void TopBar_Hidden_On_Immersive_States()
+    {
+        // 촬영·QR 팝업에서 숨김
+        Assert.False(SessionStateMachine.IsTopBarVisible(AppState.Capture));
+        Assert.False(SessionStateMachine.IsTopBarVisible(AppState.Qr));
+    }
+
+    [Fact]
+    public void TopBar_Visible_On_Static_States()
+    {
+        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Home));
+        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.FrameSelect));
+        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Settings));
+        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Result));
+        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Done));
     }
 
     [Fact]

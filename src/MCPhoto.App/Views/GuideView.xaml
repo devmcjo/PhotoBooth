@@ -4,33 +4,47 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="#141018">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-            <TextBlock Text="촬영 안내" Foreground="#F5F0FA" FontSize="34" FontWeight="Bold"
-                       HorizontalAlignment="Center" Margin="0,0,0,32" />
-            <StackPanel Margin="0,0,0,12" Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="촬영 컷 수: " Foreground="#B9A7D0" FontSize="22" />
-                <TextBlock Text="{Binding CutCount}" Foreground="#F5F0FA" FontSize="22" FontWeight="Bold" />
-                <TextBlock Text=" 컷" Foreground="#B9A7D0" FontSize="22" />
+    <Grid Background="{StaticResource Brush.Bg}">
+        <Border Style="{StaticResource Card}" VerticalAlignment="Center" HorizontalAlignment="Center" MinWidth="440">
+            <StackPanel>
+                <TextBlock Text="촬영 안내" Style="{StaticResource Text.H1}"
+                           HorizontalAlignment="Center" Margin="0,0,0,28" />
+
+                <Grid Margin="0,0,0,12">
+                    <TextBlock Text="촬영 컷 수" Style="{StaticResource Text.Body}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding CutCount}" Style="{StaticResource Text.Body}"
+                                   Foreground="{StaticResource Brush.Accent.Text}" FontWeight="Bold" />
+                        <TextBlock Text=" 컷" Style="{StaticResource Text.Body}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="0,0,0,12">
+                    <TextBlock Text="컷당 카운트다운" Style="{StaticResource Text.Body}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding CountdownSec}" Style="{StaticResource Text.Body}"
+                                   Foreground="{StaticResource Brush.Accent.Text}" FontWeight="Bold" />
+                        <TextBlock Text=" 초" Style="{StaticResource Text.Body}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="0,0,0,12">
+                    <TextBlock Text="선택할 컷" Style="{StaticResource Text.Body}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding SlotCount}" Style="{StaticResource Text.Body}"
+                                   Foreground="{StaticResource Brush.Accent.Text}" FontWeight="Bold" />
+                        <TextBlock Text=" 장" Style="{StaticResource Text.Body}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="촬영 중 [바로 촬영]으로 즉시 셔터를 누를 수 있어요."
+                           Style="{StaticResource Text.Caption}"
+                           HorizontalAlignment="Center" Margin="0,16,0,28" TextAlignment="Center" />
+
+                <Button Content="촬영 시작" Command="{Binding StartCaptureCommand}"
+                        Style="{StaticResource Button.Primary}" Height="64" FontSize="20"
+                        HorizontalAlignment="Stretch" Margin="0,0,0,12" />
+                <Button Content="취소" Command="{Binding CancelCommand}"
+                        Style="{StaticResource Button.Ghost}" HorizontalAlignment="Center" />
             </StackPanel>
-            <StackPanel Margin="0,0,0,12" Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="컷당 카운트다운: " Foreground="#B9A7D0" FontSize="22" />
-                <TextBlock Text="{Binding CountdownSec}" Foreground="#F5F0FA" FontSize="22" FontWeight="Bold" />
-                <TextBlock Text=" 초" Foreground="#B9A7D0" FontSize="22" />
-            </StackPanel>
-            <StackPanel Margin="0,0,0,12" Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="선택할 컷: " Foreground="#B9A7D0" FontSize="22" />
-                <TextBlock Text="{Binding SlotCount}" Foreground="#F5F0FA" FontSize="22" FontWeight="Bold" />
-                <TextBlock Text=" 장" Foreground="#B9A7D0" FontSize="22" />
-            </StackPanel>
-            <TextBlock Text="촬영 중 [바로 촬영]으로 즉시 셔터를 누를 수 있어요."
-                       Foreground="#8574A0" FontSize="16" HorizontalAlignment="Center" Margin="0,20,0,40" />
-            <Button Content="촬영 시작" Command="{Binding StartCaptureCommand}"
-                    FontSize="28" Padding="56,20" Background="#C44B9B" Foreground="White"
-                    BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" />
-            <Button Content="취소" Command="{Binding CancelCommand}"
-                    FontSize="15" Background="Transparent" Foreground="#8574A0"
-                    BorderThickness="0" Cursor="Hand" Margin="0,20,0,0" HorizontalAlignment="Center" />
-        </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

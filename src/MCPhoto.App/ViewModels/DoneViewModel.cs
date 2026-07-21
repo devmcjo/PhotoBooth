@@ -18,7 +18,7 @@ public sealed partial class DoneViewModel : ViewModelBase
         _autoReturn.Tick += (_, _) =>
         {
             _autoReturn?.Stop();
-            _shell.ReturnHome("세션 완료");
+            _shell.ReturnHome("세션 완료", clearUser: true); // 다음 손님 위해 로그아웃(it3 §2.3)
         };
         _autoReturn.Start();
         return Task.CompletedTask;
@@ -32,5 +32,5 @@ public sealed partial class DoneViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void GoHome() => _shell.ReturnHome("완료 확인");
+    private void GoHome() => _shell.ReturnHome("완료 확인", clearUser: true); // 세션 완료 → 다음 손님(it3 §2.3)
 }

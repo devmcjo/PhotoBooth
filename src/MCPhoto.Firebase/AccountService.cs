@@ -47,8 +47,13 @@ public sealed class AccountService : IAccountService
         return ToUser(doc);
     }
 
-    public async Task<User> CreateAsync(string id, string password, UserRole role = UserRole.User, CancellationToken ct = default)
+    public async Task<User> CreateAsync(string id, string password, UserRole role, UserRole actingRole, CancellationToken ct = default)
     {
+        // 권한 게이트를 먼저 검사(호출자 신뢰 금지, it2 §7). 위반이 미초기화보다 우선.
+        if (!actingRole.CanCreate(role))
+            throw new UnauthorizedAccessException(
+                $"{actingRole} 권한으로 {role} 계정을 생성할 수 없습니다.");
+
         EnsureDb();
         var docRef = Db!.Collection(Collection).Document(id);
         var existing = await docRef.GetSnapshotAsync(ct);
