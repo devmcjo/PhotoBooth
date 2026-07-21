@@ -364,7 +364,7 @@ MainWindow Grid
 
 | 기존 자산 | 이번 처리 |
 |---|---|
-| `AdminViewModel` (설정 편집 로직·LoadSettings/SaveSettings) | **`SettingsViewModel`로 승격·확장**. 앱설정 필드는 [앱 설정] 섹션이 계승, 로그인 게이트는 [관리자] 섹션 로그인 카드로 이동, 신규 항목(OutputFormat/DisplayMode/StorageBucket) 추가. |
+| `AdminViewModel` (설정 편집 로직·LoadSettings/SaveSettings) | **`SettingsViewModel`로 승격·확장**. 앱설정 필드는 [앱 설정] 섹션이 이어받고, 로그인 게이트는 [관리자] 섹션 로그인 카드로 이동, 신규 항목(OutputFormat/DisplayMode/StorageBucket) 추가. |
 | `AdminView.xaml` | `SettingsView.xaml`로 재작성(디자인 시스템 적용, 섹션 카드 구조). |
 | `UserMgmtViewModel` / `UserMgmtView` | **거의 그대로 재사용**. 설정 페이지 [관리자] 섹션의 사용자 관리 하위뷰로 임베드하거나 서브 네비(`AppState.UserMgmt` 유지) — 스타일만 디자인 시스템 적용. |
 | `AppState.Admin` | 설정 페이지로 대체(제거) 또는 내부 서브상태로 흡수. **결정: `AppState.Admin` 제거, `AppState.Settings` 신설.** `UserMgmt`는 설정의 자식 네비로 유지. |
@@ -413,7 +413,7 @@ MainWindow Grid
 | 화면(View) | ViewModel | 상태 | 변경 유형 | 핵심 변경 |
 |---|---|---|---|---|
 | MainWindow | AppShellViewModel | (셸) | **변경** | 상단 바 오버레이 추가, `IsTopBarVisible`/`IsLoggedIn`/`AccountLabel`/`Orientation` 노출, 롱프레스 코드 제거, 오버레이 네비(`NavigateToOverlayAsync`/`ReturnFromOverlay`) |
-| HomeView | HomeViewModel | Home | **변경** | Start → `FrameSelect` 직행. 디자인 시스템 적용. (선택) 홈에 glassmorphism 장식 |
+| HomeView | HomeViewModel | Home | **변경** | Start → `FrameSelect` 직행. 라이트 디자인 시스템 적용. (선택) 홈에 로즈/민트 파스텔 장식·soft shadow |
 | (신규) SettingsView | SettingsViewModel | **Settings(신규)** | **신설** | 앱설정/계정/관리자 3섹션. AdminViewModel 로직 승격 |
 | LoginGuestView → LoginView | LoginGuestViewModel(→LoginViewModel) | Login | **변경** | 게스트 버튼 제거, 로그인 후 복귀 로직, 디자인 적용 |
 | FrameSelectView | FrameSelectViewModel | FrameSelect | **경미** | 로직 유지, 디자인 시스템·카드 선택 강조·세로 레이아웃 |

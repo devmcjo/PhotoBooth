@@ -64,14 +64,14 @@ Step 9 (통합 정리·롱프레스 제거·최종 빌드)         ← 전 단�
 
 ## Step 1: 디자인 시스템 리소스 딕셔너리 골격 (색·타이포·간격)
 
-- **Context Brief**: 현재 앱은 스타일 리소스가 전무하고 색을 화면마다 리터럴로 하드코딩한다(VF-2). 재사용 가능한 디자인 시스템의 토대인 색 팔레트·브러시·타이포·간격 리소스를 만든다. 이 Step은 **원자 토큰만** 정의하고 컨트롤 스타일(버튼 등)은 Step 2에서 얹는다. 팔레트는 기존 값을 계승(VF-3)하며 상태·시맨틱 색을 보강한다.
+- **Context Brief**: 현재 앱은 스타일 리소스가 전무하고 색을 화면마다 리터럴로 하드코딩한다(VF-2). 재사용 가능한 디자인 시스템의 토대인 색 팔레트·브러시·타이포·간격 리소스를 만든다. 이 Step은 **원자 토큰만** 정의하고 컨트롤 스타일(버튼 등)은 Step 2에서 얹는다. **색은 Direction A 라이트 팔레트**(화이트 배경·Ink 텍스트·로즈 CTA·민트 포인트)를 `wpf-it2-design.md` §2.3 표대로 정의한다(다크 계승 아님).
 - **대상 파일**: `src/MCPhoto.App/Themes/Colors.xaml`, `Brushes.xaml`, `Typography.xaml`, `Metrics.xaml`, `Theme.xaml`(신규), `src/MCPhoto.App/App.xaml`(MergedDictionaries 등록).
 - **선행 조건**: 없음.
 - **구현 내용**:
-  - `Colors.xaml`: `wpf-it2-design.md` §2.3 표의 색을 `<Color x:Key="...">`로 정의(순수 Color).
-  - `Brushes.xaml`: 각 Color를 참조하는 `SolidColorBrush`(키 = `Brush.Bg`, `Brush.Surface`, `Brush.Accent` … 설계 §2.3 전체). Scrim/Glass는 알파 포함.
-  - `Typography.xaml`: `FontFamily x:Key="Font.Primary"`(`Segoe UI, Malgun Gothic`) + 설계 §2.4의 `Text.Display/H1/H2/Title/Body/Label/Caption` `Style TargetType=TextBlock`(x:Key, Foreground/FontSize/FontWeight/FontFamily).
-  - `Metrics.xaml`: 설계 §2.5의 Spacing(double/Thickness), CornerRadius, Touch 크기, `Shadow.Card`(DropShadowEffect) 리소스.
+  - `Colors.xaml`: `wpf-it2-design.md` §2.3 표(라이트)의 색을 `<Color x:Key="...">`로 정의(순수 Color). 확정 6색(#FFFFFF/#F4F1F7/#241F2B/#8A8494/#FF4D79/#37C9B0) + 보강 톤.
+  - `Brushes.xaml`: 각 Color를 참조하는 `SolidColorBrush`(키 = `Brush.Bg`, `Brush.Surface`, `Brush.Accent`(로즈), `Brush.Accent2`(민트) … 설계 §2.3 전체). Scrim은 알파 포함. **`Brush.Glass`는 정의하지 않음**(glassmorphism 폐기).
+  - `Typography.xaml`: `FontFamily x:Key="Font.Primary"`(`Segoe UI, Malgun Gothic`) + 설계 §2.4의 `Text.Display/H1/H2/Title/Body/Label/Caption` `Style TargetType=TextBlock`(x:Key, Foreground/FontSize/FontWeight/FontFamily). Foreground 기본=Ink 계열(§2.4).
+  - `Metrics.xaml`: 설계 §2.5의 Spacing(double/Thickness), CornerRadius, Touch 크기, **라이트 soft shadow 3단계**(`Shadow.Sm`/`Shadow.Card`/`Shadow.Pop`, DropShadowEffect 저투명 #241F2B) 리소스.
   - `Theme.xaml`: 위 4개를 `MergedDictionaries`로 묶음.
   - `App.xaml`: `Application.Resources`를 `ResourceDictionary` + `MergedDictionaries`(`Themes/Theme.xaml`)로 감싸고, **기존 컨버터·DataTemplate는 그 아래에 그대로 유지**(제거 금지).
 - **검증 명령**: `dotnet build MCPhoto.sln -c Release`(error 0, App 프로젝트 warning 0). `grep`로 `Themes/Theme.xaml` 참조가 `App.xaml`에 존재 확인.
@@ -222,13 +222,13 @@ Step 9 (통합 정리·롱프레스 제거·최종 빌드)         ← 전 단�
 - **대상 파일**: `src/MCPhoto.App/Views/HomeView.xaml`, `FrameSelectView.xaml`, `GuideView.xaml`, `CaptureView.xaml`, `CutSelectView.xaml`, `ResultView.xaml`, `QrPopupView.xaml`, `DoneView.xaml`, `FrameEditorView.xaml`, `PreviewView.xaml`, `UserMgmtView.xaml`(디자인 미적용분), `MainWindow.xaml`(배경 토큰화). `AppShellViewModel.cs`(Orientation 노출).
 - **선행 조건**: Step 2. (신규 화면 관련은 Step 3·5·6·7.)
 - **구현 내용**:
-  - 색 리터럴 → 브러시 키 치환(부록 A 매핑표). 인라인 `Background/Foreground/Padding/FontSize` 버튼 → `Style="{StaticResource Button.Primary/Secondary/Ghost/...}"`. 제목 TextBlock → `Text.H1` 스타일. 필터 칩 → `Button.Filter`(선택 표시). 프레임 카드 → `Button.FrameCard`/`Card`.
-  - CaptureView: 카운트다운 pulse·플래시 storyboard 적용(설계 §2.7). 촬영 배경은 몰입 위해 검정 유지(부록 A 예외 명시).
+  - 색 리터럴 → 브러시 키 치환(부록 A **역할 전환** 매핑). **다크→라이트 반전 주의**: 다크 배경 위 흰/밝은 텍스트 조합은 라이트에서 Ink 텍스트 on 흰/연회색으로 뒤집는다(흰 텍스트를 흰 배경에 남기지 말 것, §2.3.1). 인라인 `Background/Foreground/Padding/FontSize` 버튼 → `Style="{StaticResource Button.Primary/Secondary/Ghost/...}"`. 제목 TextBlock → `Text.H1` 스타일. 필터 칩 → `Button.Filter`(선택=연로즈 배경+로즈 테두리). 프레임 카드 → `Button.FrameCard`/`Card`(soft shadow).
+  - CaptureView: 카운트다운 pulse·플래시 storyboard 적용(설계 §2.7). **촬영 배경은 몰입 위해 예외적 다크 유지**(`Brush.CaptureBg`=#111114, 부록 A 예외 — 라이트 치환 대상 아님). 카운트다운/오버레이 텍스트는 다크 배경 위라 흰색 유지 OK.
   - `AppShellViewModel`: `MainWindow.SizeChanged`→`Orientation`(Landscape/Portrait) 노출. 주요 화면(ResultView·SettingsView·FrameEditorView)에 `DataTrigger`(Orientation)로 2열↔2행 재배치. 나머지는 중앙 정렬 폴백(OA-5 완화책).
-  - 전이 페이드(설계 §2.7): `MainWindow`의 `ContentControl` 콘텐츠 교체 시 opacity 페이드(스타일/트리거).
-- **검증 명령**: `dotnet build -c Release`(error 0, warning 0). `grep -n "#[0-9A-Fa-f]\{6\}"` 를 각 View XAML에 실행해 남은 색 리터럴이 **의도된 예외(촬영 검정 배경·프레임/프리뷰 관련)만** 남았는지 정적 확인.
+  - 전이 페이드(설계 §2.7): `MainWindow`의 `ContentControl` 콘텐츠 교체 시 opacity 페이드(스타일/트리거). MainWindow 배경도 `Brush.Bg`(흰)로 토큰화(현재 `#141018` 하드코딩).
+- **검증 명령**: `dotnet build -c Release`(error 0, warning 0). `grep -n "#[0-9A-Fa-f]\{6\}"` 를 각 View XAML에 실행해 남은 색 리터럴이 **의도된 예외(촬영 다크 배경 `Brush.CaptureBg`·스크림·프레임/프리뷰 관련)만** 남았는지 정적 확인. `grep`로 각 View에 `Foreground="#F` 류 흰색 텍스트 리터럴 잔존 0(반전 누락 방지).
 - **완료 기준**:
-  - [관측] 빌드 error 0·warning 0. 각 View XAML의 색 리터럴이 브러시 키로 치환됨(grep: 잔존 `#RRGGBB`가 촬영 배경 `#000`/스크림 등 부록 A 예외 목록에 한정). 버튼이 스타일 키 참조(grep: `Style="{StaticResource Button.`). `AppShellViewModel`에 `Orientation` 존재.
+  - [관측] 빌드 error 0·warning 0. 각 View XAML의 색 리터럴이 브러시 키로 치환됨(grep: 잔존 `#RRGGBB`가 촬영 배경/스크림 등 부록 A 예외 목록에 한정). 흰색 텍스트 리터럴(`#F5F0FA`/`#E8DEF2`/`White` Foreground)이 촬영 오버레이 외에 잔존하지 않음(라이트 반전 완료). 버튼이 스타일 키 참조(grep: `Style="{StaticResource Button.`). `AppShellViewModel`에 `Orientation` 존재.
   - [non-goal] 화면의 **기능·바인딩·커맨드는 변경하지 않는다**(순수 프레젠테이션 치환). 상태머신·VM 로직 불변. 촬영 프리뷰/카운트다운 렌더 표면에 무거운 Effect 추가 금지(성능).
   - [trigger] 레이아웃 재배치는 창 종횡비 변화(Orientation 바인딩) 시에만. 전이 페이드는 화면 전환 시에만.
   - [사용자 확인 필요] 전 화면 일관 디자인·올드함 해소, 가로/세로 레이아웃, 애니메이션 자연스러움(design §10-1·5·6).
