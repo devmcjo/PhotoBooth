@@ -41,4 +41,14 @@ public class QrDeliveryPolicyTests
         s.NormalizeQr();
         Assert.False(s.EnableQrDelivery); // 둘 다 off → QR off
     }
+
+    // ── it8 A5: QR off→on 재활성 시 하위 둘 다 on 강제 ──
+
+    [Fact]
+    public void OnReEnabled_Forces_Both_Sub_Toggles_On()
+    {
+        var (sp, st) = QrDeliveryPolicy.OnReEnabled();
+        Assert.True(sp);
+        Assert.True(st);
+    }
 }

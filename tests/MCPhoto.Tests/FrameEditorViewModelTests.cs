@@ -31,6 +31,23 @@ public class FrameEditorViewModelTests : IDisposable
         public Task DeleteAllByUserAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
+    private sealed class CapturingLocalStore : ILocalFrameStore
+    {
+        public FrameTemplate? SavedFrame { get; private set; }
+        public string? SavedOwner { get; private set; }
+        public FrameTemplate SaveLocal(FrameTemplate frame, byte[] png, string? ownerName)
+        {
+            SavedFrame = frame;
+            SavedOwner = ownerName;
+            return frame;
+        }
+        public IReadOnlyList<FrameTemplate> LoadPublic() => new List<FrameTemplate>();
+        public IReadOnlyList<FrameTemplate> LoadUser(string ownerName) => new List<FrameTemplate>();
+        public FrameTemplate CacheFromDb(FrameTemplate frame, byte[] png) => frame;
+        public bool DeleteLocal(FrameTemplate frame) => true;
+        public IReadOnlySet<string> PublicFrameNames() => new HashSet<string>();
+    }
+
     private sealed class EmptyServiceProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
@@ -58,19 +75,20 @@ public class FrameEditorViewModelTests : IDisposable
         return new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
     }
 
-    private (FrameEditorViewModel vm, CapturingFrameRepository repo, SessionContext session) MakeVm()
+    private (FrameEditorViewModel vm, CapturingFrameRepository repo, CapturingLocalStore local, SessionContext session) MakeVm(UserRole role = UserRole.User)
     {
         var session = new SessionContext();
-        session.Login(new User { Id = "u1", Password = "pw", Role = UserRole.User });
+        session.Login(new User { Id = "u1", Password = "pw", Role = role });
         var repo = new CapturingFrameRepository();
-        var vm = new FrameEditorViewModel(MakeShell(session), repo);
-        return (vm, repo, session);
+        var local = new CapturingLocalStore();
+        var vm = new FrameEditorViewModel(MakeShell(session), repo, local);
+        return (vm, repo, local, session);
     }
 
     [Fact]
     public void SlotCountOptions_Is_One_To_Six()
     {
-        var (vm, _, _) = MakeVm();
+        var (vm, _, _, _) = MakeVm();
         Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, vm.SlotCountOptions);
     }
 
@@ -80,7 +98,7 @@ public class FrameEditorViewModelTests : IDisposable
     [InlineData(6)]
     public void SlotCount_Change_Reflects_In_Slots(int count)
     {
-        var (vm, _, _) = MakeVm();
+        var (vm, _, _, _) = MakeVm();
         Assert.True(vm.LoadImage(_imagePath)); // FrameWidth/Height 세팅 → ArrangeSlots 가능
 
         vm.SlotCount = count;
@@ -89,17 +107,38 @@ public class FrameEditorViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Save_Persists_Selected_Slot_Count()
+    public async Task User_Save_Persists_Locally_With_Six_Slots()
     {
-        var (vm, repo, _) = MakeVm();
+        // it8 A2: user는 로컬 전용 저장(DB 미호출). B9: 6 선택이 clobber 없이 유지.
+        var (vm, repo, local, _) = MakeVm(UserRole.User);
         Assert.True(vm.LoadImage(_imagePath));
 
-        vm.SlotCount = 6; // B9: 6 선택이 clobber 없이 유지되어야
+        vm.SlotCount = 6;
         Assert.Equal(6, vm.Slots.Count);
 
         await vm.SaveCommand.ExecuteAsync(null);
 
+        Assert.Null(repo.Saved);                    // user는 DB 미저장
+        Assert.NotNull(local.SavedFrame);
+        Assert.Equal("u1", local.SavedOwner);       // 계정명 prefix
+        Assert.Equal(6, local.SavedFrame!.Slots.Count);
+    }
+
+    [Fact]
+    public async Task Power_Save_Persists_To_Db_And_Local_Cache()
+    {
+        // it8 A2: 파워는 DB(isDefault=true) + 로컬 캐시(ownerName=null).
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+
+        vm.SlotCount = 6;
+        await vm.SaveCommand.ExecuteAsync(null);
+
         Assert.NotNull(repo.Saved);
-        Assert.Equal(6, repo.Saved!.Slots.Count); // 저장 문서에 6개 전달
+        Assert.True(repo.Saved!.IsDefault);
+        Assert.Null(repo.Saved.UserId);
+        Assert.Equal(6, repo.Saved.Slots.Count);
+        Assert.NotNull(local.SavedFrame);           // 로컬 캐시도
+        Assert.Null(local.SavedOwner);              // 파워 캐시는 ownerName null(frameId 기반)
     }
 }

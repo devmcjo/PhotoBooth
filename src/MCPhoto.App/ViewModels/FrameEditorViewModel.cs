@@ -19,6 +19,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 {
     private readonly AppShellViewModel _shell;
     private readonly IFrameRepository _repository;
+    private readonly ILocalFrameStore _localStore;
     private readonly ILogger<FrameEditorViewModel>? _logger;
 
     private byte[]? _imageBytes;
@@ -50,10 +51,11 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     /// <summary>편집 중 슬롯(드래그 대상).</summary>
     public ObservableCollection<Slot> Slots { get; } = new();
 
-    public FrameEditorViewModel(AppShellViewModel shell, IFrameRepository repository, ILogger<FrameEditorViewModel>? logger = null)
+    public FrameEditorViewModel(AppShellViewModel shell, IFrameRepository repository, ILocalFrameStore localStore, ILogger<FrameEditorViewModel>? logger = null)
     {
         _shell = shell;
         _repository = repository;
+        _localStore = localStore;
         _logger = logger;
     }
 
@@ -186,15 +188,36 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         try
         {
             StatusMessage = "저장 중...";
-            var frame = new FrameTemplate
+            bool isPower = user.Role.IsPower();
+
+            if (isPower)
             {
-                UserId = user.Id,
-                IsDefault = false,
-                Name = FrameName,
-                ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
-                Slots = Slots.ToList()
-            };
-            await _repository.SaveAsync(frame, _imageBytes);
+                // 파워: 공용 기본 프레임 → DB(isDefault=true, userId=null) + 로컬 캐시. (it8 §3 A2)
+                var frame = new FrameTemplate
+                {
+                    UserId = null,
+                    IsDefault = true,
+                    Name = FrameName,
+                    ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
+                    Slots = Slots.ToList()
+                };
+                var saved = await _repository.SaveAsync(frame, _imageBytes);
+                _localStore.SaveLocal(saved, _imageBytes, ownerName: null); // frameId 기반 캐시
+            }
+            else
+            {
+                // user: 로컬 전용(DB 미저장). {계정}_{이름}.png. (it8 §3 A2)
+                var frame = new FrameTemplate
+                {
+                    UserId = user.Id,
+                    IsDefault = false,
+                    Name = FrameName,
+                    ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
+                    Slots = Slots.ToList()
+                };
+                _localStore.SaveLocal(frame, _imageBytes, ownerName: user.Id);
+            }
+
             await _shell.NavigateAsync(AppState.FrameSelect);
         }
         catch (InvalidOperationException ex)

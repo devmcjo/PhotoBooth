@@ -32,7 +32,12 @@
     </UserControl.Resources>
 
     <Grid Background="{StaticResource Brush.Bg}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,88,40,40">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="40,88,40,16">
             <!-- PC 밀도: 넓은 카드(MaxWidth 1000). 계정·관리자 섹션은 계정 페이지로 분리(C1). -->
             <StackPanel MaxWidth="1000" HorizontalAlignment="Center">
 
@@ -184,6 +189,45 @@
 
                         <Border Style="{StaticResource GroupDivider}" />
 
+                        <!-- ── 그룹: 필터 (it8 §6 A6) — 원본은 항상 제공(토글 불가), 나머지 개별 on/off ── -->
+                        <TextBlock Text="필터" Style="{StaticResource GroupTitle}" />
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="원본(항상 제공)" Style="{StaticResource RowLabel}" />
+                            <!-- 원본은 끌 수 없음: 체크 고정 + 비활성(Disable) -->
+                            <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right"
+                                          IsChecked="True" IsEnabled="False" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="흑백" Style="{StaticResource RowLabel}" />
+                            <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding FilterGrayscale}" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="밝게" Style="{StaticResource RowLabel}" />
+                            <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding FilterBrightness}" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="뷰티" Style="{StaticResource RowLabel}" />
+                            <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding FilterBeauty}" />
+                        </Grid>
+
+                        <Border Style="{StaticResource GroupDivider}" />
+
                         <!-- ── 그룹: 고급 ── -->
                         <TextBlock Text="고급" Style="{StaticResource GroupTitle}" />
                         <StackPanel Style="{StaticResource FullRow}">
@@ -198,21 +242,26 @@
                                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
                                        Margin="0,4,0,0" />
                         </StackPanel>
-
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="저장" Style="{StaticResource Button.Primary}"
-                                    Command="{Binding SaveSettingsCommand}" Margin="0,0,12,0" />
-                            <!-- 성공=Success(민트 계열), 실패=Danger(로즈 계열) 색 분기(it3 §3) -->
-                            <TextBlock Text="{Binding SavedNotice}" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
-                                       Foreground="{Binding SavedNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
-                        </StackPanel>
                     </StackPanel>
                 </Border>
-
-                <!-- 닫기 -->
-                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
-                        Command="{Binding CloseCommand}" HorizontalAlignment="Left" Margin="0,0,0,16" />
             </StackPanel>
         </ScrollViewer>
+
+        <!-- A4: sticky 하단 고정 바(ScrollViewer 밖). 저장/닫기 항상 노출 + 저장 토스트. (it8 §5.1) -->
+        <Border Grid.Row="1" Background="{StaticResource Brush.Bg}" BorderThickness="0,1,0,0"
+                BorderBrush="{StaticResource Brush.Divider}" Effect="{StaticResource Shadow.Sm}"
+                Padding="40,12">
+            <Grid MaxWidth="1000" HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button Content="저장" Style="{StaticResource Button.Primary}"
+                            Command="{Binding SaveSettingsCommand}" Margin="0,0,12,0" />
+                    <!-- 성공=Success(민트 계열), 실패=Danger(로즈 계열) 색 분기(it3 §3) -->
+                    <TextBlock Text="{Binding SavedNotice}" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
+                               Foreground="{Binding SavedNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
+                </StackPanel>
+                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                        Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

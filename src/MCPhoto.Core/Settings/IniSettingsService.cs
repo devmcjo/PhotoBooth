@@ -137,6 +137,9 @@ public sealed class IniSettingsService : ISettingsService
         s.EnableQrDelivery = ini.GetBool(Section, nameof(s.EnableQrDelivery), s.EnableQrDelivery);
         s.SendPhoto = ini.GetBool(Section, nameof(s.SendPhoto), s.SendPhoto);
         s.SendTimelapse = ini.GetBool(Section, nameof(s.SendTimelapse), s.SendTimelapse);
+        s.FilterGrayscale = ini.GetBool(Section, nameof(s.FilterGrayscale), s.FilterGrayscale);
+        s.FilterBrightness = ini.GetBool(Section, nameof(s.FilterBrightness), s.FilterBrightness);
+        s.FilterBeauty = ini.GetBool(Section, nameof(s.FilterBeauty), s.FilterBeauty);
         s.SaveLocalCopy = ini.GetBool(Section, nameof(s.SaveLocalCopy), s.SaveLocalCopy);
         s.LocalSavePath = ini.GetString(Section, nameof(s.LocalSavePath), s.LocalSavePath);
         s.DisplayMode = ini.GetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
@@ -161,6 +164,9 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetBool(Section, nameof(s.EnableQrDelivery), s.EnableQrDelivery);
         ini.SetBool(Section, nameof(s.SendPhoto), s.SendPhoto);
         ini.SetBool(Section, nameof(s.SendTimelapse), s.SendTimelapse);
+        ini.SetBool(Section, nameof(s.FilterGrayscale), s.FilterGrayscale);
+        ini.SetBool(Section, nameof(s.FilterBrightness), s.FilterBrightness);
+        ini.SetBool(Section, nameof(s.FilterBeauty), s.FilterBeauty);
         ini.SetBool(Section, nameof(s.SaveLocalCopy), s.SaveLocalCopy);
         ini.Set(Section, nameof(s.LocalSavePath), s.LocalSavePath);
         ini.SetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);

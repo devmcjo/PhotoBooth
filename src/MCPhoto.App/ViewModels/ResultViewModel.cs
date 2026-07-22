@@ -29,6 +29,9 @@ public sealed partial class ResultViewModel : ViewModelBase
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _statusMessage = string.Empty;
 
+    /// <summary>결과 화면에 노출할 필터(항상 None + 설정에서 켜진 것). (it8 §6 A6)</summary>
+    public System.Collections.ObjectModel.ObservableCollection<FilterOption> AvailableFilters { get; } = new();
+
     public ResultViewModel(
         AppShellViewModel shell,
         ICompositionService composition,
@@ -48,7 +51,26 @@ public sealed partial class ResultViewModel : ViewModelBase
     public override async Task OnEnterAsync()
     {
         SelectedFilter = _shell.Session.Filter;
+        BuildAvailableFilters();
         await ComposePreviewAsync();
+    }
+
+    /// <summary>설정에서 켜진 필터만(+항상 None) 노출 목록 구성. (it8 §6 A6)</summary>
+    private void BuildAvailableFilters()
+    {
+        AvailableFilters.Clear();
+        foreach (var opt in BuildFilterOptions(_shell.Settings.Current))
+            AvailableFilters.Add(opt);
+    }
+
+    /// <summary>설정 → 필터 옵션 목록(순수 로직, 테스트 대상). 항상 None + 켜진 것. (it8 §6 A6)</summary>
+    public static IReadOnlyList<FilterOption> BuildFilterOptions(Core.Settings.AppSettings s)
+    {
+        var list = new List<FilterOption> { new(FilterKind.None, "원본") }; // 항상 제공
+        if (s.FilterGrayscale) list.Add(new FilterOption(FilterKind.Grayscale, "흑백"));
+        if (s.FilterBrightness) list.Add(new FilterOption(FilterKind.Brightness, "밝게"));
+        if (s.FilterBeauty) list.Add(new FilterOption(FilterKind.Beauty, "뷰티"));
+        return list;
     }
 
     private async Task ComposePreviewAsync()
@@ -139,3 +161,6 @@ public sealed partial class ResultViewModel : ViewModelBase
     [RelayCommand]
     private void Cancel() => _shell.ReturnHome("결과 취소");
 }
+
+/// <summary>결과 화면 필터 버튼 항목(종류 + 표시 라벨). (it8 §6 A6)</summary>
+public sealed record FilterOption(FilterKind Kind, string Label);

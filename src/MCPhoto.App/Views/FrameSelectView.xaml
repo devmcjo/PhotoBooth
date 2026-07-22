@@ -58,10 +58,50 @@
                                        FontSize="14" FontWeight="SemiBold"
                                        VerticalAlignment="Center" HorizontalAlignment="Center" />
                         </Border>
+                        <!-- A3: 삭제 X (로그인 관리자 + 로컬 프레임만). 게스트·번들 미노출. -->
+                        <Button Content="✕" FontSize="14" Width="28" Height="28"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                Style="{StaticResource Button.Icon}"
+                                Command="{Binding DataContext.RequestDeleteCommand,
+                                          RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                CommandParameter="{Binding}"
+                                AutomationProperties.Name="프레임 삭제">
+                            <Button.Visibility>
+                                <MultiBinding Converter="{StaticResource AllTrueToVis}">
+                                    <Binding Path="DataContext.CanDeleteFrames" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                    <Binding Path="Id" Converter="{StaticResource StartsWithToVis}" ConverterParameter="local:" />
+                                </MultiBinding>
+                            </Button.Visibility>
+                        </Button>
                     </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
+
+        <!-- A3: 삭제 확인 팝업(오버레이). 파워면 "서버에서도 제거" 체크(기본 off). -->
+        <Grid Grid.RowSpan="3" Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding IsDeleteConfirmVisible, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Padding="32" Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="380"
+                    Background="{StaticResource Brush.Bg}">
+                <StackPanel>
+                    <TextBlock Text="이 프레임을 삭제하시겠습니까?" Style="{StaticResource Text.H2}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="{Binding FrameToDelete.Name}" Style="{StaticResource Text.Body}"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               HorizontalAlignment="Center" Margin="0,0,0,20" />
+                    <CheckBox Content="서버에서도 제거" IsChecked="{Binding DeleteAlsoServer}"
+                              Visibility="{Binding IsPower, Converter={StaticResource BoolToVis}}"
+                              Margin="0,0,0,20" HorizontalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="삭제" Command="{Binding ConfirmDeleteCommand}"
+                                Style="{StaticResource Button.Danger}" Margin="0,0,12,0" />
+                        <Button Content="취소" Command="{Binding CancelDeleteCommand}"
+                                Style="{StaticResource Button.Ghost}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,32">
             <Button Content="프레임 만들기" Command="{Binding CreateFrameCommand}"

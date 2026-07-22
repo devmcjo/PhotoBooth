@@ -27,6 +27,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _enableQrDelivery;
     [ObservableProperty] private bool _sendPhoto;       // QR 하위: 사진 전송 (it7 F2)
     [ObservableProperty] private bool _sendTimelapse;   // QR 하위: 타임랩스 전송 (it7 F2)
+    [ObservableProperty] private bool _filterGrayscale; // 필터 노출 (it8 A6)
+    [ObservableProperty] private bool _filterBrightness;
+    [ObservableProperty] private bool _filterBeauty;
     [ObservableProperty] private bool _saveLocalCopy;
     [ObservableProperty] private int _retentionHours;
     [ObservableProperty] private string _localSavePath = string.Empty;
@@ -64,26 +67,52 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void LoadSettings()
     {
         var s = _settings.Current;
-        CutCount = s.CutCount;
-        CountdownSec = s.CountdownSec;
-        MirrorMode = s.MirrorMode;
-        FlashMode = s.FlashMode;
-        EnableQrDelivery = s.EnableQrDelivery;
-        SendPhoto = s.SendPhoto;
-        SendTimelapse = s.SendTimelapse;
-        SaveLocalCopy = s.SaveLocalCopy;
-        RetentionHours = s.RetentionHours;
-        LocalSavePath = s.LocalSavePath;
-        HostingBaseUrl = s.HostingBaseUrl;
-        CameraDevice = s.CameraDevice;
-        OutputFormat = s.OutputFormat;
-        DisplayMode = s.DisplayMode;
-        StorageBucket = s.StorageBucket;
+        // 로드 중에는 QR 연동 콜백 억제(저장값을 그대로 반영, off→on 강제·정규화 발동 방지).
+        _normalizing = true;
+        try
+        {
+            CutCount = s.CutCount;
+            CountdownSec = s.CountdownSec;
+            MirrorMode = s.MirrorMode;
+            FlashMode = s.FlashMode;
+            EnableQrDelivery = s.EnableQrDelivery;
+            SendPhoto = s.SendPhoto;
+            SendTimelapse = s.SendTimelapse;
+            FilterGrayscale = s.FilterGrayscale;
+            FilterBrightness = s.FilterBrightness;
+            FilterBeauty = s.FilterBeauty;
+            SaveLocalCopy = s.SaveLocalCopy;
+            RetentionHours = s.RetentionHours;
+            LocalSavePath = s.LocalSavePath;
+            HostingBaseUrl = s.HostingBaseUrl;
+            CameraDevice = s.CameraDevice;
+            OutputFormat = s.OutputFormat;
+            DisplayMode = s.DisplayMode;
+            StorageBucket = s.StorageBucket;
+        }
+        finally { _normalizing = false; }
     }
 
     // QR 하위 토글 변경 연동(it7 F2): 둘 다 off면 QR 전송 자체 off(단일 정규화 지점).
     partial void OnSendPhotoChanged(bool value) => NormalizeQrToggles();
     partial void OnSendTimelapseChanged(bool value) => NormalizeQrToggles();
+
+    // QR off→on 재활성 시 하위 토글 둘 다 on 강제(it8 A5). LoadSettings 중에는 _normalizing으로 억제.
+    partial void OnEnableQrDeliveryChanged(bool oldValue, bool newValue)
+    {
+        if (_normalizing) return;
+        if (!oldValue && newValue) // false→true 전환
+        {
+            _normalizing = true;
+            try
+            {
+                var (sp, st) = QrDeliveryPolicy.OnReEnabled();
+                SendPhoto = sp;
+                SendTimelapse = st;
+            }
+            finally { _normalizing = false; }
+        }
+    }
 
     private bool _normalizing;
     private void NormalizeQrToggles()
@@ -110,6 +139,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.EnableQrDelivery = EnableQrDelivery;
         s.SendPhoto = SendPhoto;
         s.SendTimelapse = SendTimelapse;
+        s.FilterGrayscale = FilterGrayscale;
+        s.FilterBrightness = FilterBrightness;
+        s.FilterBeauty = FilterBeauty;
         s.SaveLocalCopy = SaveLocalCopy;
         s.RetentionHours = RetentionHours;
         s.LocalSavePath = LocalSavePath;

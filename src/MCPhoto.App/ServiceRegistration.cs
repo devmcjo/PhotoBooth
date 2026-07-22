@@ -63,6 +63,10 @@ internal static class ServiceRegistration
         services.AddSingleton<IFrameRepository, FrameRepository>();
         services.AddSingleton<IAccountService, AccountService>();
 
+        // it8 A2(정정): 로컬 프레임 저장소 = 실행 폴더 Frame\ (번들과 동일 폴더, 번들+파워캐시+user 공존).
+        services.AddSingleton<ILocalFrameStore>(_ =>
+            new LocalFrameStore(System.IO.Path.Combine(AppContext.BaseDirectory, "Frame")));
+
         // Step 9: 세션 컨텍스트 + 프레임 카탈로그 + 화면 VM들
         services.AddSingleton<SessionContext>();
         services.AddSingleton<FrameCatalogService>();

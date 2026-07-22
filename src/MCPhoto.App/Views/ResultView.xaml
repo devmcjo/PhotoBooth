@@ -25,26 +25,17 @@
         <StackPanel Grid.Column="1" Margin="0,88,40,40">
             <TextBlock Text="필터" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
 
-            <Button Content="원본" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Command="{Binding SetFilterCommand}">
-                <Button.CommandParameter><cap:FilterKind>None</cap:FilterKind></Button.CommandParameter>
-            </Button>
-            <Button Content="흑백" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Command="{Binding SetFilterCommand}">
-                <Button.CommandParameter><cap:FilterKind>Grayscale</cap:FilterKind></Button.CommandParameter>
-            </Button>
-            <Button Content="밝게" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Command="{Binding SetFilterCommand}">
-                <Button.CommandParameter><cap:FilterKind>Brightness</cap:FilterKind></Button.CommandParameter>
-            </Button>
-            <Button Content="뷰티" Style="{StaticResource Button.Filter}" Margin="0,0,0,24"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Command="{Binding SetFilterCommand}">
-                <Button.CommandParameter><cap:FilterKind>Beauty</cap:FilterKind></Button.CommandParameter>
-            </Button>
+            <!-- A6: 설정에서 켜진 필터만 동적 노출(항상 원본 포함). (it8 §6) -->
+            <ItemsControl ItemsSource="{Binding AvailableFilters}" Margin="0,0,0,16">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding Label}" Style="{StaticResource Button.Filter}" Margin="0,0,0,8"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Command="{Binding DataContext.SetFilterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding Kind}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <Button Content="다음" Command="{Binding NextCommand}"
                     IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"

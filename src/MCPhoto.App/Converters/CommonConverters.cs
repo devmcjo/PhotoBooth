@@ -118,3 +118,42 @@ public sealed class AspectRatioToHeightConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>문자열이 ConverterParameter로 시작하면 Visible, 아니면 Collapsed(삭제 가능 프레임 X 표시 등, it8 A3).</summary>
+public sealed class StartsWithToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var s = value as string;
+        var prefix = parameter as string;
+        return s is not null && prefix is not null && s.StartsWith(prefix, StringComparison.Ordinal)
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// 여러 입력이 모두 "참"(bool true 또는 Visibility.Visible)일 때만 Visible, 아니면 Collapsed. (it8 A3 카드 X 조건 결합)
+/// </summary>
+public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        foreach (var v in values)
+        {
+            bool ok = v switch
+            {
+                bool b => b,
+                Visibility vis => vis == Visibility.Visible,
+                _ => false
+            };
+            if (!ok) return Visibility.Collapsed;
+        }
+        return Visibility.Visible;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

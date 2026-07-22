@@ -69,5 +69,29 @@
                 </Border>
             </Popup>
         </Grid>
+
+        <!-- 유휴 경고 오버레이(모달, 최상위): 2분 무동작 → 10초 카운트다운. 로그아웃 없음. (it8 §2 A1) -->
+        <Grid Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding IsIdleWarningVisible, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Padding="40" Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="420"
+                    Background="{StaticResource Brush.Bg}">
+                <StackPanel>
+                    <TextBlock Text="잠시 자리를 비우셨나요?" Style="{StaticResource Text.H2}"
+                               HorizontalAlignment="Center" Margin="0,0,0,12" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,24">
+                        <TextBlock Text="{Binding IdleCountdownRemaining}" Foreground="{StaticResource Brush.Accent.Text}"
+                                   FontSize="28" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="초 후 메인 화면으로 돌아갑니다" Style="{StaticResource Text.Body}"
+                                   VerticalAlignment="Center" Margin="6,0,0,0" />
+                    </StackPanel>
+                    <Button Content="이어서 진행하기" Style="{StaticResource Button.Primary}"
+                            Command="{Binding ContinueSessionCommand}"
+                            HorizontalAlignment="Stretch" Margin="0,0,0,12" />
+                    <Button Content="메인 화면으로" Style="{StaticResource Button.Ghost}"
+                            Command="{Binding GoHomeFromIdleCommand}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

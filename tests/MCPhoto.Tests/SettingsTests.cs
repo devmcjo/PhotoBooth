@@ -130,6 +130,32 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void Filter_Toggles_RoundTrip()
+    {
+        // it8 A6: 필터 개별 on/off INI 영속. 흑백만 끄고 저장→로드 유지.
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.FilterGrayscale = false;
+        s.FilterBrightness = true;
+        s.FilterBeauty = false;
+        Assert.True(svc.Save());
+
+        var s2 = new IniSettingsService(iniPath: _tempPath).Load();
+        Assert.False(s2.FilterGrayscale);
+        Assert.True(s2.FilterBrightness);
+        Assert.False(s2.FilterBeauty);
+    }
+
+    [Fact]
+    public void Filter_Toggles_Default_All_On()
+    {
+        var s = new IniSettingsService(iniPath: _tempPath).Load();
+        Assert.True(s.FilterGrayscale);
+        Assert.True(s.FilterBrightness);
+        Assert.True(s.FilterBeauty);
+    }
+
+    [Fact]
     public void StorageBucket_RoundTrips_New_Convention()
     {
         // it5 §2.3 B6: 신규 규약(*.firebasestorage.app) 버킷명 저장→로드 보존.

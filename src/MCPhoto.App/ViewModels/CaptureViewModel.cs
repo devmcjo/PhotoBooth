@@ -75,13 +75,13 @@ public sealed partial class CaptureViewModel : ViewModelBase
             return;
         }
 
-        // 첫 프레임(프리뷰 준비) 대기 → Ready. 타임아웃 시 Failed(무한 로딩 방지). (it3 §7.1)
-        bool ready = await WaitForFirstFrameAsync(CameraReadyTimeoutMs);
+        // 안정적 프리뷰(연속 N프레임+최소 경과) 대기 → Ready. 타임아웃 시 Failed(무한 로딩 방지). (it8 §7 A7)
+        bool ready = await WaitForStablePreviewAsync(CameraReadyTimeoutMs);
         if (!ready)
         {
             CameraState = CameraLoadState.Failed;
             StatusMessage = "카메라 준비에 실패했습니다.";
-            _logger?.LogWarning("촬영 화면: 첫 프레임 타임아웃");
+            _logger?.LogWarning("촬영 화면: 안정적 프리뷰 타임아웃");
             return;
         }
         CameraState = CameraLoadState.Ready;
@@ -98,12 +98,21 @@ public sealed partial class CaptureViewModel : ViewModelBase
         _ = RunCaptureSequenceAsync(_sessionCts.Token);
     }
 
-    /// <summary>첫 FrameReady를 1회 대기(구독 후 해제). 타임아웃 내 미수신 시 false.</summary>
-    private async Task<bool> WaitForFirstFrameAsync(int timeoutMs)
+    /// <summary>
+    /// 안정적 프리뷰(연속 N프레임 + 최소 경과 + fps>0)까지 대기. (it8 §7 A7)
+    /// 첫 프레임 1회로 끝내던 것을 강화 — 실사용 가능 시점까지 waiting 유지. 타임아웃 내 미충족 시 false.
+    /// </summary>
+    private async Task<bool> WaitForStablePreviewAsync(int timeoutMs)
     {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readiness = new PreviewReadiness(); // 기본 8프레임 + 500ms
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
-        void OnFrame(object? s, CameraFrame f) => tcs.TrySetResult(true);
+        void OnFrame(object? s, CameraFrame f)
+        {
+            if (readiness.OnFrame(sw.Elapsed.TotalMilliseconds, _camera.CurrentFps))
+                tcs.TrySetResult(true);
+        }
         _camera.FrameReady += OnFrame;
         try
         {

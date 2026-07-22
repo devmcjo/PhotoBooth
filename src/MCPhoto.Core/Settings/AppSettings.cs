@@ -70,6 +70,16 @@ public sealed class AppSettings
     /// <summary>QR 전송 시 타임랩스 영상 포함. 기본 on. (it7 F2)</summary>
     public bool SendTimelapse { get; set; } = true;
 
+    // ── 필터 노출 (it8 §6 A6). 원본(None)은 항상 제공 — 필드 없음. ──
+    /// <summary>흑백 필터 노출. 기본 on.</summary>
+    public bool FilterGrayscale { get; set; } = true;
+
+    /// <summary>밝기 필터 노출. 기본 on.</summary>
+    public bool FilterBrightness { get; set; } = true;
+
+    /// <summary>뷰티 필터 노출. 기본 on.</summary>
+    public bool FilterBeauty { get; set; } = true;
+
     // ── 로컬 저장 (PRD §F4, §9 #34) ──
     /// <summary>결과물 로컬 저장 on/off. 기본 off. QR 전송과 독립.</summary>
     public bool SaveLocalCopy { get; set; }
@@ -159,6 +169,9 @@ public sealed class AppSettings
         EnableQrDelivery = EnableQrDelivery,
         SendPhoto = SendPhoto,
         SendTimelapse = SendTimelapse,
+        FilterGrayscale = FilterGrayscale,
+        FilterBrightness = FilterBrightness,
+        FilterBeauty = FilterBeauty,
         SaveLocalCopy = SaveLocalCopy,
         LocalSavePath = LocalSavePath,
         DisplayMode = DisplayMode,

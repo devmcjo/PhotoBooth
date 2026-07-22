@@ -22,6 +22,8 @@
         <conv:CameraStateToVisibilityConverter x:Key="CameraStateToVis" />
         <conv:SlotAspectLabelConverter x:Key="SlotAspectLabel" />
         <conv:AspectRatioToHeightConverter x:Key="AspectRatioToHeight" />
+        <conv:StartsWithToVisibilityConverter x:Key="StartsWithToVis" />
+        <conv:AllTrueToVisibilityConverter x:Key="AllTrueToVis" />
 
         <!-- VM → View DataTemplate 매핑(상태머신 화면 스왑) -->
         <DataTemplate DataType="{x:Type vm:HomeViewModel}">

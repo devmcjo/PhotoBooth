@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using MCPhoto.Capture;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
@@ -13,6 +14,8 @@ namespace MCPhoto.App.Services;
 public sealed class FrameCatalogService
 {
     private readonly IFrameRepository _repository;
+    private readonly ILocalFrameStore _localStore;
+    private readonly Func<string, CancellationToken, Task<byte[]?>> _downloadImage;
     private readonly ILogger<FrameCatalogService>? _logger;
 
     /// <summary>번들 프레임 폴더(설치 경로/Frame).</summary>
@@ -21,33 +24,53 @@ public sealed class FrameCatalogService
     /// <summary>fallback 프레임 이미지 캐시 경로(%ProgramData%\MCPhoto\).</summary>
     public string FallbackImagePath { get; }
 
-    public FrameCatalogService(IFrameRepository repository, ILogger<FrameCatalogService>? logger = null)
+    public FrameCatalogService(
+        IFrameRepository repository,
+        ILocalFrameStore localStore,
+        ILogger<FrameCatalogService>? logger = null,
+        Func<string, CancellationToken, Task<byte[]?>>? downloadImage = null)
     {
         _repository = repository;
+        _localStore = localStore;
         _logger = logger;
+        _downloadImage = downloadImage ?? DefaultDownloadAsync;
         BundleFolder = Path.Combine(AppContext.BaseDirectory, "Frame");
         FallbackImagePath = Path.Combine(App.DataFolder, "cache", "fallback_frame.png");
     }
 
-    /// <summary>기본 프레임(게스트 포함) 목록. DB → 번들 → fallback 우선순위.</summary>
+    /// <summary>
+    /// 공용 프레임(게스트 포함). 로컬 공용(번들+파워캐시) 우선 → DB isDefault 중 로컬에 없는 이름만 캐시·병합
+    /// (이름 기준 dedup) → 없으면 fallback. 로컬에 이미 있으면 그 이름은 DB 미다운로드. (it8 §3 정정)
+    /// </summary>
     public async Task<IReadOnlyList<FrameTemplate>> GetDefaultFramesAsync(CancellationToken ct = default)
     {
-        // ① DB 기본 프레임
+        // ① 로컬 공용(접두 없는 파일 = 번들 + 파워 캐시)
+        var local = _localStore.LoadPublic();
+        var localNames = _localStore.PublicFrameNames();
+
+        // ② DB isDefault 중 로컬에 이름이 없는 것만 다운로드·캐시(이름 기준 dedup, 중복 집계 없음)
         try
         {
             var dbFrames = await _repository.GetDefaultFramesAsync(ct);
-            if (dbFrames.Count > 0)
+            foreach (var f in dbFrames)
             {
-                _logger?.LogInformation("DB 기본 프레임 {Count}개 사용", dbFrames.Count);
-                return dbFrames;
+                if (localNames.Contains(f.Name)) continue; // 로컬에 이미 있음 → 다운로드 스킵(캐시 히트)
+                var cached = await TryCacheAsync(f, ct);
+                if (cached is not null) local = Append(local, cached);
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "DB 기본 프레임 조회 실패 — 번들/fallback로 폴백(오프라인 모드)");
+            _logger?.LogWarning(ex, "DB 기본 프레임 조회 실패 — 로컬/번들/fallback로 폴백(오프라인 모드)");
         }
 
-        // ② 번들 Frame/ 폴더
+        if (local.Count > 0)
+        {
+            _logger?.LogInformation("공용 프레임 {Count}개(로컬 우선 + DB 캐시 병합)", local.Count);
+            return local;
+        }
+
+        // ③ 번들 폴더에 .slots 없는 이미지가 있으면 자동 격자 배치로 로드(기존 폴백)
         var bundled = LoadBundleFrames();
         if (bundled.Count > 0)
         {
@@ -55,20 +78,52 @@ public sealed class FrameCatalogService
             return bundled;
         }
 
-        // ③ fallback(코드 생성)
+        // ④ fallback(코드 생성)
         _logger?.LogInformation("fallback 프레임 생성");
         return new[] { EnsureFallbackFrame() };
     }
 
-    /// <summary>로그인 사용자 커스텀 프레임(있으면). 실패 시 빈 목록.</summary>
-    public async Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
+    /// <summary>로그인 사용자 커스텀 프레임(로컬 전용, `{계정}_` 접두). DB 미조회. (it8 §3 정정)</summary>
+    public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
     {
-        try { return await _repository.GetUserFramesAsync(userId, ct); }
+        try { return Task.FromResult(_localStore.LoadUser(userId)); }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "커스텀 프레임 조회 실패: {User}", userId);
-            return Array.Empty<FrameTemplate>();
+            _logger?.LogWarning(ex, "로컬 커스텀 프레임 로드 실패: {User}", userId);
+            return Task.FromResult((IReadOnlyList<FrameTemplate>)Array.Empty<FrameTemplate>());
         }
+    }
+
+    /// <summary>DB 프레임 이미지를 다운로드해 공용 캐시(이름 기반, 접두 없음). 실패 시 null.</summary>
+    private async Task<FrameTemplate?> TryCacheAsync(FrameTemplate f, CancellationToken ct)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(f.ImageUrl)) return null;
+            var bytes = await _downloadImage(f.ImageUrl, ct);
+            if (bytes is { Length: > 0 })
+                return _localStore.CacheFromDb(f, bytes);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "프레임 캐시 다운로드 실패: {Id}", f.Id);
+        }
+        return null;
+    }
+
+    private static IReadOnlyList<FrameTemplate> Append(IReadOnlyList<FrameTemplate> list, FrameTemplate item)
+    {
+        var l = new List<FrameTemplate>(list) { item };
+        return l;
+    }
+
+    private static readonly HttpClient _http = new();
+    private static async Task<byte[]?> DefaultDownloadAsync(string url, CancellationToken ct)
+    {
+        // 로컬 파일 경로(번들/기존 캐시)면 직접 읽기, http면 다운로드.
+        if (File.Exists(url)) return await File.ReadAllBytesAsync(url, ct);
+        if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+        return await _http.GetByteArrayAsync(url, ct);
     }
 
     private List<FrameTemplate> LoadBundleFrames()

@@ -23,8 +23,18 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private readonly ILogger<AppShellViewModel>? _logger;
     private readonly Dispatcher _dispatcher;
 
-    /// <summary>유휴 타임아웃(초). PRD §10 권장 60~90초.</summary>
-    public int IdleTimeoutSeconds { get; set; } = 75;
+    /// <summary>무동작 후 경고 팝업까지(초). 2분. (it8 §2 A1)</summary>
+    public int IdleWarningSeconds { get; set; } = 120;
+
+    /// <summary>경고 팝업 카운트다운(초). 0 도달 시 홈 복귀(로그아웃 없음). (it8 §2 A1)</summary>
+    public int IdleCountdownSeconds { get; set; } = 10;
+
+    // 유휴 경고 오버레이 상태(모달 오버레이 — 현재 화면 유지한 채 위에 표시).
+    [ObservableProperty] private bool _isIdleWarningVisible;
+    [ObservableProperty] private int _idleCountdownRemaining;
+
+    private IdleCountdown? _idleCountdown;
+    private DispatcherTimer? _idleCountdownTimer;
 
     /// <summary>오버레이(설정/로그인) 진입 전 상태 — 복귀 대상. (it2 §5.3)</summary>
     private AppState _returnState = AppState.Home;
@@ -189,18 +199,67 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         _ = NavigateAsync(AppState.Home);
     }
 
-    public void NotifyUserActivity() => _idle.Reset();
+    /// <summary>
+    /// 사용자 활동 통지. 경고 팝업 표시 중에는 무시(버튼으로만 해제, 설계 §2.2) —
+    /// 경고 전 단계에서만 warning 타이머를 리셋한다.
+    /// </summary>
+    public void NotifyUserActivity()
+    {
+        if (IsIdleWarningVisible) return;
+        _idle.Reset();
+    }
 
     private void UpdateIdleWatch()
     {
+        // 화면 전환 시 경고 오버레이가 떠 있으면 내린다(예: 촬영 진입 등).
+        HideIdleWarning();
         if (SessionStateMachine.IsSessionActive(CurrentState))
-            _idle.Start(IdleTimeoutSeconds);
+            _idle.Start(IdleWarningSeconds);
         else
             _idle.Stop();
     }
 
+    /// <summary>
+    /// 2분 무동작 → 경고 팝업 표시 + 10초 카운트다운 시작. 즉시 홈 복귀·로그아웃 없음. (it8 §2 A1)
+    /// 카운트다운 0 → 홈 복귀(clearUser:false). [이어서]/활동은 취소, [메인]은 즉시 홈.
+    /// </summary>
     private void OnIdleTimeout(object? sender, EventArgs e)
-        => _dispatcher.BeginInvoke(() => ReturnHome("유휴 타임아웃", clearUser: true)); // 다음 손님 위해 로그아웃
+        => _dispatcher.BeginInvoke(ShowIdleWarning);
+
+    private void ShowIdleWarning()
+    {
+        if (IsIdleWarningVisible) return;
+        _idle.Stop(); // 경고 단계에선 warning 타이머 정지(카운트다운이 이어받음)
+        _idleCountdown = new IdleCountdown(IdleCountdownSeconds);
+        IdleCountdownRemaining = _idleCountdown.Remaining;
+        IsIdleWarningVisible = true;
+
+        _idleCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _idleCountdownTimer.Tick += OnIdleCountdownTick;
+        _idleCountdownTimer.Start();
+    }
+
+    private void OnIdleCountdownTick(object? sender, EventArgs e)
+    {
+        if (_idleCountdown is null) return;
+        bool expired = _idleCountdown.Tick();
+        IdleCountdownRemaining = _idleCountdown.Remaining;
+        if (expired)
+        {
+            HideIdleWarning();
+            ReturnHome("유휴 타임아웃", clearUser: false); // 로그아웃 절대 금지(it8 A1)
+        }
+    }
+
+    private void HideIdleWarning()
+    {
+        _idleCountdownTimer?.Stop();
+        if (_idleCountdownTimer is not null)
+            _idleCountdownTimer.Tick -= OnIdleCountdownTick;
+        _idleCountdownTimer = null;
+        _idleCountdown = null;
+        IsIdleWarningVisible = false;
+    }
 
     // ── 공통 네비게이션 커맨드 ──
 
@@ -263,10 +322,30 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         ReturnHome("로그아웃");        // 촬영 데이터 폐기(로그인은 이미 해제됨)
     }
 
+    // ── 유휴 경고 팝업 커맨드 (it8 §2 A1) ──
+
+    /// <summary>[이어서 진행하기]: 경고 해제 + 유휴 타이머 재시작. 현재 화면·로그인 유지.</summary>
+    [RelayCommand]
+    private void ContinueSession()
+    {
+        HideIdleWarning();
+        if (SessionStateMachine.IsSessionActive(CurrentState))
+            _idle.Start(IdleWarningSeconds); // warning 타이머 재시작
+    }
+
+    /// <summary>[메인 화면으로]: 즉시 홈 복귀(로그아웃 없음).</summary>
+    [RelayCommand]
+    private void GoHomeFromIdle()
+    {
+        HideIdleWarning();
+        ReturnHome("유휴 경고 — 메인으로", clearUser: false);
+    }
+
     public void Dispose()
     {
         _idle.IdleTimeout -= OnIdleTimeout;
         _session.CurrentUserChanged -= OnCurrentUserChanged;
+        HideIdleWarning(); // 카운트다운 타이머 정리
         (_idle as IDisposable)?.Dispose();
     }
 }

@@ -17,4 +17,10 @@ public static class QrDeliveryPolicy
             return (false, sendPhoto, sendTimelapse);
         return (enableQr, sendPhoto, sendTimelapse);
     }
+
+    /// <summary>
+    /// QR 전송 off→on 재활성 시 하위 토글(사진·타임랩스)을 둘 다 on으로 강제. (it8 §5 A5)
+    /// 둘 다 off 상태로 재활성되면 즉시 다시 off로 정규화되는 것을 막고, 전송이 실제로 되도록.
+    /// </summary>
+    public static (bool sendPhoto, bool sendTimelapse) OnReEnabled() => (true, true);
 }
