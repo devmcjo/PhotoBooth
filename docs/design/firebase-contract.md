@@ -72,14 +72,16 @@
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `id` | string | 세션 ID = 문서 ID = **URL 토큰**(UUIDv4). 순차 ID 금지(§10) |
-| `finalImageUrl` | string | 프레임 포함 최종 이미지 URL (§4, Storage `results/{sessionId}/…`) |
-| `timelapseUrl` | string \| null | 타임랩스 영상 URL. 생성 실패/미포함 시 null |
+| `finalImageUrl` | string \| null | 프레임 포함 최종 이미지 URL (§4, Storage `results/{sessionId}/…`). **사진 전송 옵션(SendPhoto) off면 null**(it7 F2) |
+| `timelapseUrl` | string \| null | 타임랩스 영상 URL. 타임랩스 전송 옵션 off·생성 실패·미포함 시 null |
 | `createdAt` | timestamp | 생성 시각 |
 | `expiresAt` | timestamp | `createdAt + retentionHours`(기본 24h, 범위 1~72h). **자동 삭제 기준** |
 | `downloadPageUrl` | string | 모바일 다운로드 페이지 URL(QR 인코딩 대상, §3) |
 
 - **웹 접근**: **토큰 ID 단건 get만 허용**. list/query **금지**(§10 #33). 웹은 URL의 토큰으로 `doc(resultSessions/{token})`을 get하고, 성공 시 `finalImageUrl`/`timelapseUrl`로 파일을 표시한다.
 - **만료 처리**: 웹은 `expiresAt < now` 또는 문서 부재(삭제됨) 시 **만료 안내 페이지** 표시(§3.4). 문서에 별도 `expired` 플래그는 두지 않음 — `expiresAt` 비교 + 문서 존재 여부로 판단.
+- **미디어 URL null 의미론(it7 F2, 추론 방식)**: **미만료 문서**에서 `finalImageUrl`/`timelapseUrl`이 null이면 해당 미디어는 **전송 옵션이 꺼진 것**(의도적 제외 — 만료·로드 실패가 아님). 웹은 이를 만료(문서 부재/expiresAt 초과)·로드 실패(URL 있는데 fetch 실패)와 **구분**해 "전송 옵션 꺼짐" 안내를 표시한다. `photoSent`/`timelapseSent` 같은 명시 플래그는 **추가하지 않는다**(계약 변경 최소, "doc 존재+미만료+URL null" 추론으로 충분).
+- **최소 1개 불변식**: 미만료 `resultSessions` 문서는 `finalImageUrl`·`timelapseUrl` 중 **최소 1개는 non-null**이다. 둘 다 off면 WPF 연동 규칙(QrDeliveryPolicy)에 의해 `enableQrDelivery`가 off로 정규화되어 **문서 자체가 생성되지 않는다**. 웹은 방어적으로 둘 다 null인 경우도 처리(안내 2개 표시, 만료로 오판하지 않음).
 
 ---
 
