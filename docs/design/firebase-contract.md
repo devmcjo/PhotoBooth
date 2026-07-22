@@ -66,6 +66,7 @@
 
 - 계정당 최대 10개(커스텀). 기본 프레임(isDefault=true, userId=null)은 별개.
 - **웹 접근**: **전면 차단**. 웹 다운로드 페이지는 프레임 목록을 다루지 않는다(§10 #33). *(프레임 관리는 WPF 전용)*
+- **it8 A2 저장 하이브리드**: `frameTemplates`(DB)에는 **공용 기본 프레임(isDefault=true, userId=null)만** 저장한다(파워=admin/manager가 생성). **일반 user 커스텀 프레임은 DB에 저장하지 않고 WPF 로컬 전용**(`%ProgramData%\MCPhoto\Frame\{계정}_{이름}.png` + `.slots`)이다. 따라서 `userId != null` 문서는 신규 생성되지 않는다(기존 문서는 하위호환 유지). 파워 프레임은 로컬에도 캐시(`Frame/default/{frameId}.png`)해 재다운로드를 피한다. `frameTemplates`는 웹 접근이 없어 이 변경은 웹·보안 규칙에 영향 없음. 계정당 10개 제한은 **user는 로컬 파일 수**로, 파워 DB 프레임은 별개.
 
 ### 2.3 `resultSessions` 컬렉션 (문서 ID = **추측 불가 토큰**, §3.3)
 

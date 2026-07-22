@@ -90,18 +90,18 @@ Step 7 (A7 카메라 Ready 강화)          ── 독립(CaptureViewModel)
 - **대상 파일**: `src/MCPhoto.Core/Frames/ILocalFrameStore.cs`·`LocalFrameStore.cs`(신규), `src/MCPhoto.App/ViewModels/FrameEditorViewModel.cs`(역할별 저장), `src/MCPhoto.App/ServiceRegistration.cs`(DI), `tests/MCPhoto.Tests/LocalFrameStoreTests.cs`(신규).
 - **선행 조건**: 없음.
 - **구현 내용**:
-  - `ILocalFrameStore`/`LocalFrameStore`: 저장 폴더 = `%ProgramData%\MCPhoto\Frame`(쓰기 가능, `App.DataFolder\Frame`). 메서드: `SaveLocal(FrameTemplate frame, byte[] png, string? ownerName)` → user면 `{sanitize(owner)}_{sanitize(name)}.png`+`.slots`, 파워 캐시면 `{frameId}.png`+`.slots`. `.slots` 포맷: 첫 줄 `#imagesize=W,H`, 이후 "index,x,y,w,h"(하위호환 5필드). `LoadLocal(string? ownerName)`·`DeleteLocal(FrameTemplate)`·`ExistsLocal(id/name)`. sanitize(공백·특수문자·경로 구분자 제거).
+  - `ILocalFrameStore`/`LocalFrameStore`: 저장 폴더 = **`AppContext.BaseDirectory\Frame`**(앱 실행 폴더, 쓰기 가능 전제 = `FrameCatalogService.BundleFolder`와 동일). 메서드: `SaveLocal(FrameTemplate frame, byte[] png, string? ownerName)` → ownerName 있으면 `{owner}_{name}.png`+`.slots`(user 전용, 접두), 없으면 `{name}.png`+`.slots`(공용/파워 캐시, 접두 없음). **이름 원문 그대로**(sanitize·`_`치환 없음); 파일시스템 금지문자(`\ / : * ? " < > |`)만 저장 거부(유효성 검사). `.slots` 포맷: 첫 줄 `#imagesize=W,H`, 이후 "index,x,y,w,h"(하위호환 5필드). `LoadPublic()`(접두 없는 파일=번들+파워캐시)·`LoadUser(string ownerName)`(`{owner}_` 접두만)·`DeleteLocal(FrameTemplate)`·`CacheFromDb(FrameTemplate)`(Step 3). 접두 파싱=첫 `_` 앞이 로그인 계정명과 일치할 때만 user 전용(§3.1.1 모호성 수용).
   - `FrameEditorViewModel.Save` 분기: 로그인 역할 —
-    - 파워(`IsPower`): `FrameRepository.SaveAsync`(DB, isDefault=true, userId=null) + `LocalFrameStore.SaveLocal`(frameId 캐시).
-    - user: `LocalFrameStore.SaveLocal`(ownerName=계정id)만(DB 미호출). 10개 제한은 로컬 파일 수로.
+    - 파워(`IsPower`): `FrameRepository.SaveAsync`(DB, isDefault=true, userId=null) + `LocalFrameStore.SaveLocal(ownerName: null)`(공용 캐시, 접두 없음, 이름 기반).
+    - user: `LocalFrameStore.SaveLocal(ownerName: 계정id)`만(DB 미호출, `{계정}_{이름}` 접두). 10개 제한은 로컬 파일 수로.
   - `ServiceRegistration`: `AddSingleton<ILocalFrameStore, LocalFrameStore>()`.
-  - 테스트(`LocalFrameStoreTests`): user 저장→`계정_이름.png`+`.slots` 생성, slots 라운드트립(개수·좌표·크기·imagesize). `LoadLocal(계정)`→본인 prefix만·slots 파싱. sanitize(공백/특수문자). 파워 캐시 명명(frameId).
-- **검증 명령**: `dotnet test --filter LocalFrameStoreTests` + `dotnet build -c Release`(error 0, warning 0). `grep`로 `ILocalFrameStore`·`LocalFrameStore`·`FrameEditorViewModel` 역할 분기.
+  - 테스트(`LocalFrameStoreTests`): 루트=`AppContext.BaseDirectory\Frame`. user 저장(ownerName)→`계정_이름.png`+`.slots`(접두), 파워 저장(ownerName=null)→`이름.png`(접두 없음). slots 라운드트립(개수·좌표·크기·imagesize). `LoadPublic()`→접두 없는 파일만, `LoadUser(계정)`→`계정_` 접두만. 이름 원문 그대로(sanitize 없음, `_` 보존). 금지문자 이름 저장 거부. 첫 `_` 앞=계정 파싱.
+- **검증 명령**: `dotnet test --filter LocalFrameStoreTests` + `dotnet build -c Release`(error 0, warning 0). `grep`로 `LocalFrameStore` 루트가 `AppContext.BaseDirectory`(ProgramData 아님)·sanitize 없음·`LoadPublic`/`LoadUser`, `FrameEditorViewModel` 역할 분기.
 - **완료 기준**:
-  - [관측] `LocalFrameStoreTests` 통과: user 저장 명명·slots 라운드트립·sanitize·LoadLocal prefix 필터. 빌드 통과. `FrameEditorViewModel.Save`가 역할 분기(파워=DB+로컬, user=로컬)(grep).
-  - [non-goal] 파워 DB 저장(`FrameRepository`)·계약 경로는 **변경하지 않는다**(user만 DB 미호출로). 로딩·캐시는 Step 3. 슬롯 좌표계(it4)·종횡비(w/h) 불변.
-  - [trigger] 로컬 저장은 [저장] 시 역할별. user는 DB 미호출.
-  - [사용자 확인 필요] user 생성→로컬만(`계정_이름.png`), 파워 생성→DB+로컬(design §10-2).
+  - [관측] `LocalFrameStoreTests` 통과: user 저장 접두 명명·파워 무접두·slots 라운드트립·LoadPublic/LoadUser 분리·이름 원문(sanitize 없음). 빌드 통과. 루트가 `AppContext.BaseDirectory\Frame`(grep). `FrameEditorViewModel.Save` 역할 분기(파워=DB+무접두 로컬, user=접두 로컬)(grep).
+  - [non-goal] 파워 DB 저장(`FrameRepository`)·계약 경로는 **변경하지 않는다**(user만 DB 미호출로). 로딩·캐시·dedup은 Step 3. 슬롯 좌표계(it4)·종횡비(w/h) 불변. **파일명 sanitize·`_`치환 안 함**(이름 원문). %ProgramData% 저장 안 함.
+  - [trigger] 로컬 저장은 [저장] 시 역할별. user는 DB 미호출, 접두 명명. 파워는 접두 없는 공용 명명.
+  - [사용자 확인 필요] user 생성→로컬만(`계정_이름.png`, 본인만 노출), 파워 생성→DB+로컬(접두 없음, 게스트 포함 공용), 번들과 같은 폴더 공존(design §10-2).
 - **롤백**: 이 Step 커밋 revert(LocalFrameStore·편집기 분기·DI·테스트 원복).
 - [ ] 완료
 
@@ -109,21 +109,21 @@ Step 7 (A7 카메라 Ready 강화)          ── 독립(CaptureViewModel)
 
 ## Step 3: A2 — 로컬 우선 로딩 + 파워 프레임 캐시(없을 때만 DB 다운로드)
 
-- **Context Brief**: 프레임 로딩을 로컬 우선으로 바꾼다(설계 §3.3). 기본(공용) 프레임 = 로컬 Frame/에 있으면 사용(캐시 히트, DB 미접근), 없으면 DB isDefault 다운로드 후 로컬 캐시. user 프레임 = 로컬 전용(Step 2 저장분). DB 접근·서버 부하 최소화.
-- **대상 파일**: `src/MCPhoto.App/Services/FrameCatalogService.cs`(로컬 우선·캐시·user 로컬), `src/MCPhoto.Core/Frames/ILocalFrameStore.cs`(`CacheFromDb` 추가), `tests/MCPhoto.Tests/FrameCatalogServiceTests.cs`(신규 or 확장).
-- **선행 조건**: Step 2(`ILocalFrameStore`).
+- **Context Brief**: 프레임 로딩을 로컬 우선으로 바꾼다(설계 §3.1·3.3). 로컬 폴더 = 실행 폴더 `AppContext.BaseDirectory\Frame`(번들+파워캐시+user 공존). 공용 프레임(번들+파워캐시, 접두 없음) = 로컬에 있으면 사용(캐시 히트, DB 미접근), 없으면 DB isDefault 다운로드 후 이름 기반 로컬 캐시. user 프레임 = 로컬 `{계정}_` 접두 전용. 이름 기준 dedup(중복 집계 방지). DB 접근·서버 부하 최소화.
+- **대상 파일**: `src/MCPhoto.App/Services/FrameCatalogService.cs`(로컬 우선·이름 dedup·공용/user 분리), `src/MCPhoto.Core/Frames/ILocalFrameStore.cs`(`CacheFromDb` 추가), `tests/MCPhoto.Tests/FrameCatalogServiceTests.cs`(신규 or 확장).
+- **선행 조건**: Step 2(`ILocalFrameStore`, `LoadPublic`/`LoadUser`).
 - **구현 내용**:
-  - `FrameCatalogService.GetDefaultFramesAsync` 개편: ① 로컬 Frame/의 공용 프레임(파워 캐시 + 번들) 스캔 → 있으면 사용(**DB 미조회**). ② 로컬에 없으면 DB `GetDefaultFramesAsync` → 각 프레임 이미지 다운로드 후 `LocalFrameStore.CacheFromDb`(png+slots 로컬 기록) → 사용. ③ DB도 없으면 fallback. **캐시 히트 시 DB 호출 0**(서버 부하 최소).
-  - `GetUserFramesAsync` 개편: DB(`FrameRepository.GetUserFramesAsync`) 대신 **`LocalFrameStore.LoadLocal(userId)`**(user 로컬 전용, Step 2). DB user 조회 제거.
-  - `ILocalFrameStore.CacheFromDb(FrameTemplate)`: DB 프레임 이미지(ImageUrl) 다운로드 → 로컬 png+slots. 실패 시 DB 프레임 그대로 사용(폴백).
-  - 오프라인: DB 조회 실패 시 로컬 캐시/번들/fallback(기존 폴백 유지).
-  - 테스트: 로컬에 공용 프레임 존재 시 목 repo `GetDefaultFramesAsync` 호출 0(캐시 히트). 미존재 시 1회 호출+캐시. user는 LocalFrameStore에서 로드.
-- **검증 명령**: `dotnet test --filter FrameCatalogServiceTests` + `dotnet build -c Release`(error 0, warning 0). `grep`로 `FrameCatalogService`가 `ILocalFrameStore` 사용·로컬 우선.
+  - `FrameCatalogService.GetDefaultFramesAsync` 개편: ① `ILocalFrameStore.LoadPublic()`(접두 없는 로컬=번들+파워캐시) 스캔 → 있으면 사용(**DB 미조회**). ② 로컬에 없는 DB isDefault만 `CacheFromDb`(이름 기반 `{name}.png`+`.slots` 로컬 기록) 후 병합 → 사용. **이름 기준 dedup**(로컬에 이미 있으면 DB 항목 스킵, 중복 집계 없음, §3.1.1). ③ DB도 없으면 fallback. **캐시 히트 시 DB 호출 0**.
+  - `GetUserFramesAsync` 개편: DB(`FrameRepository.GetUserFramesAsync`) 대신 **`LocalFrameStore.LoadUser(userId)`**(`{userId}_` 접두 로컬, Step 2). DB user 조회 제거.
+  - `ILocalFrameStore.CacheFromDb(FrameTemplate)`: DB 프레임 이미지(ImageUrl) 다운로드 → 로컬 `{name}.png`+`.slots`(공용, 접두 없음). 실패 시 DB 프레임 그대로 사용(폴백).
+  - 오프라인: DB 조회 실패 시 로컬 공용/fallback(기존 폴백 유지).
+  - 테스트: 로컬에 공용(접두 없는) 프레임 존재 시 목 repo `GetDefaultFramesAsync` 호출 0(캐시 히트). 미존재 시 1회 호출+캐시. 이름 중복 시 dedup(로컬 우선). user는 `LoadUser(계정)`에서 로드(접두).
+- **검증 명령**: `dotnet test --filter FrameCatalogServiceTests` + `dotnet build -c Release`(error 0, warning 0). `grep`로 `FrameCatalogService`가 `LoadPublic`/`LoadUser` 사용·로컬 우선·이름 dedup.
 - **완료 기준**:
-  - [관측] `FrameCatalogServiceTests` 통과: 로컬 캐시 히트 시 DB 미조회(repo 호출 0), 미스 시 다운로드+캐시, user는 로컬 로드. 빌드 통과. `GetUserFramesAsync`가 LocalFrameStore 사용(grep).
-  - [non-goal] fallback·번들 폴백(오프라인)은 **유지**. 파워 DB 저장(Step 2)·계약 불변. 캐시 무효화(DB 갱신 stale)는 범위 밖(id 기반).
-  - [trigger] DB 다운로드는 로컬 미존재 시에만(캐시 히트면 0). user 로딩은 로컬 prefix.
-  - [사용자 확인 필요] 파워 프레임 재사용 시 로컬 캐시(다운로드 안 함), user 로컬 로딩(design §10-2).
+  - [관측] `FrameCatalogServiceTests` 통과: 로컬 공용 존재 시 DB 미조회(repo 호출 0), 미스 시 다운로드+이름기반 캐시, 이름 중복 dedup, user는 `LoadUser` 접두 로드. 빌드 통과. `GetUserFramesAsync`가 `LoadUser` 사용(grep).
+  - [non-goal] fallback 폴백(오프라인)은 **유지**. 파워 DB 저장(Step 2)·계약 불변. 번들 프레임은 삭제 불가 공용으로 그대로 노출. 캐시 무효화(DB 갱신 stale)는 범위 밖(이름 기준).
+  - [trigger] DB 다운로드는 로컬(이름) 미존재 시에만(캐시 히트면 0). user 로딩은 `{계정}_` 접두 파일.
+  - [사용자 확인 필요] 파워 프레임 재사용 시 로컬 캐시(다운로드 안 함)·게스트 포함 공용 노출, user는 본인 접두만, 번들 공존(design §10-2).
 - **롤백**: 이 Step 커밋 revert(FrameCatalogService·CacheFromDb 원복 → DB 우선).
 - [ ] 완료
 
@@ -136,7 +136,7 @@ Step 7 (A7 카메라 Ready 강화)          ── 독립(CaptureViewModel)
 - **선행 조건**: Step 2(`ILocalFrameStore.DeleteLocal`), Step 3(로딩). `FrameRepository.DeleteAsync`(기존).
 - **구현 내용**:
   - `FrameSelectViewModel`: `bool CanDeleteFrames`(로그인 여부), `bool IsPower`. `RequestDeleteCommand(FrameTemplate)` → 확인 팝업 표시(오버레이 상태 `IsDeleteConfirmVisible`·`FrameToDelete`·`DeleteAlsoServer`(파워만)). `ConfirmDeleteCommand` → 항상 `ILocalFrameStore.DeleteLocal(frame)`, `DeleteAlsoServer && IsPower`면 `FrameRepository.DeleteAsync(frame.Id)`. 목록 갱신(컬렉션 제거 or 재로드). `CancelDeleteCommand`.
-  - 삭제 대상 판별: user는 자기 로컬(prefix) 프레임만 X. 파워는 공용+자기. 번들/fallback은 삭제 불가(X 미노출).
+  - 삭제 대상 판별: user는 자기 로컬(`{계정}_` 접두) 프레임만 X. 파워는 공용(접두 없는 파워캐시)+자기. **번들 프레임·fallback은 삭제 불가**(설치 자산, X 미노출). 파워 캐시(공용, 접두 없음)는 파워 삭제 가능(로컬+옵션 DB). 삭제 시 로컬 파일은 이름/접두로 매칭, DB는 `frame.Id`로 매칭.
   - `FrameSelectView.xaml`: 카드 DataTemplate 우상단 X 버튼(`Visibility={Binding DataContext.CanDeleteFrames, RelativeSource=부모}` + 프레임별 삭제 가능 여부). 확인 팝업 오버레이("삭제하시겠습니까?" + 파워면 "서버에서도 제거" CheckBox 기본 off + [확인]/[취소]).
   - 테스트: `CanDeleteFrames`(게스트 false·로그인 true). 삭제 정책 — user는 로컬만·DeleteAlsoServer 무시, 파워는 체크 시 DB도. 목 store/repo로 호출 검증.
 - **검증 명령**: `dotnet test --filter FrameSelectViewModelTests` + `dotnet build -c Release`(error 0, warning 0). `grep`로 `FrameSelectViewModel`에 삭제 커맨드·권한, `FrameSelectView.xaml`에 카드 X·확인 팝업.

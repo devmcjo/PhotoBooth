@@ -102,40 +102,63 @@
 
 ## 3. A2 — 프레임 저장 하이브리드 (파워=DB+로컬캐시 / user=로컬전용)
 
+> **정정(2026-07-22, 사용자 확정)**: (1) 로컬 저장 폴더 = **앱 실행 폴더 `AppContext.BaseDirectory\Frame`**(%ProgramData% 아님) — 실행 폴더는 항상 쓰기 가능 전제, 파워 캐시·user 프레임 모두 이 폴더. **번들 기본 프레임과 동일 폴더**(`FrameCatalogService.BundleFolder`)라 한 폴더에 번들+파워캐시+user가 공존 → §3.1.1 구분 규칙으로 정리. (2) 파일명 **sanitize 제거**(`_`→`-` 치환 없음) — 이름 원문 그대로. 파워 유저(본인)가 명명 관리하므로 접두 충돌 예외 불요, 접두 파싱 모호성은 수용(사용자 확정). (3) 파워 프레임 게스트 노출 유지.
+
 ### 3.1 저장 구조 다이어그램
 
 ```
+로컬 폴더 = AppContext.BaseDirectory\Frame  (실행 폴더, 쓰기 가능 전제)
+  = FrameCatalogService.BundleFolder 와 동일 → 번들 + 파워캐시 + user 프레임 공존
+
 프레임 생성(FrameEditor 저장)
- ├─ 파워(admin/manager): isDefault=true
+ ├─ 파워(admin/manager): isDefault=true (공용)
  │    ├─ DB: Firestore frameTemplates(userId=null, isDefault=true) + Storage frames/default/{id}.png  (기존 FrameRepository)
- │    └─ 로컬 캐시: Frame/{id}.png + Frame/{id}.slots  (저장 시 함께 기록 → 이후 재다운로드 불필요)
- └─ user(일반): 로컬 전용
-      └─ 로컬: Frame/{계정명}_{프레임이름}.png + Frame/{계정명}_{프레임이름}.slots  (DB 미업로드)
+ │    └─ 로컬 캐시: Frame/{프레임이름}.png + Frame/{프레임이름}.slots  (접두 없음 = 공용, 저장 시 함께 기록)
+ └─ user(일반): 로컬 전용 (본인만)
+      └─ 로컬: Frame/{계정명}_{프레임이름}.png + Frame/{계정명}_{프레임이름}.slots  (접두 있음 = user 전용, DB 미업로드)
 
 프레임 로딩(FrameSelect)
- ├─ 기본(공용) 프레임:
- │    ① 로컬 Frame/ 에 파워 프레임 있으면 사용(캐시 히트, 다운로드 안 함)
- │    ② 없으면 DB isDefault 조회 → 로컬 Frame/ 로 1회 다운로드(이미지+slots) → 사용
- │    ③ DB도 없으면 번들/fallback (기존)
- └─ user 프레임: 로컬 Frame/{계정명}_*.png (본인 계정명 prefix만)
+ ├─ 공용 프레임(게스트 포함 노출): Frame/ 의 접두 없는 파일(번들 + 파워 캐시)
+ │    ① 로컬에 있으면 사용(캐시 히트, 다운로드 안 함)
+ │    ② 없으면 DB isDefault 조회 → Frame/{이름}.png + .slots 로 1회 다운로드(캐시) → 사용
+ │    ③ DB도 없으면 fallback (기존)
+ └─ user 프레임: Frame/{자기계정명}_*.png (본인 접두만, 타 계정 미노출)
 ```
+
+### 3.1.1 폴더 공존 구분 규칙 (번들/파워캐시 vs user)
+
+한 폴더(`Frame\`)에 세 종류가 공존하므로 **접두 규칙**으로 구분한다:
+
+| 종류 | 파일명 규칙 | 노출 대상 | 삭제 대상 |
+|---|---|---|---|
+| 번들 기본 프레임 | 접두 없음 `{이름}.png`(+`.slots`) | 게스트 포함 공용 | 삭제 불가(설치 자산) |
+| 파워 캐시(DB isDefault) | 접두 없음 `{이름}.png`(+`.slots`) | 게스트 포함 공용 | 파워 삭제 가능(로컬+옵션 DB) |
+| user 프레임 | **접두 `{계정명}_`** → `{계정명}_{이름}.png`(+`.slots`) | 해당 user 로그인 시만 | 해당 user 삭제 가능(로컬) |
+
+- **판별**: 파일명에 **`_`가 있고 그 앞부분이 로그인 계정명과 일치**하면 user 전용, 아니면 공용. 로딩 시:
+  - 공용 목록 = `Frame\`의 파일 중 **`{로그인계정명}_` 접두로 시작하지 않는** 전부(번들+파워캐시). 게스트도 이 목록.
+  - user 목록 = 로그인 계정명 `{name}` 있을 때 **`{name}_` 접두 파일만**.
+- **번들 vs 파워캐시 구분은 불필요**(둘 다 공용·접두 없음). 파워캐시는 `IsDefault=true`로 표시(삭제 시 DB 옵션 노출 판단에 사용). 번들은 삭제 불가 표시(설치 경로 자산 or 별도 마킹).
+- **중복 집계 방지**: `FrameCatalogService`가 DB isDefault를 조회해 로컬에 없는 것만 캐시하되, **로딩 목록은 로컬 `Frame\` 스캔 1회로 통합**(DB 목록과 로컬 파일을 이름 기준 병합 — 이미 로컬에 있으면 DB 항목 스킵). 같은 이름이 번들·캐시로 중복되지 않게 파일명(이름) 유일성 기준 dedup.
+- **접두 모호성(수용)**: 계정명이나 프레임 이름에 `_`가 포함되면 파싱이 모호할 수 있으나(예: `a_b_c.png`가 계정 `a`의 `b_c`인지 `a_b`의 `c`인지), **사용자 확정으로 수용** — "첫 `_` 앞 = 계정명" 규칙으로 단순 파싱(로그인 계정명과 정확히 일치할 때만 user 전용, 아니면 공용 취급). 파워 유저가 명명을 관리하는 전제.
 
 ### 3.2 로컬 저장 규약
 
-- **폴더**: 기존 `Frame/`(`FrameCatalogService.BundleFolder` = `{설치경로}\Frame`) — 단 설치 경로는 쓰기 제한 가능 → **쓰기 가능한 데이터 폴더**(`%ProgramData%\MCPhoto\Frame\` 또는 `App.DataFolder\Frame`)로. 로딩은 두 위치(번들 설치 + 데이터 폴더) 모두 스캔. **저장은 데이터 폴더**(쓰기 가능).
-- **명명**:
-  - user 프레임: `{계정명}_{프레임이름}.png` + `{계정명}_{프레임이름}.slots`. 파워 프레임과 이름 충돌 방지(prefix). 파일명 안전화(공백·특수문자 sanitize).
-  - 파워 프레임 캐시: `{frameId}.png` + `{frameId}.slots`(DB id 기준, 공용).
-- **`.slots` 포맷**(기존 "index,x,y,w,h" 확장): 종횡비는 w/h 파생이라 필수 아님. A2 "종횡비 저장" 명시 충족 위해 **헤더 라인 + 종횡비 주석** 또는 6번째 필드(aspect) 추가. **채택: 기존 5필드 유지 + 파일 첫 줄에 `#imagesize=W,H`(프레임 크기) 메타** — 슬롯 좌표가 프레임 픽셀 기준이라 imagesize 필요(현재 번들은 이미지 디코드로 얻음). 종횡비는 슬롯 w/h로 자동. 하위호환(5필드 파싱 유지).
-- **소유자 구분 로딩**: user는 `{자기계정명}_` prefix 파일만(타 계정 프레임 안 보임). 파워 프레임(prefix 없는 id.png 또는 번들)은 공용.
+- **폴더**: **`AppContext.BaseDirectory\Frame`**(실행 폴더, 쓰기 가능 전제). `FrameCatalogService.BundleFolder`와 **동일** → 저장·로딩·번들이 한 폴더. (%ProgramData% 폴더는 A2에서 사용 안 함. fallback 캐시(`App.DataFolder\cache`)는 별개 유지.)
+- **명명**(sanitize 없음, 원문 그대로):
+  - user 프레임: `{계정명}_{프레임이름}.png` + `{계정명}_{프레임이름}.slots`. 접두 = user 전용 표시.
+  - 파워 캐시/생성: `{프레임이름}.png` + `{프레임이름}.slots`(접두 없음 = 공용). (기존 설계의 frameId 기반 → **이름 기반**으로 변경: 사용자가 이름으로 관리·번들과 일관.) DB 문서 id는 FrameTemplate.Id로 별도 유지(삭제 시 DB 매칭용).
+  - **파일명 안전화(sanitize) 제거**: `_`→`-` 치환·특수문자 변환 없이 이름 원문 사용. 단 파일 시스템 금지문자(`\ / : * ? " < > |`)는 OS가 거부하므로 최소 방어(금지문자 포함 이름은 저장 거부·안내) — 이는 sanitize가 아니라 유효성 검사(사용자 확정 "원문 그대로"와 무충돌).
+- **`.slots` 포맷**(기존 "index,x,y,w,h" 유지 + 메타): 파일 첫 줄 `#imagesize=W,H`(프레임 원본 크기, 슬롯 좌표 기준) + 이후 "index,x,y,w,h" 줄. 종횡비는 슬롯 w/h 파생(별도 필드 불요). 하위호환: `#` 주석·5필드 파싱(기존 번들 `.slots`도 읽힘).
+- **소유자 구분 로딩**: §3.1.1 접두 규칙. user는 `{자기계정명}_` 접두만, 공용은 접두 없는 전부.
 
 ### 3.3 저장/로딩 파이프라인
 
-- **`ILocalFrameStore`(신규, Core/App)**: `SaveLocal(FrameTemplate, imageBytes, ownerName?)` → 파일명 규약대로 png+slots 기록. `LoadLocal(ownerName?)` → Frame/ 스캔해 FrameTemplate 목록(slots 파싱). `DeleteLocal(frame)` → png+slots 삭제(A3). `CacheFromDb(FrameTemplate)` → DB 프레임 이미지 다운로드 후 로컬 저장(파워 캐시).
+- **`ILocalFrameStore`(신규, Core/App)**: 루트 = `AppContext.BaseDirectory\Frame`. `SaveLocal(FrameTemplate, imageBytes, ownerName?)` → ownerName 있으면 `{owner}_{이름}`(user 전용), 없으면 `{이름}`(공용/파워) png+slots 기록(§3.1.1). `LoadPublic()` → 접두 없는 파일(번들+파워캐시) 목록. `LoadUser(ownerName)` → `{owner}_` 접두 파일만. `DeleteLocal(frame)` → png+slots 삭제(A3). `CacheFromDb(FrameTemplate)` → DB 프레임 이미지 다운로드 후 `{이름}.png`+`.slots`(공용, 접두 없음) 기록.
 - **`FrameEditorViewModel.Save` 분기**: 로그인 역할로 분기 —
-  - 파워: `FrameRepository.SaveAsync`(DB, isDefault=true) + `ILocalFrameStore.SaveLocal`(캐시).
-  - user: `ILocalFrameStore.SaveLocal`만(DB 미호출). userId 기반 명명.
-- **`FrameCatalogService` 로딩 개편**: 기본 프레임 = 로컬 캐시 우선 → DB 조회 시 로컬에 없는 것만 다운로드(캐시) → 번들/fallback. user 프레임 = `ILocalFrameStore.LoadLocal(userName)`. DB `GetUserFramesAsync`는 **더 이상 user 로컬 전용이라 미사용**(파워 isDefault만 DB).
+  - 파워: `FrameRepository.SaveAsync`(DB, isDefault=true) + `ILocalFrameStore.SaveLocal(ownerName: null)`(공용 캐시, 접두 없음).
+  - user: `ILocalFrameStore.SaveLocal(ownerName: 계정id)`만(DB 미호출, `{계정}_{이름}` 접두).
+- **`FrameCatalogService` 로딩 개편**: 공용 프레임 = `ILocalFrameStore.LoadPublic()`(접두 없는 로컬=번들+파워캐시) 우선 → DB isDefault 중 **로컬에 이름이 없는 것만** `CacheFromDb`로 캐시 후 병합(이름 기준 dedup, 중복 집계 방지 §3.1.1) → 없으면 fallback. user 프레임 = `ILocalFrameStore.LoadUser(userId)`(접두 파일). DB `GetUserFramesAsync`는 **미사용**(user는 로컬 전용, 파워 isDefault만 DB).
 
 ### 3.4 계약 영향 (firebase-contract)
 
@@ -145,9 +168,9 @@
 
 ### 3.5 검증 (headless)
 
-- 단위(`LocalFrameStoreTests`): `SaveLocal`(user) → `{계정}_{이름}.png`+`.slots` 생성, slots 라운드트립(개수·좌표·크기). `LoadLocal(계정)` → 본인 prefix만. 파일명 sanitize. `.slots` 파싱(5필드+imagesize 메타).
-- 단위(`FrameCatalogService`): 로컬 캐시 히트 시 DB 미조회(목 repo 호출 0), 미스 시 다운로드.
-- 사용자 확인(육안): 파워 생성→DB+로컬, user 생성→로컬만, 재시작 후 로딩(로컬 우선).
+- 단위(`LocalFrameStoreTests`): 루트가 `AppContext.BaseDirectory\Frame`. `SaveLocal`(ownerName=계정) → `{계정}_{이름}.png`+`.slots`(접두), `SaveLocal`(ownerName=null) → `{이름}.png`(접두 없음). slots 라운드트립(개수·좌표·크기·imagesize 메타). `LoadPublic()` → 접두 없는 파일만, `LoadUser(계정)` → `{계정}_` 접두만. 이름 원문 그대로(sanitize 없음, `_` 치환 없음). 첫 `_` 앞=계정 파싱. 금지문자 이름 저장 거부.
+- 단위(`FrameCatalogService`): 로컬 공용 프레임 존재 시 DB 미조회(목 repo 호출 0), 미스 시 다운로드+캐시. 이름 기준 dedup(번들·캐시 중복 집계 없음).
+- 사용자 확인(육안): 파워 생성→DB+로컬(접두 없음, 공용 노출), user 생성→로컬만(`계정_이름`, 본인만), 재시작 후 로딩(로컬 우선, 번들과 공존).
 
 ---
 
@@ -277,7 +300,7 @@ it5는 **첫 프레임 1회 수신**으로 Ready 판정(VF-11). 그러나 첫 �
 |---|---|---|---|---|
 | R1 | 유휴 경고 오버레이가 촬영 등 몰입 화면과 충돌 | 오조작 | 유휴 감시 대상(IsSessionActive)에만·촬영 중 경고는 카운트다운으로 촬영 취소 고지. FrameEditor 제외 유지 | Step 1 |
 | R2 | clearUser 전면 false로 무인 키오스크에 이전 손님 계정 잔존 | 계정 오용 | 요구 확정(로그아웃=수동 only). 무인 우려는 사용자 승인 사항. 홈 복귀는 유지 | Step 1(정책) |
-| R3 | 로컬 프레임 저장 위치 쓰기 권한(설치 Frame/ vs 데이터 폴더) | 저장 실패 | 데이터 폴더(%ProgramData%\MCPhoto\Frame) 저장, 두 위치 로딩 | Step 2 |
+| R3 | 실행 폴더 `AppContext.BaseDirectory\Frame` 쓰기 권한(Program Files 설치 시 제한 가능) | 저장 실패 | 실행 폴더 쓰기 가능은 사용자 확정 전제. 저장 실패 시 오류 안내(크래시 금지). Program Files 설치 시 권한 이슈는 배포 시 검토(범위 밖) | Step 2 |
 | R4 | 파워 캐시 무효화(DB 프레임 갱신 시 로컬 stale) | 옛 프레임 사용 | id 기반 캐시(id 같으면 동일), 갱신은 새 id or 명시 갱신(범위 밖 — 미검증 가정) | Step 3 |
 | R5 | user 로컬 전용화로 기기 이전 시 프레임 유실 | 데이터 이동성 | 로컬 전용은 요구 확정(user=로컬). 백업은 범위 밖 | Step 2 |
 | R6 | 필터 동적 노출이 ResultView 하드코딩 리팩터 회귀 | 필터 미표시 | ItemsControl 바인딩 + None 항상. FiltersTests·ResultVM 테스트 | Step 6 |
