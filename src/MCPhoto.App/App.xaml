@@ -18,9 +18,10 @@
         <conv:InverseBoolConverter x:Key="InverseBool" />
         <conv:BoolToBrushConverter x:Key="BoolToBrush" />
         <conv:NullToVisibilityConverter x:Key="NullToVis" />
-        <conv:SlotCountIndexConverter x:Key="SlotCountIndex" />
         <conv:BoolToNoticeBrushConverter x:Key="BoolToNoticeBrush" />
         <conv:CameraStateToVisibilityConverter x:Key="CameraStateToVis" />
+        <conv:SlotAspectLabelConverter x:Key="SlotAspectLabel" />
+        <conv:AspectRatioToHeightConverter x:Key="AspectRatioToHeight" />
 
         <!-- VM → View DataTemplate 매핑(상태머신 화면 스왑) -->
         <DataTemplate DataType="{x:Type vm:HomeViewModel}">
@@ -58,6 +59,9 @@
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:UserMgmtViewModel}">
             <views:UserMgmtView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AccountViewModel}">
+            <views:AccountView />
         </DataTemplate>
         </ResourceDictionary>
     </Application.Resources>

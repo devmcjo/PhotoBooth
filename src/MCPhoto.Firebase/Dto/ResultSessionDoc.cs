@@ -12,7 +12,7 @@ public sealed class ResultSessionDoc
     public string Id { get; set; } = string.Empty;
 
     [FirestoreProperty("finalImageUrl")]
-    public string FinalImageUrl { get; set; } = string.Empty;
+    public string? FinalImageUrl { get; set; } // 사진 전송 off면 null (it7 F2 계약)
 
     [FirestoreProperty("timelapseUrl")]
     public string? TimelapseUrl { get; set; }

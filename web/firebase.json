@@ -29,6 +29,7 @@
     "indexes": "firestore.indexes.json"
   },
   "storage": {
+    "bucket": "mcphoto-955fb.firebasestorage.app",
     "rules": "storage.rules"
   }
 }

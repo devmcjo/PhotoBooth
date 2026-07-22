@@ -4,44 +4,46 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <!-- 스크림 위 카드 다이얼로그(모달) -->
+    <!-- 스크림 위 카드 다이얼로그(모달). 업로드중/성공(QR)/실패 3상태를 Visibility로 분기(it5 §2 B6). -->
     <Grid Background="{StaticResource Brush.Scrim}">
         <Border Style="{StaticResource Card}" Padding="48" Effect="{StaticResource Shadow.Pop}"
                 HorizontalAlignment="Center" VerticalAlignment="Center" Width="440" Background="{StaticResource Brush.Bg}">
             <StackPanel>
-                <TextBlock Text="QR을 스캔하세요" Style="{StaticResource Text.H2}"
-                           HorizontalAlignment="Center" Margin="0,0,0,24"
-                           Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}" />
 
-                <!-- 업로드 중 -->
+                <!-- ① 업로드 중 -->
                 <TextBlock Text="업로드 중..." Style="{StaticResource Text.Body}"
                            HorizontalAlignment="Center"
                            Visibility="{Binding IsUploading, Converter={StaticResource BoolToVis}}" />
 
-                <!-- QR (업로드 성공 후에만). QR 코드 배경은 스캔 위해 흰색 필수(예외). -->
-                <Border Background="{StaticResource Brush.OnAccent}" Padding="16" CornerRadius="8"
-                        HorizontalAlignment="Center" Margin="0,0,0,20"
-                        Effect="{StaticResource Shadow.Sm}"
-                        Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}">
-                    <Image Source="{Binding QrImage}" Width="240" Height="240" />
-                </Border>
+                <!-- ② 성공: QR + 만료 안내 -->
+                <StackPanel Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="QR을 스캔하세요" Style="{StaticResource Text.H2}"
+                               HorizontalAlignment="Center" Margin="0,0,0,24" />
+                    <!-- QR 코드 배경은 스캔 위해 흰색 필수(예외). -->
+                    <Border Background="{StaticResource Brush.OnAccent}" Padding="16" CornerRadius="8"
+                            HorizontalAlignment="Center" Margin="0,0,0,20"
+                            Effect="{StaticResource Shadow.Sm}">
+                        <Image Source="{Binding QrImage}" Width="240" Height="240" />
+                    </Border>
+                    <TextBlock Text="{Binding ExpiryNotice}" Style="{StaticResource Text.Caption}"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                               Margin="0,0,0,20" />
+                </StackPanel>
 
-                <TextBlock Text="{Binding ExpiryNotice}" Style="{StaticResource Text.Caption}"
-                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
-                           Margin="0,0,0,20"
-                           Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}" />
+                <!-- ③ 실패: 비위협 안내(로컬 저장됨) — 흐름 비차단([완료]로 진행 가능) -->
+                <StackPanel Visibility="{Binding UploadFailed, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Text.Primary}"
+                               Style="{StaticResource Text.Body}"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                               Margin="0,0,0,20" />
+                    <Button Content="다시 시도" Command="{Binding RetryCommand}"
+                            Style="{StaticResource Button.Secondary}" HorizontalAlignment="Center" Margin="0,0,0,12" />
+                </StackPanel>
 
-                <!-- 실패 안내 -->
-                <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
-                           Style="{StaticResource Text.Body}"
-                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
-                           Margin="0,0,0,16" />
-                <Button Content="다시 시도" Command="{Binding RetryCommand}"
-                        Style="{StaticResource Button.Secondary}" HorizontalAlignment="Center" Margin="0,0,0,12"
-                        Visibility="{Binding UploadSucceeded, Converter={StaticResource InverseBoolToVis}}" />
-
-                <Button Content="홈으로" Command="{Binding GoHomeCommand}"
-                        Style="{StaticResource Button.Primary}" HorizontalAlignment="Center" Padding="40,0" />
+                <!-- 완료: 성공·실패 어느 상태든 세션 완료로 진행(실패해도 비차단). 업로드 중엔 숨김. -->
+                <Button Content="완료" Command="{Binding DoneCommand}"
+                        Style="{StaticResource Button.Primary}" HorizontalAlignment="Center" Padding="40,0"
+                        Visibility="{Binding IsUploading, Converter={StaticResource InverseBoolToVis}}" />
             </StackPanel>
         </Border>
     </Grid>

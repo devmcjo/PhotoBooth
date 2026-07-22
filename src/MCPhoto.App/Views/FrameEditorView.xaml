@@ -13,8 +13,12 @@
         <!-- 편집 캔버스(프레임 이미지 + 슬롯 오버레이) -->
         <Border Grid.Column="0" Margin="40,88,20,40" Style="{StaticResource Card}" Padding="16">
             <Grid x:Name="EditorArea">
-                <Image x:Name="FramePreview" Source="{Binding FrameImage}" Stretch="Uniform" />
-                <Canvas x:Name="SlotCanvas" Background="Transparent" />
+                <!-- Image·Canvas가 같은 셀을 동일 정렬(Stretch)로 채워 표시 영역 정합.
+                     SlotCanvas가 좌표계 기준(EditorTransform이 SlotCanvas.ActualWidth 사용, it4 §2.3). -->
+                <Image x:Name="FramePreview" Source="{Binding FrameImage}" Stretch="Uniform"
+                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                <Canvas x:Name="SlotCanvas" Background="Transparent"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 <TextBlock Text="프레임 이미지를 불러오세요"
                            Style="{StaticResource Text.Body}" Foreground="{StaticResource Brush.Text.Muted}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -33,15 +37,40 @@
             <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20" />
 
             <TextBlock Text="슬롯 개수" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <ComboBox SelectedIndex="{Binding SlotCount, Converter={StaticResource SlotCountIndex}}"
+            <!-- 값 기반 바인딩(SelectedValue): 초기화 시 index 흔들림으로 인한 SlotCount clobber 차단(it7 B9). -->
+            <ComboBox ItemsSource="{Binding SlotCountOptions}" SelectedValue="{Binding SlotCount}"
                       Margin="0,0,0,20">
-                <ComboBoxItem Content="1개" />
-                <ComboBoxItem Content="2개" />
-                <ComboBoxItem Content="3개" />
-                <ComboBoxItem Content="4개" />
-                <ComboBoxItem Content="5개" />
-                <ComboBoxItem Content="6개" />
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding StringFormat={}{0}개}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
             </ComboBox>
+
+            <TextBlock Text="슬롯 비율" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+            <ComboBox ItemsSource="{Binding AspectOptions}"
+                      SelectedItem="{Binding SlotAspect}"
+                      Margin="0,0,0,20">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Converter={StaticResource SlotAspectLabel}}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <!-- F1: 슬롯 크기 일괄 스케일(70~130%) + % 표시(it5 §8) -->
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="슬롯 크기" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
+                           Text="{Binding SlotScalePercent, StringFormat={}{0:0}%}" />
+            </Grid>
+            <Slider Minimum="70" Maximum="130" Value="{Binding SlotScalePercent}"
+                    TickFrequency="10" IsSnapToTickEnabled="False"
+                    AutomationProperties.Name="슬롯 크기 배율" Margin="0,0,0,20" />
 
             <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
                        Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,16" />

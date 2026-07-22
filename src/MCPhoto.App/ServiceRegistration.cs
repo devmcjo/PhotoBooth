@@ -84,5 +84,6 @@ internal static class ServiceRegistration
         services.AddTransient<FrameEditorViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<UserMgmtViewModel>();
+        services.AddTransient<AccountViewModel>();
     }
 }

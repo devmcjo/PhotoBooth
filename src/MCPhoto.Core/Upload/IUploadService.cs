@@ -9,11 +9,12 @@ using MCPhoto.Core.Models;
 public interface IUploadService
 {
     /// <summary>
-    /// 최종 이미지·타임랩스를 results/{sessionId}/에 업로드하고 ResultSession 문서 생성.
+    /// 켜진 미디어(사진·타임랩스)를 results/{sessionId}/에 업로드하고 ResultSession 문서 생성.
+    /// finalImagePath가 null/부재면 사진 스킵(FinalImageUrl=null), timelapsePath 동일. 최소 1개 필요(it7 F2).
     /// downloadPageUrl 조립(§3.5) 후 반환. 업로드 실패 시 예외(QR 노출 전 확인).
     /// </summary>
     Task<ResultSession> UploadResultAsync(
-        string finalImagePath,
+        string? finalImagePath,
         string? timelapsePath,
         int retentionHours,
         string hostingBaseUrl,

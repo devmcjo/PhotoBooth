@@ -88,6 +88,13 @@ body {
   padding: 24px 8px;
 }
 
+/* hidden 속성이 .state의 display:flex에 눌려 무시되던 버그 수정 —
+   상태 전이 시 한 화면만 보이도록 명시적으로 숨김.
+   (이전엔 성공+만료+오류 섹션이 동시에 노출됨) */
+.state[hidden] {
+  display: none;
+}
+
 #state-success {
   justify-content: flex-start;
   align-items: stretch;
@@ -174,6 +181,18 @@ img.media__preview {
   margin: 0;
 }
 
+/* 전송 옵션 꺼짐 안내 — 만료(빨강 아님)·로드 실패와 시각적으로 구분되는 중립 정보 톤 */
+.media__optout {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+}
+
 /* 버튼 / 다운로드 링크 */
 .btn {
   display: inline-flex;
@@ -231,5 +250,11 @@ img.media__preview {
     width: auto;
     min-width: 220px;
     align-self: flex-start;
+  }
+  /* 중앙 정렬 상태(오류·만료)의 버튼은 가운데로 — 성공 화면의 좌측 정렬 규칙이
+     오류 화면 '다시 시도'까지 밀던 문제 수정. */
+  #state-error .btn,
+  #state-expired .btn {
+    align-self: center;
   }
 }

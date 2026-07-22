@@ -29,6 +29,9 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>오버레이(설정/로그인) 진입 전 상태 — 복귀 대상. (it2 §5.3)</summary>
     private AppState _returnState = AppState.Home;
 
+    /// <summary>계정 페이지 진입 모드(비번변경/계정생성/관리자). Account VM 생성 직후 주입. (it5 §5 C2)</summary>
+    private ViewModels.AccountMode _pendingAccountMode = ViewModels.AccountMode.PasswordChange;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTopBarVisible))]
     private AppState _currentState = AppState.Home;
@@ -161,8 +164,16 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         AppState.FrameEditor => _services.GetRequiredService<FrameEditorViewModel>(),
         AppState.Settings => _services.GetRequiredService<SettingsViewModel>(),
         AppState.UserMgmt => _services.GetRequiredService<UserMgmtViewModel>(),
+        AppState.Account => CreateAccountViewModel(),
         _ => null
     };
+
+    private AccountViewModel CreateAccountViewModel()
+    {
+        var vm = _services.GetRequiredService<AccountViewModel>();
+        vm.Mode = _pendingAccountMode; // 진입 모드 주입(팝오버 항목이 지정)
+        return vm;
+    }
 
     /// <summary>
     /// 어디서든 Home으로 강제 복귀. 촬영 세션 데이터는 항상 폐기.
@@ -216,12 +227,31 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
             await NavigateToOverlayAsync(AppState.Login);
     }
 
-    /// <summary>계정 팝오버 → 비밀번호 변경(설정 계정 섹션).</summary>
-    [RelayCommand]
-    private async Task OpenAccountSettings()
+    /// <summary>계정 페이지(오버레이) 진입 + 모드 저장. 복귀는 진입 전 화면으로. (it5 §5 C2)</summary>
+    private async Task NavigateToAccountAsync(ViewModels.AccountMode mode)
     {
         IsAccountPopupOpen = false;
-        await NavigateToOverlayAsync(AppState.Settings);
+        _pendingAccountMode = mode;
+        await NavigateToOverlayAsync(AppState.Account);
+    }
+
+    /// <summary>계정 팝오버 → 비밀번호 변경 전용 페이지.</summary>
+    [RelayCommand]
+    private Task OpenPasswordChange() => NavigateToAccountAsync(ViewModels.AccountMode.PasswordChange);
+
+    /// <summary>계정 팝오버(power) → 계정 생성 전용 페이지.</summary>
+    [RelayCommand]
+    private Task OpenAccountCreate() => NavigateToAccountAsync(ViewModels.AccountMode.AccountCreate);
+
+    /// <summary>계정 팝오버(power) → 관리자 도구(사용자 관리·앱 종료) 페이지.</summary>
+    [RelayCommand]
+    private Task OpenAdminTools() => NavigateToAccountAsync(ViewModels.AccountMode.Admin);
+
+    /// <summary>사용자 관리 화면에서 관리자 도구(Account/Admin)로 복귀. (it5 §5 C2)</summary>
+    public async Task ReturnToAdminToolsAsync()
+    {
+        _pendingAccountMode = ViewModels.AccountMode.Admin;
+        await NavigateAsync(AppState.Account);
     }
 
     /// <summary>로그아웃: 세션 계정 해제(이벤트 통지) + 홈 복귀. 세션 이미 로그아웃되므로 clearUser 불필요.</summary>

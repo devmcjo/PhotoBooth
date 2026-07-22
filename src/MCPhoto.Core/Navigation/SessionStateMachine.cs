@@ -20,33 +20,36 @@ public static class SessionStateMachine
         [AppState.Result] = new[] { AppState.Qr, AppState.Done },
         [AppState.Qr] = new[] { AppState.Done },
         [AppState.Done] = new[] { AppState.Home },
-        [AppState.Settings] = new[] { AppState.Login, AppState.UserMgmt, AppState.FrameEditor },
-        [AppState.UserMgmt] = new[] { AppState.Settings },
-        [AppState.FrameEditor] = new[] { AppState.FrameSelect, AppState.Settings, AppState.Login }
+        [AppState.Settings] = new[] { AppState.Login, AppState.FrameEditor },
+        [AppState.UserMgmt] = new[] { AppState.Account }, // 관리자 도구(Account) 복귀
+        [AppState.FrameEditor] = new[] { AppState.FrameSelect, AppState.Settings, AppState.Login },
+        [AppState.Account] = new[] { AppState.UserMgmt } // 관리자 도구 → 사용자 관리
     };
 
     /// <summary>
-    /// from → to 전이가 합법인지. Home·Settings·Login으로의 전이는 어디서든 허용(오버레이 진입).
-    /// (it2 §5.2 — 특례는 이 3개로 한정)
+    /// from → to 전이가 합법인지. Home·Settings·Login·Account로의 전이는 어디서든 허용(오버레이 진입).
+    /// (it2 §5.2 특례 + it5 §5 C2에서 Account 추가)
     /// </summary>
     public static bool CanTransition(AppState from, AppState to)
     {
-        // 오버레이성 진입/복귀는 어디서든 허용(취소·유휴·예외·완료·설정·로그인).
+        // 오버레이성 진입/복귀는 어디서든 허용(취소·유휴·예외·완료·설정·로그인·계정).
         // 자기 자신으로의 오버레이 전이도 무해 허용(예: Home→Home 복귀). 기존 동작 보존.
-        if (to is AppState.Home or AppState.Settings or AppState.Login) return true;
+        if (to is AppState.Home or AppState.Settings or AppState.Login or AppState.Account) return true;
         if (from == to) return false; // 그 외 자기 자신 전이는 무의미
         return Forward.TryGetValue(from, out var next) && Array.IndexOf(next, to) >= 0;
     }
 
-    /// <summary>세션 진행(촬영 흐름) 중 상태인지 — 유휴 감시 대상. Settings·Login은 비대상(it2 §5.2).</summary>
+    /// <summary>
+    /// 세션 진행(촬영 흐름) 중 상태인지 — 유휴 감시 대상. Settings·Login은 비대상(it2 §5.2).
+    /// FrameEditor는 로그인 필수 능동 작업(관리/커스텀)이라 촬영용 유휴 타임아웃 대상이 아니다(it4 §4 B5).
+    /// </summary>
     public static bool IsSessionActive(AppState state) => state
         is AppState.FrameSelect
         or AppState.Guide
         or AppState.Capture
         or AppState.CutSelect
         or AppState.Result
-        or AppState.Qr
-        or AppState.FrameEditor;
+        or AppState.Qr;
 
     /// <summary>
     /// 상단 바(로그인·설정 버튼)를 표시할 상태인지. 몰입/모달 화면(촬영·카운트다운·QR 팝업)에서는 숨김.

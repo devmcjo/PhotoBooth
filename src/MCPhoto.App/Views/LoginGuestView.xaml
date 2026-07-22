@@ -3,7 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
+             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280"
+             Loaded="OnLoaded"
+             FocusManager.FocusedElement="{Binding ElementName=IdTextBox}">
     <Grid Background="{StaticResource Brush.Bg}">
         <Border Style="{StaticResource Card}" Width="440" VerticalAlignment="Center" HorizontalAlignment="Center">
             <StackPanel>
@@ -12,7 +14,7 @@
                            Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" Margin="0,0,0,28" />
 
                 <TextBlock Text="아이디" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                <TextBox Text="{Binding LoginId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16" />
+                <TextBox x:Name="IdTextBox" Text="{Binding LoginId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16" />
 
                 <TextBlock Text="비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                 <PasswordBox x:Name="PasswordInput" Margin="0,0,0,8"

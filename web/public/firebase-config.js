@@ -3,9 +3,9 @@
 // 배포 환경별로 이 파일만 교체한다(코드 수정 불요). 실값은 배포 시점에 확정(OA-1).
 // 대상 Firebase 프로젝트 콘솔 > 프로젝트 설정 > 웹 앱 SDK 설정에서 복사한다.
 export const firebaseConfig = {
-  apiKey: "REPLACE_WITH_API_KEY",
-  authDomain: "REPLACE_WITH_PROJECT.firebaseapp.com",
-  projectId: "REPLACE_WITH_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_PROJECT.firebasestorage.app",
-  appId: "REPLACE_WITH_APP_ID"
+  apiKey: "AIzaSyATr28hNS9NfDe6qCzMGWer4qB8vh_2764",
+  authDomain: "mcphoto-955fb.firebaseapp.com",
+  projectId: "mcphoto-955fb",
+  storageBucket: "mcphoto-955fb.firebasestorage.app",
+  appId: "1:712395684881:web:4e6fb605984eaede2885b0"
 };

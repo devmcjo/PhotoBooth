@@ -30,12 +30,15 @@ public enum AppState
     /// <summary>완료/감사.</summary>
     Done,
 
-    /// <summary>설정 페이지(앱 설정·계정·관리자 섹션). 관리자 모드를 흡수. (it2 §4)</summary>
+    /// <summary>설정 페이지(앱 설정만). 계정·관리자 기능은 Account로 분리. (it5 §5 C1)</summary>
     Settings,
 
     /// <summary>사용자 관리(power).</summary>
     UserMgmt,
 
     /// <summary>프레임 편집기.</summary>
-    FrameEditor
+    FrameEditor,
+
+    /// <summary>계정 전용 페이지(비번 변경·계정 생성·앱 종료 등, 진입 모드로 분기). (it5 §5 C2)</summary>
+    Account
 }

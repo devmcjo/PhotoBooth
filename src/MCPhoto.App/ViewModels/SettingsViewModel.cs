@@ -1,51 +1,23 @@
-using System.Collections.ObjectModel;
-using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
-using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace MCPhoto.App.ViewModels;
 
 /// <summary>
-/// 설정 페이지 VM. [앱 설정](게스트 포함)·[계정](로그인)·[관리자](power) 3섹션. (it2 §4)
-/// AppSettings 전 항목 편집(OutputFormat/DisplayMode/StorageBucket 포함) + 계정/관리자 기능.
+/// 설정 페이지 VM. [앱 설정](AppSettings)만 담당. 계정·관리자 기능은 AccountViewModel로 분리(it5 §5 C1).
+/// AppSettings 전 항목 편집(OutputFormat/DisplayMode/StorageBucket 포함) + 저장 신뢰성(it3 §3).
 /// </summary>
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly AppShellViewModel _shell;
     private readonly ISettingsService _settings;
-    private readonly IAccountService _accounts;
     private readonly ILogger<SettingsViewModel>? _logger;
 
     private DispatcherTimer? _noticeTimer;
-
-    // PasswordBox는 바인딩 불가 → View 코드비하인드가 여기에 전달(기존 AdminView 패턴)
-    public string NewPassword { get; set; } = string.Empty;
-    public string ConfirmPassword { get; set; } = string.Empty;
-
-    // ── [계정] 비번 변경 ──
-    [ObservableProperty] private string _accountMessage = string.Empty;
-    [ObservableProperty] private bool _accountMessageIsError;
-
-    // ── [관리자] 계정 생성 ──
-    [ObservableProperty] private string _newAccountId = string.Empty;
-    public string NewAccountPassword { get; set; } = string.Empty; // code-behind 전달
-    [ObservableProperty] private UserRole _selectedNewRole = UserRole.User;
-    [ObservableProperty] private string _adminMessage = string.Empty;
-    [ObservableProperty] private bool _adminMessageIsError;
-
-    /// <summary>로그인 역할이 생성 가능한 역할 목록(admin→[User,Manager], manager→[User]).</summary>
-    public ObservableCollection<UserRole> CreatableRoles { get; } = new();
-
-    // ── 섹션 표시 플래그(Session 기반) ──
-    public bool IsGuest => _shell.Session.CurrentUser is null;
-    public bool IsLoggedIn => _shell.Session.CurrentUser is not null;
-    public bool IsPower => _shell.Session.CurrentUser?.Role.IsPower() == true;
 
     // ── [앱 설정] 필드 (AppSettings 전 항목, it2 §4.2) ──
     [ObservableProperty] private int _cutCount;
@@ -53,14 +25,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _mirrorMode;
     [ObservableProperty] private bool _flashMode;
     [ObservableProperty] private bool _enableQrDelivery;
+    [ObservableProperty] private bool _sendPhoto;       // QR 하위: 사진 전송 (it7 F2)
+    [ObservableProperty] private bool _sendTimelapse;   // QR 하위: 타임랩스 전송 (it7 F2)
     [ObservableProperty] private bool _saveLocalCopy;
     [ObservableProperty] private int _retentionHours;
     [ObservableProperty] private string _localSavePath = string.Empty;
     [ObservableProperty] private string _hostingBaseUrl = string.Empty;
     [ObservableProperty] private int _cameraDevice;
-    [ObservableProperty] private OutputFormat _outputFormat;      // 신규 노출(VF-12)
-    [ObservableProperty] private DisplayMode _displayMode;        // 신규 노출(VF-12)
-    [ObservableProperty] private string _storageBucket = string.Empty; // 신규 노출(VF-12)
+    [ObservableProperty] private OutputFormat _outputFormat;
+    [ObservableProperty] private DisplayMode _displayMode;
+    [ObservableProperty] private string _storageBucket = string.Empty;
 
     [ObservableProperty] private string _savedNotice = string.Empty;
     [ObservableProperty] private bool _savedNoticeIsError; // 성공=false(민트/성공색), 실패=true(로즈/danger)
@@ -74,29 +48,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>표시 모드 옵션.</summary>
     public IReadOnlyList<DisplayMode> DisplayModeOptions { get; } = new[] { DisplayMode.Fullscreen, DisplayMode.Windowed };
 
-    public SettingsViewModel(AppShellViewModel shell, ISettingsService settings, IAccountService accounts, ILogger<SettingsViewModel>? logger = null)
+    public SettingsViewModel(AppShellViewModel shell, ISettingsService settings, ILogger<SettingsViewModel>? logger = null)
     {
         _shell = shell;
         _settings = settings;
-        _accounts = accounts;
         _logger = logger;
     }
 
     public override Task OnEnterAsync()
     {
         LoadSettings();
-        OnPropertyChanged(nameof(IsGuest));
-        OnPropertyChanged(nameof(IsLoggedIn));
-        OnPropertyChanged(nameof(IsPower));
-
-        // 생성 가능 역할 갱신(로그인 역할 기반)
-        CreatableRoles.Clear();
-        var role = _shell.Session.CurrentUser?.Role;
-        if (role is { } r)
-            foreach (var cr in r.CreatableRoles())
-                CreatableRoles.Add(cr);
-        SelectedNewRole = CreatableRoles.Count > 0 ? CreatableRoles[0] : UserRole.User;
-
         return Task.CompletedTask;
     }
 
@@ -108,6 +69,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         MirrorMode = s.MirrorMode;
         FlashMode = s.FlashMode;
         EnableQrDelivery = s.EnableQrDelivery;
+        SendPhoto = s.SendPhoto;
+        SendTimelapse = s.SendTimelapse;
         SaveLocalCopy = s.SaveLocalCopy;
         RetentionHours = s.RetentionHours;
         LocalSavePath = s.LocalSavePath;
@@ -118,7 +81,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
         StorageBucket = s.StorageBucket;
     }
 
-    /// <summary>[앱 설정] 저장: 필드 → AppSettings → Clamp → INI flush. (it2 §4.2)</summary>
+    // QR 하위 토글 변경 연동(it7 F2): 둘 다 off면 QR 전송 자체 off(단일 정규화 지점).
+    partial void OnSendPhotoChanged(bool value) => NormalizeQrToggles();
+    partial void OnSendTimelapseChanged(bool value) => NormalizeQrToggles();
+
+    private bool _normalizing;
+    private void NormalizeQrToggles()
+    {
+        if (_normalizing) return; // 재진입 방지(정규화가 프로퍼티를 다시 바꿀 때)
+        _normalizing = true;
+        try
+        {
+            var (enableQr, _, _) = QrDeliveryPolicy.Normalize(EnableQrDelivery, SendPhoto, SendTimelapse);
+            if (EnableQrDelivery != enableQr) EnableQrDelivery = enableQr; // 둘 다 off → QR off
+        }
+        finally { _normalizing = false; }
+    }
+
+    /// <summary>[앱 설정] 저장: 필드 → AppSettings → Clamp → INI flush. (it2 §4.2, it3 §3)</summary>
     [RelayCommand]
     private void SaveSettings()
     {
@@ -128,6 +108,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.MirrorMode = MirrorMode;
         s.FlashMode = FlashMode;
         s.EnableQrDelivery = EnableQrDelivery;
+        s.SendPhoto = SendPhoto;
+        s.SendTimelapse = SendTimelapse;
         s.SaveLocalCopy = SaveLocalCopy;
         s.RetentionHours = RetentionHours;
         s.LocalSavePath = LocalSavePath;
@@ -152,107 +134,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    // ── [계정] 비밀번호 변경 (it2 §4.3, 2회 확인) ──
-
-    [RelayCommand]
-    private async Task ChangePassword()
-    {
-        var user = _shell.Session.CurrentUser;
-        if (user is null) return;
-
-        if (string.IsNullOrWhiteSpace(NewPassword))
-        {
-            SetAccountMessage("새 비밀번호를 입력하세요.", isError: true);
-            return;
-        }
-        if (NewPassword != ConfirmPassword)
-        {
-            SetAccountMessage("새 비밀번호가 일치하지 않습니다.", isError: true);
-            return;
-        }
-
-        try
-        {
-            await _accounts.ChangePasswordAsync(user.Id, NewPassword);
-            user.Password = NewPassword;
-            NewPassword = ConfirmPassword = string.Empty;
-            SetAccountMessage("비밀번호가 변경되었습니다.", isError: false);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "비밀번호 변경 실패");
-            SetAccountMessage("변경에 실패했습니다.", isError: true);
-        }
-    }
-
-    // ── [관리자] 계정 생성 (it2 §4.4·§7, 역할 게이트) ──
-
-    [RelayCommand]
-    private async Task CreateAccount()
-    {
-        var acting = _shell.Session.CurrentUser?.Role;
-        if (acting is not { } actingRole || !actingRole.IsPower())
-        {
-            SetAdminMessage("권한이 없습니다.", isError: true);
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(NewAccountId) || string.IsNullOrWhiteSpace(NewAccountPassword))
-        {
-            SetAdminMessage("아이디와 비밀번호를 입력하세요.", isError: true);
-            return;
-        }
-
-        try
-        {
-            var createdId = NewAccountId.Trim(); // 비우기 전에 보존(메시지 조립용)
-            await _accounts.CreateAsync(createdId, NewAccountPassword, SelectedNewRole, actingRole);
-            NewAccountId = string.Empty;
-            NewAccountPassword = string.Empty;
-            SetAdminMessage($"'{createdId}' 계정을 생성했습니다.", isError: false);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            SetAdminMessage("해당 역할을 생성할 권한이 없습니다.", isError: true);
-        }
-        catch (InvalidOperationException ex)
-        {
-            // 중복 id 또는 미초기화
-            SetAdminMessage(ex.Message, isError: true);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "계정 생성 실패");
-            SetAdminMessage("생성에 실패했습니다.", isError: true);
-        }
-    }
-
-    /// <summary>사용자 관리 화면 진입(power).</summary>
-    [RelayCommand]
-    private async Task OpenUserManagement()
-    {
-        if (IsPower)
-            await _shell.NavigateAsync(AppState.UserMgmt);
-    }
-
-    /// <summary>앱 종료(관리자, 기존 AdminView에서 이관).</summary>
-    [RelayCommand]
-    private void ExitApp() => Application.Current.Shutdown();
-
     /// <summary>[닫기]: 오버레이 복귀(직전 화면). 세션 보존.</summary>
     [RelayCommand]
     private async Task Close() => await _shell.ReturnFromOverlay();
-
-    private void SetAccountMessage(string text, bool isError)
-    {
-        AccountMessage = text;
-        AccountMessageIsError = isError;
-    }
-
-    private void SetAdminMessage(string text, bool isError)
-    {
-        AdminMessage = text;
-        AdminMessageIsError = isError;
-    }
 
     private void ShowNotice(string text, bool isError = false)
     {

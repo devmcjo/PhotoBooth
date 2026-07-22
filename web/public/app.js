@@ -60,37 +60,60 @@ function formatExpiry(date) {
   }
 }
 
-// ---- 성공 렌더(Step 5) --------------------------------------------------
+// ---- 성공 렌더(Step 5, it7 F3) ------------------------------------------
+// renderSuccess 는 loadSession 이 만료 판정(문서 부재/expiresAt 경과)을 통과한 뒤에만 호출된다(VF-10).
+// 따라서 여기서 URL 이 falsy 하면 "만료/실패"가 아니라 "전송 옵션이 꺼진 것"(의도적 제외)으로
+// 안전하게 해석한다(it7 F3, 계약 §5: 미만료 문서의 URL null = 전송 옵션 꺼짐).
 function renderSuccess(data) {
-  const photoSection = document.getElementById("photo-section");
   const photoPreview = document.getElementById("photo-preview");
   const photoDownload = document.getElementById("photo-download");
   const photoError = document.getElementById("photo-error");
+  const photoHint = document.getElementById("photo-hint");
+  const photoOptout = document.getElementById("photo-optout");
   const videoSection = document.getElementById("video-section");
   const videoPreview = document.getElementById("video-preview");
   const videoDownload = document.getElementById("video-download");
   const videoError = document.getElementById("video-error");
+  const videoHint = document.getElementById("video-hint");
+  const videoOptout = document.getElementById("video-optout");
   const expiryNotice = document.getElementById("expiry-notice");
 
-  // 개별 미디어 로드 성공/실패 추적 — 둘 다 실패하면 만료 화면으로 폴백(§3.4, VF-10).
-  const mediaState = { photoOk: null, videoPresent: false, videoOk: null };
+  // 미디어별 상태:
+  //   present=false → URL null = 전송 옵션 꺼짐(의도적 제외). 실패 아님 → 만료 폴백에서 제외.
+  //   present=true  → URL 있음. loadOk: null(로드 대기)/true(성공)/false(onerror=로드 실패).
+  const mediaState = {
+    photo: { present: false, loadOk: null },
+    video: { present: false, loadOk: null }
+  };
 
+  // 만료 폴백은 "URL 이 있는데 로드에 실패한 경우"만 실패로 센다.
+  // 옵션 꺼짐(present=false)은 정상 성공의 부분 부재이므로 폴백 트리거에서 제외한다(it7 §4.2).
   function maybeFallbackToExpired() {
-    const photoFailed = mediaState.photoOk === false;
-    const videoFailed = !mediaState.videoPresent || mediaState.videoOk === false;
-    if (photoFailed && videoFailed) {
+    const photoLoadFailed = mediaState.photo.present && mediaState.photo.loadOk === false;
+    const videoLoadFailed = mediaState.video.present && mediaState.video.loadOk === false;
+    // present 인 미디어가 하나라도 있고, present 인 것이 모두 로드 실패면 만료로 폴백.
+    const anyPresent = mediaState.photo.present || mediaState.video.present;
+    const allPresentFailed =
+      (!mediaState.photo.present || photoLoadFailed) &&
+      (!mediaState.video.present || videoLoadFailed);
+    if (anyPresent && allPresentFailed) {
       showState("expired");
     }
   }
 
-  // 사진: 문서 URL 을 img/a 에 직접 바인딩(파일명은 표시용 힌트, 실제는 서버 헤더 따름).
+  // 사진: URL 있으면 프리뷰/다운로드 표시, 없으면 "전송 옵션 꺼짐" 안내.
   if (data.finalImageUrl) {
+    mediaState.photo.present = true;
+    if (photoOptout) photoOptout.hidden = true;
+    photoPreview.hidden = false;
+    if (photoHint) photoHint.hidden = false;
+    photoDownload.hidden = false;
     photoPreview.onload = () => {
-      mediaState.photoOk = true;
+      mediaState.photo.loadOk = true;
       if (photoError) photoError.hidden = true;
     };
     photoPreview.onerror = () => {
-      mediaState.photoOk = false;
+      mediaState.photo.loadOk = false;
       photoPreview.hidden = true;
       if (photoError) photoError.hidden = false;
       photoDownload.setAttribute("aria-disabled", "true");
@@ -102,25 +125,28 @@ function renderSuccess(data) {
     photoDownload.href = data.finalImageUrl;
     photoDownload.setAttribute("download", "mcphoto.jpg");
   } else {
-    // finalImageUrl 이 없으면(계약상 필수지만 방어적으로) 사진 영역을 실패로 표시.
-    // 폴백 평가는 영상 블록까지 처리한 뒤 아래에서 한 번 수행한다(순서 안전).
-    mediaState.photoOk = false;
+    // 전송 옵션 꺼짐: 프리뷰·다운로드·힌트·실패문구 숨기고 옵션꺼짐 안내만 노출.
+    mediaState.photo.present = false;
     if (photoPreview) photoPreview.hidden = true;
-    if (photoError) photoError.hidden = false;
-    photoDownload.setAttribute("aria-disabled", "true");
-    photoDownload.classList.add("is-disabled");
-    photoDownload.removeAttribute("href");
+    if (photoError) photoError.hidden = true;
+    if (photoHint) photoHint.hidden = true;
+    if (photoDownload) photoDownload.hidden = true;
+    if (photoOptout) photoOptout.hidden = false;
   }
 
-  // 영상: timelapseUrl 이 truthy 일 때만 표시, null 이면 영역 전체 숨김(계약 §2.3).
+  // 영상: URL 있으면 프리뷰/다운로드 표시, 없으면 영역을 표시하되 "전송 옵션 꺼짐" 안내(it7: 숨기지 않음).
   if (data.timelapseUrl) {
-    mediaState.videoPresent = true;
+    mediaState.video.present = true;
+    if (videoOptout) videoOptout.hidden = true;
+    videoPreview.hidden = false;
+    if (videoHint) videoHint.hidden = false;
+    videoDownload.hidden = false;
     videoPreview.onloadeddata = () => {
-      mediaState.videoOk = true;
+      mediaState.video.loadOk = true;
       if (videoError) videoError.hidden = true;
     };
     videoPreview.onerror = () => {
-      mediaState.videoOk = false;
+      mediaState.video.loadOk = false;
       videoPreview.hidden = true;
       if (videoError) videoError.hidden = false;
       videoDownload.setAttribute("aria-disabled", "true");
@@ -133,8 +159,14 @@ function renderSuccess(data) {
     videoDownload.setAttribute("download", "mcphoto.mp4");
     if (videoSection) videoSection.hidden = false;
   } else {
-    mediaState.videoPresent = false;
-    if (videoSection) videoSection.hidden = true; // 빈 영상 플레이어를 노출하지 않는다.
+    // 전송 옵션 꺼짐: 영역은 표시하되 프리뷰·다운로드·힌트·실패문구 숨기고 옵션꺼짐 안내 노출.
+    mediaState.video.present = false;
+    if (videoPreview) videoPreview.hidden = true;
+    if (videoError) videoError.hidden = true;
+    if (videoHint) videoHint.hidden = true;
+    if (videoDownload) videoDownload.hidden = true;
+    if (videoOptout) videoOptout.hidden = false;
+    if (videoSection) videoSection.hidden = false;
   }
 
   // 만료 고지: 사용자 로컬 시간으로 포맷.
@@ -142,14 +174,14 @@ function renderSuccess(data) {
     expiryNotice.textContent = `이 사진·영상은 ${formatExpiry(data.expiresAt.toDate())}에 만료됩니다.`;
   }
 
-  // 다운로드 폴백 안내(#photo-hint / #video-hint)는 상시 노출한다.
+  // 다운로드 폴백 안내(#photo-hint / #video-hint)는 URL 이 있는 미디어에서만 노출한다.
   // <a download> 는 cross-origin(firebasestorage.googleapis.com)에서 전 브라우저가 무시하므로
   // (MDN: same-origin + blob:/data: 전용), iOS 한정이 아니라 공통 안내다(리뷰 Minor 1, 2026-07-20).
 
   showState("success");
 
-  // 동기 확정분(URL 부재) 반영 후 폴백 평가: 사진 URL 부재 + 영상 없음이면 만료로 폴백(리뷰 Minor 3).
-  // 비동기 로드 실패는 각 onerror 콜백에서 별도로 평가된다.
+  // 동기 확정분(옵션 꺼짐/로드 대기) 반영 후 폴백 평가. 옵션 꺼짐은 실패가 아니므로 폴백되지 않는다.
+  // present 인 미디어가 하나도 없으면(둘 다 옵션 꺼짐 — 계약상 미발생, 방어적) 성공 화면 유지(안내 2개).
   maybeFallbackToExpired();
 }
 

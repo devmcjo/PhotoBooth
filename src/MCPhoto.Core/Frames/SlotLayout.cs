@@ -13,6 +13,14 @@ public static class SlotLayout
     /// 세로로 긴 프레임(aspect &lt; 0.6)은 1열 스트립, 그 외는 격자.
     /// </summary>
     public static List<Slot> AutoArrange(int slotCount, int frameW, int frameH)
+        => AutoArrange(slotCount, frameW, frameH, targetAspect: null);
+
+    /// <summary>
+    /// 종횡비를 지정해 자동 배치(it4 §3). 격자 셀을 산출한 뒤 <b>각 셀 안에서 targetAspect를 유지하는
+    /// 최대 사각형</b>을 셀 중앙에 배치한다. targetAspect=null이면 셀 크기 그대로(기존 동작).
+    /// 캡처 크롭이 <see cref="Slot.AspectRatio"/>를 따르므로 이 비율이 결과물에 직결.
+    /// </summary>
+    public static List<Slot> AutoArrange(int slotCount, int frameW, int frameH, double? targetAspect)
     {
         slotCount = Math.Clamp(slotCount, 1, 6);
         double frameAspect = (double)frameW / frameH;
@@ -46,16 +54,83 @@ public static class SlotLayout
         {
             int r = i / cols;
             int c = i % cols;
+            int cellX = marginX + c * (cellW + gapX);
+            int cellY = marginY + r * (cellH + gapY);
+
+            var (w, h, offX, offY) = FitInCell(cellW, cellH, targetAspect);
             slots.Add(new Slot
             {
                 Index = i,
-                X = marginX + c * (cellW + gapX),
-                Y = marginY + r * (cellH + gapY),
-                Width = cellW,
-                Height = cellH
+                X = cellX + offX,
+                Y = cellY + offY,
+                Width = w,
+                Height = h
             });
         }
         return slots;
+    }
+
+    /// <summary>
+    /// 셀(cellW×cellH) 안에서 targetAspect(=w/h)를 유지하는 최대 사각형과 중앙 정렬 오프셋을 산출.
+    /// targetAspect=null이면 셀 크기 그대로(오프셋 0).
+    /// </summary>
+    private static (int w, int h, int offX, int offY) FitInCell(int cellW, int cellH, double? targetAspect)
+    {
+        if (targetAspect is not { } aspect || aspect <= 0)
+            return (cellW, cellH, 0, 0);
+
+        double cellAspect = (double)cellW / cellH;
+        int w, h;
+        if (cellAspect > aspect)
+        {
+            // 셀이 목표보다 가로로 넓음 → 높이를 셀에 맞추고 폭을 비율로.
+            h = cellH;
+            w = (int)Math.Round(h * aspect);
+        }
+        else
+        {
+            // 셀이 목표보다 세로로 김 → 폭을 셀에 맞추고 높이를 비율로.
+            w = cellW;
+            h = (int)Math.Round(w / aspect);
+        }
+        w = Math.Clamp(w, 1, cellW);
+        h = Math.Clamp(h, 1, cellH);
+        int offX = (cellW - w) / 2;
+        int offY = (cellH - h) / 2;
+        return (w, h, offX, offY);
+    }
+
+    /// <summary>
+    /// 슬롯 폭을 기준으로 targetAspect를 유지하도록 높이를 재계산(비율 유지 리사이즈). (it4 §3.2 선택)
+    /// 경계·중앙 정렬은 호출측에서 <see cref="ClampToFrame"/>로 마무리.
+    /// </summary>
+    public static Slot ResizeKeepingAspect(Slot slot, int newWidth, double targetAspect)
+    {
+        int w = Math.Max(1, newWidth);
+        int h = targetAspect <= 0 ? slot.Height : Math.Max(1, (int)Math.Round(w / targetAspect));
+        return new Slot { Index = slot.Index, X = slot.X, Y = slot.Y, Width = w, Height = h };
+    }
+
+    /// <summary>
+    /// 모든 슬롯을 동일 배율로 일괄 스케일(it5 §8 F1). 각 슬롯 중심 유지·종횡비 유지(w·h 동일 배율)·경계 클램프.
+    /// 누적 오차 방지를 위해 항상 <b>기준(원본) 슬롯</b>에서 계산해야 한다(호출측이 baseSlots 전달).
+    /// </summary>
+    public static List<Slot> ScaleSlots(IReadOnlyList<Slot> baseSlots, double factor, int frameW, int frameH)
+    {
+        var result = new List<Slot>(baseSlots.Count);
+        foreach (var s in baseSlots)
+        {
+            int newW = Math.Max(1, (int)Math.Round(s.Width * factor));
+            int newH = Math.Max(1, (int)Math.Round(s.Height * factor));
+            double cx = s.X + s.Width / 2.0;
+            double cy = s.Y + s.Height / 2.0;
+            int newX = (int)Math.Round(cx - newW / 2.0);
+            int newY = (int)Math.Round(cy - newH / 2.0);
+            result.Add(ClampToFrame(
+                new Slot { Index = s.Index, X = newX, Y = newY, Width = newW, Height = newH },
+                frameW, frameH));
+        }
+        return result;
     }
 
     /// <summary>슬롯을 프레임 경계 내로 클램프(프레임 밖 이탈 방지). 좌표·크기 모두 보정.</summary>

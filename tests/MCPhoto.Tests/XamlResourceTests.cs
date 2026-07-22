@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows;
 using Xunit;
@@ -70,7 +73,7 @@ public class XamlResourceTests
                 "Radius.S", "Radius.M", "Radius.Pill", "Touch.Min", "Touch.CTA", "Touch.IconBtn",
                 "Font.Primary", "Text.Display", "Text.H1", "Text.H2", "Text.Body", "Text.Label", "Text.Caption",
                 "Button.Primary", "Button.Secondary", "Button.Ghost", "Button.Danger",
-                "Button.Icon", "Button.Icon.Pill", "Button.Filter", "Button.FrameCard",
+                "Button.Icon", "Button.Icon.Pill", "Button.Filter", "Button.FrameCard", "Button.Shutter",
                 "Card", "ScreenTitle", "Toggle", "Segment",
             };
 
@@ -99,6 +102,69 @@ public class XamlResourceTests
             var accent = theme["Brush.Accent"] as System.Windows.Media.SolidColorBrush;
             Assert.NotNull(accent);
             Assert.Equal((byte)0xFF, accent!.Color.R); // 로즈 #FF4D79
+        });
+    }
+
+    // ── it4: sibling merged dictionary 교차 참조 정적 안전망 ──
+    // it2 버그: Brushes.xaml이 {StaticResource Color.Bg}를 형제 딕셔너리에서 참조 → 런타임 XamlParseException.
+    // 각 Themes 파일이 자기 안에서(자체 MergedDictionaries 포함) 참조 키를 모두 해석할 수 있어야 한다.
+    // 창을 띄우지 않고(pack URI 로드만) StaticResource 미해결을 잡는다.
+
+    // 소스 트리에서 Themes 원본 XAML을 찾는다(테스트 실행 디렉터리 기준 상위 탐색).
+    private static string FindThemesDir()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "MCPhoto.App", "Themes");
+            if (Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        throw new DirectoryNotFoundException("src/MCPhoto.App/Themes 를 찾지 못함");
+    }
+
+    [Theory]
+    [InlineData("Colors.xaml")]
+    [InlineData("Brushes.xaml")]
+    [InlineData("Typography.xaml")]
+    [InlineData("Metrics.xaml")]
+    [InlineData("Controls.xaml")]
+    public void Each_Theme_File_Resolves_Its_Own_StaticResource_References(string file)
+    {
+        var themesDir = FindThemesDir();
+        var text = File.ReadAllText(Path.Combine(themesDir, file));
+
+        // 이 파일이 참조하는 모든 StaticResource 키 추출.
+        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(k => k.Length > 0)
+            .Distinct()
+            .ToArray();
+        if (referenced.Length == 0) return; // 참조 없으면 통과(Colors 등)
+
+        RunSta(() =>
+        {
+            EnsureApplication();
+            // 개별 파일을 로드(자체 MergedDictionaries 포함) — 형제 교차 참조면 여기서/조회에서 실패.
+            var dict = new ResourceDictionary
+            {
+                Source = new Uri($"pack://application:,,,/MCPhoto;component/Themes/{file}", UriKind.Absolute)
+            };
+
+            var unresolved = new List<string>();
+            foreach (var key in referenced)
+            {
+                try
+                {
+                    if (!dict.Contains(key)) unresolved.Add(key);
+                }
+                catch (Exception ex)
+                {
+                    unresolved.Add($"{key} ({ex.GetType().Name})");
+                }
+            }
+            Assert.True(unresolved.Count == 0,
+                $"{file} 이 자체적으로 해석 못 하는 StaticResource: {string.Join(", ", unresolved)}");
         });
     }
 }

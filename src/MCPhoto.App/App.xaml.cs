@@ -34,6 +34,14 @@ public partial class App : Application
             .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
             .CreateLogger();
 
+        // 이전 실행의 세션 임시폴더 잔재 정리(비정상 종료 등). result·logs는 제외. (it6 #3, PRD §10)
+        try
+        {
+            var removed = Core.Capture.SessionWorkspace.CleanupOnStartup(DataFolder);
+            if (removed > 0) Log.Information("시작 시 sessions 잔재 {Count}건 정리", removed);
+        }
+        catch (Exception ex) { Log.Warning(ex, "sessions 잔재 정리 실패(무시)"); }
+
         _host = Host.CreateDefaultBuilder()
             .ConfigureServices((_, services) =>
             {

@@ -1,5 +1,7 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MCPhoto.App.ViewModels;
 
 namespace MCPhoto.App.Views;
@@ -7,6 +9,16 @@ namespace MCPhoto.App.Views;
 public partial class LoginGuestView : UserControl
 {
     public LoginGuestView() => InitializeComponent();
+
+    // U8: 진입 시 아이디 입력창 자동 포커스. FocusManager 선언 + 오버레이 재진입 보강(로직 없음, MVVM 유지). (it5 §7)
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            IdTextBox.Focus();
+            Keyboard.Focus(IdTextBox);
+        }));
+    }
 
     // PasswordBox는 보안상 바인딩 불가 → 코드비하인드에서 VM으로 전달
     private void OnPasswordChanged(object sender, System.Windows.RoutedEventArgs e)

@@ -5,21 +5,24 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using MCPhoto.App.ViewModels;
+using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using Microsoft.Win32;
 
 namespace MCPhoto.App.Views;
 
 /// <summary>
-/// 프레임 편집기. 슬롯을 Canvas에 렌더하고 드래그로 이동. 프레임 좌표 ↔ 화면 좌표 스케일 변환. (WBS Step 10)
+/// 프레임 편집기. 슬롯을 Canvas에 렌더하고 드래그로 이동. 프레임 좌표 ↔ 캔버스 좌표는
+/// 순수 함수 <see cref="EditorTransform"/>로 통일(표시·드래그·클램프 동일 변환 → WYSIWYG). (it4 §2)
 /// </summary>
 public partial class FrameEditorView : UserControl
 {
     private FrameEditorViewModel? _vm;
     private Rectangle? _dragTarget;
     private int _dragIndex = -1;
-    private Point _dragStart;
-    private double _origSlotX, _origSlotY;
+
+    // 드래그 시작 시 슬롯 내 클릭 지점(프레임 좌표 오프셋). 절대 위치 이동의 그랩 포인트.
+    private double _grabOffsetX, _grabOffsetY;
 
     public FrameEditorView()
     {
@@ -61,47 +64,38 @@ public partial class FrameEditorView : UserControl
         }
     }
 
-    // ── 프레임 좌표 ↔ 화면 좌표 변환 ──
+    // ── 프레임 좌표 ↔ 캔버스 좌표 변환 ──
 
-    private (double scale, double offsetX, double offsetY) GetTransform()
-    {
-        if (_vm is null || _vm.FrameWidth <= 0 || _vm.FrameHeight <= 0)
-            return (1, 0, 0);
-
-        // Uniform 스케일된 이미지의 실제 표시 영역 계산(Image margin 16 반영)
-        double areaW = FramePreview.ActualWidth;
-        double areaH = FramePreview.ActualHeight;
-        if (areaW <= 0 || areaH <= 0) return (1, 0, 0);
-
-        double scale = Math.Min(areaW / _vm.FrameWidth, areaH / _vm.FrameHeight);
-        double dispW = _vm.FrameWidth * scale;
-        double dispH = _vm.FrameHeight * scale;
-        double offsetX = FramePreview.Margin.Left + (areaW - dispW) / 2;
-        double offsetY = FramePreview.Margin.Top + (areaH - dispH) / 2;
-        return (scale, offsetX, offsetY);
-    }
+    // 슬롯을 실제로 그리는 SlotCanvas가 캔버스 좌표계의 기준(Image ActualWidth 의존 제거, it4 §2.3).
+    private EditorTransform GetTransform()
+        => _vm is null
+            ? default
+            : EditorTransform.Compute(SlotCanvas.ActualWidth, SlotCanvas.ActualHeight, _vm.FrameWidth, _vm.FrameHeight);
 
     private void RedrawSlots()
     {
         SlotCanvas.Children.Clear();
         if (_vm is null || _vm.FrameImage is null) return;
 
-        var (scale, ox, oy) = GetTransform();
+        var tf = GetTransform();
+        if (!tf.IsValid) return; // 크기 0/미확정 — 다음 SizeChanged 패스에서 재그리기
+
         for (int i = 0; i < _vm.Slots.Count; i++)
         {
             var slot = _vm.Slots[i];
             var rect = new Rectangle
             {
-                Width = slot.Width * scale,
-                Height = slot.Height * scale,
+                Width = slot.Width * tf.Scale,
+                Height = slot.Height * tf.Scale,
                 Stroke = new SolidColorBrush(Color.FromRgb(0xC4, 0x4B, 0x9B)),
                 StrokeThickness = 2,
                 Fill = new SolidColorBrush(Color.FromArgb(0x33, 0xC4, 0x4B, 0x9B)),
                 Tag = i,
                 Cursor = Cursors.SizeAll
             };
-            Canvas.SetLeft(rect, ox + slot.X * scale);
-            Canvas.SetTop(rect, oy + slot.Y * scale);
+            var (cx, cy) = tf.FrameToCanvas(slot.X, slot.Y);
+            Canvas.SetLeft(rect, cx);
+            Canvas.SetTop(rect, cy);
             rect.MouseLeftButtonDown += OnSlotMouseDown;
             rect.MouseMove += OnSlotMouseMove;
             rect.MouseLeftButtonUp += OnSlotMouseUp;
@@ -112,11 +106,19 @@ public partial class FrameEditorView : UserControl
     private void OnSlotMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Rectangle rect || _vm is null) return;
+        var tf = GetTransform();
+        if (!tf.IsValid) return;
+
         _dragTarget = rect;
         _dragIndex = (int)rect.Tag!;
-        _dragStart = e.GetPosition(SlotCanvas);
-        _origSlotX = _vm.Slots[_dragIndex].X;
-        _origSlotY = _vm.Slots[_dragIndex].Y;
+
+        // 그랩 오프셋 = 클릭한 프레임 좌표 − 슬롯 좌상단(프레임 좌표). 이동 내내 고정.
+        var pos = e.GetPosition(SlotCanvas);
+        var (fx, fy) = tf.CanvasToFrame(pos.X, pos.Y);
+        var slot = _vm.Slots[_dragIndex];
+        _grabOffsetX = fx - slot.X;
+        _grabOffsetY = fy - slot.Y;
+
         rect.CaptureMouse();
         e.Handled = true;
     }
@@ -126,17 +128,16 @@ public partial class FrameEditorView : UserControl
         if (_dragTarget is null || _dragIndex < 0 || _vm is null) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
-        var (scale, _, _) = GetTransform();
-        if (scale <= 0) return;
+        var tf = GetTransform();
+        if (!tf.IsValid) return;
 
+        // 절대 위치: 현재 마우스의 프레임 좌표에서 그랩 오프셋을 빼 슬롯 좌상단을 산출(델타 누적·정수 절삭 없음).
         var pos = e.GetPosition(SlotCanvas);
-        double dxFrame = (pos.X - _dragStart.X) / scale;
-        double dyFrame = (pos.Y - _dragStart.Y) / scale;
-
+        var (fx, fy) = tf.CanvasToFrame(pos.X, pos.Y);
         var slot = _vm.Slots[_dragIndex];
         _vm.UpdateSlot(_dragIndex,
-            (int)(_origSlotX + dxFrame),
-            (int)(_origSlotY + dyFrame),
+            (int)Math.Round(fx - _grabOffsetX),
+            (int)Math.Round(fy - _grabOffsetY),
             slot.Width, slot.Height);
         RedrawSlots();
     }

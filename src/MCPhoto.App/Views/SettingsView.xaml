@@ -5,103 +5,198 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="900" d:DesignWidth="1280">
     <UserControl.Resources>
-        <!-- 인라인 행 라벨: 고정폭 240 좌측, 수직 중앙(2열 정렬 통일, it3 §4.1) -->
+        <!-- 인라인 행 라벨: 고정폭 제거(잘림 방지, it5 §6 U7). 내용 폭 Auto + 잘림 없음, 우측 여백만. -->
         <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Width" Value="240" />
+            <Setter Property="TextTrimming" Value="None" />
+            <Setter Property="Margin" Value="0,0,16,0" />
+        </Style>
+        <!-- 설정 행: 라벨(Auto) | 컨트롤(*). 라벨이 내용만큼 차지해 잘리지 않음. PC 밀도 Space.S. -->
+        <Style x:Key="SettingRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <!-- 전폭 입력 행(경로·URL 등 긴 입력) -->
+        <Style x:Key="FullRow" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
         <!-- 그룹 소제목 -->
         <Style x:Key="GroupTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Title}">
-            <Setter Property="Margin" Value="0,4,0,10" />
+            <Setter Property="Margin" Value="0,4,0,8" />
         </Style>
         <!-- 그룹 구분선 -->
         <Style x:Key="GroupDivider" TargetType="Border">
             <Setter Property="Height" Value="1" />
             <Setter Property="Background" Value="{StaticResource Brush.Divider}" />
-            <Setter Property="Margin" Value="0,4,0,20" />
+            <Setter Property="Margin" Value="0,8,0,16" />
         </Style>
     </UserControl.Resources>
 
     <Grid Background="{StaticResource Brush.Bg}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,88,40,40">
-            <StackPanel MaxWidth="720" HorizontalAlignment="Center">
+            <!-- PC 밀도: 넓은 카드(MaxWidth 1000). 계정·관리자 섹션은 계정 페이지로 분리(C1). -->
+            <StackPanel MaxWidth="1000" HorizontalAlignment="Center">
 
                 <TextBlock Text="설정" Style="{StaticResource ScreenTitle}" />
 
                 <!-- ══════════ [앱 설정] 섹션 (게스트 포함) ══════════ -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                     <StackPanel>
-                        <TextBlock Text="앱 설정" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
+                        <TextBlock Text="앱 설정" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
 
-                        <!-- ── 그룹: 촬영 ── -->
-                        <TextBlock Text="촬영" Style="{StaticResource GroupTitle}" />
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="촬영 컷 수" Style="{StaticResource RowLabel}" />
-                            <ComboBox HorizontalAlignment="Right" Width="140"
-                                      ItemsSource="{Binding CutCountOptions}" SelectedItem="{Binding CutCount}" />
+                        <!-- 2열 그리드: 촬영|장치·표시. 좁은 폭에선 1열 폴백(code-behind, it5 §6 R6). -->
+                        <Grid x:Name="TwoColArea" SizeChanged="OnTwoColSizeChanged">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- ── 좌열: 촬영 ── -->
+                            <StackPanel x:Name="LeftCol" Grid.Column="0" Grid.Row="0">
+                                <TextBlock Text="촬영" Style="{StaticResource GroupTitle}" />
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="촬영 컷 수" Style="{StaticResource RowLabel}" />
+                                    <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="140"
+                                              ItemsSource="{Binding CutCountOptions}" SelectedItem="{Binding CutCount}" />
+                                </Grid>
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="컷당 카운트다운(초)" Style="{StaticResource RowLabel}" />
+                                    <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="140"
+                                              ItemsSource="{Binding CountdownOptions}" SelectedItem="{Binding CountdownSec}" />
+                                </Grid>
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="거울모드(좌우반전)" Style="{StaticResource RowLabel}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding MirrorMode}" />
+                                </Grid>
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="플래시" Style="{StaticResource RowLabel}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding FlashMode}" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- 열 간격 -->
+                            <Border x:Name="ColGap" Grid.Column="1" Width="{StaticResource Space.XL}" />
+
+                            <!-- ── 우열: 장치·표시 (좁은 폭에선 code-behind가 Column0/Row1로 재배치) ── -->
+                            <StackPanel x:Name="RightCol" Grid.Column="2" Grid.Row="0">
+                                <TextBlock Text="장치·표시" Style="{StaticResource GroupTitle}" />
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="카메라 장치 인덱스" Style="{StaticResource RowLabel}" />
+                                    <TextBox Grid.Column="1" HorizontalAlignment="Right" Width="140" Text="{Binding CameraDevice}" />
+                                </Grid>
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="표시 모드" Style="{StaticResource RowLabel}" />
+                                    <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="160"
+                                              ItemsSource="{Binding DisplayModeOptions}" SelectedItem="{Binding DisplayMode}" />
+                                </Grid>
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="QR 전송" Style="{StaticResource RowLabel}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding EnableQrDelivery}" />
+                                </Grid>
+                                <!-- QR 하위 토글(사진/타임랩스): QR on일 때만 노출. 들여쓰기로 하위 계층 표현. (it7 F2) -->
+                                <StackPanel Margin="20,0,0,0"
+                                            Visibility="{Binding EnableQrDelivery, Converter={StaticResource BoolToVis}}">
+                                    <Grid Style="{StaticResource SettingRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="↳ 사진 전송" Style="{StaticResource RowLabel}" />
+                                        <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding SendPhoto}" />
+                                    </Grid>
+                                    <Grid Style="{StaticResource SettingRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="↳ 타임랩스 전송" Style="{StaticResource RowLabel}" />
+                                        <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding SendTimelapse}" />
+                                    </Grid>
+                                </StackPanel>
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="로컬 저장" Style="{StaticResource RowLabel}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding SaveLocalCopy}" />
+                                </Grid>
+                            </StackPanel>
                         </Grid>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="컷당 카운트다운(초)" Style="{StaticResource RowLabel}" />
-                            <ComboBox HorizontalAlignment="Right" Width="140"
-                                      ItemsSource="{Binding CountdownOptions}" SelectedItem="{Binding CountdownSec}" />
-                        </Grid>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="거울모드(좌우반전)" Style="{StaticResource RowLabel}" />
-                            <ToggleButton Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding MirrorMode}" />
-                        </Grid>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="플래시" Style="{StaticResource RowLabel}" />
-                            <ToggleButton Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding FlashMode}" />
-                        </Grid>
+
                         <Border Style="{StaticResource GroupDivider}" />
 
-                        <!-- ── 그룹: 출력·전송 ── -->
+                        <!-- ── 그룹: 출력·전송(전폭 입력 포함) ── -->
                         <TextBlock Text="출력·전송" Style="{StaticResource GroupTitle}" />
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="출력 포맷" Style="{StaticResource RowLabel}" />
-                            <ComboBox HorizontalAlignment="Right" Width="140"
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="출력 포맷" Style="{StaticResource RowLabel}" />
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Left" Width="140"
                                       ItemsSource="{Binding OutputFormatOptions}" SelectedItem="{Binding OutputFormat}" />
                         </Grid>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="QR 전송" Style="{StaticResource RowLabel}" />
-                            <ToggleButton Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding EnableQrDelivery}" />
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="보관 시간(1~72h)" Style="{StaticResource RowLabel}" />
+                            <TextBox Grid.Column="1" HorizontalAlignment="Left" Width="140" Text="{Binding RetentionHours}" />
                         </Grid>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="로컬 저장" Style="{StaticResource RowLabel}" />
-                            <ToggleButton Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding SaveLocalCopy}" />
-                        </Grid>
-                        <StackPanel Margin="0,0,0,14">
+                        <StackPanel Style="{StaticResource FullRow}">
                             <TextBlock Text="로컬 저장 경로" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                             <TextBox Text="{Binding LocalSavePath}" />
                         </StackPanel>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="보관 시간(1~72h)" Style="{StaticResource RowLabel}" />
-                            <TextBox HorizontalAlignment="Right" Width="140" Text="{Binding RetentionHours}" />
-                        </Grid>
-                        <Border Style="{StaticResource GroupDivider}" />
 
-                        <!-- ── 그룹: 장치·표시 ── -->
-                        <TextBlock Text="장치·표시" Style="{StaticResource GroupTitle}" />
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="카메라 장치 인덱스" Style="{StaticResource RowLabel}" />
-                            <TextBox HorizontalAlignment="Right" Width="140" Text="{Binding CameraDevice}" />
-                        </Grid>
-                        <Grid Margin="0,0,0,14">
-                            <TextBlock Text="표시 모드" Style="{StaticResource RowLabel}" />
-                            <ComboBox HorizontalAlignment="Right" Width="160"
-                                      ItemsSource="{Binding DisplayModeOptions}" SelectedItem="{Binding DisplayMode}" />
-                        </Grid>
                         <Border Style="{StaticResource GroupDivider}" />
 
                         <!-- ── 그룹: 고급 ── -->
                         <TextBlock Text="고급" Style="{StaticResource GroupTitle}" />
-                        <StackPanel Margin="0,0,0,14">
+                        <StackPanel Style="{StaticResource FullRow}">
                             <TextBlock Text="다운로드 페이지 Base URL" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                             <TextBox Text="{Binding HostingBaseUrl}" />
                         </StackPanel>
-                        <StackPanel Margin="0,0,0,20">
+                        <StackPanel Margin="0,0,0,16">
                             <TextBlock Text="Storage 버킷" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                             <TextBox Text="{Binding StorageBucket}" />
+                            <!-- 신규 규약 안내(it5 §2.3 B6). Blaze+버킷 생성 후 이 값을 넣으면 QR 전송 동작. -->
+                            <TextBlock Text="예: mcphoto-955fb.firebasestorage.app"
+                                       Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                       Margin="0,4,0,0" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal">
@@ -114,53 +209,9 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ══════════ [계정] 섹션 (로그인 사용자) — 비밀번호 2회 확인 변경 ══════════ -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,20"
-                        Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}">
-                    <StackPanel>
-                        <TextBlock Text="계정" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
-                        <TextBlock Text="새 비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <PasswordBox x:Name="NewPwBox" Margin="0,0,0,12" PasswordChanged="OnNewPasswordChanged" />
-                        <TextBlock Text="새 비밀번호 확인" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <PasswordBox x:Name="ConfirmPwBox" Margin="0,0,0,12" PasswordChanged="OnConfirmPasswordChanged" />
-                        <TextBlock Text="{Binding AccountMessage}" Style="{StaticResource Text.Caption}" Margin="0,0,0,12" />
-                        <Button Content="비밀번호 변경" Style="{StaticResource Button.Secondary}"
-                                Command="{Binding ChangePasswordCommand}" HorizontalAlignment="Left" />
-                    </StackPanel>
-                </Border>
-
-                <!-- ══════════ [관리자] 섹션 (power) — 계정 생성·사용자 관리·앱 종료 ══════════ -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,20"
-                        Visibility="{Binding IsPower, Converter={StaticResource BoolToVis}}">
-                    <StackPanel>
-                        <TextBlock Text="관리자" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
-
-                        <TextBlock Text="계정 생성" Style="{StaticResource GroupTitle}" />
-                        <TextBlock Text="새 아이디" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <TextBox Text="{Binding NewAccountId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
-                        <TextBlock Text="새 비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <PasswordBox x:Name="NewAccountPwBox" Margin="0,0,0,12" PasswordChanged="OnNewAccountPasswordChanged" />
-                        <TextBlock Text="역할" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <ComboBox ItemsSource="{Binding CreatableRoles}" SelectedItem="{Binding SelectedNewRole}"
-                                  Width="180" HorizontalAlignment="Left" Margin="0,0,0,12" />
-                        <TextBlock Text="{Binding AdminMessage}" Style="{StaticResource Text.Caption}" Margin="0,0,0,12" />
-                        <Button Content="계정 생성" Style="{StaticResource Button.Secondary}"
-                                Command="{Binding CreateAccountCommand}" HorizontalAlignment="Left" Margin="0,0,0,20" />
-                        <Border Style="{StaticResource GroupDivider}" />
-
-                        <TextBlock Text="사용자 관리" Style="{StaticResource GroupTitle}" />
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="사용자 관리 열기" Style="{StaticResource Button.Secondary}"
-                                    Command="{Binding OpenUserManagementCommand}" Margin="0,0,12,0" />
-                            <Button Content="앱 종료" Style="{StaticResource Button.Danger}"
-                                    Command="{Binding ExitAppCommand}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
                 <!-- 닫기 -->
                 <Button Content="닫기" Style="{StaticResource Button.Ghost}"
-                        Command="{Binding CloseCommand}" HorizontalAlignment="Left" Margin="0,0,0,20" />
+                        Command="{Binding CloseCommand}" HorizontalAlignment="Left" Margin="0,0,0,16" />
             </StackPanel>
         </ScrollViewer>
     </Grid>

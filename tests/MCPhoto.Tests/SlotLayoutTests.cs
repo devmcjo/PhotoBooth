@@ -100,6 +100,157 @@ public class SlotLayoutTests
         Assert.False(SlotLayout.IsValid(seven, 1000, 1000));
     }
 
+    // ── it4 Step 2 (B4): 종횡비 지정 배치 ──
+
+    [Theory]
+    [InlineData(SlotAspect.Ratio4x3)]
+    [InlineData(SlotAspect.Ratio3x4)]
+    [InlineData(SlotAspect.Ratio1x1)]
+    public void AutoArrange_With_Aspect_Keeps_Ratio_And_Valid(SlotAspect aspect)
+    {
+        double target = aspect.ToRatio();
+        var slots = SlotLayout.AutoArrange(4, 1200, 1600, target);
+
+        Assert.Equal(4, slots.Count);
+        Assert.True(SlotLayout.IsValid(slots, 1200, 1600), $"{aspect} 배치가 유효해야 함");
+        foreach (var s in slots)
+        {
+            double ratio = (double)s.Width / s.Height;
+            // 정수 반올림·클램프 여유로 소폭 오차 허용(±2%).
+            Assert.True(Math.Abs(ratio - target) / target < 0.02,
+                $"{aspect}: 슬롯 비율 {ratio:F3} 이 목표 {target:F3} 에 근접해야 함");
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void AutoArrange_With_Aspect_Any_Count_Valid(int count)
+    {
+        var slots = SlotLayout.AutoArrange(count, 1200, 1600, SlotAspect.Ratio1x1.ToRatio());
+        Assert.Equal(count, slots.Count);
+        Assert.True(SlotLayout.IsValid(slots, 1200, 1600), $"{count}개 정사각 배치가 유효해야 함");
+    }
+
+    [Fact]
+    public void AutoArrange_Null_Aspect_Matches_Legacy_Overload()
+    {
+        // targetAspect=null 오버로드는 기존 무인자 동작과 동일해야(하위호환).
+        var legacy = SlotLayout.AutoArrange(4, 1200, 1600);
+        var explicitNull = SlotLayout.AutoArrange(4, 1200, 1600, targetAspect: null);
+        Assert.Equal(legacy.Count, explicitNull.Count);
+        for (int i = 0; i < legacy.Count; i++)
+        {
+            Assert.Equal(legacy[i].X, explicitNull[i].X);
+            Assert.Equal(legacy[i].Y, explicitNull[i].Y);
+            Assert.Equal(legacy[i].Width, explicitNull[i].Width);
+            Assert.Equal(legacy[i].Height, explicitNull[i].Height);
+        }
+    }
+
+    [Fact]
+    public void AutoArrange_Square_Aspect_Produces_Square_Slots()
+    {
+        var slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio1x1.ToRatio());
+        foreach (var s in slots)
+            Assert.True(Math.Abs(s.Width - s.Height) <= 1, $"정사각이어야: {s.Width}×{s.Height}");
+    }
+
+    [Fact]
+    public void ResizeKeepingAspect_Derives_Height_From_Width()
+    {
+        var slot = new Slot { Index = 0, X = 10, Y = 10, Width = 100, Height = 100 };
+        var resized = SlotLayout.ResizeKeepingAspect(slot, 400, 4.0 / 3.0);
+        Assert.Equal(400, resized.Width);
+        Assert.Equal(300, resized.Height); // 400 / (4/3)
+        Assert.Equal(10, resized.X);        // 위치 불변
+    }
+
+    // ── it5 Step 7 (F1): 슬롯 일괄 스케일 ──
+
+    [Theory]
+    [InlineData(0.7)]  // 축소 — 경계 클램프 없음(중심 유지 엄격 검증)
+    [InlineData(1.0)]  // 등배
+    public void ScaleSlots_Shrink_Scales_Size_And_Keeps_Center(double factor)
+    {
+        var baseSlots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio());
+        var scaled = SlotLayout.ScaleSlots(baseSlots, factor, 1200, 1600);
+
+        Assert.Equal(baseSlots.Count, scaled.Count);
+        for (int i = 0; i < baseSlots.Count; i++)
+        {
+            var b = baseSlots[i];
+            var s = scaled[i];
+            // 크기 factor배(±1px 반올림 여유).
+            Assert.True(Math.Abs(s.Width - b.Width * factor) <= 1.5, $"폭 {s.Width} ≈ {b.Width * factor}");
+            Assert.True(Math.Abs(s.Height - b.Height * factor) <= 1.5, $"높이 {s.Height} ≈ {b.Height * factor}");
+            // 중심 유지(축소는 경계를 안 넘으므로 엄격, ±1.5px 반올림 여유).
+            double bc = b.X + b.Width / 2.0, sc = s.X + s.Width / 2.0;
+            double bcy = b.Y + b.Height / 2.0, scy = s.Y + s.Height / 2.0;
+            Assert.True(Math.Abs(bc - sc) <= 1.5, $"중심 X {sc} ≈ {bc}");
+            Assert.True(Math.Abs(bcy - scy) <= 1.5, $"중심 Y {scy} ≈ {bcy}");
+        }
+    }
+
+    [Fact]
+    public void ScaleSlots_Enlarge_Scales_Size_Within_Bounds()
+    {
+        // 확대(1.3)는 가장자리 슬롯이 경계에 닿으면 클램프 우선(중심 이동 허용) — 크기 배율·경계 내만 보장.
+        var baseSlots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio());
+        var scaled = SlotLayout.ScaleSlots(baseSlots, 1.3, 1200, 1600);
+
+        Assert.Equal(baseSlots.Count, scaled.Count);
+        for (int i = 0; i < baseSlots.Count; i++)
+        {
+            var s = scaled[i];
+            // 경계 내(클램프 보장)
+            Assert.True(s.X >= 0 && s.Y >= 0);
+            Assert.True(s.X + s.Width <= 1200 && s.Y + s.Height <= 1600);
+            // 크기는 최소한 원본 이상(확대이므로), 프레임 한도 내
+            Assert.True(s.Width >= baseSlots[i].Width);
+            Assert.True(s.Height >= baseSlots[i].Height);
+        }
+    }
+
+    [Fact]
+    public void ScaleSlots_Keeps_Aspect_Ratio()
+    {
+        var baseSlots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio4x3.ToRatio());
+        var scaled = SlotLayout.ScaleSlots(baseSlots, 1.25, 1200, 1600);
+        for (int i = 0; i < baseSlots.Count; i++)
+        {
+            double baseRatio = (double)baseSlots[i].Width / baseSlots[i].Height;
+            double scaledRatio = (double)scaled[i].Width / scaled[i].Height;
+            Assert.True(Math.Abs(baseRatio - scaledRatio) / baseRatio < 0.03,
+                $"종횡비 유지: {scaledRatio:F3} ≈ {baseRatio:F3}");
+        }
+    }
+
+    [Fact]
+    public void ScaleSlots_Clamps_Within_Frame()
+    {
+        // 프레임을 꽉 채운 단일 슬롯을 확대 → 경계 클램프로 프레임 안에 머무름.
+        var baseSlots = new List<Slot> { new() { Index = 0, X = 100, Y = 100, Width = 1000, Height = 1400 } };
+        var scaled = SlotLayout.ScaleSlots(baseSlots, 1.3, 1200, 1600);
+        var s = scaled[0];
+        Assert.True(s.X >= 0 && s.Y >= 0);
+        Assert.True(s.X + s.Width <= 1200);
+        Assert.True(s.Y + s.Height <= 1600);
+    }
+
+    [Fact]
+    public void ScaleSlots_Does_Not_Mutate_Base()
+    {
+        var baseSlots = SlotLayout.AutoArrange(2, 1200, 1600, SlotAspect.Ratio1x1.ToRatio());
+        var w0 = baseSlots[0].Width;
+        _ = SlotLayout.ScaleSlots(baseSlots, 1.3, 1200, 1600);
+        Assert.Equal(w0, baseSlots[0].Width); // 원본 불변(새 리스트 반환)
+    }
+
     // ── 이미지 제한 ──
 
     [Fact]

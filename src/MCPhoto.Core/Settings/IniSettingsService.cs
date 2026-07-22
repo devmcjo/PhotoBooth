@@ -3,8 +3,8 @@ using Microsoft.Extensions.Logging;
 namespace MCPhoto.Core.Settings;
 
 /// <summary>
-/// INI 기반 설정 저장/복원. %ProgramData%\MCPhoto\MCPhoto.ini 우선, 실패 시 실행 경로. (architecture §7)
-/// 손상/누락 키는 기본값 폴백(크래시 금지, WBS Step 2).
+/// INI 기반 설정 저장/복원. 실행경로\MCPhoto.ini 1순위, 쓰기 불가 시 %ProgramData% → %LocalAppData% 폴백. (it6 #1)
+/// 손상/누락 키는 기본값 폴백(크래시 금지, WBS Step 2). 로그는 여전히 %ProgramData%\MCPhoto\logs\(변경 없음).
 /// </summary>
 public sealed class IniSettingsService : ISettingsService
 {
@@ -79,16 +79,32 @@ public sealed class IniSettingsService : ISettingsService
     {
         yield return _iniPath;
 
-        var exeDir = AppContext.BaseDirectory;
-        var exePath = Path.Combine(exeDir, "MCPhoto.ini");
-        if (!string.Equals(exePath, _iniPath, StringComparison.OrdinalIgnoreCase))
-            yield return exePath;
+        // 실행경로 → ProgramData → LocalAppData 순(it6 #1). 현재 경로와 중복은 건너뜀.
+        foreach (var p in DefaultCandidates())
+            if (!string.Equals(p, _iniPath, StringComparison.OrdinalIgnoreCase))
+                yield return p;
+    }
 
-        var localApp = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MCPhoto");
-        var localPath = Path.Combine(localApp, "MCPhoto.ini");
-        if (!string.Equals(localPath, _iniPath, StringComparison.OrdinalIgnoreCase))
-            yield return localPath;
+    private static IReadOnlyList<string> DefaultCandidates()
+        => SettingsPathResolver.DefaultCandidates(
+            AppContext.BaseDirectory,
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+
+    /// <summary>경로에 실제 쓰기 가능한지(디렉터리 생성 + 임시파일 쓰기·삭제)로 판정. (it6 #1)</summary>
+    private static bool CanWrite(string iniPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(iniPath);
+            if (string.IsNullOrEmpty(dir)) return false;
+            Directory.CreateDirectory(dir);
+            var probe = Path.Combine(dir, $".mcphoto_write_probe_{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return true;
+        }
+        catch { return false; }
     }
 
     private bool TryWrite(string path, string content)
@@ -119,6 +135,8 @@ public sealed class IniSettingsService : ISettingsService
         s.OutputFormat = ini.GetEnum(Section, nameof(s.OutputFormat), s.OutputFormat);
         s.RetentionHours = ini.GetInt(Section, nameof(s.RetentionHours), s.RetentionHours);
         s.EnableQrDelivery = ini.GetBool(Section, nameof(s.EnableQrDelivery), s.EnableQrDelivery);
+        s.SendPhoto = ini.GetBool(Section, nameof(s.SendPhoto), s.SendPhoto);
+        s.SendTimelapse = ini.GetBool(Section, nameof(s.SendTimelapse), s.SendTimelapse);
         s.SaveLocalCopy = ini.GetBool(Section, nameof(s.SaveLocalCopy), s.SaveLocalCopy);
         s.LocalSavePath = ini.GetString(Section, nameof(s.LocalSavePath), s.LocalSavePath);
         s.DisplayMode = ini.GetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
@@ -141,6 +159,8 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetEnum(Section, nameof(s.OutputFormat), s.OutputFormat);
         ini.SetInt(Section, nameof(s.RetentionHours), s.RetentionHours);
         ini.SetBool(Section, nameof(s.EnableQrDelivery), s.EnableQrDelivery);
+        ini.SetBool(Section, nameof(s.SendPhoto), s.SendPhoto);
+        ini.SetBool(Section, nameof(s.SendTimelapse), s.SendTimelapse);
         ini.SetBool(Section, nameof(s.SaveLocalCopy), s.SaveLocalCopy);
         ini.Set(Section, nameof(s.LocalSavePath), s.LocalSavePath);
         ini.SetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
@@ -154,20 +174,10 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetDouble(Section, "WindowHeight", s.WindowBounds.Height);
     }
 
-    /// <summary>기본 INI 경로: %ProgramData%\MCPhoto\MCPhoto.ini(쓰기 가능 시), 아니면 실행 경로.</summary>
+    /// <summary>
+    /// 기본 INI 경로: 실행경로\MCPhoto.ini 1순위, 쓰기 불가 시 %ProgramData% → %LocalAppData% 폴백. (it6 #1)
+    /// 쓰기 가능 판정은 실제 쓰기 시도 기반.
+    /// </summary>
     private static string ResolveDefaultPath()
-    {
-        var programData = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MCPhoto");
-        try
-        {
-            Directory.CreateDirectory(programData);
-            return Path.Combine(programData, "MCPhoto.ini");
-        }
-        catch
-        {
-            var exeDir = AppContext.BaseDirectory;
-            return Path.Combine(exeDir, "MCPhoto.ini");
-        }
-    }
+        => SettingsPathResolver.ResolveWritable(DefaultCandidates(), CanWrite);
 }

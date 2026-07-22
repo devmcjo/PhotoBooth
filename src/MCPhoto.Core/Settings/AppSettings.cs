@@ -64,6 +64,12 @@ public sealed class AppSettings
     /// <summary>QR 전송(업로드+QR+다운로드 페이지) on/off. 기본 on.</summary>
     public bool EnableQrDelivery { get; set; } = true;
 
+    /// <summary>QR 전송 시 사진(최종 합성 이미지) 포함. 기본 on. (it7 F2)</summary>
+    public bool SendPhoto { get; set; } = true;
+
+    /// <summary>QR 전송 시 타임랩스 영상 포함. 기본 on. (it7 F2)</summary>
+    public bool SendTimelapse { get; set; } = true;
+
     // ── 로컬 저장 (PRD §F4, §9 #34) ──
     /// <summary>결과물 로컬 저장 on/off. 기본 off. QR 전송과 독립.</summary>
     public bool SaveLocalCopy { get; set; }
@@ -111,6 +117,21 @@ public sealed class AppSettings
         if (CameraDevice < 0) CameraDevice = 0;
 
         HostingBaseUrl = HostingBaseUrl.TrimEnd('/');
+
+        NormalizeQr();
+    }
+
+    /// <summary>
+    /// QR 세분화 연동 정규화(it7 F2): 사진·타임랩스 둘 다 off면 QR 전송 자체 off.
+    /// 저장/로드(Clamp) 시 호출. 하위 토글 값은 보존.
+    /// </summary>
+    public void NormalizeQr()
+    {
+        var (enableQr, sendPhoto, sendTimelapse) =
+            QrDeliveryPolicy.Normalize(EnableQrDelivery, SendPhoto, SendTimelapse);
+        EnableQrDelivery = enableQr;
+        SendPhoto = sendPhoto;
+        SendTimelapse = sendTimelapse;
     }
 
     private static int ClosestFrom(int value, int[] allowed, int fallback)
@@ -136,6 +157,8 @@ public sealed class AppSettings
         OutputFormat = OutputFormat,
         RetentionHours = RetentionHours,
         EnableQrDelivery = EnableQrDelivery,
+        SendPhoto = SendPhoto,
+        SendTimelapse = SendTimelapse,
         SaveLocalCopy = SaveLocalCopy,
         LocalSavePath = LocalSavePath,
         DisplayMode = DisplayMode,

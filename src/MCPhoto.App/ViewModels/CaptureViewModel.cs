@@ -86,8 +86,9 @@ public sealed partial class CaptureViewModel : ViewModelBase
         }
         CameraState = CameraLoadState.Ready;
 
-        // 세션 작업 폴더 준비
-        session.WorkFolder = Path.Combine(App.DataFolder, "sessions", Guid.NewGuid().ToString("N"));
+        // 세션 작업 폴더 준비(sessions\{guid} — 종료 시 Reset이 삭제, 시작 시 잔재 정리, it6 #3)
+        session.WorkFolder = Path.Combine(
+            Core.Capture.SessionWorkspace.SessionsRoot(App.DataFolder), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(session.WorkFolder);
         session.SessionVideoPath = Path.Combine(session.WorkFolder, "session.mp4");
         session.SessionTime = DateTime.Now;

@@ -49,14 +49,19 @@
                     <StackPanel>
                         <TextBlock Text="{Binding AccountLabel}" Style="{StaticResource Text.Title}" />
                         <TextBlock Text="계정" Style="{StaticResource Text.Caption}" Margin="0,0,0,12" />
+                        <!-- 계정 항목별 전용 페이지로 이동(it5 §5 C2) -->
                         <Button Content="비밀번호 변경" Style="{StaticResource Button.Ghost}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Command="{Binding OpenAccountSettingsCommand}" />
-                        <!-- power(admin/manager)용 관리자 설정 바로가기(설정 페이지의 관리자 섹션, it2 §3.2) -->
-                        <Button Content="관리자 설정" Style="{StaticResource Button.Ghost}"
+                                Command="{Binding OpenPasswordChangeCommand}" />
+                        <!-- power(admin/manager)용: 계정 생성·관리자 도구 -->
+                        <Button Content="계정 생성" Style="{StaticResource Button.Ghost}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Visibility="{Binding IsPower, Converter={StaticResource BoolToVis}}"
-                                Command="{Binding OpenAccountSettingsCommand}" />
+                                Command="{Binding OpenAccountCreateCommand}" />
+                        <Button Content="관리자 도구" Style="{StaticResource Button.Ghost}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Visibility="{Binding IsPower, Converter={StaticResource BoolToVis}}"
+                                Command="{Binding OpenAdminToolsCommand}" />
                         <Button Content="로그아웃" Style="{StaticResource Button.Ghost}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Command="{Binding LogoutCommand}" />

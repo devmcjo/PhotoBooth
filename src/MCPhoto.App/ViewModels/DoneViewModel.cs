@@ -18,7 +18,9 @@ public sealed partial class DoneViewModel : ViewModelBase
         _autoReturn.Tick += (_, _) =>
         {
             _autoReturn?.Stop();
-            _shell.ReturnHome("세션 완료", clearUser: true); // 다음 손님 위해 로그아웃(it3 §2.3)
+            // 촬영 후 로그인 유지(it5 §4 B8, PRD 원안 갱신). 촬영 데이터는 Reset이 항상 폐기.
+            // 로그아웃은 계정 메뉴 수동 또는 유휴 타임아웃(무인 보호)만.
+            _shell.ReturnHome("세션 완료", clearUser: false);
         };
         _autoReturn.Start();
         return Task.CompletedTask;
@@ -32,5 +34,5 @@ public sealed partial class DoneViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void GoHome() => _shell.ReturnHome("완료 확인", clearUser: true); // 세션 완료 → 다음 손님(it3 §2.3)
+    private void GoHome() => _shell.ReturnHome("완료 확인", clearUser: false); // 촬영 후 로그인 유지(it5 §4 B8)
 }

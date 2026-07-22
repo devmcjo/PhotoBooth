@@ -22,7 +22,7 @@ public sealed class UploadService : IUploadService
     }
 
     public async Task<ResultSession> UploadResultAsync(
-        string finalImagePath,
+        string? finalImagePath,
         string? timelapsePath,
         int retentionHours,
         string hostingBaseUrl,
@@ -31,19 +31,29 @@ public sealed class UploadService : IUploadService
         if (!_client.IsInitialized)
             throw new InvalidOperationException("Firebase 미초기화 — 업로드 불가(QR off/로컬 저장 완화 경로 사용).");
 
+        // 사진·타임랩스 각각 "옵션 on(경로 non-null) & 파일 존재"일 때만 업로드. 최소 1개 필요(it7 F2).
+        bool wantPhoto = !string.IsNullOrEmpty(finalImagePath) && File.Exists(finalImagePath);
+        bool wantTimelapse = !string.IsNullOrEmpty(timelapsePath) && File.Exists(timelapsePath);
+        if (!wantPhoto && !wantTimelapse)
+            throw new InvalidOperationException("전송할 미디어가 없습니다(사진·타임랩스 모두 off/부재). QR 연동 규칙 위반.");
+
         var token = UploadContract.NewSessionToken();
-        var format = finalImagePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-            ? OutputFormat.Png : OutputFormat.Jpg;
 
-        // 1) 최종 이미지 업로드 + 토큰 URL
-        var finalStoragePath = UploadContract.FinalImagePath(token, format);
-        var finalContentType = format == OutputFormat.Png ? "image/png" : "image/jpeg";
-        var finalToken = await _client.UploadFileAsync(finalStoragePath, finalImagePath, finalContentType, ct);
-        var finalUrl = UploadContract.TokenDownloadUrl(_client.Bucket, finalStoragePath, finalToken);
+        // 1) 최종 이미지 업로드 + 토큰 URL. off면 null.
+        string? finalUrl = null;
+        if (finalImagePath is not null && wantPhoto)
+        {
+            var format = finalImagePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                ? OutputFormat.Png : OutputFormat.Jpg;
+            var finalStoragePath = UploadContract.FinalImagePath(token, format);
+            var finalContentType = format == OutputFormat.Png ? "image/png" : "image/jpeg";
+            var finalToken = await _client.UploadFileAsync(finalStoragePath, finalImagePath, finalContentType, ct);
+            finalUrl = UploadContract.TokenDownloadUrl(_client.Bucket, finalStoragePath, finalToken);
+        }
 
-        // 2) 타임랩스 업로드(있을 때만)
+        // 2) 타임랩스 업로드(옵션 on & 파일 존재 시만)
         string? timelapseUrl = null;
-        if (!string.IsNullOrEmpty(timelapsePath) && File.Exists(timelapsePath))
+        if (timelapsePath is not null && wantTimelapse)
         {
             var tlPath = UploadContract.TimelapsePath(token);
             var tlToken = await _client.UploadFileAsync(tlPath, timelapsePath, "video/mp4", ct);

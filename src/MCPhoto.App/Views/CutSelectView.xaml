@@ -30,12 +30,18 @@
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <Border Width="220" Height="165" Margin="8" CornerRadius="12"
+                    <!-- 썸네일 컨테이너를 대표 슬롯 종횡비로(폭 200 고정 + 높이=200/aspect) → Uniform으로 왜곡·잘림 없이 표시(WYSIWYG, it5 §3 B7).
+                         SlotAspectRatio는 항목이 아닌 CutSelectViewModel에 있으므로 ListBox의 DataContext를 조상 참조. -->
+                    <Border Width="200"
+                            Height="{Binding DataContext.SlotAspectRatio,
+                                     RelativeSource={RelativeSource AncestorType=ListBox},
+                                     Converter={StaticResource AspectRatioToHeight}, ConverterParameter=200}"
+                            Margin="8" CornerRadius="12"
                             BorderThickness="3"
                             BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToBrush}}"
                             Effect="{StaticResource Shadow.Sm}">
                         <Grid>
-                            <Image Source="{Binding Image}" Stretch="UniformToFill" />
+                            <Image Source="{Binding Image}" Stretch="Uniform" />
                             <Border Background="{StaticResource Brush.Accent}" CornerRadius="14" Width="28" Height="28"
                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
                                     Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">

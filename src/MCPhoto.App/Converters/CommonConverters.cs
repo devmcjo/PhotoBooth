@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using MCPhoto.Core.Frames;
 
 namespace MCPhoto.App.Converters;
 
@@ -45,16 +46,6 @@ public sealed class NullToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>SlotCount(1~6) ↔ ComboBox 인덱스(0~5).</summary>
-public sealed class SlotCountIndexConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is int count ? Math.Clamp(count - 1, 0, 5) : 3;
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is int index ? index + 1 : 4;
-}
-
 /// <summary>선택 상태 → 테두리 색(true=강조 로즈, 테마 토큰). (it3: 하드코딩 제거)</summary>
 public sealed class BoolToBrushConverter : IValueConverter
 {
@@ -93,6 +84,35 @@ public sealed class CameraStateToVisibilityConverter : IValueConverter
     {
         var target = parameter?.ToString();
         return value?.ToString() == target ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>SlotAspect → 표시 라벨("4:3"/"3:4"/"1:1"). 종횡비 ComboBox 항목 표시. (it4 §3 B4)</summary>
+public sealed class SlotAspectLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is SlotAspect aspect ? aspect.ToLabel() : string.Empty;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// 종횡비(가로/세로) → 높이. 기준 폭은 ConverterParameter(기본 200). height = width / aspect.
+/// 썸네일 컨테이너를 슬롯 비율로 맞춰 WYSIWYG 표시(it5 §3 B7).
+/// </summary>
+public sealed class AspectRatioToHeightConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        double width = 200;
+        if (parameter is string p && double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var w))
+            width = w;
+        double aspect = value is double a && a > 0 ? a : (3.0 / 4.0);
+        return width / aspect;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

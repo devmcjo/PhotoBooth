@@ -31,6 +31,22 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _canSave;
 
+    /// <summary>슬롯 종횡비(편집기 전역, MVP). 변경 시 재배치. (it4 §3)</summary>
+    [ObservableProperty] private SlotAspect _slotAspect = SlotAspect.Ratio3x4;
+
+    /// <summary>종횡비 선택 옵션(4:3 / 3:4 / 1:1).</summary>
+    public IReadOnlyList<SlotAspect> AspectOptions { get; } =
+        new[] { SlotAspect.Ratio4x3, SlotAspect.Ratio3x4, SlotAspect.Ratio1x1 };
+
+    /// <summary>슬롯 개수 옵션(1~6). 값 기반 바인딩(SelectedValue)으로 초기화 clobber 차단. (it7 B9)</summary>
+    public IReadOnlyList<int> SlotCountOptions { get; } = new[] { 1, 2, 3, 4, 5, 6 };
+
+    /// <summary>슬롯 크기 일괄 스케일(%, 70~130). 기본 100. (it5 §8 F1)</summary>
+    [ObservableProperty] private double _slotScalePercent = 100;
+
+    /// <summary>스케일 기준(100% 원본) 슬롯. _baseSlots에서 매번 스케일해 누적 오차 방지. (it5 §8)</summary>
+    private readonly List<Slot> _baseSlots = new();
+
     /// <summary>편집 중 슬롯(드래그 대상).</summary>
     public ObservableCollection<Slot> Slots { get; } = new();
 
@@ -91,16 +107,41 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     /// <summary>슬롯 개수 변경 → 자동 배치.</summary>
     partial void OnSlotCountChanged(int value) => ArrangeSlots();
 
+    /// <summary>종횡비 변경 → 선택 비율로 재배치. (it4 §3)</summary>
+    partial void OnSlotAspectChanged(SlotAspect value) => ArrangeSlots();
+
+    /// <summary>슬롯 크기 슬라이더(%) 변경 → _baseSlots 기준 일괄 스케일. 70~130 클램프. (it5 §8 F1)</summary>
+    partial void OnSlotScalePercentChanged(double value)
+    {
+        var clamped = Math.Clamp(value, 70, 130);
+        if (Math.Abs(clamped - value) > 0.0001)
+        {
+            SlotScalePercent = clamped; // 재진입(클램프 값으로) — 아래 ApplyScale는 다음 호출에서 수행
+            return;
+        }
+        ApplyScale();
+    }
+
     private void ArrangeSlots()
     {
         if (FrameWidth <= 0 || FrameHeight <= 0) return;
+        // 자동 배치 원본을 스케일 기준으로 보관, 현재 배율을 재적용(개수·종횡비 변경 시).
+        _baseSlots.Clear();
+        _baseSlots.AddRange(SlotLayout.AutoArrange(SlotCount, FrameWidth, FrameHeight, SlotAspect.ToRatio()));
+        ApplyScale();
+    }
+
+    /// <summary>_baseSlots에서 현재 배율로 스케일해 Slots 갱신(누적 오차 없음).</summary>
+    private void ApplyScale()
+    {
+        if (_baseSlots.Count == 0) return;
         Slots.Clear();
-        foreach (var s in SlotLayout.AutoArrange(SlotCount, FrameWidth, FrameHeight))
+        foreach (var s in SlotLayout.ScaleSlots(_baseSlots, SlotScalePercent / 100.0, FrameWidth, FrameHeight))
             Slots.Add(s);
         UpdateCanSave();
     }
 
-    /// <summary>드래그 후 슬롯 위치·크기 반영(경계 클램프).</summary>
+    /// <summary>드래그 후 슬롯 위치·크기 반영(경계 클램프). 스케일 기준(_baseSlots) 위치도 중심 맞춰 갱신.</summary>
     public void UpdateSlot(int index, int x, int y, int width, int height)
     {
         if (index < 0 || index >= Slots.Count) return;
@@ -108,6 +149,23 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             new Slot { Index = index, X = x, Y = y, Width = width, Height = height },
             FrameWidth, FrameHeight);
         Slots[index] = clamped;
+
+        // 드래그로 옮긴 중심을 _baseSlots에도 반영(원본 크기 유지) → 이후 스케일 기준 위치 일치.
+        if (index < _baseSlots.Count)
+        {
+            var b = _baseSlots[index];
+            double cx = clamped.X + clamped.Width / 2.0;
+            double cy = clamped.Y + clamped.Height / 2.0;
+            _baseSlots[index] = SlotLayout.ClampToFrame(
+                new Slot
+                {
+                    Index = b.Index,
+                    X = (int)Math.Round(cx - b.Width / 2.0),
+                    Y = (int)Math.Round(cy - b.Height / 2.0),
+                    Width = b.Width,
+                    Height = b.Height
+                }, FrameWidth, FrameHeight);
+        }
         UpdateCanSave();
     }
 

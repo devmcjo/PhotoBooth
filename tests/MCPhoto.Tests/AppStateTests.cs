@@ -60,7 +60,6 @@ public class AppStateTests
         Assert.True(SessionStateMachine.IsSessionActive(AppState.Capture));
         Assert.True(SessionStateMachine.IsSessionActive(AppState.CutSelect));
         Assert.True(SessionStateMachine.IsSessionActive(AppState.Result));
-        Assert.True(SessionStateMachine.IsSessionActive(AppState.FrameEditor));
 
         // Home·Done은 유휴 감시 비대상
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Home));
@@ -68,6 +67,27 @@ public class AppStateTests
         // it2: Settings·Login도 유휴 감시 비대상(설정 조작 중 홈복귀 방지, §5.2)
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Settings));
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Login));
+    }
+
+    // ── it4 §4 (B5): 편집기 유휴 타임아웃 제외 ──
+
+    [Fact]
+    public void FrameEditor_Excluded_From_Idle_Watch()
+    {
+        // 편집기는 로그인 필수 능동 작업 → 촬영용 유휴 타임아웃 대상 아님(홈복귀·로그아웃 방지).
+        Assert.False(SessionStateMachine.IsSessionActive(AppState.FrameEditor));
+    }
+
+    [Fact]
+    public void Capture_Flow_Idle_Watch_Not_Regressed()
+    {
+        // 촬영 흐름(FrameSelect~Qr)은 여전히 유휴 감시 대상(무인 키오스크 보호 유지).
+        Assert.True(SessionStateMachine.IsSessionActive(AppState.FrameSelect));
+        Assert.True(SessionStateMachine.IsSessionActive(AppState.Guide));
+        Assert.True(SessionStateMachine.IsSessionActive(AppState.Capture));
+        Assert.True(SessionStateMachine.IsSessionActive(AppState.CutSelect));
+        Assert.True(SessionStateMachine.IsSessionActive(AppState.Result));
+        Assert.True(SessionStateMachine.IsSessionActive(AppState.Qr));
     }
 
     // ── it2 §5.2: Settings/Login 오버레이 특례 + 촬영 게스트 직행 ──
@@ -102,9 +122,38 @@ public class AppStateTests
     }
 
     [Fact]
-    public void UserMgmt_Back_To_Settings_Legal()
+    public void UserMgmt_Back_To_Account_Legal()
     {
-        Assert.True(SessionStateMachine.CanTransition(AppState.UserMgmt, AppState.Settings));
+        // it5 C2: 사용자 관리는 관리자 도구(Account)에서 진입·복귀(설정에서 계정 분리).
+        Assert.True(SessionStateMachine.CanTransition(AppState.UserMgmt, AppState.Account));
+    }
+
+    // ── it5 §5 C2: 계정 전용 페이지(Account) 오버레이 ──
+
+    [Fact]
+    public void Account_Reachable_From_Anywhere()
+    {
+        foreach (AppState from in Enum.GetValues<AppState>())
+        {
+            if (from == AppState.Account) continue;
+            Assert.True(SessionStateMachine.CanTransition(from, AppState.Account),
+                $"{from}→Account 는 어디서든 합법이어야 함(오버레이 진입)");
+        }
+    }
+
+    [Fact]
+    public void Account_Not_Idle_Watched_And_TopBar_Visible()
+    {
+        // 계정 페이지는 유휴 감시 비대상(능동 작업) + 상단바 표시(몰입 화면 아님).
+        Assert.False(SessionStateMachine.IsSessionActive(AppState.Account));
+        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Account));
+    }
+
+    [Fact]
+    public void Account_To_UserMgmt_Legal()
+    {
+        // 관리자 도구(Account) → 사용자 관리 진입.
+        Assert.True(SessionStateMachine.CanTransition(AppState.Account, AppState.UserMgmt));
     }
 
     // ── it2 리뷰 사이클1 Major 회귀: 오버레이 복귀 방향 ──

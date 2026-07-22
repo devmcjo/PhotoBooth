@@ -18,6 +18,9 @@ public sealed partial class CutSelectViewModel : ViewModelBase
     [ObservableProperty] private int _selectedCount;
     [ObservableProperty] private bool _canProceed;
 
+    /// <summary>대표 슬롯 종횡비(가로/세로). 썸네일 컨테이너 비율 = 컷 크롭 비율(WYSIWYG, it5 §3 B7). 기본 3:4.</summary>
+    [ObservableProperty] private double _slotAspectRatio = 3.0 / 4.0;
+
     public CutSelectViewModel(AppShellViewModel shell) => _shell = shell;
 
     public override Task OnEnterAsync()
@@ -25,6 +28,11 @@ public sealed partial class CutSelectViewModel : ViewModelBase
         Cuts.Clear();
         var session = _shell.Session.Capture;
         SlotCount = session.SlotCount;
+
+        // 컷은 이미 대표 슬롯 종횡비로 중앙 크롭됨(VF-4). 썸네일 컨테이너도 같은 비율로 → Uniform 표시 시 왜곡·잘림 0.
+        var slots = session.Frame?.Slots;
+        if (slots is { Count: > 0 } && slots[0].AspectRatio > 0)
+            SlotAspectRatio = slots[0].AspectRatio;
 
         for (int i = 0; i < session.Cuts.Count; i++)
         {

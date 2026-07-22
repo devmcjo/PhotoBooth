@@ -8,10 +8,13 @@ public sealed class ResultSession
     /// <summary>세션 ID = 문서 ID = URL 토큰(UUIDv4).</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>프레임 포함 최종 이미지 다운로드 토큰 URL.</summary>
-    public string FinalImageUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// 프레임 포함 최종 이미지 다운로드 토큰 URL. 사진 전송 옵션(SendPhoto) off면 null. (it7 F2 계약)
+    /// 미만료 문서에서 null = "사진 전송 옵션 꺼짐"(의도적 제외, 실패·만료 아님).
+    /// </summary>
+    public string? FinalImageUrl { get; set; }
 
-    /// <summary>타임랩스 영상 URL. 생성 실패/미포함 시 null.</summary>
+    /// <summary>타임랩스 영상 URL. 옵션 off·생성 실패·미포함 시 null. (it7 F2)</summary>
     public string? TimelapseUrl { get; set; }
 
     public DateTime CreatedAt { get; set; }

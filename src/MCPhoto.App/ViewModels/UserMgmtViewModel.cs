@@ -106,5 +106,5 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task Back() => await _shell.NavigateAsync(AppState.Settings);
+    private async Task Back() => await _shell.ReturnToAdminToolsAsync(); // 관리자 도구(Account)로 복귀(it5 §5 C2)
 }

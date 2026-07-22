@@ -82,6 +82,67 @@ public class SettingsTests : IDisposable
         Assert.Equal(1600, s2.WindowBounds.Width);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EnableQrDelivery_Bool_RoundTrips(bool value)
+    {
+        // QR 토글 저장 → 새 인스턴스 Load 시 그대로 유지(bool 저장/로드 회귀).
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.EnableQrDelivery = value;
+        Assert.True(svc.Save());
+
+        var svc2 = new IniSettingsService(iniPath: _tempPath);
+        Assert.Equal(value, svc2.Load().EnableQrDelivery);
+    }
+
+    [Fact]
+    public void SendPhoto_SendTimelapse_RoundTrip()
+    {
+        // it7 F2: QR 하위 토글 INI 영속. 사진만 켜고 저장 → 로드 시 유지(QR은 하나라도 on이라 유지).
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.EnableQrDelivery = true;
+        s.SendPhoto = true;
+        s.SendTimelapse = false;
+        Assert.True(svc.Save());
+
+        var s2 = new IniSettingsService(iniPath: _tempPath).Load();
+        Assert.True(s2.EnableQrDelivery);
+        Assert.True(s2.SendPhoto);
+        Assert.False(s2.SendTimelapse);
+    }
+
+    [Fact]
+    public void Both_SubToggles_Off_Normalizes_Qr_Off_On_Load()
+    {
+        // 둘 다 off 저장 → NormalizeQr(Clamp)로 EnableQrDelivery=false 로드.
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.EnableQrDelivery = true;
+        s.SendPhoto = false;
+        s.SendTimelapse = false;
+        Assert.True(svc.Save()); // Save가 Clamp→NormalizeQr 적용
+
+        var s2 = new IniSettingsService(iniPath: _tempPath).Load();
+        Assert.False(s2.EnableQrDelivery);
+    }
+
+    [Fact]
+    public void StorageBucket_RoundTrips_New_Convention()
+    {
+        // it5 §2.3 B6: 신규 규약(*.firebasestorage.app) 버킷명 저장→로드 보존.
+        // Blaze+버킷 생성 후 이 값을 넣으면 업로드 경로가 동작(외부 전제).
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.StorageBucket = "mcphoto-955fb.firebasestorage.app";
+        Assert.True(svc.Save());
+
+        var svc2 = new IniSettingsService(iniPath: _tempPath);
+        Assert.Equal("mcphoto-955fb.firebasestorage.app", svc2.Load().StorageBucket);
+    }
+
     [Fact]
     public void Save_Returns_Bool_Not_Void()
     {

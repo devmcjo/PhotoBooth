@@ -40,9 +40,12 @@
           <p id="photo-hint" class="media__hint">
             저장이 안 되면 이미지를 길게 눌러(모바일)/우클릭(PC) 저장하세요.
           </p>
+          <p id="photo-optout" class="media__optout" hidden>
+            사진은 전송 옵션이 꺼져 있어 제공되지 않습니다.
+          </p>
         </div>
 
-        <!-- 영상 (timelapseUrl 이 null 이면 JS 가 숨김) -->
+        <!-- 영상 (timelapseUrl 이 있으면 프리뷰, 옵션 꺼짐이면 안내, 그 외 숨김) -->
         <div id="video-section" class="media" hidden>
           <h2 class="media__title">영상</h2>
           <video
@@ -60,6 +63,9 @@
           </a>
           <p id="video-hint" class="media__hint">
             저장이 안 되면 영상을 길게 눌러(모바일)/우클릭(PC) 저장하세요.
+          </p>
+          <p id="video-optout" class="media__optout" hidden>
+            타임랩스는 전송 옵션이 꺼져 있어 제공되지 않습니다.
           </p>
         </div>
 

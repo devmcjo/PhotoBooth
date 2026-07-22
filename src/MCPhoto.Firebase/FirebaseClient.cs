@@ -12,7 +12,7 @@ namespace MCPhoto.Firebase;
 
 /// <summary>
 /// Firebase 접근(Admin SDK/서비스 계정) — MVP 1차. 규칙 우회 쓰기. (architecture §6.4)
-/// ⚠️ 서비스 계정 키는 로컬 보호 위치(%ProgramData%\MCPhoto\)에서만 로드. git·인스톨러 포함 금지.
+/// ⚠️ 서비스 계정 키는 실행경로 우선, 없으면 %ProgramData%\MCPhoto\ 폴백에서 로드(it6 #2). git·인스톨러 포함 금지.
 /// 키가 없으면 IsInitialized=false로 안전 동작(오프라인/QR off 완화 경로).
 /// </summary>
 public sealed class FirebaseClient : IFirebaseClient
@@ -84,11 +84,21 @@ public sealed class FirebaseClient : IFirebaseClient
         }
     }
 
+    /// <summary>
+    /// 서비스 계정 키 탐색: 실행경로\serviceAccountKey.json 우선, 없으면 %ProgramData%\MCPhoto\ 폴백. (it6 #2)
+    /// 둘 다 없으면 ProgramData 경로를 반환(존재하지 않음 → 호출측 오프라인 완화).
+    /// ⚠️ 키는 비밀: .gitignore가 serviceAccountKey.json 커버, 인스톨러 미포함. 실행경로 배치는 포터블 편의.
+    /// </summary>
     public static string DefaultKeyPath()
     {
-        var dir = Path.Combine(
+        const string fileName = "serviceAccountKey.json";
+
+        var exePath = Path.Combine(AppContext.BaseDirectory, fileName);
+        if (File.Exists(exePath)) return exePath;
+
+        var programDataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MCPhoto");
-        return Path.Combine(dir, "serviceAccountKey.json");
+        return Path.Combine(programDataDir, fileName);
     }
 
     private static string ProjectIdFromKey(string keyPath)
