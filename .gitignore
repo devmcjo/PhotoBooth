@@ -53,6 +53,9 @@ result/
 *.ini
 !appsettings.ini.sample
 
+# 수동 테스트용 스크래치 이미지(프레임·스크린샷 등, 재생성 가능)
+TEMP/
+
 # publish 산출물(인스톨러 소스, 재생성 가능)
 publish/
 installer/Output/

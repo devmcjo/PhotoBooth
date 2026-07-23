@@ -88,6 +88,57 @@ public class FrameCatalogServiceTests : IDisposable
         Assert.Equal(2, again.Count);          // 중복 없이 2개
     }
 
+    // ── it10 S3-2: 동시 호출 직렬화(중복 다운로드 방지) ──
+
+    [Fact]
+    public async Task Concurrent_Calls_Download_Each_Frame_Once()
+    {
+        // 다운로드에 인위적 지연(게이트)을 걸어 두 호출을 확실히 경합시킨다.
+        // 직렬화가 없으면 두 호출이 dedup 검사(캐시 쓰기 전)를 동시에 통과 → 프레임당 2회 다운로드.
+        // 게이트가 있으면 두 번째 호출은 첫 호출의 캐시를 보고 다운로드 0.
+        var repo = new CountingFrameRepository { DefaultFrames = new List<FrameTemplate> { DbFrame("f1"), DbFrame("f2") } };
+
+        var release = new TaskCompletionSource();
+        int downloadCount = 0;
+        var svc = new FrameCatalogService(repo, _store, logger: null,
+            downloadImage: async (_, _) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                await release.Task; // 첫 호출이 게이트 안에서 대기 → 두 번째 호출이 진입을 시도하게 함
+                return new byte[] { 1, 2, 3 };
+            });
+
+        var call1 = svc.GetDefaultFramesAsync();
+        var call2 = svc.GetDefaultFramesAsync();
+
+        // 두 호출이 스케줄될 시간을 준 뒤 다운로드 게이트 해제.
+        await Task.Delay(50);
+        release.SetResult();
+
+        var r1 = await call1;
+        var r2 = await call2;
+
+        // 직렬화로 프레임당 다운로드 1회(f1·f2 = 2회)만 발생해야 한다.
+        Assert.Equal(2, downloadCount);
+        Assert.Equal(2, r1.Count);
+        Assert.Equal(2, r2.Count);
+    }
+
+    // ── it10 S3-3(D3): 이름에 '_' 포함 기본 프레임 — 동작 불변(경고만) ──
+
+    [Fact]
+    public async Task Underscore_Name_Default_Frame_Still_Downloaded_And_Displayed()
+    {
+        // '_' 포함 이름은 로컬 공용 규약과 충돌해 매 실행 재다운로드되지만, 세션 표시는 정상이어야 한다(동작 불변).
+        var repo = new CountingFrameRepository { DefaultFrames = new List<FrameTemplate> { DbFrame("bad_name") } };
+        var svc = MakeService(repo);
+
+        var result = await svc.GetDefaultFramesAsync();
+
+        Assert.Equal(1, _downloadCalls);                     // '_' 이름은 공용 dedup에서 제외 → 다운로드됨
+        Assert.Contains(result, f => f.Name == "bad_name");  // 반환 목록에 정상 포함(표시 가능)
+    }
+
     [Fact]
     public async Task User_Frames_Loaded_From_Local_Not_Db()
     {

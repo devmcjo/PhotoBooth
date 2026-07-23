@@ -297,6 +297,29 @@
                                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
                                        Margin="0,4,0,0" />
                         </StackPanel>
+
+                        <!-- it10 S4-2: 서버 연결 상태(읽기 전용, 표시 전용 — 저장 대상 아님). QA 트러블슈팅용. -->
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="서버 연결" Style="{StaticResource RowLabel}" />
+                            <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                       Text="{Binding ServerStatusText}" TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <!-- 연결=성공(민트) / 미연결=danger(로즈). 신규 리소스 키 없이 기존 팔레트 브러시만 사용. -->
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsServerConnected}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Success}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>

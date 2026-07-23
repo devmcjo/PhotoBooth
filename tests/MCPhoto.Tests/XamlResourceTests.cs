@@ -68,6 +68,8 @@ public class XamlResourceTests
                 "Brush.Text.Primary", "Brush.Text.Secondary", "Brush.Text.Tertiary", "Brush.Text.Muted",
                 "Brush.Accent", "Brush.Accent.Hover", "Brush.Accent.Press", "Brush.Accent.Text", "Brush.Accent.Soft",
                 "Brush.OnAccent", "Brush.Accent2", "Brush.Success", "Brush.Danger", "Brush.Danger.Surface",
+                // it10 S2-1: 로그인 오프라인 배너가 사용하는 경고 톤 리소스 회귀(미해결 시 배너 XamlParseException).
+                "Brush.Warning", "Brush.Warning.Surface",
                 "Brush.Scrim", "Brush.CaptureBg", "Brush.Disabled.Bg", "Brush.Disabled.Fg",
                 "Shadow.Sm", "Shadow.Card", "Shadow.Pop",
                 "Radius.S", "Radius.M", "Radius.Pill", "Touch.Min", "Touch.CTA", "Touch.IconBtn",

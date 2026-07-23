@@ -7,6 +7,7 @@ using MCPhoto.App.Services;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
+using MCPhoto.Core.Upload;
 using Microsoft.Extensions.Logging;
 
 namespace MCPhoto.App.ViewModels;
@@ -21,6 +22,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly ISettingsService _settings;
     private readonly ICameraService _camera;
     private readonly ICameraTestDialogService _cameraTestDialog;
+    private readonly IFirebaseClient _firebase;
     private readonly ILogger<SettingsViewModel>? _logger;
 
     private DispatcherTimer? _noticeTimer;
@@ -83,14 +85,23 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public SettingsViewModel(AppShellViewModel shell, ISettingsService settings,
         ICameraService camera, ICameraTestDialogService cameraTestDialog,
-        ILogger<SettingsViewModel>? logger = null)
+        IFirebaseClient firebase, ILogger<SettingsViewModel>? logger = null)
     {
         _shell = shell;
         _settings = settings;
         _camera = camera;
         _cameraTestDialog = cameraTestDialog;
+        _firebase = firebase;
         _logger = logger;
     }
+
+    // ── it10 S4-2: 서버 연결 상태(읽기 전용, 표시 전용) ──
+    /// <summary>Firebase 초기화(서버 연결) 여부. 색상 트리거·상태 문구 판단용. 설정 진입 중 불변(키는 시작 시 결정).</summary>
+    public bool IsServerConnected => _firebase.IsInitialized;
+    /// <summary>서버 연결 상태 안내 문구. 연결 시 버킷 표기, 미연결 시 키 부재 안내(로그 참조).</summary>
+    public string ServerStatusText => _firebase.IsInitialized
+        ? $"연결됨 — {_firebase.Bucket}"
+        : "미연결 — 서비스 계정 키 없음(로그 참조)";
 
     public override async Task OnEnterAsync()
     {

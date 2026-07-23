@@ -9,6 +9,15 @@
     <Grid Background="{StaticResource Brush.Bg}">
         <Border Style="{StaticResource Card}" Width="440" VerticalAlignment="Center" HorizontalAlignment="Center">
             <StackPanel>
+                <!-- it10 S2-1: 서버 미연결(키 없음) 상태 배너. 오프라인 관리자 계정으로만 로그인 가능함을 명시. -->
+                <Border Background="{StaticResource Brush.Warning.Surface}" CornerRadius="{StaticResource Radius.M}"
+                        Padding="16,12" Margin="0,0,0,20"
+                        Visibility="{Binding IsServerOffline, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="서버 미연결 상태입니다. 오프라인 관리자 계정으로만 로그인할 수 있습니다."
+                               Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Warning}"
+                               TextWrapping="Wrap" />
+                </Border>
+
                 <TextBlock Text="로그인" Style="{StaticResource Text.H1}" HorizontalAlignment="Center" Margin="0,0,0,8" />
                 <TextBlock Text="커스텀 프레임·계정 기능을 사용하려면 로그인하세요"
                            Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" Margin="0,0,0,28" />

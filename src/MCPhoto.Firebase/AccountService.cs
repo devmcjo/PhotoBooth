@@ -36,7 +36,11 @@ public sealed class AccountService : IAccountService
         if (Db is null)
         {
             if (id == SeedId && password == SeedPassword)
+            {
+                // it10 S2-2: 오프라인 시드 로그인은 백도어가 아니라 현장 오프라인 대응 수단임을 로그로 명시.
+                _logger?.LogWarning("오프라인 시드 로그인 — DB 미연결(서비스 계정 키 없음)");
                 return new User { Id = SeedId, Password = SeedPassword, Role = UserRole.Admin };
+            }
             return null;
         }
 

@@ -47,7 +47,15 @@ public sealed class FirebaseClient : IFirebaseClient
             var keyPath = serviceAccountKeyPath ?? DefaultKeyPath();
             if (!File.Exists(keyPath))
             {
-                _logger?.LogWarning("서비스 계정 키 없음 — Firebase 미초기화(QR off/오프라인 완화 경로): {Path}", keyPath);
+                // it10 S4-1: 후보 전부를 존재 여부와 함께 로그 — QA가 "키를 어디에 두어야 하는지" 파악 가능.
+                // 명시 경로가 주어졌으면 그 경로만, 아니면 기본 후보 2경로를 나열.
+                var candidates = serviceAccountKeyPath is not null
+                    ? new[] { serviceAccountKeyPath }
+                    : KeyCandidatePaths();
+                var detail = string.Join(", ", candidates.Select(p => $"[{p}]={(File.Exists(p) ? "있음" : "없음")}"));
+                _logger?.LogWarning(
+                    "서비스 계정 키 없음 — Firebase 미초기화(QR off/오프라인 완화 경로). 탐색: {Candidates}. " +
+                    "서버 기능 비활성(오프라인 모드).", detail);
                 return;
             }
 
@@ -75,7 +83,10 @@ public sealed class FirebaseClient : IFirebaseClient
                     "업로드 실패 가능. AppSettings.StorageBucket에 실제 버킷을 지정하세요.", Bucket);
             }
             IsInitialized = true;
-            _logger?.LogInformation("Firebase 초기화 완료: project={Project}, bucket={Bucket}", resolvedProject, Bucket);
+            // it10 S4-1: 진단 — 실제 사용한 키 경로를 로그에 포함(QA가 어떤 키로 붙었는지 확인).
+            _logger?.LogInformation(
+                "Firebase 초기화 완료: project={Project}, bucket={Bucket}, key={KeyPath}",
+                resolvedProject, Bucket, keyPath);
         }
         catch (Exception ex)
         {
@@ -85,20 +96,30 @@ public sealed class FirebaseClient : IFirebaseClient
     }
 
     /// <summary>
-    /// 서비스 계정 키 탐색: 실행경로\serviceAccountKey.json 우선, 없으면 %ProgramData%\MCPhoto\ 폴백. (it6 #2)
-    /// 둘 다 없으면 ProgramData 경로를 반환(존재하지 않음 → 호출측 오프라인 완화).
+    /// 서비스 계정 키 탐색 후보(우선순위 순): ①실행경로\serviceAccountKey.json ②%ProgramData%\MCPhoto\serviceAccountKey.json. (it6 #2, it10 S4-1)
+    /// 진단 로그·기본 경로 결정 모두 이 목록을 단일 소스로 사용한다.
     /// ⚠️ 키는 비밀: .gitignore가 serviceAccountKey.json 커버, 인스톨러 미포함. 실행경로 배치는 포터블 편의.
     /// </summary>
-    public static string DefaultKeyPath()
+    public static string[] KeyCandidatePaths()
     {
         const string fileName = "serviceAccountKey.json";
 
         var exePath = Path.Combine(AppContext.BaseDirectory, fileName);
-        if (File.Exists(exePath)) return exePath;
+        var programDataPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MCPhoto", fileName);
+        return new[] { exePath, programDataPath };
+    }
 
-        var programDataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MCPhoto");
-        return Path.Combine(programDataDir, fileName);
+    /// <summary>
+    /// 기본 키 경로: <see cref="KeyCandidatePaths"/> 중 첫 존재 파일. 둘 다 없으면 마지막 후보(ProgramData) 반환
+    /// (존재하지 않음 → 호출측 오프라인 완화). 동작 불변(실행경로 우선).
+    /// </summary>
+    public static string DefaultKeyPath()
+    {
+        var candidates = KeyCandidatePaths();
+        foreach (var path in candidates)
+            if (File.Exists(path)) return path;
+        return candidates[^1];
     }
 
     private static string ProjectIdFromKey(string keyPath)

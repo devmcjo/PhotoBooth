@@ -18,6 +18,11 @@ public sealed class FrameCatalogService
     private readonly Func<string, CancellationToken, Task<byte[]?>> _downloadImage;
     private readonly ILogger<FrameCatalogService>? _logger;
 
+    // it10 S3-2: 시작 prefetch(App.OnStartup)와 FrameSelect 진입이 경합하면 이름 dedup 검사가 다운로드 완료 전이라
+    // 같은 프레임을 2회 다운로드할 수 있다. GetDefaultFramesAsync를 직렬화해 두 번째 호출이 첫 캐시를 보게 한다.
+    // 싱글턴 서비스(ServiceRegistration.cs:80)이므로 인스턴스 필드로 충분. 비동기 대기 — UI 스레드 블로킹 없음.
+    private readonly SemaphoreSlim _defaultFramesGate = new(1, 1);
+
     /// <summary>번들 프레임 폴더(설치 경로/Frame).</summary>
     public string BundleFolder { get; }
 
@@ -44,43 +49,52 @@ public sealed class FrameCatalogService
     /// </summary>
     public async Task<IReadOnlyList<FrameTemplate>> GetDefaultFramesAsync(CancellationToken ct = default)
     {
-        // ① 로컬 공용(접두 없는 파일 = 번들 + 파워 캐시)
-        var local = _localStore.LoadPublic();
-        var localNames = _localStore.PublicFrameNames();
-
-        // ② DB isDefault 중 로컬에 이름이 없는 것만 다운로드·캐시(이름 기준 dedup, 중복 집계 없음)
+        // it10 S3-2: 동시 호출(시작 prefetch ↔ FrameSelect 진입) 직렬화 — 중복 다운로드 방지.
+        await _defaultFramesGate.WaitAsync(ct);
         try
         {
-            var dbFrames = await _repository.GetDefaultFramesAsync(ct);
-            foreach (var f in dbFrames)
+            // ① 로컬 공용(접두 없는 파일 = 번들 + 파워 캐시)
+            var local = _localStore.LoadPublic();
+            var localNames = _localStore.PublicFrameNames();
+
+            // ② DB isDefault 중 로컬에 이름이 없는 것만 다운로드·캐시(이름 기준 dedup, 중복 집계 없음)
+            try
             {
-                if (localNames.Contains(f.Name)) continue; // 로컬에 이미 있음 → 다운로드 스킵(캐시 히트)
-                var cached = await TryCacheAsync(f, ct);
-                if (cached is not null) local = Append(local, cached);
+                var dbFrames = await _repository.GetDefaultFramesAsync(ct);
+                foreach (var f in dbFrames)
+                {
+                    if (localNames.Contains(f.Name)) continue; // 로컬에 이미 있음 → 다운로드 스킵(캐시 히트)
+                    var cached = await TryCacheAsync(f, ct);
+                    if (cached is not null) local = Append(local, cached);
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "DB 기본 프레임 조회 실패 — 로컬/번들/fallback로 폴백(오프라인 모드)");
-        }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "DB 기본 프레임 조회 실패 — 로컬/번들/fallback로 폴백(오프라인 모드)");
+            }
 
-        if (local.Count > 0)
-        {
-            _logger?.LogInformation("공용 프레임 {Count}개(로컬 우선 + DB 캐시 병합)", local.Count);
-            return local;
-        }
+            if (local.Count > 0)
+            {
+                _logger?.LogInformation("공용 프레임 {Count}개(로컬 우선 + DB 캐시 병합)", local.Count);
+                return local;
+            }
 
-        // ③ 번들 폴더에 .slots 없는 이미지가 있으면 자동 격자 배치로 로드(기존 폴백)
-        var bundled = LoadBundleFrames();
-        if (bundled.Count > 0)
-        {
-            _logger?.LogInformation("번들 프레임 {Count}개 사용", bundled.Count);
-            return bundled;
-        }
+            // ③ 번들 폴더에 .slots 없는 이미지가 있으면 자동 격자 배치로 로드(기존 폴백)
+            var bundled = LoadBundleFrames();
+            if (bundled.Count > 0)
+            {
+                _logger?.LogInformation("번들 프레임 {Count}개 사용", bundled.Count);
+                return bundled;
+            }
 
-        // ④ fallback(코드 생성)
-        _logger?.LogInformation("fallback 프레임 생성");
-        return new[] { EnsureFallbackFrame() };
+            // ④ fallback(코드 생성)
+            _logger?.LogInformation("fallback 프레임 생성");
+            return new[] { EnsureFallbackFrame() };
+        }
+        finally
+        {
+            _defaultFramesGate.Release();
+        }
     }
 
     /// <summary>로그인 사용자 커스텀 프레임(로컬 전용, `{계정}_` 접두). DB 미조회. (it8 §3 정정)</summary>
@@ -100,9 +114,21 @@ public sealed class FrameCatalogService
         try
         {
             if (string.IsNullOrEmpty(f.ImageUrl)) return null;
+
+            // it10 S3-3(D3): 이름에 '_' 포함 기본 프레임은 로컬 공용 규약(접두 '_' = user 파일)과 충돌해
+            // 공용 목록·dedup 집합에서 제외 → 매 실행 재다운로드된다. 동작은 현행 유지(캐시·표시 정상), 경고만.
+            if (f.Name.Contains('_'))
+                _logger?.LogWarning(
+                    "기본 프레임 이름에 '_' 포함 — 로컬 공용 규약과 충돌, 매 실행 재다운로드됨: {Name}", f.Name);
+
             var bytes = await _downloadImage(f.ImageUrl, ct);
             if (bytes is { Length: > 0 })
-                return _localStore.CacheFromDb(f, bytes);
+            {
+                var cached = _localStore.CacheFromDb(f, bytes);
+                // it10 S3-3: 다운로드·캐시 성공 로그(기존은 실패 warning만) — QA가 캐시 건수를 로그로 확인.
+                _logger?.LogInformation("기본 프레임 캐시: {Name} ← DB({Id})", cached.Name, f.Id);
+                return cached;
+            }
         }
         catch (Exception ex)
         {

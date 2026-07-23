@@ -6,6 +6,7 @@ using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
+using MCPhoto.Core.Upload;
 
 namespace MCPhoto.Tests;
 
@@ -46,14 +47,16 @@ public class SettingsViewModelTests
         public Task ShowAsync(int deviceIndex) { LastDeviceIndex = deviceIndex; return Task.CompletedTask; }
     }
 
-    private static SettingsViewModel MakeVm(ICameraService? camera = null, IniSettingsService? settings = null)
+    private static SettingsViewModel MakeVm(ICameraService? camera = null, IniSettingsService? settings = null,
+        IFirebaseClient? firebase = null)
     {
         var session = new SessionContext();
         settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         settings.Load();
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         camera ??= new FakeCameraService(new CameraDevice(0, "Camera 0"));
-        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog());
+        firebase ??= new FakeFirebaseClient { IsInitialized = false };
+        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(), firebase);
     }
 
     [Fact]
@@ -87,7 +90,8 @@ public class SettingsViewModelTests
         var session = new SessionContext();
         session.Login(new User { Id = "u1", Password = "pw", Role = UserRole.User }); // QR 로드값 검증은 로그인 사용자 대상(게스트는 소스단 off)
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
-        var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")), new FakeCameraTestDialog());
+        var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
+            new FakeCameraTestDialog(), new FakeFirebaseClient { IsInitialized = false });
         await vm.OnEnterAsync();
 
         Assert.True(vm.EnableQrDelivery);
@@ -166,4 +170,24 @@ public class SettingsViewModelTests
 
     // 로그인 사용자 비밀번호 가드는 설정 '진입 전' 모달(PasswordPromptWindow)로 이동 —
     // AppShellViewModel.OpenSettings에서 처리(UI 모달이라 여기서 단위 테스트하지 않음). (보완#1 후속)
+
+    // ── it10 S4-2: 서버 연결 상태 표시(읽기 전용) ──
+
+    [Fact]
+    public void Server_Connected_Shows_Bucket()
+    {
+        var vm = MakeVm(firebase: new FakeFirebaseClient { IsInitialized = true, Bucket = "mcphoto-955fb.firebasestorage.app" });
+
+        Assert.True(vm.IsServerConnected);
+        Assert.Equal("연결됨 — mcphoto-955fb.firebasestorage.app", vm.ServerStatusText);
+    }
+
+    [Fact]
+    public void Server_Offline_Shows_No_Key_Notice()
+    {
+        var vm = MakeVm(firebase: new FakeFirebaseClient { IsInitialized = false });
+
+        Assert.False(vm.IsServerConnected);
+        Assert.Equal("미연결 — 서비스 계정 키 없음(로그 참조)", vm.ServerStatusText);
+    }
 }

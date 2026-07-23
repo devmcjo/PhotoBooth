@@ -73,6 +73,10 @@ public partial class App : Application
         // 시드 계정 보장(Firebase 초기화 시). 오프라인이면 로그인 시 인메모리 시드 처리.
         _ = EnsureSeedAsync();
 
+        // it10 S3-1: 앱 실행 직후 기본 프레임 백그라운드 prefetch(부수효과인 로컬 캐시가 목적).
+        // fire-and-forget + 예외 무시(FrameSelect 진입 시 재시도됨) — 시작 화면 표시 지연 없음.
+        _ = PrefetchDefaultFramesAsync();
+
         var shell = _host.Services.GetRequiredService<MainWindow>();
         shell.Show();
     }
@@ -88,6 +92,25 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log.Warning(ex, "시드 계정 보장 실패(오프라인 가능)");
+        }
+    }
+
+    /// <summary>
+    /// it10 S3-1: 앱 시작 시 기본 프레임을 백그라운드로 확보(로컬 캐시). 결과는 무시 — 부수효과인 캐시가 목적.
+    /// FrameCatalogService의 SemaphoreSlim 게이트(S3-2)가 FrameSelect 진입과의 경합·중복 다운로드를 막는다.
+    /// 실패는 앱 동작에 영향 없음(FrameSelect 진입 시 재시도) → Warning 로그만.
+    /// </summary>
+    private async Task PrefetchDefaultFramesAsync()
+    {
+        try
+        {
+            var catalog = _host!.Services.GetService<MCPhoto.App.Services.FrameCatalogService>();
+            if (catalog is not null)
+                await catalog.GetDefaultFramesAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "기본 프레임 prefetch 실패(FrameSelect 진입 시 재시도)");
         }
     }
 
