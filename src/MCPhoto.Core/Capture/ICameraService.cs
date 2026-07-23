@@ -52,5 +52,8 @@ public sealed class CapturedStill
     public byte[] Pixels { get; init; } = Array.Empty<byte>();
 }
 
-/// <summary>카메라 장치 정보.</summary>
-public sealed record CameraDevice(int Index, string Name);
+/// <summary>카메라 장치 정보. ToString=Name(ComboBox 닫힌 박스 폴백 대비 — 레코드 원문 표기 방지).</summary>
+public sealed record CameraDevice(int Index, string Name)
+{
+    public override string ToString() => Name;
+}

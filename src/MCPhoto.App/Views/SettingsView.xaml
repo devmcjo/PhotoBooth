@@ -134,11 +134,14 @@
                                                 IsEnabled="{Binding HasCamera}" />
                                     </Grid>
                                 </Grid>
-                                <!-- 카메라 없음 안내(HasCamera=false일 때만) -->
-                                <TextBlock Text="연결된 카메라가 없습니다. 카메라를 연결한 뒤 ↻ 다시 검색을 눌러 주세요."
-                                           Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
-                                           TextWrapping="Wrap" Margin="0,0,0,8"
-                                           Visibility="{Binding HasCamera, Converter={StaticResource InverseBoolToVis}}" />
+                                <!-- 카메라 없음 안내. 고정 높이를 항상 예약해 열거 전/후 레이아웃 점프(재배치) 방지. (it9 후속)
+                                     안내가 숨겨져도 이 높이는 유지되므로 아래 항목이 위로 밀리지 않음. -->
+                                <Grid Height="22" Margin="0,2,0,6">
+                                    <TextBlock Text="연결된 카메라가 없습니다. ↻ 다시 검색을 눌러 주세요."
+                                               Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               Visibility="{Binding HasCamera, Converter={StaticResource InverseBoolToVis}}" />
+                                </Grid>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
