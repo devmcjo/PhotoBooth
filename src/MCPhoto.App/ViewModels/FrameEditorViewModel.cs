@@ -27,6 +27,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     // 편집 모드 상태(기존 프레임 편집 시 LoadForEdit가 set). 신규 생성이면 _isEditing=false.
     private bool _isEditing;
     private string? _editingFrameId;
+    private bool _suppressArrange; // LoadForEdit 중 SlotCount 설정이 기존 슬롯을 자동 배치로 덮어쓰지 않도록.
 
     [ObservableProperty] private ImageSource? _frameImage;
     [ObservableProperty] private int _frameWidth;
@@ -145,21 +146,25 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             return;
         }
 
-        // 슬롯 개수 콤보 반영 — 백킹 필드 직접 설정으로 자동 배치(OnSlotCountChanged) 억제.
-        _slotCount = Math.Clamp(frame.Slots.Count, SlotCountOptions[0], SlotCountOptions[^1]);
-        OnPropertyChanged(nameof(SlotCount));
+        // 슬롯 개수 콤보 반영 — 자동 배치(OnSlotCountChanged) 억제하고 기존 슬롯 유지.
+        _suppressArrange = true;
+        SlotCount = Math.Clamp(frame.Slots.Count, SlotCountOptions[0], SlotCountOptions[^1]);
+        _suppressArrange = false;
 
         // 기존 슬롯을 스케일 기준(_baseSlots)으로 로드하고 100%로 표시(자동 배치 아님).
         _baseSlots.Clear();
         foreach (var s in frame.Slots)
             _baseSlots.Add(new Slot { Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height });
-        _slotScalePercent = 100;
-        OnPropertyChanged(nameof(SlotScalePercent));
+        SlotScalePercent = 100;
         ApplyScale(); // Slots = _baseSlots (100%)
     }
 
-    /// <summary>슬롯 개수 변경 → 자동 배치.</summary>
-    partial void OnSlotCountChanged(int value) => ArrangeSlots();
+    /// <summary>슬롯 개수 변경 → 자동 배치. (편집 로드 중에는 억제해 기존 슬롯 보존)</summary>
+    partial void OnSlotCountChanged(int value)
+    {
+        if (_suppressArrange) return;
+        ArrangeSlots();
+    }
 
     /// <summary>종횡비 변경 → 선택 비율로 재배치. (it4 §3)</summary>
     partial void OnSlotAspectChanged(SlotAspect value) => ArrangeSlots();
