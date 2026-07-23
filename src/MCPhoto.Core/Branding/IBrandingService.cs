@@ -8,4 +8,7 @@ public interface IBrandingService
 {
     /// <summary>앱 표시명(창 제목·홈 타이틀 등). 기본값 "MC포토".</summary>
     string AppName { get; }
+
+    /// <summary>홈 화면 소제목(타이틀 아래). 기본값 "셀프 포토부스".</summary>
+    string Subtitle { get; }
 }

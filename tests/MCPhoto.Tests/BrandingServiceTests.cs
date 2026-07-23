@@ -20,6 +20,35 @@ public class BrandingServiceTests
         var path = Path.Combine(Path.GetTempPath(), $"branding_absent_{Guid.NewGuid():N}.ini");
         var svc = new IniBrandingService(path);
         Assert.Equal("MC포토", svc.AppName);
+        Assert.Equal("셀프 포토부스", svc.Subtitle); // 소제목 기본값
+    }
+
+    [Fact]
+    public void Valid_Subtitle_Is_Loaded()
+    {
+        var path = TempIni("[Branding]\nAppName=철이네 사진관\nSubtitle=추억을 남기는 순간\n");
+        try
+        {
+            var svc = new IniBrandingService(path);
+            Assert.Equal("철이네 사진관", svc.AppName);
+            Assert.Equal("추억을 남기는 순간", svc.Subtitle);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Empty_Or_Missing_Subtitle_Falls_Back_To_Default()
+    {
+        // Subtitle 키 자체가 없을 때
+        var path1 = TempIni("[Branding]\nAppName=우리동네 포토부스\n");
+        // Subtitle 이 빈 값일 때
+        var path2 = TempIni("[Branding]\nSubtitle=\n");
+        try
+        {
+            Assert.Equal("셀프 포토부스", new IniBrandingService(path1).Subtitle);
+            Assert.Equal("셀프 포토부스", new IniBrandingService(path2).Subtitle);
+        }
+        finally { File.Delete(path1); File.Delete(path2); }
     }
 
     [Fact]

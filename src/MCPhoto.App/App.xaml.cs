@@ -66,6 +66,7 @@ public partial class App : Application
         {
             var branding = _host.Services.GetRequiredService<MCPhoto.Core.Branding.IBrandingService>();
             Resources["Branding.AppName"] = branding.AppName;
+            Resources["Branding.Subtitle"] = branding.Subtitle;
         }
         catch (Exception ex) { Log.Warning(ex, "브랜딩 리소스 주입 실패(기본값 유지)"); }
 

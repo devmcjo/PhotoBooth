@@ -13,7 +13,7 @@
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <TextBlock Text="{DynamicResource Branding.AppName}" Style="{StaticResource Text.Display}" HorizontalAlignment="Center" />
-            <TextBlock Text="셀프 포토부스" Style="{StaticResource Text.H2}"
+            <TextBlock Text="{DynamicResource Branding.Subtitle}" Style="{StaticResource Text.H2}"
                        Foreground="{StaticResource Brush.Text.Tertiary}"
                        HorizontalAlignment="Center" Margin="0,8,0,48" />
             <Button Content="촬영하기" Command="{Binding StartCommand}"
