@@ -1,18 +1,18 @@
 @echo off
 rem ============================================================
-rem  MCPhoto 베타 단일 EXE 빌드 (더블클릭 실행)
-rem  - publish.ps1 을 Windows PowerShell로 실행합니다.
-rem  - 결과: publish\MCPhoto\MCPhoto.exe (항상 이 경로)
+rem  MCPhoto beta single-EXE build (double-click)
+rem  Runs publish.ps1 via Windows PowerShell.
+rem  Output: publish\MCPhoto\MCPhoto.exe
+rem  (ASCII only on purpose: avoids CP949/UTF-8 batch parsing issues)
 rem ============================================================
-chcp 65001 >nul
 cd /d "%~dp0"
 
-echo MCPhoto publish 를 시작합니다...
+echo Starting MCPhoto publish...
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0publish.ps1"
 
 echo.
 echo ------------------------------------------------------------
-echo 창을 닫으려면 아무 키나 누르세요.
+echo Press any key to close.
 pause >nul
