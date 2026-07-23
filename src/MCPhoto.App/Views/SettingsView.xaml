@@ -329,17 +329,14 @@
         <Border Grid.Row="1" Background="{StaticResource Brush.Bg}" BorderThickness="0,1,0,0"
                 BorderBrush="{StaticResource Brush.Divider}" Effect="{StaticResource Shadow.Sm}"
                 Padding="40,12">
-            <!-- 저장/닫기만. 저장 안내는 상단 토스트로 분리(버튼 가림 방지). -->
-            <Grid MaxWidth="1200" HorizontalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Content="저장" Style="{StaticResource Button.Primary}"
-                        Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left" />
-                <Button Grid.Column="1" Content="닫기" Style="{StaticResource Button.Ghost}"
-                        Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
-            </Grid>
+            <!-- 저장/닫기만. 저장 안내는 상단 토스트로 분리(버튼 가림 방지).
+                 프레임선택(다음/취소)과 동일하게 중앙 배치 + 각 Margin 8,0(→ 버튼 간 16px 간격). -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="저장" Style="{StaticResource Button.Primary}"
+                        Command="{Binding SaveSettingsCommand}" Margin="8,0" />
+                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                        Command="{Binding CloseCommand}" Margin="8,0" />
+            </StackPanel>
         </Border>
 
         <!-- 저장 결과 토스트: 상단 중앙, 자동 숨김(3~6초). 하단 버튼과 분리해 가림 방지. 클릭 비간섭. -->

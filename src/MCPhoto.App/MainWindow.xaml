@@ -41,12 +41,13 @@
                         AutomationProperties.Name="로그인 또는 계정" />
             </StackPanel>
 
-            <!-- 우: 설정 버튼(gear 글리프) -->
+            <!-- 우: 설정 버튼(gear 글리프). 설정 화면에선 숨김(자기 화면 재진입 방지). -->
             <Button Grid.Column="2" Margin="16,8"
                     Style="{StaticResource Button.Icon}"
                     Command="{Binding OpenSettingsCommand}"
                     Content="⚙"
                     FontSize="22"
+                    Visibility="{Binding IsSettings, Converter={StaticResource InverseBoolToVis}}"
                     AutomationProperties.Name="설정" />
 
             <!-- 계정 팝오버 -->

@@ -48,6 +48,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTopBarVisible))]
     [NotifyPropertyChangedFor(nameof(IsHome))]
+    [NotifyPropertyChangedFor(nameof(IsSettings))]
     private AppState _currentState = AppState.Home;
 
     [ObservableProperty]
@@ -73,6 +74,9 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
 
     /// <summary>현재 홈 화면인지(홈 버튼은 홈에서 숨김). (it9 후속)</summary>
     public bool IsHome => CurrentState == AppState.Home;
+
+    /// <summary>현재 설정 화면인지(설정 버튼은 설정 화면에서 숨김 — 자기 화면 재진입 방지).</summary>
+    public bool IsSettings => CurrentState == AppState.Settings;
 
     public SessionContext Session => _session;
     public ISettingsService Settings => _settings;

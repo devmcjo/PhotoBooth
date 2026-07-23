@@ -104,13 +104,17 @@
         </Setter>
     </Style>
 
-    <!-- ══════════════ Button.Ghost (취소·닫기) ══════════════ -->
+    <!-- ══════════════ Button.Ghost (취소·닫기 — 아웃라인, 3순위 위계) ══════════════ -->
+    <!-- 채움 없는 아웃라인. Primary(채움 로즈)>Secondary(채움 뉴트럴)>Ghost(아웃라인) 위계.
+         높이·폰트를 CTA와 맞춰 나란히 놓였을 때 정렬·가독. 테두리로 버튼임을 명확히(텍스트처럼 안 보이게). -->
     <Style x:Key="Button.Ghost" TargetType="Button">
-        <Setter Property="Height" Value="{StaticResource Touch.Min}" />
-        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="{StaticResource Touch.CTA}" />
+        <Setter Property="MinWidth" Value="100" />
+        <Setter Property="Padding" Value="20,0" />
         <Setter Property="FontFamily" Value="{StaticResource Font.Primary}" />
-        <Setter Property="FontSize" Value="15" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text.Tertiary}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -118,15 +122,21 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            CornerRadius="{StaticResource Radius.S}">
+                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                            CornerRadius="{StaticResource Radius.M}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource Brush.Surface.Hover}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Brush.Text.Tertiary}" />
                             <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
                         </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Brush.Surface.Press}" />
+                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Brush.Disabled.Bg}" />
                             <Setter Property="Foreground" Value="{StaticResource Brush.Disabled.Fg}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -136,11 +146,13 @@
     </Style>
 
     <!-- ══════════════ Button.Danger (삭제·앱 종료) ══════════════ -->
+    <!-- 높이·폰트를 CTA와 맞춤 → 확인 다이얼로그에서 취소(Ghost)와 나란히 정렬. -->
     <Style x:Key="Button.Danger" TargetType="Button">
-        <Setter Property="Height" Value="{StaticResource Touch.Min}" />
+        <Setter Property="Height" Value="{StaticResource Touch.CTA}" />
+        <Setter Property="MinWidth" Value="100" />
         <Setter Property="Padding" Value="20,0" />
         <Setter Property="FontFamily" Value="{StaticResource Font.Primary}" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
         <Setter Property="Background" Value="{StaticResource Brush.Danger.Surface}" />
