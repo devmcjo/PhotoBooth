@@ -10,10 +10,16 @@
     <PackageReference Include="OpenCvSharp4.Windows" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.10.0.20241108" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MCPhoto.Core\MCPhoto.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CameraNameProbe.ComposeDevices(순수 매핑 헬퍼) 단위 테스트 접근 허용(it11 #15). -->
+    <InternalsVisibleTo Include="MCPhoto.Tests" />
   </ItemGroup>
 
 </Project>

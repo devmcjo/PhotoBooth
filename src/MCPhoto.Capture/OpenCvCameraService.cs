@@ -307,8 +307,11 @@ public sealed class OpenCvCameraService : ICameraService
 
     public IReadOnlyList<CameraDevice> EnumerateDevices()
     {
-        // OpenCvSharp/DShow는 장치 이름 열거 API가 제한적이므로 인덱스 프로빙.
-        var devices = new List<CameraDevice>();
+        // (1) FriendlyName 후보를 WMI로 best-effort 조회(실패 시 빈 목록 → 인덱스 라벨 폴백).
+        var friendlyNames = CameraNameProbe.TryGetImagingDeviceNames(_logger);
+
+        // (2) OpenCvSharp/DShow는 장치 이름 열거 API가 제한적이므로 인덱스 프로빙(동작 기준).
+        var openIndices = new List<int>();
         for (int i = 0; i < 8; i++)
         {
             try
@@ -316,7 +319,7 @@ public sealed class OpenCvCameraService : ICameraService
                 using var cap = new VideoCapture(i, VideoCaptureAPIs.DSHOW);
                 if (cap.IsOpened())
                 {
-                    devices.Add(new CameraDevice(i, $"Camera {i}"));
+                    openIndices.Add(i);
                     cap.Release();
                 }
             }
@@ -325,7 +328,9 @@ public sealed class OpenCvCameraService : ICameraService
                 // 장치 없음 — 무시
             }
         }
-        return devices;
+
+        // (3) 열린 인덱스에 WMI 이름을 순서 매핑(best-effort) + 폴백. 동작은 인덱스 기준 유지.
+        return CameraNameProbe.ComposeDevices(openIndices, friendlyNames);
     }
 
     public void Dispose()
