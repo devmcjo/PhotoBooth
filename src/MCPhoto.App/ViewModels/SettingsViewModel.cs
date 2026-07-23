@@ -30,6 +30,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private int _countdownSec;
     [ObservableProperty] private bool _mirrorMode;
     [ObservableProperty] private bool _flashMode;
+    [ObservableProperty] private bool _shutterSound;   // 기능#7
     [ObservableProperty] private bool _enableQrDelivery;
     [ObservableProperty] private bool _sendPhoto;       // QR 하위: 사진 전송 (it7 F2)
     [ObservableProperty] private bool _sendTimelapse;   // QR 하위: 타임랩스 전송 (it7 F2)
@@ -132,6 +133,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             CountdownSec = s.CountdownSec;
             MirrorMode = s.MirrorMode;
             FlashMode = s.FlashMode;
+            ShutterSound = s.ShutterSound;
             EnableQrDelivery = s.EnableQrDelivery;
             SendPhoto = s.SendPhoto;
             SendTimelapse = s.SendTimelapse;
@@ -193,6 +195,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.CountdownSec = CountdownSec;
         s.MirrorMode = MirrorMode;
         s.FlashMode = FlashMode;
+        s.ShutterSound = ShutterSound;
         s.EnableQrDelivery = EnableQrDelivery;
         s.SendPhoto = SendPhoto;
         s.SendTimelapse = SendTimelapse;

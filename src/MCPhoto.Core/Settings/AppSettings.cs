@@ -53,6 +53,9 @@ public sealed class AppSettings
     /// <summary>플래시(촬영 직전 하양 화면). 기본 off.</summary>
     public bool FlashMode { get; set; }
 
+    /// <summary>셔터음(촬영 순간 효과음). 기본 off. (기능#7)</summary>
+    public bool ShutterSound { get; set; }
+
     // ── 출력 (PRD §F4) ──
     /// <summary>최종 이미지 포맷. 기본 JPG.</summary>
     public OutputFormat OutputFormat { get; set; } = OutputFormat.Jpg;
@@ -165,6 +168,7 @@ public sealed class AppSettings
         CountdownSec = CountdownSec,
         MirrorMode = MirrorMode,
         FlashMode = FlashMode,
+        ShutterSound = ShutterSound,
         OutputFormat = OutputFormat,
         RetentionHours = RetentionHours,
         EnableQrDelivery = EnableQrDelivery,

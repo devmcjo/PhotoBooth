@@ -87,6 +87,7 @@ public sealed partial class CameraTestViewModel : ObservableObject
                 FlashActive = true;
                 await Task.Delay(120);
             }
+            if (_settings.Current.ShutterSound) SoundEffects.PlayShutter(); // 실촬영과 동일 재현
             var still = await _camera.CaptureStillAsync(); // 결과 폐기(저장 안 함)
             _ = still;
             FlashActive = false;

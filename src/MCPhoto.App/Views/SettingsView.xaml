@@ -97,6 +97,15 @@
                                     <TextBlock Grid.Column="0" Text="플래시" Style="{StaticResource RowLabel}" />
                                     <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding FlashMode}" />
                                 </Grid>
+                                <!-- 기능#7: 셔터음(플래시 아래). Assets\shutter.wav 있으면 재생, 없으면 시스템음 -->
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="셔터음" Style="{StaticResource RowLabel}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding ShutterSound}" />
+                                </Grid>
                             </StackPanel>
 
                             <!-- 열 간격 -->

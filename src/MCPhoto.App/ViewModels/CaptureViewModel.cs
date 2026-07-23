@@ -151,6 +151,9 @@ public sealed partial class CaptureViewModel : ViewModelBase
                     await Task.Delay(120, ct);
                 }
 
+                // 셔터음(옵션). 저장 흐름 방해 금지 — 비동기 재생·실패 무시. (기능#7)
+                if (settings.ShutterSound) SoundEffects.PlayShutter();
+
                 var still = await _camera.CaptureStillAsync(ct);
                 session.Capture.AddCut(still);
                 FlashActive = false;

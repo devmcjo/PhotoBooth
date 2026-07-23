@@ -28,6 +28,7 @@ public class SettingsTests : IDisposable
         Assert.Equal(6, s.CountdownSec);
         Assert.True(s.MirrorMode);
         Assert.False(s.FlashMode);
+        Assert.False(s.ShutterSound);   // 기능#7: 기본 off
         Assert.Equal(OutputFormat.Jpg, s.OutputFormat);
         Assert.Equal(24, s.RetentionHours);
         Assert.True(s.EnableQrDelivery);
