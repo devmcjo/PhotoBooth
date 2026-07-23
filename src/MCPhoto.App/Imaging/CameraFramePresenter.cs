@@ -8,7 +8,7 @@ namespace MCPhoto.App.Imaging;
 
 /// <summary>
 /// 카메라 FrameReady를 재사용 WriteableBitmap으로 Image에 렌더(프레임 스킵). (architecture §2.3)
-/// PreviewView·CaptureView가 공유. 매 프레임 새 BitmapSource 생성 금지.
+/// CaptureView·카메라 테스트 모달이 공유. 매 프레임 새 BitmapSource 생성 금지.
 /// </summary>
 public sealed class CameraFramePresenter : IDisposable
 {

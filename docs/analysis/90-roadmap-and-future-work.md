@@ -17,8 +17,8 @@
 | 설정 페이지 역할 게이트 없음 | `OpenSettings`에 권한 가드 없음 — 게스트도 설정 진입 가능 | `AppShellViewModel.OpenSettings` | 검토 필요(키오스크 정책에 따라 파워 전용으로 제한할지) |
 | 비밀번호 평문 저장 | `users` 문서에 비밀번호 평문(MVP) | `Firebase/AccountService.cs`, `web/firestore.rules` | 개선 예정(해시/솔트, 규칙 강화) |
 | 인스톨러 self-contained 불일치 | `installer/MCPhoto.iss` 주석은 `--self-contained false` 예시, 실제 `publish.ps1`은 `true`(단일 파일) | `installer/MCPhoto.iss`, `publish.ps1` | 확정 필요(배포 방식 통일) |
-| ffprobe 잔존 | `tools/ffmpeg/ffprobe.exe`(~101MB)가 리포에 있으나 코드 미사용·배포 제외 | `tools/ffmpeg/` | 정리 권장(리포에서 제거) |
-| Preview 데드코드 | `PreviewView`/`PreviewViewModel`이 어떤 `AppState`에도 매핑 안 됨 | `Views/PreviewView.*`, `ViewModels/PreviewViewModel.cs` | 정리 권장(제거 or 활용) |
+| ~~ffprobe 잔존~~ | `tools/ffmpeg/ffprobe.exe` 코드 미사용 | `tools/ffmpeg/` | **정리 완료(2026-07-23)**: 삭제 |
+| ~~Preview 데드코드~~ | `PreviewView`/`PreviewViewModel` 미매핑 | — | **정리 완료(2026-07-23)**: 파일·DI 등록 제거 |
 | 만료 물리삭제는 인프라 의존 | `PurgeExpiredAsync` 코드 존재하나 앱에서 호출 안 함 → GCS Lifecycle/Firestore TTL 설정에 의존 | `Firebase/UploadService.cs` | 의도된 설계([50](./50-infra-gcp-lifecycle-and-ttl.md)). 인프라 미설정 시 미삭제 주의 |
 
 ## 2. 개선 예정 (단기)

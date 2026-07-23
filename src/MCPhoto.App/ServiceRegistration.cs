@@ -34,9 +34,8 @@ internal static class ServiceRegistration
         // Step 2: 설정(INI)
         services.AddSingleton<ISettingsService, IniSettingsService>();
 
-        // Step 3: 캡처 파이프라인(프리뷰)
+        // Step 3: 캡처 파이프라인(카메라)
         services.AddSingleton<ICameraService, OpenCvCameraService>();
-        services.AddTransient<PreviewViewModel>();
 
         // Step 4: 셸 상태머신·유휴 감시
         services.AddSingleton<IIdleWatchdog, IdleWatchdog>();
