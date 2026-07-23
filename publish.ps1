@@ -70,6 +70,18 @@ if ($LASTEXITCODE -ne 0) {
     return
 }
 
+# ---- Build info file (bldinfo.ini) ----
+# App reads bldinfo.ini ([General] Version/BuildDate/Site) to show the version in the UI.
+# Single-file publish can drop csproj 'None' items, so copy it explicitly to guarantee inclusion.
+$bldSource = Join-Path $root 'src\MCPhoto.App\bldinfo.ini'
+$bldDest   = Join-Path $out 'bldinfo.ini'
+if (Test-Path -LiteralPath $bldSource -PathType Leaf) {
+    Copy-Item -LiteralPath $bldSource -Destination $bldDest -Force
+    Write-Host "bldinfo.ini copied -> $bldDest" -ForegroundColor Green
+} else {
+    Write-Host "bldinfo.ini NOT found at $bldSource (version will show fallback)." -ForegroundColor Yellow
+}
+
 Write-Host "`nDone: $out\MCPhoto.exe" -ForegroundColor Green
 Get-ChildItem $out -Recurse -File |
     ForEach-Object { '{0,8:N2} MB  {1}' -f ($_.Length/1MB), $_.FullName.Substring($out.Length+1) }

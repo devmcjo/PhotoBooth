@@ -3,6 +3,7 @@ using MCPhoto.App.ViewModels;
 using MCPhoto.Capture;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Branding;
+using MCPhoto.Core.Build;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.LocalSave;
@@ -27,6 +28,8 @@ internal static class ServiceRegistration
 
         // it9 C3: 앱 이름 브랜딩(branding.ini). 시작 시 1회 로드, 폴백 "MC포토".
         services.AddSingleton<IBrandingService, IniBrandingService>();
+        // 빌드 정보(bldinfo.ini): 버전·빌드일·사이트. 게스트 하단 상시 표기 + 설정 표기. 폴백 v0.0.0.
+        services.AddSingleton<IBuildInfoService, IniBuildInfoService>();
 
         // it9 C1: 카메라 테스트 모달 오픈(다이얼로그 서비스 — VM이 Window 미참조).
         services.AddSingleton<ICameraTestDialogService, CameraTestDialogService>();

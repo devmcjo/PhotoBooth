@@ -2,6 +2,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.ViewModels;
+using MCPhoto.Core.Build;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -22,6 +23,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private readonly SessionContext _session;
     private readonly ILogger<AppShellViewModel>? _logger;
     private readonly Dispatcher _dispatcher;
+    private readonly IBuildInfoService? _buildInfo;
 
     /// <summary>무동작 후 경고 팝업까지(초). 2분. (it8 §2 A1)</summary>
     public int IdleWarningSeconds { get; set; } = 120;
@@ -78,6 +80,10 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>현재 설정 화면인지(설정 버튼은 설정 화면에서 숨김 — 자기 화면 재진입 방지).</summary>
     public bool IsSettings => CurrentState == AppState.Settings;
 
+    /// <summary>앱 하단 버전 표기(예: "v1.0.0 · Beta"). 로그인 무관 상시 노출.
+    /// 빌드 정보 미주입 시 빈 문자열. 값은 시작 시 고정(불변) → 통지 불필요.</summary>
+    public string VersionText => _buildInfo?.DisplayText ?? string.Empty;
+
     public SessionContext Session => _session;
     public ISettingsService Settings => _settings;
 
@@ -100,6 +106,8 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         _session = session;
         _logger = logger;
         _dispatcher = Dispatcher.CurrentDispatcher;
+        // 빌드 정보는 선택적(미등록/테스트 시 null → 표기 비노출). 앱에선 DI로 항상 주입.
+        _buildInfo = services.GetService<IBuildInfoService>();
 
         _idle.IdleTimeout += OnIdleTimeout;
         _session.CurrentUserChanged += OnCurrentUserChanged;
