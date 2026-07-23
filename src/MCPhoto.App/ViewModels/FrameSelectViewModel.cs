@@ -56,7 +56,10 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
            && !frame.Id.StartsWith("fallback", StringComparison.Ordinal)
            && !string.IsNullOrEmpty(frame.Id);
 
-    public override async Task OnEnterAsync()
+    public override Task OnEnterAsync() => ReloadFramesAsync();
+
+    /// <summary>디스크·DB 기준으로 프레임 목록을 재로드. 삭제 후에도 호출해 UI를 실제 파일 상태와 일치시킨다. (보완#3)</summary>
+    private async Task ReloadFramesAsync()
     {
         IsLoading = true;
         Frames.Clear();
@@ -119,6 +122,9 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
             DeleteNoticeIsError = true;
             _logger?.LogWarning("로컬 프레임 삭제 실패: {Name} ({Path})", frame.Name, frame.ImageUrl);
         }
+
+        // 디스크 기준 재스캔으로 목록을 실제 상태와 일치(삭제 성공분은 사라지고, 실패분은 다시 노출). (보완#3)
+        await ReloadFramesAsync();
     }
 
     /// <summary>
