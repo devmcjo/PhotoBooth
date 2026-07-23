@@ -10,10 +10,17 @@
                 HorizontalAlignment="Center" VerticalAlignment="Center" Width="440" Background="{StaticResource Brush.Bg}">
             <StackPanel>
 
-                <!-- ① 업로드 중 -->
-                <TextBlock Text="업로드 중..." Style="{StaticResource Text.Body}"
-                           HorizontalAlignment="Center"
-                           Visibility="{Binding IsUploading, Converter={StaticResource BoolToVis}}" />
+                <!-- ① 업로드 중: 진행 바 + 단계 라벨(it11 #16). 세밀 진행 불가 시 IsIndeterminate로 무한 표시. -->
+                <StackPanel Visibility="{Binding IsUploading, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding ProgressLabel}" Style="{StaticResource Text.Body}"
+                               HorizontalAlignment="Center" />
+                    <ProgressBar Height="8" Margin="0,16,0,0" Minimum="0" Maximum="1"
+                                 Value="{Binding UploadProgress}"
+                                 IsIndeterminate="{Binding IsIndeterminate}"
+                                 Foreground="{StaticResource Brush.Accent}"
+                                 Background="{StaticResource Brush.Divider}"
+                                 BorderThickness="0" />
+                </StackPanel>
 
                 <!-- ② 성공: QR + 만료 안내 -->
                 <StackPanel Visibility="{Binding UploadSucceeded, Converter={StaticResource BoolToVis}}">

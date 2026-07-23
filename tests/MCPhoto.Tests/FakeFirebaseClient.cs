@@ -12,7 +12,7 @@ internal sealed class FakeFirebaseClient : IFirebaseClient
     public bool IsInitialized { get; init; }
     public string Bucket { get; init; } = string.Empty;
 
-    public Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, CancellationToken ct = default)
+    public Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, IProgress<double>? fileProgress = null, CancellationToken ct = default)
         => throw new NotSupportedException("FakeFirebaseClient: 업로드는 이 테스트 범위 밖입니다.");
 
     public Task DeleteStoragePrefixAsync(string prefix, CancellationToken ct = default)

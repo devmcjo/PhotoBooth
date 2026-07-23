@@ -79,7 +79,7 @@ public class UploadContractTests
         public string Bucket => "mcphoto.firebasestorage.app";
         public ResultSession? Created { get; private set; }
 
-        public Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, CancellationToken ct = default)
+        public Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, IProgress<double>? fileProgress = null, CancellationToken ct = default)
             => Task.FromResult("tok-" + Path.GetFileName(storagePath));
         public Task DeleteStoragePrefixAsync(string prefix, CancellationToken ct = default) => Task.CompletedTask;
         public Task CreateResultSessionAsync(ResultSession session, CancellationToken ct = default)

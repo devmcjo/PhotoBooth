@@ -134,7 +134,7 @@ public sealed class FirebaseClient : IFirebaseClient
         return string.Empty;
     }
 
-    public async Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, CancellationToken ct = default)
+    public async Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, IProgress<double>? fileProgress = null, CancellationToken ct = default)
     {
         EnsureInit();
         var downloadToken = Guid.NewGuid().ToString();
@@ -149,7 +149,23 @@ public sealed class FirebaseClient : IFirebaseClient
         };
 
         await using var stream = File.OpenRead(localFilePath);
-        await _storage!.UploadObjectAsync(obj, stream, cancellationToken: ct);
+
+        // it11 #16(A1 검증 결과): Google.Cloud.Storage.V1 4.10.0의 UploadObjectAsync는
+        // IProgress<Google.Apis.Upload.IUploadProgress> 오버로드를 지원 → 파일 단위 바이트 진행률 배선.
+        // fileProgress가 null이면 진행 보고 없이 기존 경로(하위호환).
+        IProgress<Google.Apis.Upload.IUploadProgress>? gcsProgress = null;
+        if (fileProgress is not null)
+        {
+            var fileLen = new FileInfo(localFilePath).Length;
+            gcsProgress = new Progress<Google.Apis.Upload.IUploadProgress>(p =>
+            {
+                // 파일 크기 0/미상 시 비율 계산 불가 → 보고 스킵(소비 측이 indeterminate 유지).
+                if (fileLen > 0)
+                    fileProgress.Report(Math.Clamp(p.BytesSent / (double)fileLen, 0.0, 1.0));
+            });
+        }
+
+        await _storage!.UploadObjectAsync(obj, stream, options: null, cancellationToken: ct, progress: gcsProgress);
         _logger?.LogInformation("업로드: {Path}", storagePath);
         return downloadToken;
     }

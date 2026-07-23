@@ -25,6 +25,15 @@ public sealed partial class QrPopupViewModel : ViewModelBase
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private string _expiryNotice = string.Empty;
 
+    // it11 #16: 업로드 진행률 UI. 전체 비율(0.0~1.0) + 단계 라벨 + 세밀 진행 불가 시 무한 표시.
+    [ObservableProperty] private double _uploadProgress;
+    [ObservableProperty] private string _progressLabel = string.Empty;
+    [ObservableProperty] private bool _isIndeterminate = true;
+
+    // ComputeOverall이 전송 구성을 알 수 있도록 진입 시 저장(사진/타임랩스 각각 전송 여부).
+    private bool _hasPhoto;
+    private bool _hasTimelapse;
+
     public QrPopupViewModel(
         AppShellViewModel shell,
         IUploadService upload,
@@ -53,17 +62,30 @@ public sealed partial class QrPopupViewModel : ViewModelBase
             return;
         }
 
+        // it11 #16: 진행률 전송 구성 저장 + 상태 초기화(재시도 시 재호출로 자동 리셋).
+        // 첫 진행 콜백 전에도 라벨이 보이도록 초기 문구 지정, 세밀 진행 전까진 indeterminate.
+        _hasPhoto = photoPath is not null;
+        _hasTimelapse = timelapsePath is not null;
+        UploadProgress = 0;
+        IsIndeterminate = true;
+        ProgressLabel = "업로드 중...";
+
         IsUploading = true;
         UploadFailed = false;
         UploadSucceeded = false;
         StatusMessage = "업로드 중...";
         try
         {
+            // Progress<T>는 생성 스레드의 SynchronizationContext로 콜백을 마샬링한다.
+            // OnEnterAsync는 UI 스레드에서 실행 → 여기서 생성해야 OnUploadProgress가 UI 스레드에서 돌아
+            // [ObservableProperty] 갱신이 안전(§3.16.4). 백그라운드 스레드 생성 금지.
+            var progress = new Progress<UploadProgress>(OnUploadProgress);
             var result = await _upload.UploadResultAsync(
                 photoPath,
                 timelapsePath,
                 settings.RetentionHours,
-                settings.HostingBaseUrl);
+                settings.HostingBaseUrl,
+                progress);
 
             session.Result = result;
 
@@ -89,6 +111,53 @@ public sealed partial class QrPopupViewModel : ViewModelBase
         }
         finally { IsUploading = false; }
     }
+
+    /// <summary>
+    /// 진행 콜백(UI 스레드에서 실행 — Progress&lt;T&gt;가 OnEnterAsync의 UI 컨텍스트로 마샬링).
+    /// UI 상태(진행률·라벨)만 변경한다(§3.16.4).
+    /// </summary>
+    private void OnUploadProgress(UploadProgress p)
+    {
+        IsIndeterminate = false;
+        UploadProgress = ComputeOverall(p.Stage, p.Fraction, _hasPhoto, _hasTimelapse);
+        ProgressLabel = p.Label ?? StageLabel(p.Stage);
+    }
+
+    /// <summary>
+    /// 단계·단계내 비율을 전송 미디어 구성 기준으로 전체 진행률(0~1)로 정규화. 순수 함수(테스트 대상).
+    /// 사진만/타임랩스만이면 해당 단계가 전체 100%, 둘 다면 사진 0~0.5·타임랩스 0.5~1.
+    /// Finalizing은 항상 전체 100%(문서 생성은 순간). (§3.16.8)
+    /// </summary>
+    public static double ComputeOverall(UploadStage stage, double fraction, bool hasPhoto, bool hasTimelapse)
+    {
+        var frac = Math.Clamp(fraction, 0.0, 1.0);
+
+        if (stage == UploadStage.Finalizing)
+            return 1.0;
+
+        // 전송 미디어가 없다는 건 논리상 진입 불가지만 방어(0 나눗셈 회피).
+        if (!hasPhoto && !hasTimelapse)
+            return frac;
+
+        if (hasPhoto && hasTimelapse)
+        {
+            // 사진 구간 [0, 0.5], 타임랩스 구간 [0.5, 1.0].
+            return stage == UploadStage.Photo
+                ? frac * 0.5
+                : 0.5 + frac * 0.5;
+        }
+
+        // 단일 미디어(사진만 또는 타임랩스만) → 해당 단계가 전체 100% 기여.
+        return frac;
+    }
+
+    private static string StageLabel(UploadStage stage) => stage switch
+    {
+        UploadStage.Photo => "사진 업로드 중",
+        UploadStage.Timelapse => "영상 업로드 중",
+        UploadStage.Finalizing => "마무리 중",
+        _ => "업로드 중"
+    };
 
     /// <summary>재시도(업로드 실패 시).</summary>
     [RelayCommand]

@@ -26,6 +26,7 @@ public sealed class UploadService : IUploadService
         string? timelapsePath,
         int retentionHours,
         string hostingBaseUrl,
+        IProgress<UploadProgress>? progress = null,
         CancellationToken ct = default)
     {
         if (!_client.IsInitialized)
@@ -40,6 +41,7 @@ public sealed class UploadService : IUploadService
         var token = UploadContract.NewSessionToken();
 
         // 1) 최종 이미지 업로드 + 토큰 URL. off면 null.
+        // it11 #16: 파일 단위 진행률(IProgress<double>)을 해당 단계(UploadProgress)로 합성해 상위에 보고.
         string? finalUrl = null;
         if (finalImagePath is not null && wantPhoto)
         {
@@ -47,7 +49,10 @@ public sealed class UploadService : IUploadService
                 ? OutputFormat.Png : OutputFormat.Jpg;
             var finalStoragePath = UploadContract.FinalImagePath(token, format);
             var finalContentType = format == OutputFormat.Png ? "image/png" : "image/jpeg";
-            var finalToken = await _client.UploadFileAsync(finalStoragePath, finalImagePath, finalContentType, ct);
+            progress?.Report(new UploadProgress(UploadStage.Photo, 0.0));
+            var photoFileProgress = MakeStageProgress(progress, UploadStage.Photo);
+            var finalToken = await _client.UploadFileAsync(finalStoragePath, finalImagePath, finalContentType, photoFileProgress, ct);
+            progress?.Report(new UploadProgress(UploadStage.Photo, 1.0));
             finalUrl = UploadContract.TokenDownloadUrl(_client.Bucket, finalStoragePath, finalToken);
         }
 
@@ -56,11 +61,15 @@ public sealed class UploadService : IUploadService
         if (timelapsePath is not null && wantTimelapse)
         {
             var tlPath = UploadContract.TimelapsePath(token);
-            var tlToken = await _client.UploadFileAsync(tlPath, timelapsePath, "video/mp4", ct);
+            progress?.Report(new UploadProgress(UploadStage.Timelapse, 0.0));
+            var tlFileProgress = MakeStageProgress(progress, UploadStage.Timelapse);
+            var tlToken = await _client.UploadFileAsync(tlPath, timelapsePath, "video/mp4", tlFileProgress, ct);
+            progress?.Report(new UploadProgress(UploadStage.Timelapse, 1.0));
             timelapseUrl = UploadContract.TokenDownloadUrl(_client.Bucket, tlPath, tlToken);
         }
 
         // 3) ResultSession 문서 생성
+        progress?.Report(new UploadProgress(UploadStage.Finalizing, 1.0, "마무리 중"));
         var now = DateTime.UtcNow;
         var session = new ResultSession
         {
@@ -76,6 +85,15 @@ public sealed class UploadService : IUploadService
         _logger?.LogInformation("업로드 완료: session={Token}, page={Url}", token, session.DownloadPageUrl);
         return session;
     }
+
+    /// <summary>
+    /// 파일 단위 진행률(0.0~1.0)을 해당 <paramref name="stage"/>의 UploadProgress로 상위에 중계하는 어댑터.
+    /// upstream이 null이면 null 반환(진행 보고 없이 기존 경로). (it11 #16 §3.16.2)
+    /// </summary>
+    private static IProgress<double>? MakeStageProgress(IProgress<UploadProgress>? upstream, UploadStage stage)
+        => upstream is null
+            ? null
+            : new Progress<double>(f => upstream.Report(new UploadProgress(stage, f)));
 
     public async Task<int> PurgeExpiredAsync(CancellationToken ct = default)
     {

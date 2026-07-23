@@ -23,9 +23,14 @@ public class QrPopupUploadTests
         public StubUploadService(bool @throw) => _throw = @throw;
 
         public Task<ResultSession> UploadResultAsync(string? finalImagePath, string? timelapsePath,
-            int retentionHours, string hostingBaseUrl, CancellationToken ct = default)
+            int retentionHours, string hostingBaseUrl, IProgress<UploadProgress>? progress = null,
+            CancellationToken ct = default)
         {
             if (_throw) throw new InvalidOperationException("버킷 없음(404) 모사");
+            // it11 #16: 진행률 배선 검증 — 사진 단계 진행 → 마무리 순으로 보고(성공 경로).
+            progress?.Report(new UploadProgress(UploadStage.Photo, 0.0));
+            progress?.Report(new UploadProgress(UploadStage.Photo, 1.0));
+            progress?.Report(new UploadProgress(UploadStage.Finalizing, 1.0));
             return Task.FromResult(new ResultSession
             {
                 Id = "s1",
@@ -104,5 +109,45 @@ public class QrPopupUploadTests
         Assert.NotNull(vm.QrImage);
         Assert.NotNull(session.Result);
         Assert.False(vm.IsUploading);
+    }
+
+    // ── it11 #16: 업로드 진행률 배선 ──
+
+    [Fact]
+    public async Task Upload_Reports_Progress_And_Clears_Indeterminate()
+    {
+        // StubUploadService가 Photo 0→1, Finalizing 1을 Report → VM 진행률 갱신 확인.
+        var (vm, _) = MakeVm(uploadThrows: false, saveLocalCopy: true);
+        await vm.OnEnterAsync();
+
+        Assert.False(vm.IsIndeterminate);      // 세밀 진행 콜백 도착 후 무한 표시 해제
+        Assert.True(vm.UploadProgress > 0);    // 진행률 갱신됨(사진만 전송 → 마지막 1.0)
+        Assert.Equal(1.0, vm.UploadProgress);  // Finalizing 단계는 전체 100%
+    }
+
+    [Theory]
+    // 둘 다 전송: 사진 구간 [0,0.5], 타임랩스 구간 [0.5,1.0]
+    [InlineData(UploadStage.Photo, 0.0, true, true, 0.0)]
+    [InlineData(UploadStage.Photo, 1.0, true, true, 0.5)]
+    [InlineData(UploadStage.Timelapse, 0.0, true, true, 0.5)]
+    [InlineData(UploadStage.Timelapse, 1.0, true, true, 1.0)]
+    [InlineData(UploadStage.Timelapse, 0.5, true, true, 0.75)]
+    // 사진만: 사진 단계가 전체 100%
+    [InlineData(UploadStage.Photo, 0.5, true, false, 0.5)]
+    [InlineData(UploadStage.Photo, 1.0, true, false, 1.0)]
+    // 타임랩스만: 타임랩스 단계가 전체 100%
+    [InlineData(UploadStage.Timelapse, 0.5, false, true, 0.5)]
+    [InlineData(UploadStage.Timelapse, 1.0, false, true, 1.0)]
+    // Finalizing은 구성 무관 항상 100%
+    [InlineData(UploadStage.Finalizing, 0.0, true, true, 1.0)]
+    [InlineData(UploadStage.Finalizing, 1.0, true, false, 1.0)]
+    // 경계: fraction 범위 밖은 클램프
+    [InlineData(UploadStage.Photo, -0.5, true, false, 0.0)]
+    [InlineData(UploadStage.Photo, 1.5, true, false, 1.0)]
+    public void ComputeOverall_Normalizes_By_Media_Composition(
+        UploadStage stage, double fraction, bool hasPhoto, bool hasTimelapse, double expected)
+    {
+        var actual = QrPopupViewModel.ComputeOverall(stage, fraction, hasPhoto, hasTimelapse);
+        Assert.Equal(expected, actual, precision: 6);
     }
 }

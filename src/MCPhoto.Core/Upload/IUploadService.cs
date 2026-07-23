@@ -13,11 +13,15 @@ public interface IUploadService
     /// finalImagePath가 null/부재면 사진 스킵(FinalImageUrl=null), timelapsePath 동일. 최소 1개 필요(it7 F2).
     /// downloadPageUrl 조립(§3.5) 후 반환. 업로드 실패 시 예외(QR 노출 전 확인).
     /// </summary>
+    /// <param name="progress">
+    /// 업로드 진행 보고(선택, 하위호환). null이면 진행 보고 없이 기존 동작. (it11 #16 §3.16.2)
+    /// </param>
     Task<ResultSession> UploadResultAsync(
         string? finalImagePath,
         string? timelapsePath,
         int retentionHours,
         string hostingBaseUrl,
+        IProgress<UploadProgress>? progress = null,
         CancellationToken ct = default);
 
     /// <summary>만료(expiresAt &lt; now) 세션 정리: Storage results/ + Firestore 문서 삭제.</summary>

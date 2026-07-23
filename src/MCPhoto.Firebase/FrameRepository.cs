@@ -63,7 +63,7 @@ public sealed class FrameRepository : IFrameRepository
         await File.WriteAllBytesAsync(tmp, imageBytes, ct);
         try
         {
-            var token = await _client.UploadFileAsync(storagePath, tmp, "image/png", ct);
+            var token = await _client.UploadFileAsync(storagePath, tmp, "image/png", ct: ct);
             frame.ImageUrl = MCPhoto.Core.Upload.UploadContract.TokenDownloadUrl(_client.Bucket, storagePath, token);
         }
         finally { try { File.Delete(tmp); } catch { /* 무시 */ } }

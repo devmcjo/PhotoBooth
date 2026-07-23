@@ -19,9 +19,12 @@ public class UploadServiceTests
         public List<string> DeletedSessions { get; } = new();
         public List<ResultSession> ExpiredToReturn { get; } = new();
 
-        public Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, CancellationToken ct = default)
+        public Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, IProgress<double>? fileProgress = null, CancellationToken ct = default)
         {
             UploadedPaths.Add(storagePath);
+            // it11 #16: 파일 단위 진행률 시뮬레이트(0.5 → 1.0) — UploadService의 stage 합성 검증용.
+            fileProgress?.Report(0.5);
+            fileProgress?.Report(1.0);
             return Task.FromResult($"token-{UploadedPaths.Count}");
         }
 
@@ -113,6 +116,56 @@ public class UploadServiceTests
         {
             await Assert.ThrowsAsync<InvalidOperationException>(
                 () => svc.UploadResultAsync(final, null, 24, "https://x.web.app"));
+        }
+        finally { File.Delete(final); }
+    }
+
+    /// <summary>진행 보고를 순서대로 수집하는 동기 IProgress(테스트용).</summary>
+    private sealed class CollectingProgress : IProgress<UploadProgress>
+    {
+        public List<UploadProgress> Reports { get; } = new();
+        // UploadService의 stage 경계 보고는 동기 호출 → await 완료 시점에 전부 수집됨.
+        public void Report(UploadProgress value) => Reports.Add(value);
+    }
+
+    [Fact]
+    public async Task Upload_Reports_Stage_Progress_In_Order()
+    {
+        var mock = new MockFirebaseClient();
+        var svc = new UploadService(mock);
+        var final = MakeTempFile(".jpg");
+        var timelapse = MakeTempFile(".mp4");
+        var progress = new CollectingProgress();
+
+        try
+        {
+            await svc.UploadResultAsync(final, timelapse, 24, "https://mcphoto.web.app", progress);
+
+            // 동기 stage 경계 보고: Photo 0→1, Timelapse 0→1, Finalizing 1(순서 보존).
+            var stages = progress.Reports.Select(r => r.Stage).ToList();
+            Assert.Contains(UploadStage.Photo, stages);
+            Assert.Contains(UploadStage.Timelapse, stages);
+            Assert.Equal(UploadStage.Finalizing, stages[^1]); // 마무리는 항상 마지막
+
+            // 사진 단계 시작(0.0)이 타임랩스 단계 시작(0.0)보다 먼저(단계 순서 유지).
+            int firstPhoto = stages.IndexOf(UploadStage.Photo);
+            int firstTimelapse = stages.IndexOf(UploadStage.Timelapse);
+            Assert.True(firstPhoto < firstTimelapse);
+        }
+        finally { File.Delete(final); File.Delete(timelapse); }
+    }
+
+    [Fact]
+    public async Task Upload_Without_Progress_Still_Works()
+    {
+        // 하위호환: progress 미전달(4인자)도 정상 동작.
+        var mock = new MockFirebaseClient();
+        var svc = new UploadService(mock);
+        var final = MakeTempFile(".jpg");
+        try
+        {
+            var session = await svc.UploadResultAsync(final, null, 24, "https://x.web.app");
+            Assert.NotNull(session.FinalImageUrl);
         }
         finally { File.Delete(final); }
     }

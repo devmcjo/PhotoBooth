@@ -14,8 +14,13 @@ public interface IFirebaseClient
     /// <summary>Storage 버킷 이름(토큰 URL 조립용).</summary>
     string Bucket { get; }
 
-    /// <summary>파일 업로드. 다운로드 토큰(UUID)을 부여하고 그 토큰을 반환. (§4.3)</summary>
-    Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, CancellationToken ct = default);
+    /// <summary>
+    /// 파일 업로드. 다운로드 토큰(UUID)을 부여하고 그 토큰을 반환. (§4.3)
+    /// </summary>
+    /// <param name="fileProgress">
+    /// 파일 단위 진행 보고(선택, 하위호환). 0.0~1.0. null이면 진행 보고 없이 기존 동작. (it11 #16 §3.16.3)
+    /// </param>
+    Task<string> UploadFileAsync(string storagePath, string localFilePath, string contentType, IProgress<double>? fileProgress = null, CancellationToken ct = default);
 
     /// <summary>Storage 경로(폴더) 삭제.</summary>
     Task DeleteStoragePrefixAsync(string prefix, CancellationToken ct = default);
