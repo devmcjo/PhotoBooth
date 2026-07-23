@@ -44,6 +44,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTopBarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsHome))]
     private AppState _currentState = AppState.Home;
 
     [ObservableProperty]
@@ -67,8 +68,17 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>상단 바 표시 여부(촬영·QR 팝업에서 숨김).</summary>
     public bool IsTopBarVisible => SessionStateMachine.IsTopBarVisible(CurrentState);
 
+    /// <summary>현재 홈 화면인지(홈 버튼은 홈에서 숨김). (it9 후속)</summary>
+    public bool IsHome => CurrentState == AppState.Home;
+
     public SessionContext Session => _session;
     public ISettingsService Settings => _settings;
+
+    /// <summary>표시 모드 변경 즉시 반영 요청(설정 저장 시). MainWindow가 구독해 ApplyDisplaySettings 재실행. (it9 후속)</summary>
+    public event Action? DisplayModeApplyRequested;
+
+    /// <summary>설정 저장 후 표시 모드(전체화면/창모드)를 즉시 적용하도록 셸 창에 통지.</summary>
+    public void RequestApplyDisplayMode() => DisplayModeApplyRequested?.Invoke();
 
     public AppShellViewModel(
         IIdleWatchdog idle,

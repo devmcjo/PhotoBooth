@@ -27,7 +27,7 @@ public class FrameEditorViewModelTests : IDisposable
             Saved = frame;
             return Task.FromResult(frame);
         }
-        public Task DeleteAsync(string frameId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default) => Task.FromResult(true);
         public Task DeleteAllByUserAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
     }
 

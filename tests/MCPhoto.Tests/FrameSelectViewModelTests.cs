@@ -16,15 +16,20 @@ public class FrameSelectViewModelTests
     {
         public int DeleteCalls { get; private set; }
         public string? DeletedId { get; private set; }
+        /// <summary>서버에 실제로 존재하는 문서 id(있어야 DeleteAsync가 true 반환).</summary>
+        public HashSet<string> ExistingServerIds { get; } = new();
+        /// <summary>GetDefaultFramesAsync가 돌려줄 서버 기본 프레임(이름 매칭 폴백 테스트용).</summary>
+        public List<FrameTemplate> Defaults { get; } = new();
+
         public Task<IReadOnlyList<FrameTemplate>> GetDefaultFramesAsync(CancellationToken ct = default)
-            => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
+            => Task.FromResult((IReadOnlyList<FrameTemplate>)Defaults);
         public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
-        public Task DeleteAsync(string frameId, CancellationToken ct = default)
+        public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
         {
-            DeleteCalls++; DeletedId = frameId; return Task.CompletedTask;
+            DeleteCalls++; DeletedId = frameId; return Task.FromResult(ExistingServerIds.Remove(frameId));
         }
         public Task DeleteAllByUserAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
     }
@@ -146,5 +151,60 @@ public class FrameSelectViewModelTests
 
         Assert.Equal(1, local.DeleteLocalCalls);
         Assert.Equal(0, repo.DeleteCalls); // 체크 안 하면 DB 미삭제
+    }
+
+    [Fact]
+    public async Task Power_Server_Delete_Succeeds_When_Id_Matches()
+    {
+        var (vm, repo, _) = MakeVm(UserRole.Admin);
+        await vm.OnEnterAsync();
+        // 실 DB id(GUID, 접두 없음)를 담은 공용 프레임 — 서버에 존재.
+        var frame = new FrameTemplate { Id = "GUID-abc", Name = "공용프레임", ImageSize = new ImageSize { Width = 100, Height = 100 } };
+        repo.ExistingServerIds.Add("GUID-abc");
+        vm.Frames.Add(frame);
+
+        vm.RequestDeleteCommand.Execute(frame);
+        vm.DeleteAlsoServer = true;
+        await vm.ConfirmDeleteCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, repo.DeleteCalls);
+        Assert.Equal("GUID-abc", repo.DeletedId);
+        Assert.False(vm.DeleteNoticeIsError);           // 성공 안내
+    }
+
+    [Fact]
+    public async Task Power_Server_Delete_Falls_Back_To_Name_When_Id_Mismatched()
+    {
+        var (vm, repo, _) = MakeVm(UserRole.Admin);
+        await vm.OnEnterAsync();
+        // 로컬 id에 #dbid가 없어 local:name 으로 로드된 상황 — 직접 id로는 서버에서 못 찾음.
+        var frame = new FrameTemplate { Id = "local:myframe", Name = "myframe", ImageSize = new ImageSize { Width = 100, Height = 100 } };
+        // 서버에는 이름이 같은 실제 문서(GUID)가 존재.
+        repo.Defaults.Add(new FrameTemplate { Id = "GUID-xyz", Name = "myframe" });
+        repo.ExistingServerIds.Add("GUID-xyz");
+        vm.Frames.Add(frame);
+
+        vm.RequestDeleteCommand.Execute(frame);
+        vm.DeleteAlsoServer = true;
+        await vm.ConfirmDeleteCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, repo.DeleteCalls);              // 1) local id 실패 → 2) 이름 매칭 재삭제
+        Assert.Equal("GUID-xyz", repo.DeletedId);       // 이름으로 찾은 실제 문서 삭제
+        Assert.False(vm.DeleteNoticeIsError);           // 최종 성공
+    }
+
+    [Fact]
+    public async Task Power_Server_Delete_Reports_Error_When_Not_Found()
+    {
+        var (vm, repo, _) = MakeVm(UserRole.Admin);
+        await vm.OnEnterAsync();
+        var frame = LocalFrame(); // 서버에도 없고 이름 매칭도 없음
+        vm.Frames.Add(frame);
+
+        vm.RequestDeleteCommand.Execute(frame);
+        vm.DeleteAlsoServer = true;
+        await vm.ConfirmDeleteCommand.ExecuteAsync(null);
+
+        Assert.True(vm.DeleteNoticeIsError);            // 성공 오인 금지: 실패 안내
     }
 }

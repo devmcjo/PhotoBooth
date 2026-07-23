@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MCPhoto.App"
         mc:Ignorable="d"
-        Title="MC포토" Height="720" Width="1280"
+        Title="{DynamicResource Branding.AppName}" Height="720" Width="1280"
         MinHeight="720" MinWidth="1280"
         Background="{StaticResource Brush.Bg}"
         PreviewMouseDown="OnAnyUserActivity"
@@ -26,12 +26,20 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- 좌: 로그인/계정 버튼 -->
-            <Button Grid.Column="0" Margin="16,8"
-                    Style="{StaticResource Button.Icon.Pill}"
-                    Command="{Binding OpenAccountCommand}"
-                    Content="{Binding AccountLabel}"
-                    AutomationProperties.Name="로그인 또는 계정" />
+            <!-- 좌: 홈 + 로그인/계정 버튼. 홈 버튼은 홈 화면에선 숨김. (it9 후속) -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Margin="16,8,0,8"
+                        Style="{StaticResource Button.Icon.Pill}"
+                        Command="{Binding GoHomeCommand}"
+                        Content="⌂ 홈"
+                        Visibility="{Binding IsHome, Converter={StaticResource InverseBoolToVis}}"
+                        AutomationProperties.Name="홈으로" />
+                <Button Margin="8,8,16,8"
+                        Style="{StaticResource Button.Icon.Pill}"
+                        Command="{Binding OpenAccountCommand}"
+                        Content="{Binding AccountLabel}"
+                        AutomationProperties.Name="로그인 또는 계정" />
+            </StackPanel>
 
             <!-- 우: 설정 버튼(gear 글리프) -->
             <Button Grid.Column="2" Margin="16,8"

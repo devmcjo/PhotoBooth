@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:MCPhoto.App"
              xmlns:conv="clr-namespace:MCPhoto.App.Converters"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:vm="clr-namespace:MCPhoto.App.ViewModels"
              xmlns:views="clr-namespace:MCPhoto.App.Views">
     <Application.Resources>
@@ -11,6 +12,9 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- it9 C3: 앱 표시명 기본값. App.OnStartup에서 branding.ini 값으로 덮어씀(DynamicResource). -->
+            <sys:String x:Key="Branding.AppName">MC포토</sys:String>
 
             <!-- 공용 컨버터 -->
             <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
@@ -24,6 +28,7 @@
         <conv:AspectRatioToHeightConverter x:Key="AspectRatioToHeight" />
         <conv:StartsWithToVisibilityConverter x:Key="StartsWithToVis" />
         <conv:AllTrueToVisibilityConverter x:Key="AllTrueToVis" />
+        <conv:FrameDeleteVisibilityConverter x:Key="FrameDeleteVis" />
 
         <!-- VM → View DataTemplate 매핑(상태머신 화면 스왑) -->
         <DataTemplate DataType="{x:Type vm:HomeViewModel}">

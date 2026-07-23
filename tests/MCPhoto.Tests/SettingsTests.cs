@@ -31,8 +31,8 @@ public class SettingsTests : IDisposable
         Assert.Equal(OutputFormat.Jpg, s.OutputFormat);
         Assert.Equal(24, s.RetentionHours);
         Assert.True(s.EnableQrDelivery);
-        Assert.False(s.SaveLocalCopy);
-        Assert.Equal(DisplayMode.Fullscreen, s.DisplayMode);
+        Assert.True(s.SaveLocalCopy);                        // it9 후속: 기본 on
+        Assert.Equal(DisplayMode.Windowed, s.DisplayMode);   // it9 후속: 개발 기본 창모드
         Assert.Equal(0, s.CameraDevice);
     }
 

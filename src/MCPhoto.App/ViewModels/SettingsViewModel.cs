@@ -1,6 +1,10 @@
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MCPhoto.App.Services;
+using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
 using Microsoft.Extensions.Logging;
@@ -15,6 +19,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly AppShellViewModel _shell;
     private readonly ISettingsService _settings;
+    private readonly ICameraService _camera;
+    private readonly ICameraTestDialogService _cameraTestDialog;
     private readonly ILogger<SettingsViewModel>? _logger;
 
     private DispatcherTimer? _noticeTimer;
@@ -42,26 +48,77 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _savedNotice = string.Empty;
     [ObservableProperty] private bool _savedNoticeIsError; // 성공=false(민트/성공색), 실패=true(로즈/danger)
 
+    // ── it9 C1: 카메라 장치(ComboBox) ──
+    /// <summary>연결된 카메라 목록(설정 진입 시 백그라운드 열거). 빈 목록이면 ComboBox Disable.</summary>
+    public ObservableCollection<CameraDevice> CameraDevices { get; } = new();
+    /// <summary>카메라 연결 여부(ComboBox·테스트 버튼 IsEnabled). 빈 목록=false.</summary>
+    [ObservableProperty] private bool _hasCamera;
+    /// <summary>카메라 열거 진행 중(로딩 표시·재열거 버튼 비활성).</summary>
+    [ObservableProperty] private bool _isEnumeratingCameras;
+
     /// <summary>컷수 옵션(세그먼트 바인딩).</summary>
     public IReadOnlyList<int> CutCountOptions { get; } = AppSettings.AllowedCutCounts;
     /// <summary>카운트다운 옵션.</summary>
     public IReadOnlyList<int> CountdownOptions { get; } = AppSettings.AllowedCountdownSecs;
     /// <summary>출력 포맷 옵션.</summary>
     public IReadOnlyList<OutputFormat> OutputFormatOptions { get; } = new[] { OutputFormat.Jpg, OutputFormat.Png };
-    /// <summary>표시 모드 옵션.</summary>
-    public IReadOnlyList<DisplayMode> DisplayModeOptions { get; } = new[] { DisplayMode.Fullscreen, DisplayMode.Windowed };
+    /// <summary>표시 모드 옵션(한글 라벨). 값=DisplayMode, 표시=전체화면/창모드. (it9 후속)</summary>
+    public IReadOnlyList<DisplayModeOption> DisplayModeOptions { get; } = new[]
+    {
+        new DisplayModeOption(DisplayMode.Fullscreen, "전체화면"),
+        new DisplayModeOption(DisplayMode.Windowed, "창모드"),
+    };
 
-    public SettingsViewModel(AppShellViewModel shell, ISettingsService settings, ILogger<SettingsViewModel>? logger = null)
+    public SettingsViewModel(AppShellViewModel shell, ISettingsService settings,
+        ICameraService camera, ICameraTestDialogService cameraTestDialog,
+        ILogger<SettingsViewModel>? logger = null)
     {
         _shell = shell;
         _settings = settings;
+        _camera = camera;
+        _cameraTestDialog = cameraTestDialog;
         _logger = logger;
     }
 
-    public override Task OnEnterAsync()
+    public override async Task OnEnterAsync()
     {
         LoadSettings();
-        return Task.CompletedTask;
+        await RefreshCamerasAsync();
+    }
+
+    /// <summary>연결된 카메라 열거(백그라운드 — UI 블로킹 방지). 저장 인덱스가 없으면 첫 장치로 보정. (it9 §2.1)</summary>
+    [RelayCommand]
+    private async Task RefreshCamerasAsync()
+    {
+        if (IsEnumeratingCameras) return;
+        IsEnumeratingCameras = true;
+        try
+        {
+            // EnumerateDevices()는 장치 0~7 open/close(수백 ms~초) → Task.Run 백그라운드.
+            var devices = await Task.Run(() => _camera.EnumerateDevices());
+            CameraDevices.Clear();
+            foreach (var d in devices) CameraDevices.Add(d);
+            HasCamera = CameraDevices.Count > 0;
+
+            // 저장된 인덱스가 목록에 없으면 첫 장치로 보정(연결분 있을 때만). 없으면 값 유지(재연결 대비).
+            if (HasCamera && CameraDevices.All(d => d.Index != CameraDevice))
+                CameraDevice = CameraDevices[0].Index;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "카메라 열거 실패");
+            HasCamera = false;
+        }
+        finally { IsEnumeratingCameras = false; }
+    }
+
+    /// <summary>선택된 카메라로 실촬영 동일 테스트 모달 열기(저장 없음). (it9 §2.2 C1)</summary>
+    [RelayCommand]
+    private async Task OpenCameraTest()
+    {
+        if (!HasCamera) return;
+        try { await _cameraTestDialog.ShowAsync(CameraDevice); }
+        catch (Exception ex) { _logger?.LogError(ex, "카메라 테스트 모달 오류"); }
     }
 
     private void LoadSettings()
@@ -157,6 +214,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             ShowNotice("저장되었습니다.", isError: false);
             _logger?.LogInformation("AppSettings 저장 성공(설정 페이지)");
+            // 표시 모드(전체화면/창모드)를 재시작 없이 즉시 반영. (it9 후속)
+            _shell.RequestApplyDisplayMode();
         }
         else
         {
@@ -184,4 +243,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         };
         _noticeTimer.Start();
     }
+}
+
+/// <summary>표시 모드 콤보 항목(값 + 한글 라벨). ToString=라벨(닫힌 박스 폴백 대비). (it9 후속)</summary>
+public sealed record DisplayModeOption(DisplayMode Value, string Label)
+{
+    public override string ToString() => Label;
 }

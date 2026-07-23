@@ -105,22 +105,50 @@
                             <!-- ── 우열: 장치·표시 (좁은 폭에선 code-behind가 Column0/Row1로 재배치) ── -->
                             <StackPanel x:Name="RightCol" Grid.Column="2" Grid.Row="0">
                                 <TextBlock Text="장치·표시" Style="{StaticResource GroupTitle}" />
+                                <!-- it9 C1: 카메라 선택 ComboBox + 테스트/다시검색. 목록 비면 Disable + 안내. -->
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="카메라 장치 인덱스" Style="{StaticResource RowLabel}" />
-                                    <TextBox Grid.Column="1" HorizontalAlignment="Right" Width="140" Text="{Binding CameraDevice}" />
+                                    <TextBlock Grid.Column="0" Text="카메라 장치" Style="{StaticResource RowLabel}" />
+                                    <!-- 콤보는 남는 폭을 채우고(*), ↻·테스트는 컴팩트(Auto). (it9 후속 조정) -->
+                                    <Grid Grid.Column="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Grid.Column="0" VerticalAlignment="Center" MinWidth="200"
+                                                  ItemsSource="{Binding CameraDevices}"
+                                                  DisplayMemberPath="Name" SelectedValuePath="Index"
+                                                  SelectedValue="{Binding CameraDevice}"
+                                                  IsEnabled="{Binding HasCamera}" />
+                                        <Button Grid.Column="1" Content="↻" ToolTip="카메라 다시 검색"
+                                                Style="{StaticResource Button.Secondary}" MinWidth="0" Width="44" Padding="0"
+                                                Margin="8,0,0,0" Command="{Binding RefreshCamerasCommand}"
+                                                IsEnabled="{Binding IsEnumeratingCameras, Converter={StaticResource InverseBool}}" />
+                                        <Button Grid.Column="2" Content="테스트"
+                                                Style="{StaticResource Button.Secondary}" MinWidth="0" Padding="16,0"
+                                                Margin="8,0,0,0" Command="{Binding OpenCameraTestCommand}"
+                                                IsEnabled="{Binding HasCamera}" />
+                                    </Grid>
                                 </Grid>
+                                <!-- 카메라 없음 안내(HasCamera=false일 때만) -->
+                                <TextBlock Text="연결된 카메라가 없습니다. 카메라를 연결한 뒤 ↻ 다시 검색을 눌러 주세요."
+                                           Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,8"
+                                           Visibility="{Binding HasCamera, Converter={StaticResource InverseBoolToVis}}" />
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="표시 모드" Style="{StaticResource RowLabel}" />
-                                    <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="160"
-                                              ItemsSource="{Binding DisplayModeOptions}" SelectedItem="{Binding DisplayMode}" />
+                                    <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="220"
+                                              ItemsSource="{Binding DisplayModeOptions}"
+                                              DisplayMemberPath="Label" SelectedValuePath="Value"
+                                              SelectedValue="{Binding DisplayMode}" />
                                 </Grid>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
@@ -251,15 +279,21 @@
         <Border Grid.Row="1" Background="{StaticResource Brush.Bg}" BorderThickness="0,1,0,0"
                 BorderBrush="{StaticResource Brush.Divider}" Effect="{StaticResource Shadow.Sm}"
                 Padding="40,12">
+            <!-- 2열 분리(*/Auto): 좌=저장+토스트, 우=닫기. 어떤 폭에서도 겹치지 않음. (it9 §3 C2) -->
             <Grid MaxWidth="1000" HorizontalAlignment="Center">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />     <!-- 좌: 저장 + 토스트 -->
+                    <ColumnDefinition Width="Auto" />  <!-- 우: 닫기 -->
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,12,0">
                     <Button Content="저장" Style="{StaticResource Button.Primary}"
                             Command="{Binding SaveSettingsCommand}" Margin="0,0,12,0" />
-                    <!-- 성공=Success(민트 계열), 실패=Danger(로즈 계열) 색 분기(it3 §3) -->
+                    <!-- 성공=Success(민트 계열), 실패=Danger(로즈 계열) 색 분기(it3 §3). 좌 열 내에서만 잘림(닫기 침범 불가). -->
                     <TextBlock Text="{Binding SavedNotice}" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{Binding SavedNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
                 </StackPanel>
-                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                <Button Grid.Column="1" Content="닫기" Style="{StaticResource Button.Ghost}"
                         Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
             </Grid>
         </Border>

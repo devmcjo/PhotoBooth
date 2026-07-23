@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.Services;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
+using Microsoft.Extensions.Logging;
 
 namespace MCPhoto.App.ViewModels;
 
@@ -15,6 +17,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     private readonly FrameCatalogService _catalog;
     private readonly ILocalFrameStore _localStore;
     private readonly IFrameRepository _repository;
+    private readonly ILogger<FrameSelectViewModel>? _logger;
 
     public ObservableCollection<FrameTemplate> Frames { get; } = new();
 
@@ -29,13 +32,19 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     [ObservableProperty] private FrameTemplate? _frameToDelete;
     [ObservableProperty] private bool _deleteAlsoServer;  // 파워만 노출·유효
 
+    // 삭제 결과 안내(서버 삭제 성공/실패/미발견). 성공 오인 방지.
+    [ObservableProperty] private string _deleteNotice = string.Empty;
+    [ObservableProperty] private bool _deleteNoticeIsError;
+
     public FrameSelectViewModel(AppShellViewModel shell, FrameCatalogService catalog,
-        ILocalFrameStore localStore, IFrameRepository repository)
+        ILocalFrameStore localStore, IFrameRepository repository,
+        ILogger<FrameSelectViewModel>? logger = null)
     {
         _shell = shell;
         _catalog = catalog;
         _localStore = localStore;
         _repository = repository;
+        _logger = logger;
     }
 
     /// <summary>
@@ -82,7 +91,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         IsDeleteConfirmVisible = true;
     }
 
-    /// <summary>[확인]: 로컬 삭제 항상, "서버에서도 제거" 체크(파워) 시 DB 삭제.</summary>
+    /// <summary>[확인]: 로컬 삭제 항상, "서버에서도 제거" 체크(파워) 시 DB 삭제(결과를 명확히 안내).</summary>
     [RelayCommand]
     private async Task ConfirmDelete()
     {
@@ -90,21 +99,63 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         if (frame is null) { CancelDelete(); return; }
 
         _localStore.DeleteLocal(frame);                 // 로컬 항상
-
-        if (DeleteAlsoServer && IsPower)
-        {
-            // 파워 캐시/생성 프레임은 Id에 실제 DB 문서 id를 보존(CacheFromDb/SaveLocal이 .slots #dbid로 기록).
-            // 방어적으로 local: 접두가 있으면 제거(로컬 전용 프레임엔 서버 문서 없어 no-op).
-            var serverId = frame.Id.StartsWith("local:", StringComparison.Ordinal)
-                ? frame.Id.Substring("local:".Length)
-                : frame.Id;
-            try { await _repository.DeleteAsync(serverId); }
-            catch { /* 서버 삭제 실패는 무시(로컬은 이미 제거) */ }
-        }
+        var alsoServer = DeleteAlsoServer && IsPower;   // 팝업이 곧 닫히며 값이 리셋되므로 미리 확정
+        DeleteNotice = string.Empty;
 
         Frames.Remove(frame);
         if (SelectedFrame == frame) SelectedFrame = Frames.FirstOrDefault();
         CancelDelete();
+
+        if (alsoServer)
+            await DeleteFromServerAsync(frame);
+    }
+
+    /// <summary>
+    /// 서버(DB+Storage) 삭제. 저장된 서버 id(#dbid=GUID)로 삭제 시도 →
+    /// 없으면(로컬 id 불일치·#dbid 누락) 이름으로 서버 기본 프레임을 재탐색해 삭제. 결과를 사용자에게 안내(성공 오인 금지).
+    /// </summary>
+    private async Task DeleteFromServerAsync(FrameTemplate frame)
+    {
+        // local: 접두는 로컬 전용 프레임(서버 문서 없음). 그 외는 실 DB 문서 id(GUID)를 담고 있음.
+        var serverId = frame.Id.StartsWith("local:", StringComparison.Ordinal)
+            ? frame.Id.Substring("local:".Length)
+            : frame.Id;
+        try
+        {
+            bool deleted = await _repository.DeleteAsync(serverId);
+
+            // id로 못 찾으면(#dbid 누락/불일치) 이름으로 서버 기본 프레임을 찾아 삭제(파워 공용 프레임 대비).
+            if (!deleted)
+            {
+                var dbFrames = await _repository.GetDefaultFramesAsync();
+                var match = dbFrames.FirstOrDefault(f =>
+                    string.Equals(f.Name, frame.Name, StringComparison.Ordinal) && !string.IsNullOrEmpty(f.Id));
+                if (match is not null)
+                {
+                    _logger?.LogInformation("서버 삭제 id 불일치 → 이름 매칭 재삭제: {Name} (id={Id})", frame.Name, match.Id);
+                    deleted = await _repository.DeleteAsync(match.Id);
+                }
+            }
+
+            if (deleted)
+            {
+                DeleteNotice = "서버에서도 삭제되었습니다.";
+                DeleteNoticeIsError = false;
+            }
+            else
+            {
+                DeleteNotice = $"로컬은 삭제했지만 서버에서 '{frame.Name}' 문서를 찾지 못했습니다.";
+                DeleteNoticeIsError = true;
+                _logger?.LogWarning("서버 삭제 실패: 문서 미발견 name={Name} triedId={Id}", frame.Name, serverId);
+            }
+        }
+        catch (Exception ex)
+        {
+            // 성공 오인 금지: 서버 삭제 실패를 사용자에게 노출(미초기화·권한 등).
+            DeleteNotice = $"서버 삭제 실패: {ex.Message}";
+            DeleteNoticeIsError = true;
+            _logger?.LogError(ex, "프레임 서버 삭제 실패 id={Id}", serverId);
+        }
     }
 
     /// <summary>[취소]: 팝업 닫기.</summary>

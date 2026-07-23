@@ -33,12 +33,17 @@ public static class StillImageConverter
         return img;
     }
 
-    /// <summary>이미지 파일 경로 → BitmapImage(합성 결과 미리보기).</summary>
+    /// <summary>
+    /// 이미지 파일 경로 → BitmapImage(합성 결과 미리보기).
+    /// IgnoreImageCache: 같은 경로(final.jpg)로 필터 재합성 시 WPF의 URI 캐시가 이전 이미지를 반환하는 문제 방지
+    /// — 매번 디스크에서 재디코딩해 프리뷰가 즉시 갱신되도록. (it9 후속)
+    /// </summary>
     public static BitmapImage FromFile(string path)
     {
         var img = new BitmapImage();
         img.BeginInit();
         img.CacheOption = BitmapCacheOption.OnLoad;
+        img.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
         img.UriSource = new Uri(path, UriKind.Absolute);
         img.EndInit();
         img.Freeze();

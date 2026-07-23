@@ -135,6 +135,31 @@ public sealed class StartsWithToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
+/// 프레임 삭제 ✕ 노출 판정. values=[CanDeleteFrames(bool), IsPower(bool), Id(string)]. (it9 후속 — A3 정정)
+/// 규칙: 비로그인/게스트=미노출, 번들·fallback·빈 Id=삭제 불가.
+/// user 로컬(local: 접두)=본인 것이라 로그인 사용자면 노출, 공용/DB 프레임(접두 없음)=파워만 노출.
+/// </summary>
+public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool canDelete = values.Length > 0 && values[0] is true;
+        bool isPower = values.Length > 1 && values[1] is true;
+        var id = values.Length > 2 ? values[2] as string : null;
+
+        if (!canDelete || string.IsNullOrEmpty(id)) return Visibility.Collapsed;
+        if (id.StartsWith("bundle:", StringComparison.Ordinal)
+            || id.StartsWith("fallback", StringComparison.Ordinal)) return Visibility.Collapsed;
+
+        if (id.StartsWith("local:", StringComparison.Ordinal)) return Visibility.Visible; // 본인 로컬
+        return isPower ? Visibility.Visible : Visibility.Collapsed;                        // 공용/DB=파워만
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// 여러 입력이 모두 "참"(bool true 또는 Visibility.Visible)일 때만 Visible, 아니면 Collapsed. (it8 A3 카드 X 조건 결합)
 /// </summary>
 public sealed class AllTrueToVisibilityConverter : IMultiValueConverter

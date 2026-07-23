@@ -58,7 +58,7 @@
                                        FontSize="14" FontWeight="SemiBold"
                                        VerticalAlignment="Center" HorizontalAlignment="Center" />
                         </Border>
-                        <!-- A3: 삭제 X (로그인 관리자 + 로컬 프레임만). 게스트·번들 미노출. -->
+                        <!-- A3(정정): 삭제 ✕. 로그인 사용자는 본인 로컬 프레임, 파워(manager/admin)는 공용·DB 프레임도. 번들/fallback·게스트 미노출. -->
                         <Button Content="✕" FontSize="14" Width="28" Height="28"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
                                 Style="{StaticResource Button.Icon}"
@@ -67,9 +67,10 @@
                                 CommandParameter="{Binding}"
                                 AutomationProperties.Name="프레임 삭제">
                             <Button.Visibility>
-                                <MultiBinding Converter="{StaticResource AllTrueToVis}">
+                                <MultiBinding Converter="{StaticResource FrameDeleteVis}">
                                     <Binding Path="DataContext.CanDeleteFrames" RelativeSource="{RelativeSource AncestorType=ListBox}" />
-                                    <Binding Path="Id" Converter="{StaticResource StartsWithToVis}" ConverterParameter="local:" />
+                                    <Binding Path="DataContext.IsPower" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                    <Binding Path="Id" />
                                 </MultiBinding>
                             </Button.Visibility>
                         </Button>
@@ -103,14 +104,20 @@
             </Border>
         </Grid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,32">
-            <Button Content="프레임 만들기" Command="{Binding CreateFrameCommand}"
-                    Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}"
-                    Style="{StaticResource Button.Secondary}" Margin="8,0" />
-            <Button Content="다음" Command="{Binding NextCommand}"
-                    Style="{StaticResource Button.Primary}" Padding="48,0" Margin="8,0" />
-            <Button Content="취소" Command="{Binding CancelCommand}"
-                    Style="{StaticResource Button.Ghost}" Margin="8,0" />
+        <StackPanel Grid.Row="2" Margin="0,12,0,20">
+            <!-- 삭제 결과 안내(서버 삭제 성공/실패/미발견). 성공=성공색, 실패=danger색. -->
+            <TextBlock Text="{Binding DeleteNotice}" HorizontalAlignment="Center" Margin="0,0,0,8"
+                       Style="{StaticResource Text.Body}" TextWrapping="Wrap" TextAlignment="Center"
+                       Foreground="{Binding DeleteNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="프레임 만들기" Command="{Binding CreateFrameCommand}"
+                        Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}"
+                        Style="{StaticResource Button.Secondary}" Margin="8,0" />
+                <Button Content="다음" Command="{Binding NextCommand}"
+                        Style="{StaticResource Button.Primary}" Padding="48,0" Margin="8,0" />
+                <Button Content="취소" Command="{Binding CancelCommand}"
+                        Style="{StaticResource Button.Ghost}" Margin="8,0" />
+            </StackPanel>
         </StackPanel>
     </Grid>
 </UserControl>

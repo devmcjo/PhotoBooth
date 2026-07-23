@@ -81,15 +81,15 @@ public sealed class AppSettings
     public bool FilterBeauty { get; set; } = true;
 
     // ── 로컬 저장 (PRD §F4, §9 #34) ──
-    /// <summary>결과물 로컬 저장 on/off. 기본 off. QR 전송과 독립.</summary>
-    public bool SaveLocalCopy { get; set; }
+    /// <summary>결과물 로컬 저장 on/off. 기본 on. QR 전송과 독립.</summary>
+    public bool SaveLocalCopy { get; set; } = true;
 
     /// <summary>로컬 저장 위치. 기본 {실행경로}\result\. 빈 문자열이면 런타임에 기본값 산출.</summary>
     public string LocalSavePath { get; set; } = string.Empty;
 
     // ── 표시 (PRD §9 #23) ──
-    /// <summary>표시 모드. 기본 fullscreen.</summary>
-    public DisplayMode DisplayMode { get; set; } = DisplayMode.Fullscreen;
+    /// <summary>표시 모드. 개발 기간 기본 창모드(배포 시 전체화면으로 되돌릴 것). (it9 후속)</summary>
+    public DisplayMode DisplayMode { get; set; } = DisplayMode.Windowed;
 
     /// <summary>창모드 마지막 크기·위치.</summary>
     public WindowBounds WindowBounds { get; set; } = new();
@@ -99,14 +99,15 @@ public sealed class AppSettings
     public int CameraDevice { get; set; }
 
     // ── 웹 연동 (firebase-contract §3.5) ──
-    /// <summary>다운로드 페이지 Hosting base URL(트레일링 슬래시 제외). downloadPageUrl 조립 기준.</summary>
-    public string HostingBaseUrl { get; set; } = string.Empty;
+    /// <summary>다운로드 페이지 Hosting base URL(트레일링 슬래시 제외). downloadPageUrl 조립 기준. 개발 기본값 박음(it9 후속).</summary>
+    public string HostingBaseUrl { get; set; } = "https://mcphoto-955fb.web.app";
 
     /// <summary>
     /// Storage 버킷 이름. 빈 값이면 서비스 계정 project_id에서 유도.
     /// 신규 프로젝트는 보통 {project}.firebasestorage.app, 레거시는 {project}.appspot.com — 프로젝트별로 다르므로 명시 권장.
+    /// 개발 기본값 박음(it9 후속).
     /// </summary>
-    public string StorageBucket { get; set; } = string.Empty;
+    public string StorageBucket { get; set; } = "mcphoto-955fb.firebasestorage.app";
 
     /// <summary>
     /// 값 범위·옵션 제약을 강제(로드/저장 시 호출). 잘못된 값은 가장 가까운 허용값으로 보정.

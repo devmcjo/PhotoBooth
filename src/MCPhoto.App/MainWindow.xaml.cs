@@ -20,6 +20,8 @@ public partial class MainWindow : Window
 
         DataContext = _shell;
         ApplyDisplaySettings();
+        // 설정에서 표시 모드 변경·저장 시 재시작 없이 즉시 반영. (it9 후속)
+        _shell.DisplayModeApplyRequested += ApplyDisplaySettings;
         Loaded += (_, _) => _shell.Startup();
     }
 

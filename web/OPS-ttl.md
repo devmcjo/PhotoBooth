@@ -3,7 +3,8 @@
 | 항목 | 값 |
 |------|-----|
 | 대상 | Firebase Storage `results/` 결과물 + `resultSessions` Firestore 문서의 만료 정리 |
-| 결정 | 스케줄 Cloud Functions **미채택**(D-2). WPF 직접 삭제(1차) + GCS Lifecycle(안전망) + Firestore 네이티브 TTL(선택 권장) |
+| 결정 | **GCS Lifecycle(파일) + Firestore 네이티브 TTL(문서) 둘 다 채택**(2026-07 확정). 스케줄 Cloud Functions 미채택(D-2). WPF 직접 삭제(`PurgeExpiredAsync`)는 코드에 존재하나 미사용(인프라로 대체). |
+| 이 프로젝트 | project=`mcphoto-955fb`, bucket=`mcphoto-955fb.firebasestorage.app`, age=3일, 프리픽스=`results/` |
 | 근거 | `web-architecture.md` §7, `firebase-contract.md` §6 |
 | 웹 코드 영향 | **없음** — 웹은 삭제를 수행하지 않는다. 만료/부재를 판정해 안내만 한다(§3.3/§3.4). |
 
@@ -15,10 +16,12 @@
 
 | 방식 | 주체 | 채택 | 대상 |
 |------|------|------|------|
-| WPF 앱 직접 삭제 | WPF | **1차**(계약 확정) | `results/{sid}/` 파일 + `resultSessions/{sid}` 문서 함께 |
-| GCS Lifecycle 규칙 | 인프라(자동) | **안전망**(계약 확정) | `results/` 프리픽스 파일만(age 기반) |
-| Firestore 네이티브 TTL | 인프라 | **선택 권장** | `resultSessions` 만료 문서(고아 문서 축소) |
+| GCS Lifecycle 규칙 | 인프라(자동) | **채택**(파일 삭제 주력) | `results/` 프리픽스 파일만(age 3일 기반) |
+| Firestore 네이티브 TTL | 인프라 | **채택**(문서 삭제) | `resultSessions` 만료 문서(`expiresAt` 기준) |
+| WPF 앱 직접 삭제 | WPF | 코드 존재·**미사용**(인프라로 대체) | `results/{sid}/` 파일 + `resultSessions/{sid}` 문서 함께 |
 | 스케줄 Cloud Functions | 웹/인프라 | **미채택**(D-2) | — |
+
+> **파일(GCS Lifecycle)과 문서(Firestore TTL)는 서로 다른 서비스라 각각 설정해야 한다.** Lifecycle은 Storage 파일만, TTL은 Firestore 문서만 지운다. 둘을 함께 켜야 파일+문서가 모두 정리된다.
 
 ---
 
@@ -35,11 +38,14 @@
 `results/` 프리픽스에만 age 기반 Delete 규칙을 건다. `retentionHours` 최댓값(72h = 3일)보다 여유를 둔 **age 3일** 예시를 `lifecycle.json`에 제공한다.
 
 ```bash
-# 현재 버킷의 Lifecycle 설정 조회
-gsutil lifecycle get gs://{BUCKET}
+# (이 프로젝트) 현재 Lifecycle 설정 조회
+gsutil lifecycle get gs://mcphoto-955fb.firebasestorage.app
 
-# lifecycle.json 을 적용 (web/lifecycle.json)
-gsutil lifecycle set lifecycle.json gs://{BUCKET}
+# web/lifecycle.json 적용(age 3일, results/ 한정 Delete)
+gsutil lifecycle set web/lifecycle.json gs://mcphoto-955fb.firebasestorage.app
+
+# gsutil 대신 최신 gcloud CLI를 쓴다면:
+gcloud storage buckets update gs://mcphoto-955fb.firebasestorage.app --lifecycle-file=web/lifecycle.json
 ```
 
 - `{BUCKET}`: 대상 Storage 버킷 이름(예: `{projectId}.firebasestorage.app`).
@@ -51,15 +57,15 @@ Google Cloud Console > Cloud Storage > 버킷 선택 > "수명 주기" 탭 > 규
 
 ---
 
-## 3. Firestore 네이티브 TTL (권장, 선택)
+## 3. Firestore 네이티브 TTL (채택)
 
-WPF 직접 삭제가 정상 동작하면 고아 문서가 없다. 그러나 WPF 가 못 지운 경우 GCS Lifecycle 이 **파일만** 지워 문서 고아가 남을 수 있다. 이를 완화하려면 `resultSessions.expiresAt` 필드에 Firestore 네이티브 TTL 정책을 설정한다.
+GCS Lifecycle 은 **파일만** 지우므로 Firestore `resultSessions` 문서는 그대로 남는다(고아 문서). 이를 없애기 위해 `resultSessions.expiresAt` 필드에 Firestore 네이티브 TTL 정책을 설정한다(문서 자동 삭제).
 
 ```bash
 gcloud firestore fields ttls update expiresAt \
   --collection-group=resultSessions \
   --enable-ttl \
-  --project={PROJECT_ID}
+  --project=mcphoto-955fb
 ```
 
 - 무료·서버리스·Functions 불요. 만료 문서를 자동 삭제해 고아 문서를 줄인다.

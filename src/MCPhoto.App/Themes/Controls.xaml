@@ -401,9 +401,11 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <!-- 선택 값 -->
+                                            <!-- 선택 값. ContentTemplate에 SelectionBoxItemTemplate 연결 —
+                                                 DisplayMemberPath/ItemTemplate가 닫힌 박스에도 적용되도록(미설정 콤보는 null→ToString 폴백, 무영향). (it9 후속 버그수정) -->
                                             <ContentPresenter Grid.Column="0" Margin="12,0,0,0"
                                                               Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                              ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                                               VerticalAlignment="Center" HorizontalAlignment="Left" />
                                             <!-- chevron ▾ -->
                                             <Path x:Name="Chevron" Grid.Column="1" Margin="8,0,14,0"

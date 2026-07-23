@@ -61,6 +61,14 @@ public partial class App : Application
 
         base.OnStartup(e);
 
+        // it9 C3: 브랜딩(앱 표시명) 로드 후 리소스 주입 — 창 생성 전이어야 DynamicResource가 최신값 반영.
+        try
+        {
+            var branding = _host.Services.GetRequiredService<MCPhoto.Core.Branding.IBrandingService>();
+            Resources["Branding.AppName"] = branding.AppName;
+        }
+        catch (Exception ex) { Log.Warning(ex, "브랜딩 리소스 주입 실패(기본값 유지)"); }
+
         // 시드 계정 보장(Firebase 초기화 시). 오프라인이면 로그인 시 인메모리 시드 처리.
         _ = EnsureSeedAsync();
 

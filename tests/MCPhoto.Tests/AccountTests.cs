@@ -21,7 +21,7 @@ public class AccountTests
             => Task.FromResult<IReadOnlyList<FrameTemplate>>(Array.Empty<FrameTemplate>());
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
-        public Task DeleteAsync(string frameId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default) => Task.FromResult(true);
         public Task DeleteAllByUserAsync(string userId, CancellationToken ct = default)
         {
             CascadeDeleted.Add(userId);

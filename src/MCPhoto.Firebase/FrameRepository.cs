@@ -73,23 +73,25 @@ public sealed class FrameRepository : IFrameRepository
         return frame;
     }
 
-    public async Task DeleteAsync(string frameId, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
     {
         EnsureInit();
         var docRef = Db!.Collection(Collection).Document(frameId);
 
-        // 문서에서 owner를 읽어 Storage 경로 재구성(저장 규약 frames/{owner}/{frameId}.png).
-        // 문서 삭제 전에 읽어야 경로를 알 수 있다(고아 이미지 방지).
+        // 문서 존재 확인(Firestore는 없는 문서 삭제 시 예외 없이 no-op이므로, 성공 오인 방지용으로 먼저 확인).
+        var snap = await docRef.GetSnapshotAsync(ct);
+        if (!snap.Exists)
+        {
+            _logger?.LogWarning("프레임 서버 삭제: 문서 없음 id={Id} (로컬 id와 서버 문서 id 불일치 가능)", frameId);
+            return false;
+        }
+
+        // owner를 읽어 Storage 경로 재구성(저장 규약 frames/{owner}/{frameId}.png). 문서 삭제 전에 읽어야 경로 확인(고아 이미지 방지).
         try
         {
-            var snap = await docRef.GetSnapshotAsync(ct);
-            if (snap.Exists)
-            {
-                var dto = snap.ConvertTo<FrameTemplateDoc>();
-                var owner = string.IsNullOrEmpty(dto.UserId) ? "default" : dto.UserId!;
-                var storagePath = $"frames/{owner}/{frameId}.png";
-                await _client.DeleteStoragePrefixAsync(storagePath, ct);
-            }
+            var dto = snap.ConvertTo<FrameTemplateDoc>();
+            var owner = string.IsNullOrEmpty(dto.UserId) ? "default" : dto.UserId!;
+            await _client.DeleteStoragePrefixAsync($"frames/{owner}/{frameId}.png", ct);
         }
         catch (Exception ex)
         {
@@ -97,6 +99,8 @@ public sealed class FrameRepository : IFrameRepository
         }
 
         await docRef.DeleteAsync(cancellationToken: ct);
+        _logger?.LogInformation("프레임 서버 삭제 완료 id={Id}", frameId);
+        return true;
     }
 
     public async Task DeleteAllByUserAsync(string userId, CancellationToken ct = default)

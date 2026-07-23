@@ -22,7 +22,7 @@ public class FrameCatalogServiceTests : IDisposable
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
-        public Task DeleteAsync(string frameId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default) => Task.FromResult(true);
         public Task DeleteAllByUserAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
     }
 

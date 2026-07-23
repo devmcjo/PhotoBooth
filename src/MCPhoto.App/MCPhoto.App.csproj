@@ -25,23 +25,38 @@
     <ProjectReference Include="..\MCPhoto.Firebase\MCPhoto.Firebase.csproj" />
   </ItemGroup>
 
-  <!-- ffmpeg 번들: 존재할 때만 출력 tools/ffmpeg/로 복사(바이너리 부재 시 빌드는 통과). architecture §1.2 -->
+  <!-- ffmpeg 번들(타임랩스 녹화·변환에 필수). ffprobe는 코드 미사용이라 제외(용량 절약). architecture §1.2 -->
+  <PropertyGroup>
+    <FfmpegSource>$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffmpeg.exe</FfmpegSource>
+  </PropertyGroup>
+
+  <!-- 일반 빌드/실행(bin\...\tools\ffmpeg\)용 복사. 존재할 때만(부재 시 빌드 통과). -->
   <ItemGroup>
-    <None Include="$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffmpeg.exe"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffmpeg.exe')"
+    <None Include="$(FfmpegSource)"
+          Condition="Exists('$(FfmpegSource)')"
           Link="tools\ffmpeg\ffmpeg.exe"
           CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffprobe.exe"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\tools\ffmpeg\ffprobe.exe')"
-          Link="tools\ffmpeg\ffprobe.exe"
-          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- publish 최종본에도 확실히 포함. 단일 파일 publish는 내부 임시 빌드에서 위 None 항목의
+       Condition이 뒤집혀 누락되므로, publish 완료 후 메인 프로젝트 컨텍스트에서 직접 복사. -->
+  <Target Name="CopyFfmpegToPublish" AfterTargets="Publish" Condition="Exists('$(FfmpegSource)')">
+    <Copy SourceFiles="$(FfmpegSource)"
+          DestinationFiles="$(PublishDir)tools\ffmpeg\ffmpeg.exe"
+          SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="ffmpeg 번들 복사 완료 → $(PublishDir)tools\ffmpeg\ffmpeg.exe" />
+  </Target>
 
   <!-- 번들 기본 프레임(Frame/): 출력 Frame/으로 복사(§9 #11 우선순위 ②) -->
   <ItemGroup>
     <None Include="$(MSBuildProjectDirectory)\..\..\Frame\**\*.*"
           Link="Frame\%(RecursiveDir)%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- it9 C3: 브랜딩 샘플. 실행 폴더에 동봉(고객이 branding.ini로 리네임해 앱 이름 변경). -->
+  <ItemGroup>
+    <None Include="branding.ini.sample" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

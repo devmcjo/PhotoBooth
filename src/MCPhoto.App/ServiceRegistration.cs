@@ -2,6 +2,7 @@ using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Capture;
 using MCPhoto.Core.Accounts;
+using MCPhoto.Core.Branding;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.LocalSave;
@@ -23,6 +24,12 @@ internal static class ServiceRegistration
     {
         // 셸(부트스트랩)
         services.AddSingleton<MainWindow>();
+
+        // it9 C3: 앱 이름 브랜딩(branding.ini). 시작 시 1회 로드, 폴백 "MC포토".
+        services.AddSingleton<IBrandingService, IniBrandingService>();
+
+        // it9 C1: 카메라 테스트 모달 오픈(다이얼로그 서비스 — VM이 Window 미참조).
+        services.AddSingleton<ICameraTestDialogService, CameraTestDialogService>();
 
         // Step 2: 설정(INI)
         services.AddSingleton<ISettingsService, IniSettingsService>();

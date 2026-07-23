@@ -16,8 +16,8 @@ public interface IFrameRepository
     /// <summary>프레임 저장(이미지 업로드 포함). 계정당 10개 초과 시 예외.</summary>
     Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default);
 
-    /// <summary>프레임 삭제(Firestore 문서 + Storage 이미지).</summary>
-    Task DeleteAsync(string frameId, CancellationToken ct = default);
+    /// <summary>프레임 삭제(Firestore 문서 + Storage 이미지). 반환=문서가 실제로 존재해 삭제됐는지(없으면 false).</summary>
+    Task<bool> DeleteAsync(string frameId, CancellationToken ct = default);
 
     /// <summary>계정 소유 프레임 전부 삭제(cascade용).</summary>
     Task DeleteAllByUserAsync(string userId, CancellationToken ct = default);
