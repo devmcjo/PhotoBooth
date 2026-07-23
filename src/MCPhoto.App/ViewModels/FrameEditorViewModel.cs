@@ -24,11 +24,16 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 
     private byte[]? _imageBytes;
 
+    // 편집 모드 상태(기존 프레임 편집 시 LoadForEdit가 set). 신규 생성이면 _isEditing=false.
+    private bool _isEditing;
+    private string? _editingFrameId;
+
     [ObservableProperty] private ImageSource? _frameImage;
     [ObservableProperty] private int _frameWidth;
     [ObservableProperty] private int _frameHeight;
     [ObservableProperty] private int _slotCount = 4;
     [ObservableProperty] private string _frameName = "새 프레임";
+    [ObservableProperty] private string _editorTitle = "새 프레임 만들기";
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _canSave;
 
@@ -42,8 +47,12 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     /// <summary>슬롯 개수 옵션(1~6). 값 기반 바인딩(SelectedValue)으로 초기화 clobber 차단. (it7 B9)</summary>
     public IReadOnlyList<int> SlotCountOptions { get; } = new[] { 1, 2, 3, 4, 5, 6 };
 
-    /// <summary>슬롯 크기 일괄 스케일(%, 70~130). 기본 100. (it5 §8 F1)</summary>
+    /// <summary>슬롯 크기 일괄 스케일(%, 10~300). 기본 100. (it5 §8 F1 → 범위 대폭 확대)</summary>
     [ObservableProperty] private double _slotScalePercent = 100;
+
+    /// <summary>슬롯 스케일 허용 범위(슬라이더·직접입력 공통).</summary>
+    public const double MinScale = 10;
+    public const double MaxScale = 300;
 
     /// <summary>스케일 기준(100% 원본) 슬롯. _baseSlots에서 매번 스케일해 누적 오차 방지. (it5 §8)</summary>
     private readonly List<Slot> _baseSlots = new();
@@ -106,16 +115,59 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 기존 프레임을 편집기로 불러온다(파워=공용/DB 프레임, user=본인 로컬). 이미지·슬롯·이름을 그대로 로드.
+    /// 저장 시 신규 생성이 아니라 해당 프레임을 갱신(파워+실 DB id면 DB도 update). (기능 요청)
+    /// </summary>
+    public void LoadForEdit(FrameTemplate frame)
+    {
+        _isEditing = true;
+        _editingFrameId = frame.Id;
+        EditorTitle = "프레임 편집";
+        FrameName = frame.Name;
+
+        if (string.IsNullOrEmpty(frame.ImageUrl) || !File.Exists(frame.ImageUrl))
+        {
+            StatusMessage = "프레임 이미지를 불러올 수 없습니다(로컬 파일 없음).";
+            return;
+        }
+        try
+        {
+            _imageBytes = File.ReadAllBytes(frame.ImageUrl); // 로컬 저장분은 이미 PNG(가공본)
+            FrameImage = StillImageConverter.FromPngBytes(_imageBytes);
+            if (frame.ImageSize.Width > 0) FrameWidth = frame.ImageSize.Width;
+            if (frame.ImageSize.Height > 0) FrameHeight = frame.ImageSize.Height;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "편집 이미지 로드 실패: {Path}", frame.ImageUrl);
+            StatusMessage = "이미지 로드 실패";
+            return;
+        }
+
+        // 슬롯 개수 콤보 반영 — 백킹 필드 직접 설정으로 자동 배치(OnSlotCountChanged) 억제.
+        _slotCount = Math.Clamp(frame.Slots.Count, SlotCountOptions[0], SlotCountOptions[^1]);
+        OnPropertyChanged(nameof(SlotCount));
+
+        // 기존 슬롯을 스케일 기준(_baseSlots)으로 로드하고 100%로 표시(자동 배치 아님).
+        _baseSlots.Clear();
+        foreach (var s in frame.Slots)
+            _baseSlots.Add(new Slot { Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height });
+        _slotScalePercent = 100;
+        OnPropertyChanged(nameof(SlotScalePercent));
+        ApplyScale(); // Slots = _baseSlots (100%)
+    }
+
     /// <summary>슬롯 개수 변경 → 자동 배치.</summary>
     partial void OnSlotCountChanged(int value) => ArrangeSlots();
 
     /// <summary>종횡비 변경 → 선택 비율로 재배치. (it4 §3)</summary>
     partial void OnSlotAspectChanged(SlotAspect value) => ArrangeSlots();
 
-    /// <summary>슬롯 크기 슬라이더(%) 변경 → _baseSlots 기준 일괄 스케일. 70~130 클램프. (it5 §8 F1)</summary>
+    /// <summary>슬롯 크기 슬라이더/직접입력(%) 변경 → _baseSlots 기준 일괄 스케일. 10~300 클램프.</summary>
     partial void OnSlotScalePercentChanged(double value)
     {
-        var clamped = Math.Clamp(value, 70, 130);
+        var clamped = Math.Clamp(value, MinScale, MaxScale);
         if (Math.Abs(clamped - value) > 0.0001)
         {
             SlotScalePercent = clamped; // 재진입(클램프 값으로) — 아래 ApplyScale는 다음 호출에서 수행
@@ -174,6 +226,16 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     private void UpdateCanSave()
         => CanSave = _imageBytes is not null && SlotLayout.IsValid(Slots, FrameWidth, FrameHeight);
 
+    /// <summary>편집 중이고 실 DB 문서 id(local/bundle/fallback 접두 없음)면 그 id 반환(→DB 갱신), 아니면 null(→신규 생성).</summary>
+    private string? EditingServerId()
+    {
+        if (!_isEditing || string.IsNullOrEmpty(_editingFrameId)) return null;
+        if (_editingFrameId.StartsWith("local:", StringComparison.Ordinal)
+            || _editingFrameId.StartsWith("bundle:", StringComparison.Ordinal)
+            || _editingFrameId.StartsWith("fallback", StringComparison.Ordinal)) return null;
+        return _editingFrameId;
+    }
+
     [RelayCommand]
     private async Task Save()
     {
@@ -193,8 +255,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             if (isPower)
             {
                 // 파워: 공용 기본 프레임 → DB(isDefault=true, userId=null) + 로컬 캐시. (it8 §3 A2)
+                // 편집이고 실 DB 문서 id를 가진 경우 그 id로 SetAsync → DB 문서·Storage·슬롯 update. (기능 요청)
                 var frame = new FrameTemplate
                 {
+                    Id = EditingServerId() ?? string.Empty, // 빈 값이면 SaveAsync가 새 GUID 부여(신규), 있으면 그 문서 갱신
                     UserId = null,
                     IsDefault = true,
                     Name = FrameName,
@@ -202,11 +266,11 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     Slots = Slots.ToList()
                 };
                 var saved = await _repository.SaveAsync(frame, _imageBytes);
-                _localStore.SaveLocal(saved, _imageBytes, ownerName: null); // frameId 기반 캐시
+                _localStore.SaveLocal(saved, _imageBytes, ownerName: null); // frameId 기반 캐시(갱신)
             }
             else
             {
-                // user: 로컬 전용(DB 미저장). {계정}_{이름}.png. (it8 §3 A2)
+                // user: 로컬 전용(DB 미저장). {계정}_{이름}.png. 편집이면 같은 이름 파일을 덮어씀. (it8 §3 A2)
                 var frame = new FrameTemplate
                 {
                     UserId = user.Id,

@@ -24,6 +24,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     [ObservableProperty] private FrameTemplate? _selectedFrame;
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isLoggedIn;
+    [ObservableProperty] private bool _canEditSelected;  // 선택 프레임 편집 가능(역할·프레임 종류에 따라)
 
     // A3 삭제 UI 상태
     [ObservableProperty] private bool _canDeleteFrames;  // 로그인 여부(게스트 미노출)
@@ -193,13 +194,34 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         await _shell.NavigateAsync(AppState.Guide);
     }
 
-    /// <summary>프레임 편집기 진입(로그인 사용자만).</summary>
+    /// <summary>프레임 편집기 진입(신규 생성, 로그인 사용자만).</summary>
     [RelayCommand]
     private async Task CreateFrame()
     {
         if (!IsLoggedIn) return;
-        await _shell.NavigateAsync(AppState.FrameEditor);
+        await _shell.OpenFrameEditor(null);
     }
+
+    /// <summary>선택한 기존 프레임을 편집기로 열기(본인 로컬 or 파워). (기능 요청)</summary>
+    [RelayCommand]
+    private async Task EditFrame()
+    {
+        if (SelectedFrame is null || !CanEdit(SelectedFrame)) return;
+        await _shell.OpenFrameEditor(SelectedFrame);
+    }
+
+    /// <summary>이 프레임을 현재 역할로 편집 가능한지(삭제 규칙과 동일: 본인 로컬 or 파워, 번들/fallback 제외).</summary>
+    private bool CanEdit(FrameTemplate f)
+    {
+        if (!CanDeleteFrames || string.IsNullOrEmpty(f.Id)) return false;
+        if (f.Id.StartsWith("bundle:", StringComparison.Ordinal)
+            || f.Id.StartsWith("fallback", StringComparison.Ordinal)) return false;
+        if (f.Id.StartsWith("local:", StringComparison.Ordinal)) return true; // 본인 로컬
+        return IsPower; // 공용/DB=파워
+    }
+
+    partial void OnSelectedFrameChanged(FrameTemplate? value)
+        => CanEditSelected = value is not null && CanEdit(value);
 
     [RelayCommand]
     private void Cancel() => _shell.ReturnHome("프레임 선택 취소");

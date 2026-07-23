@@ -28,7 +28,7 @@
 
         <!-- 컨트롤 패널 -->
         <StackPanel Grid.Column="1" Margin="0,88,40,40">
-            <TextBlock Text="프레임 편집" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
+            <TextBlock Text="{Binding EditorTitle}" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
 
             <Button Content="이미지 불러오기" Click="OnLoadImage"
                     Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,20" />
@@ -58,17 +58,21 @@
                 </ComboBox.ItemTemplate>
             </ComboBox>
 
-            <!-- F1: 슬롯 크기 일괄 스케일(70~130%) + % 표시(it5 §8) -->
-            <Grid Margin="0,0,0,20">
+            <!-- 슬롯 크기 일괄 스케일(10~300%): 슬라이더 + 직접 입력(조절 편의). -->
+            <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="슬롯 크기" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
-                           Text="{Binding SlotScalePercent, StringFormat={}{0:0}%}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBox Width="56" TextAlignment="Right"
+                             Text="{Binding SlotScalePercent, StringFormat={}{0:0}, UpdateSourceTrigger=LostFocus}"
+                             AutomationProperties.Name="슬롯 크기 % 직접 입력" />
+                    <TextBlock Text="%" Style="{StaticResource Text.Body}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                </StackPanel>
             </Grid>
-            <Slider Minimum="70" Maximum="130" Value="{Binding SlotScalePercent}"
+            <Slider Minimum="10" Maximum="300" Value="{Binding SlotScalePercent}"
                     TickFrequency="10" IsSnapToTickEnabled="False"
                     AutomationProperties.Name="슬롯 크기 배율" Margin="0,0,0,20" />
 

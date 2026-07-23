@@ -42,6 +42,9 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>계정 페이지 진입 모드(비번변경/계정생성/관리자). Account VM 생성 직후 주입. (it5 §5 C2)</summary>
     private ViewModels.AccountMode _pendingAccountMode = ViewModels.AccountMode.PasswordChange;
 
+    /// <summary>프레임 편집기 진입 시 편집할 기존 프레임(null이면 신규 생성). (기능 요청)</summary>
+    private MCPhoto.Core.Models.FrameTemplate? _pendingEditFrame;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTopBarVisible))]
     [NotifyPropertyChangedFor(nameof(IsHome))]
@@ -181,7 +184,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         AppState.Result => _services.GetRequiredService<ResultViewModel>(),
         AppState.Qr => _services.GetRequiredService<QrPopupViewModel>(),
         AppState.Done => _services.GetRequiredService<DoneViewModel>(),
-        AppState.FrameEditor => _services.GetRequiredService<FrameEditorViewModel>(),
+        AppState.FrameEditor => CreateFrameEditorViewModel(),
         AppState.Settings => _services.GetRequiredService<SettingsViewModel>(),
         AppState.UserMgmt => _services.GetRequiredService<UserMgmtViewModel>(),
         AppState.Account => CreateAccountViewModel(),
@@ -193,6 +196,24 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         var vm = _services.GetRequiredService<AccountViewModel>();
         vm.Mode = _pendingAccountMode; // 진입 모드 주입(팝오버 항목이 지정)
         return vm;
+    }
+
+    private FrameEditorViewModel CreateFrameEditorViewModel()
+    {
+        var vm = _services.GetRequiredService<FrameEditorViewModel>();
+        if (_pendingEditFrame is { } f)
+        {
+            vm.LoadForEdit(f); // 기존 프레임 편집으로 진입
+            _pendingEditFrame = null; // 1회성
+        }
+        return vm;
+    }
+
+    /// <summary>프레임 편집기 진입. edit=null이면 신규 생성, 아니면 해당 프레임 편집. (기능 요청)</summary>
+    public async Task OpenFrameEditor(MCPhoto.Core.Models.FrameTemplate? edit)
+    {
+        _pendingEditFrame = edit;
+        await NavigateAsync(AppState.FrameEditor);
     }
 
     /// <summary>

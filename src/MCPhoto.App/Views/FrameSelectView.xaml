@@ -137,6 +137,10 @@
                 <Button Content="프레임 만들기" Command="{Binding CreateFrameCommand}"
                         Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}"
                         Style="{StaticResource Button.Secondary}" Margin="8,0" />
+                <!-- 선택 프레임 편집(본인 로컬 or 파워). 파워가 만든 공용/DB 프레임은 저장 시 DB도 갱신. -->
+                <Button Content="선택 편집" Command="{Binding EditFrameCommand}"
+                        Visibility="{Binding CanEditSelected, Converter={StaticResource BoolToVis}}"
+                        Style="{StaticResource Button.Secondary}" Margin="8,0" />
                 <Button Content="다음" Command="{Binding NextCommand}"
                         Style="{StaticResource Button.Primary}" Padding="48,0" Margin="8,0" />
                 <Button Content="취소" Command="{Binding CancelCommand}"
