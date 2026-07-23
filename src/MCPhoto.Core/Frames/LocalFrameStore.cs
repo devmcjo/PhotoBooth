@@ -87,10 +87,10 @@ public sealed class LocalFrameStore : ILocalFrameStore
         if (pngPath is null) return false;
 
         var slotsPath = Path.ChangeExtension(pngPath, ".slots");
-        bool any = false;
-        try { if (File.Exists(pngPath)) { File.Delete(pngPath); any = true; } } catch { /* 무시 */ }
-        try { if (File.Exists(slotsPath)) { File.Delete(slotsPath); any = true; } } catch { /* 무시 */ }
-        return any;
+        try { if (File.Exists(slotsPath)) File.Delete(slotsPath); } catch { /* 무시 */ }
+        try { File.Delete(pngPath); } catch { /* 잠김 등 — 아래에서 존재 여부로 판정 */ }
+        // png가 실제로 사라졌는지로 성공을 판정(잠금·부분 삭제를 정직하게 반환).
+        return !File.Exists(pngPath);
     }
 
     // ── 내부 ──

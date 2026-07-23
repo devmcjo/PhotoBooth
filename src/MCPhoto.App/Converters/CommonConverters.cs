@@ -1,10 +1,42 @@
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using MCPhoto.Core.Frames;
 
 namespace MCPhoto.App.Converters;
+
+/// <summary>
+/// 파일 경로 → BitmapImage. OnLoad + IgnoreImageCache 로 로드해 **파일을 잠그지 않는다**
+/// (기본 바인딩은 파일 핸들을 유지해 삭제 실패 유발). 경로 없음/부재 시 null(placeholder). (it9 후속 — 프레임 삭제 수정)
+/// </summary>
+public sealed class FilePathToImageConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var path = value as string;
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var isHttp = path.StartsWith("http", StringComparison.OrdinalIgnoreCase);
+        if (!isHttp && !File.Exists(path)) return null;
+        try
+        {
+            var img = new BitmapImage();
+            img.BeginInit();
+            img.CacheOption = BitmapCacheOption.OnLoad;          // 즉시 메모리로 로드 → 파일 핸들 해제
+            img.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            img.UriSource = new Uri(path, UriKind.Absolute);
+            img.EndInit();
+            img.Freeze();
+            return img;
+        }
+        catch { return null; } // 로드 실패 시 placeholder
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
 
 /// <summary>bool → Visibility(true=Visible).</summary>
 public sealed class BoolToVisibilityConverter : IValueConverter

@@ -51,7 +51,9 @@
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Grid Width="200" Height="280">
-                        <Image Source="{Binding ImageUrl}" Stretch="Uniform" Margin="10" />
+                        <!-- 파일 잠금 없이 로드(삭제 가능). FilePathToImage: OnLoad+IgnoreImageCache. (it9 후속) -->
+                        <Image Source="{Binding ImageUrl, Converter={StaticResource FilePathToImage}}"
+                               Stretch="Uniform" Margin="10" />
                         <Border Background="{StaticResource Brush.Scrim}" CornerRadius="0,0,12,12"
                                 VerticalAlignment="Bottom" Height="36">
                             <TextBlock Text="{Binding Name}" Foreground="{StaticResource Brush.OnAccent}"

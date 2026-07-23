@@ -98,9 +98,10 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         var frame = FrameToDelete;
         if (frame is null) { CancelDelete(); return; }
 
-        _localStore.DeleteLocal(frame);                 // 로컬 항상
-        var alsoServer = DeleteAlsoServer && IsPower;   // 팝업이 곧 닫히며 값이 리셋되므로 미리 확정
+        bool localOk = _localStore.DeleteLocal(frame);  // 로컬 파일(이미지+슬롯) 삭제
+        var alsoServer = DeleteAlsoServer && IsPower;    // 팝업이 곧 닫히며 값이 리셋되므로 미리 확정
         DeleteNotice = string.Empty;
+        DeleteNoticeIsError = false;
 
         Frames.Remove(frame);
         if (SelectedFrame == frame) SelectedFrame = Frames.FirstOrDefault();
@@ -108,6 +109,16 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
 
         if (alsoServer)
             await DeleteFromServerAsync(frame);
+
+        if (!localOk)
+        {
+            // 성공 오인 금지: 로컬 파일이 실제로 지워지지 않았음을 알림(사용 중 등).
+            DeleteNotice = string.IsNullOrEmpty(DeleteNotice)
+                ? "로컬 프레임 파일을 삭제하지 못했습니다(사용 중일 수 있음)."
+                : DeleteNotice + " (단, 로컬 파일 삭제 실패)";
+            DeleteNoticeIsError = true;
+            _logger?.LogWarning("로컬 프레임 삭제 실패: {Name} ({Path})", frame.Name, frame.ImageUrl);
+        }
     }
 
     /// <summary>
