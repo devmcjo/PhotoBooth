@@ -54,6 +54,28 @@
                         <!-- 파일 잠금 없이 로드(삭제 가능). FilePathToImage: OnLoad+IgnoreImageCache. (it9 후속) -->
                         <Image Source="{Binding ImageUrl, Converter={StaticResource FilePathToImage}}"
                                Stretch="Uniform" Margin="10" />
+                        <!-- 슬롯 위치 미리보기: 프레임 픽셀 좌표(ImageSize)를 Viewbox로 이미지와 동일 스케일 →
+                             슬롯 개수·위치를 선택 전에 확인. ImageSize=0(메타 없음)이면 자동으로 안 그려짐. -->
+                        <Viewbox Margin="10" Stretch="Uniform">
+                            <ItemsControl Width="{Binding ImageSize.Width}" Height="{Binding ImageSize.Height}"
+                                          ItemsSource="{Binding Slots}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                                   Fill="#33FF4D79" Stroke="{StaticResource Brush.Accent}" StrokeThickness="10" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Viewbox>
                         <Border Background="{StaticResource Brush.Scrim}" CornerRadius="0,0,12,12"
                                 VerticalAlignment="Bottom" Height="36">
                             <TextBlock Text="{Binding Name}" Foreground="{StaticResource Brush.OnAccent}"
