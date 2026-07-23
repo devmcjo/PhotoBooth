@@ -3,9 +3,9 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 12-exe-app-settings-and-config.md |
-| 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성, 브랜딩(branding.ini), 표시 모드 즉시 적용, 창 위치 저장 |
-| 최종 업데이트 | 2026-07-23 |
-| 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.App/branding.ini.sample`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
+| 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성, 브랜딩(branding.ini), 빌드 정보(bldinfo.ini), 표시 모드 즉시 적용, 창 위치 저장 |
+| 최종 업데이트 | 2026-07-24 |
+| 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.Core/Build/**`, `src/MCPhoto.App/branding.ini.sample`, `src/MCPhoto.App/bldinfo.ini`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
 | 갱신 규칙 | `AppSettings` 필드 추가/기본값/Clamp 변경, INI 매핑(`IniSettingsService`) 변경, 폴백 경로(`SettingsPathResolver`) 변경, 브랜딩 로직/기본값 변경 시 이 문서를 갱신한다. |
 
 관련 문서: [10 아키텍처](./10-exe-app-architecture.md) · [11 기능 상세](./11-exe-app-features.md) · 인덱스 [README](./README.md)
@@ -24,6 +24,9 @@
 | `CountdownSec` | int | **6** | 허용 {3,6,8,10}; 최근접 보정 | `CountdownSec` | 컷당 카운트다운 초 |
 | `MirrorMode` | bool | **true** | — | `MirrorMode` | 거울(좌우반전) 프리뷰=저장 WYSIWYG |
 | `FlashMode` | bool | **false** | — | `FlashMode` | 셔터 직전 하양 화면 플래시 |
+| `ShutterSound` | bool | **false** | — | `ShutterSound` | 촬영 순간 셔터 효과음(`Assets\shutter.wav` 있으면 사용, 없으면 합성음) |
+| `RetakeEnabled` | bool | **false** | — | `RetakeEnabled` | 재촬영 사용(상위). off면 재촬영 UI 전부 미노출 (it11 #13) |
+| `RetakeLimit` | int | **1** | 허용 {1,2,3}; 최근접 보정 | `RetakeLimit` | 전체 재촬영 횟수 상한(RetakeEnabled on일 때만 의미) (it11 #13) |
 | `OutputFormat` | enum `OutputFormat` | **Jpg** | {Jpg, Png} | `OutputFormat` | 최종 이미지 포맷/확장자 |
 | `RetentionHours` | int | **24** | `Math.Clamp(1, 72)` | `RetentionHours` | 업로드 결과물 보관(만료) 시간, QR 고지 문구 |
 | `EnableQrDelivery` | bool | **true** | QR 정규화(하위 둘 다 off면 false) | `EnableQrDelivery` | QR 전송(업로드+QR+다운로드 페이지) on/off |
@@ -40,7 +43,7 @@
 | `HostingBaseUrl` | string | **`https://mcphoto-955fb.web.app`**(오늘 확정, 개발 기본값) | 트레일링 `/` 제거 | `HostingBaseUrl` | 다운로드 페이지 URL 조립 base |
 | `StorageBucket` | string | **`mcphoto-955fb.firebasestorage.app`**(오늘 확정, 개발 기본값) | — | `StorageBucket` | Firebase Storage 버킷(빈 값이면 project_id 유도) |
 
-보조 상수(`AppSettings.cs:36-41`): `AllowedCutCounts={6,8,10}`, `AllowedCountdownSecs={3,6,8,10}`, `MinRetentionHours=1`, `MaxRetentionHours=72`, `MinSlots=1`, `MaxSlots=6`.
+보조 상수(`AppSettings.cs:36-42`): `AllowedCutCounts={6,8,10}`, `AllowedCountdownSecs={3,6,8,10}`, `AllowedRetakeLimits={1,2,3}`, `MinRetentionHours=1`, `MaxRetentionHours=72`, `MinSlots=1`, `MaxSlots=6`.
 
 ### 1.1 오늘(2026-07-23) 확정 기본값
 
@@ -57,7 +60,7 @@
 
 ### 1.3 Clamp / QR 정규화 세부
 
-- `Clamp()`(`AppSettings.cs:115-133`): CutCount/CountdownSec 최근접 보정(`ClosestFrom`, `:148-159`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 제거 → `NormalizeQr()`.
+- `Clamp()`(`AppSettings.cs:126-147`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`, `:162-173`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 제거 → `NormalizeQr()`.
 - `NormalizeQr()`(`:139-146`) = `QrDeliveryPolicy.Normalize`: `EnableQrDelivery && !SendPhoto && !SendTimelapse`이면 `EnableQrDelivery=false`(하위 토글 값은 보존). off→on 재활성 시 하위 둘 다 on 강제(`QrDeliveryPolicy.OnReEnabled`)는 UI(`SettingsViewModel`)에서 처리(`AppSettings`/`IniSettingsService` 자체엔 없음).
 - `Clone()`(`:162-189`): 편집 취소 대비 얕은 복제(WindowBounds는 새 인스턴스).
 
@@ -142,8 +145,20 @@
 
 ---
 
-## 6. 참고
+## 6. 빌드 정보(bldinfo.ini) — 앱 버전 표기
+
+- 정의: `IBuildInfoService`(프로퍼티 `Version`·`BuildDate`·`Site` + `DisplayText`) · `IniBuildInfoService`(`IniBuildInfoService.cs`). DI Singleton(`ServiceRegistration.cs:32`), 시작 1회 로드. **버전을 소스코드에 하드코딩하지 않기 위한 외부 파일**(brandbranding과 동일 패턴).
+- **파일**: `bldinfo.ini`, 섹션 `[General]`, 키 `Version`(예 `1.0.0`) · `BuildDate`(예 `2026-07-23`) · `Site`(예 `Beta`).
+- **탐색 경로 순서**(`Candidates`): ① 실행 경로 `{AppContext.BaseDirectory}\bldinfo.ini` → ② `%ProgramData%\MCPhoto\bldinfo.ini`. 존재하는 첫 파일 사용.
+- **폴백**: 파일/키 부재·손상 → `Version="0.0.0"`, `BuildDate`·`Site` 빈 문자열. 크래시 금지. UTF-8 명시 읽기, `IniFile` 파서 재사용(`;`/`#` 주석 무시).
+- **표기**: `DisplayText`(예 `v1.0.0 · Beta · 2026-07-23`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭).
+- **배포**: 실행 폴더 동봉(`MCPhoto.App.csproj`의 `None CopyToOutputDirectory`) + `publish.ps1`이 publish 산출물에 명시 복사(`publish.bat`/`publish-nokey.bat` 공통). `.gitignore`는 `*.ini` 무시 + `!bldinfo.ini` 예외로 추적. **버전 값은 배포 시 사용자가 직접 관리**(현재 미배포).
+- 근거: `IBuildInfoService.cs`, `IniBuildInfoService.cs`, `MainWindow.xaml`, `AppShellViewModel.cs`, `publish.ps1`, `bldinfo.ini`.
+
+---
+
+## 7. 참고
 
 - 설정 화면 UI 구성·항목별 편집 동작은 [11 기능 상세](./11-exe-app-features.md) §11(설정 화면), QR 토글 연동 규칙은 §8.3.
 - 데이터 폴더·로그·세션 임시 폴더는 [10 아키텍처](./10-exe-app-architecture.md) §5.2. (설정 INI는 실행 경로 우선, 로그는 항상 `%ProgramData%\MCPhoto\logs`.)
-- 반영된 설계 근거: `docs/design/wpf-it6/it9-design.md`(INI 폴백 체인·저장 신뢰성·브랜딩·표시 모드). 본 문서 수치·경로는 실제 소스가 진실의 소스다.
+- 본 문서 수치·경로는 **실제 소스가 진실의 소스**다(과거 이터레이션 설계 문서는 git 이력 참조).

@@ -3,8 +3,8 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 11-exe-app-features.md |
-| 범위 | MCPhoto Exe 앱의 전 사용자 기능(홈·로그인·프레임·촬영·컷선택·결과·필터·타임랩스·QR·완료·유휴·설정·카메라테스트·브랜딩·표시모드) |
-| 최종 업데이트 | 2026-07-23 |
+| 범위 | MCPhoto Exe 앱의 전 사용자 기능(홈·로그인·프레임·촬영·재촬영·컷선택·결과·필터·타임랩스·QR·완료·유휴·설정·카메라테스트·진단·브랜딩·표시모드·버전표기) |
+| 최종 업데이트 | 2026-07-24 |
 | 관련 소스 경로 | `src/MCPhoto.App/ViewModels/**`, `src/MCPhoto.App/Views/**`, `src/MCPhoto.App/Services/**`, `src/MCPhoto.Core/Capture/**`, `src/MCPhoto.Core/Frames/**`, `src/MCPhoto.Core/LocalSave/**`, `src/MCPhoto.Core/Upload/**` |
 | 갱신 규칙 | 기능(화면·플로우·옵션)을 추가/변경할 때 해당 절을 갱신한다. 특히 컷수/필터/QR 토글/삭제 규칙/유휴 시간이 바뀌면 반드시 반영. |
 
@@ -105,7 +105,7 @@
   - 진입(`OnEnterAsync`, `CutSelectViewModel.cs:26-44`): 컷 썸네일 생성(`StillImageConverter.ToBitmapSource`), 대표 슬롯 종횡비로 썸네일 컨테이너 비율 맞춤(WYSIWYG, 기본 3:4).
   - 토글(`ToggleCut`→`CaptureSession.ToggleSelection`, `CaptureSession.cs:51-65`): 이미 선택이면 해제, 아니면 추가(슬롯 수 초과 불가), 선택 순서 번호 갱신.
   - [다음]은 `IsSelectionComplete`(선택 수==슬롯 수)일 때만.
-  - [재촬영](`Retake`, `:80-85`): `ResetForRetake`(컷·선택 폐기, 프레임 유지) 후 Guide로(세션 전체 재촬영).
+  - [재촬영] (**전체 재촬영, it11 #13**, `:91-97`): `RetakeEnabled` on일 때만 버튼 노출, `CanFullRetake`(=`FullRetakeCount < RetakeLimit`)면 활성. 클릭 시 `CaptureSession.BeginFullRetake`(컷·선택 폐기 + 카운터 증가, 프레임 유지) → Guide(세션 전체 재촬영). `RetakeLimit`(1~3) 도달 시 버튼 Disable + 커맨드 진입 이중 방어. **컷별 재촬영은 미구현**(버튼 UI 배치 USER-DECISION 대기, [90 로드맵](./90-roadmap-and-future-work.md) §2).
 - **근거**: `CutSelectViewModel.cs`, `CaptureSession.cs`.
 
 ### 6.2 결과 합성
@@ -161,8 +161,9 @@
 - **화면·VM**: `QrPopupView` · `QrPopupViewModel`. 서비스: `IUploadService`, `IQrService`.
 - **핵심 규칙**(`OnEnterAsync`, `QrPopupViewModel.cs:40-91`):
   - 전송할 결과물(사진·타임랩스 옵션 기준)이 없으면 방어 안내.
-  - `upload.UploadResultAsync(photo?, timelapse?, RetentionHours, HostingBaseUrl)` → 성공 시 `qr.GenerateQrPng(DownloadPageUrl, 12)` 노출 + "{N}시간 후 자동 삭제" 고지.
-  - **실패 시 우아 처리**(Storage 버킷 부재 등): 흐름을 막지 않는 비위협 안내, 결과물은 로컬 보존(QR 분기 이전 저장으로 손실 0), [완료]/[재시도](`Retry`, `:94-95`) 제공. 로컬 저장 여부에 따라 안내 문구 분기.
+  - `upload.UploadResultAsync(photo?, timelapse?, RetentionHours, HostingBaseUrl, progress?)` → 성공 시 `qr.GenerateQrPng(DownloadPageUrl, 12)` 노출 + "{N}시간 후 자동 삭제" 고지.
+  - **업로드 진행률(it11 #16)**: 업로드 중 진행 바 + 단계 라벨(사진→타임랩스→마무리). GCS 파일 단위 바이트 진행률을 `IProgress<UploadProgress>`로 수신(`Progress<T>`는 UI 스레드 생성 → 마샬링 안전, 순수 `ComputeOverall`로 전체 %). 초기 `IsIndeterminate`.
+  - **실패 시 우아 처리**(Storage 버킷 부재 등): 흐름을 막지 않는 비위협 안내, 결과물은 로컬 보존(QR 분기 이전 저장으로 손실 0), [완료]/[재시도](`Retry`) 제공(재시도 시 진행률·상태 0에서 재시작). 로컬 저장 여부에 따라 안내 문구 분기.
 - **근거**: `QrPopupViewModel.cs`, `IUploadService`, `QrService.cs`.
 
 ### 9.2 완료
@@ -185,13 +186,14 @@
 ## 11. 설정 화면
 
 - **목적**: AppSettings 전 항목 편집(앱 설정만; 계정·관리자는 Account 페이지로 분리).
-- **화면·VM**: `SettingsView`(`SettingsView.xaml`) · `SettingsViewModel`. 서비스: `ISettingsService`, `ICameraService`, `ICameraTestDialogService`.
+- **화면·VM**: `SettingsView`(`SettingsView.xaml`) · `SettingsViewModel`. 서비스: `ISettingsService`, `ICameraService`, `ICameraTestDialogService`, `IDiagnosticsDialogService`(it11 #14).
 - **항목**(2열 그리드 + 그룹, `SettingsView.xaml`):
-  - 촬영: 컷 수(6/8/10), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시.
-  - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트), 표시 모드(전체화면/창모드), QR 전송(+하위 사진/타임랩스 토글), 로컬 저장.
+  - 촬영: 컷 수(6/8/10), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시, **셔터음**, **재촬영 사용**(+on일 때 **횟수 제한 1~3**, it11 #13).
+  - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트, **실제 장치명 표시** it11 #15), 표시 모드(전체화면/창모드), QR 전송(+하위 사진/타임랩스 토글), 로컬 저장.
   - 출력·전송: 출력 포맷(JPG/PNG), 보관 시간(1~72h), 로컬 저장 경로.
   - 필터: 원본(고정 on·Disable), 흑백/밝게/뷰티 노출 토글.
-  - 고급: 다운로드 페이지 Base URL, Storage 버킷.
+  - 고급: 다운로드 페이지 Base URL, Storage 버킷, **서버 연결 상태**(it10, 읽기전용), **[진단·상태] 버튼**(로그인 전용 → §17, it11 #14).
+- **설정 진입 시 상단 설정(⚙) 버튼 숨김**(자기 화면 재진입 방지, `IsSettings`). 취소/닫기 등 공용 버튼은 아웃라인 스타일(`Button.Ghost`)로 CTA와 정렬.
 - **핵심 규칙**:
   - 카메라 열거(`RefreshCamerasAsync`, `SettingsViewModel.cs:90-113`): `EnumerateDevices()`를 `Task.Run` 백그라운드(수백 ms~초), 목록 비면 ComboBox/테스트 Disable + 안내, 저장 인덱스 없으면 첫 장치로 보정.
   - 저장(`SaveSettings`, `:188-226`): 필드→AppSettings→`Save()`(내부 Clamp) → `LoadSettings()`로 클램프값 재반영. **성공/실패 정직 표시**(bool 반환, 실패 시 오류 토스트, 성공 오인 금지) + 표시 모드 즉시 적용(`RequestApplyDisplayMode`).
@@ -239,3 +241,18 @@
 - **목적**: 키오스크(전체화면) vs 개발/창(창모드) 전환.
 - **규칙**: `MainWindow.ApplyDisplaySettings`(`MainWindow.xaml.cs:34-63`)가 `DisplayMode`에 따라 전체화면(WindowStyle None+Maximized) 또는 창모드(SingleBorder+저장된 WindowBounds/중앙) 적용. 설정 저장 시 `AppShellViewModel.RequestApplyDisplayMode`→`DisplayModeApplyRequested` 이벤트→**재시작 없이 즉시 재적용**(`MainWindow.xaml.cs:24`). 창 위치는 종료 시 저장(`OnClosing`, `:65-78`). 상세는 [12](./12-exe-app-settings-and-config.md) §표시 모드.
 - **근거**: `MainWindow.xaml.cs`, `AppShellViewModel.cs:77-81`.
+
+## 17. 진단·상태 화면 (it11 #14)
+
+- **목적**: 관리자 현장 트러블슈팅 — 카메라·ffmpeg·Firebase 상태와 로그 폴더를 한눈에.
+- **흐름**: 설정 [고급] → [진단·상태](로그인 전용, 게스트 Disable) → **모달**(별도 AppState 없음) → [로그 폴더 열기]/[닫기].
+- **화면·VM·서비스**: `DiagnosticsWindow` · `DiagnosticsViewModel`(Transient — 진입마다 최신 상태) · `IDiagnosticsDialogService`(`CameraTestDialogService` 모달 패턴 재사용) · `ILogFolderService`.
+- **표시 4섹션**: 카메라(연결 수·목록, `EnumerateDevices`), ffmpeg(`IsAvailable`·경로), Firebase(`IsInitialized`·버킷·키 후보 경로 존재여부 `KeyCandidatePaths`), 로그(경로 상시 표시 + 폴더 열기). 정상=성공색/이상=danger색 트리거.
+- **로그 열기**: `explorer.exe`로 `%ProgramData%\MCPhoto\logs` 열기, 실패해도 크래시 없음(로깅). 경로 텍스트 상시 노출(수동 탐색 대체).
+- **근거**: `DiagnosticsViewModel.cs`, `DiagnosticsWindow.xaml`, `DiagnosticsDialogService.cs`, `LogFolderService.cs`. 로그 위치 상세 [70](./70-logging-and-troubleshooting.md).
+
+## 18. 앱 버전 표기 (it11, bldinfo.ini)
+
+- **목적**: 실행 중 버전·빌드일·배포 채널을 항상 확인.
+- **규칙**: `bldinfo.ini`(`[General]` Version/BuildDate/Site)를 시작 시 로드(`IBuildInfoService`), `DisplayText`(예 `v1.0.0 · Beta · 2026-07-23`)를 **앱 하단 우측에 로그인 여부 무관 상시** 노출(흐린 캡션, 클릭 비간섭). 파일/키 부재 시 `v0.0.0` 폴백.
+- **근거**: `MainWindow.xaml`, `AppShellViewModel.cs`(`VersionText`), `IniBuildInfoService.cs`. 파일 규약·배포 상세 [12](./12-exe-app-settings-and-config.md) §6.

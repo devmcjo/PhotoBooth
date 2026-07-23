@@ -3,8 +3,8 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 70-logging-and-troubleshooting.md |
-| 범위 | 로그 파일 실제 위치·롤링·레벨, 세션 임시/결과 폴더 경로, 전역 예외 처리(크래시 대신 Home 복귀), 증상→의심 지점 매핑(소스만으로 진단), Firebase 초기화 실패 진단 |
-| 최종 업데이트 | 2026-07-23 |
+| 범위 | 로그 파일 실제 위치·롤링·레벨, 세션 임시/결과 폴더 경로, 전역 예외 처리(크래시 대신 Home 복귀), 증상→의심 지점 매핑(소스만으로 진단), Firebase 초기화 실패 진단, 인앱 진단·상태 화면(it11 #14) |
+| 최종 업데이트 | 2026-07-24 |
 | 관련 소스 경로 | `src/MCPhoto.App/App.xaml.cs`, `src/MCPhoto.Core/Capture/SessionWorkspace.cs`, `src/MCPhoto.Core/LocalSave/LocalSaveService.cs`, `src/MCPhoto.Core/Settings/{IniSettingsService,SettingsPathResolver,AppSettings}.cs`, `src/MCPhoto.Capture/{OpenCvCameraService,FfmpegRunner,TimelapseService}.cs`, `src/MCPhoto.Firebase/{FirebaseClient,UploadService,FrameRepository}.cs`, `src/MCPhoto.App/ViewModels/{CaptureViewModel,QrPopupViewModel,FrameSelectViewModel}.cs` |
 | 갱신 규칙 | Serilog 설정(경로·롤링·레벨, `App.xaml.cs`), `App.DataFolder` 정의, 전역 예외 핸들러, ffmpeg/설정/키 경로 탐색 순서, 각 서비스 로그 문자열이 바뀌면 이 문서를 갱신한다. 증상 매핑 표는 로그 키워드가 바뀔 때 함께 수정. |
 
@@ -26,6 +26,8 @@ C:\ProgramData\MCPhoto\logs\mcphoto-YYYYMMDD.log
 - 로그 파일 베이스: `Path.Combine(DataFolder, "logs", "mcphoto-.log")`(`src/MCPhoto.App/App.xaml.cs:31`). Serilog의 일자 롤링이 `mcphoto-.log`의 `-` 뒤에 날짜를 끼워 `mcphoto-20260723.log` 형태로 만든다.
 
 > `ProgramData`는 기본 숨김 폴더다. 탐색기 주소창에 `%ProgramData%\MCPhoto\logs` 또는 `C:\ProgramData\MCPhoto\logs`를 직접 입력하면 열린다.
+
+> **앱 내에서 열기(it11 #14)**: 로그인 후 **설정 [고급] → [진단·상태]** 모달의 **[로그 폴더 열기]** 버튼으로 위 폴더를 바로 열 수 있다. 같은 모달에서 카메라·ffmpeg·Firebase 상태도 함께 확인 가능([11](./11-exe-app-features.md) §17).
 
 ### 1.2 콘솔/탐색기에서 로그 폴더 여는 법(사용자 안내)
 
