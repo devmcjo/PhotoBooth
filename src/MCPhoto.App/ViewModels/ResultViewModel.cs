@@ -144,8 +144,8 @@ public sealed partial class ResultViewModel : ViewModelBase
                 await _localSave.SaveAsync(savePath, session.FinalImagePath, session.TimelapsePath, session.SessionTime);
             }
 
-            // QR 전송 on → QR 팝업, off → 완료
-            if (settings.EnableQrDelivery)
+            // QR 전송: 설정 on AND 로그인 상태에서만. 게스트는 소스단에서 강제 off(ini 불변). (보완#1)
+            if (settings.EnableQrDelivery && _shell.IsLoggedIn)
                 await _shell.NavigateAsync(AppState.Qr);
             else
                 await _shell.NavigateAsync(AppState.Done);

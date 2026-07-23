@@ -168,7 +168,9 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="QR 전송" Style="{StaticResource RowLabel}" />
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding EnableQrDelivery}" />
+                                    <!-- 게스트는 QR/Firebase 비활성(수정 불가). 로그인 시에만 편집. (보완#1) -->
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right"
+                                                  IsChecked="{Binding EnableQrDelivery}" IsEnabled="{Binding IsLoggedIn}" />
                                 </Grid>
                                 <!-- QR 하위 토글(사진/타임랩스): QR on일 때만 노출. 들여쓰기로 하위 계층 표현. (it7 F2) -->
                                 <StackPanel Margin="20,0,0,0"
@@ -285,11 +287,11 @@
                         <TextBlock Text="고급" Style="{StaticResource GroupTitle}" />
                         <StackPanel Style="{StaticResource FullRow}">
                             <TextBlock Text="다운로드 페이지 Base URL" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding HostingBaseUrl}" />
+                            <TextBox Text="{Binding HostingBaseUrl}" IsEnabled="{Binding IsLoggedIn}" />
                         </StackPanel>
                         <StackPanel Margin="0,0,0,16">
                             <TextBlock Text="Storage 버킷" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding StorageBucket}" />
+                            <TextBox Text="{Binding StorageBucket}" IsEnabled="{Binding IsLoggedIn}" />
                             <!-- 신규 규약 안내(it5 §2.3 B6). Blaze+버킷 생성 후 이 값을 넣으면 QR 전송 동작. -->
                             <TextBlock Text="예: mcphoto-955fb.firebasestorage.app"
                                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
@@ -322,5 +324,27 @@
                         Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
             </Grid>
         </Border>
+
+        <!-- 보완#1: 로그인 사용자 설정 진입 비밀번호 가드. 잠금 해제 전까지 오버레이로 설정 상호작용 차단. -->
+        <Grid Grid.RowSpan="2" Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding IsUnlocked, Converter={StaticResource InverseBoolToVis}}">
+            <Border Style="{StaticResource Card}" Padding="32" Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="360"
+                    Background="{StaticResource Brush.Bg}">
+                <StackPanel>
+                    <TextBlock Text="설정 잠김" Style="{StaticResource Text.H2}" HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="현재 로그인 계정의 비밀번호를 입력하세요." Style="{StaticResource Text.Body}"
+                               Foreground="{StaticResource Brush.Text.Muted}" HorizontalAlignment="Center" Margin="0,0,0,16" />
+                    <PasswordBox x:Name="GatePassword" Width="260" Height="40"
+                                 VerticalContentAlignment="Center" Padding="10,0" KeyDown="OnGatePasswordKeyDown" />
+                    <TextBlock Text="{Binding GateError}" Foreground="{StaticResource Brush.Danger}"
+                               HorizontalAlignment="Center" Margin="0,8,0,0" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                        <Button Content="확인" Style="{StaticResource Button.Primary}" Margin="0,0,12,0" Click="OnUnlockClick" />
+                        <Button Content="닫기" Style="{StaticResource Button.Ghost}" Command="{Binding CancelGateCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

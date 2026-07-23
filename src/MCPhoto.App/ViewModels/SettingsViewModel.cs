@@ -49,6 +49,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _savedNotice = string.Empty;
     [ObservableProperty] private bool _savedNoticeIsError; // 성공=false(민트/성공색), 실패=true(로즈/danger)
 
+    // ── 보완#1: 권한 게이트 ──
+    /// <summary>로그인 여부(게스트=false). QR/Firebase 편집 가능 여부. 설정 진입 중 불변.</summary>
+    public bool IsLoggedIn => _shell.IsLoggedIn;
+    /// <summary>게스트 여부. QR/Firebase는 소스단에서 off 표시·저장 제외(ini 원값 보존).</summary>
+    public bool IsGuest => !_shell.IsLoggedIn;
+
+    /// <summary>설정 잠금 해제 여부. 게스트=무가드(항상 해제), 로그인=비밀번호 확인 후 해제.</summary>
+    [ObservableProperty] private bool _isUnlocked;
+    /// <summary>비밀번호 가드 오류 메시지.</summary>
+    [ObservableProperty] private string _gateError = string.Empty;
+
     // ── it9 C1: 카메라 장치(ComboBox) ──
     /// <summary>연결된 카메라 목록(설정 진입 시 백그라운드 열거). 빈 목록이면 ComboBox Disable.</summary>
     public ObservableCollection<CameraDevice> CameraDevices { get; } = new();
@@ -83,6 +94,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public override async Task OnEnterAsync()
     {
+        IsUnlocked = IsGuest;   // 게스트=무가드, 로그인=비밀번호 가드 (보완#1)
+        GateError = string.Empty;
         LoadSettings();
         await RefreshCamerasAsync();
     }
@@ -148,6 +161,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
             OutputFormat = s.OutputFormat;
             DisplayMode = s.DisplayMode;
             StorageBucket = s.StorageBucket;
+
+            // 게스트: QR/Firebase는 소스단에서 off로 표시(ini는 그대로 — 저장 시 원값 보존). (보완#1)
+            if (IsGuest)
+            {
+                EnableQrDelivery = false;
+                SendPhoto = false;
+                SendTimelapse = false;
+            }
         }
         finally { _normalizing = false; }
     }
@@ -196,20 +217,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.MirrorMode = MirrorMode;
         s.FlashMode = FlashMode;
         s.ShutterSound = ShutterSound;
-        s.EnableQrDelivery = EnableQrDelivery;
-        s.SendPhoto = SendPhoto;
-        s.SendTimelapse = SendTimelapse;
+        // 게스트는 QR/Firebase 설정을 저장하지 않음(ini 원값 보존 → 관리자 값 클로버 방지). (보완#1)
+        if (!IsGuest)
+        {
+            s.EnableQrDelivery = EnableQrDelivery;
+            s.SendPhoto = SendPhoto;
+            s.SendTimelapse = SendTimelapse;
+        }
         s.FilterGrayscale = FilterGrayscale;
         s.FilterBrightness = FilterBrightness;
         s.FilterBeauty = FilterBeauty;
         s.SaveLocalCopy = SaveLocalCopy;
         s.RetentionHours = RetentionHours;
         s.LocalSavePath = LocalSavePath;
-        s.HostingBaseUrl = HostingBaseUrl;
+        if (!IsGuest) s.HostingBaseUrl = HostingBaseUrl;   // Firebase 관련: 게스트 미저장 (보완#1)
         s.CameraDevice = CameraDevice;
         s.OutputFormat = OutputFormat;
         s.DisplayMode = DisplayMode;
-        s.StorageBucket = StorageBucket;
+        if (!IsGuest) s.StorageBucket = StorageBucket;     // Firebase 관련: 게스트 미저장 (보완#1)
 
         var ok = _settings.Save(); // bool 반환(폴백 체인). 내부에서 Clamp() 호출
         LoadSettings();            // 클램프된 값 반영
@@ -231,6 +256,26 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>[닫기]: 오버레이 복귀(직전 화면). 세션 보존.</summary>
     [RelayCommand]
     private async Task Close() => await _shell.ReturnFromOverlay();
+
+    /// <summary>설정 잠금 해제: 현재 로그인 계정의 비밀번호 확인. (보완#1)</summary>
+    [RelayCommand]
+    private void Unlock(string? password)
+    {
+        var current = _shell.Session.CurrentUser;
+        if (current is not null && string.Equals(password, current.Password, StringComparison.Ordinal))
+        {
+            IsUnlocked = true;
+            GateError = string.Empty;
+        }
+        else
+        {
+            GateError = "비밀번호가 일치하지 않습니다.";
+        }
+    }
+
+    /// <summary>비밀번호 가드에서 취소 → 설정 닫기(오버레이 복귀).</summary>
+    [RelayCommand]
+    private async Task CancelGate() => await _shell.ReturnFromOverlay();
 
     private void ShowNotice(string text, bool isError = false)
     {

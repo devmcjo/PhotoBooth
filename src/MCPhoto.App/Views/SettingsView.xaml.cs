@@ -28,5 +28,17 @@ public partial class SettingsView : UserControl
             ColGap.Visibility = Visibility.Visible;
         }
     }
-    // 계정 관련 PasswordBox 핸들러는 계정 페이지(AccountView)로 이전됨(it5 §5 C1).
+
+    // ── 보완#1: 비밀번호 가드(PasswordBox는 바인딩 불가 → code-behind로 값 전달) ──
+    private void OnUnlockClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel vm)
+            vm.UnlockCommand.Execute(GatePassword.Password);
+    }
+
+    private void OnGatePasswordKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter && DataContext is SettingsViewModel vm)
+            vm.UnlockCommand.Execute(GatePassword.Password);
+    }
 }

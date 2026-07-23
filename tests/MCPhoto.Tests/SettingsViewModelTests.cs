@@ -85,6 +85,7 @@ public class SettingsViewModelTests
         settings.Save();
 
         var session = new SessionContext();
+        session.Login(new User { Id = "u1", Password = "pw", Role = UserRole.User }); // QR 로드값 검증은 로그인 사용자 대상(게스트는 소스단 off)
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")), new FakeCameraTestDialog());
         await vm.OnEnterAsync();
@@ -130,5 +131,55 @@ public class SettingsViewModelTests
         await vm.OnEnterAsync();
 
         Assert.Equal(0, vm.CameraDevice);
+    }
+
+    // ── 보완#1: 권한 게이트 ──
+
+    [Fact]
+    public async Task Guest_Is_Unlocked_And_Qr_Forced_Off()
+    {
+        var vm = MakeVm(); // 게스트(로그인 안 함)
+        await vm.OnEnterAsync();
+
+        Assert.True(vm.IsGuest);
+        Assert.True(vm.IsUnlocked);        // 무가드(비밀번호 없음)
+        Assert.False(vm.EnableQrDelivery); // 소스단 강제 off 표시
+    }
+
+    [Fact]
+    public async Task Guest_Save_Preserves_Ini_Qr_And_Firebase()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.EnableQrDelivery = true;          // 관리자가 켜둔 값
+        s.StorageBucket = "keep-bucket";
+        settings.Save();
+
+        var vm = MakeVm(settings: settings); // 게스트
+        await vm.OnEnterAsync();
+        Assert.False(vm.EnableQrDelivery);   // 표시는 off
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.EnableQrDelivery);          // ini 원값 보존(클로버 방지)
+        Assert.Equal("keep-bucket", r.StorageBucket);
+    }
+
+    [Fact]
+    public async Task LoggedIn_Requires_Password_To_Unlock()
+    {
+        var session = new SessionContext();
+        session.Login(new User { Id = "admin", Password = "1111", Role = UserRole.Admin });
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        settings.Load();
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
+        var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")), new FakeCameraTestDialog());
+        await vm.OnEnterAsync();
+
+        Assert.False(vm.IsUnlocked);          // 로그인 → 비밀번호 가드
+        vm.UnlockCommand.Execute("wrong");
+        Assert.False(vm.IsUnlocked);
+        vm.UnlockCommand.Execute("1111");
+        Assert.True(vm.IsUnlocked);
     }
 }
