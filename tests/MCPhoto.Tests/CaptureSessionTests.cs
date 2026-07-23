@@ -119,4 +119,81 @@ public class CaptureSessionTests
         Assert.Empty(s.Cuts);
         Assert.Equal(0, s.CutCount);
     }
+
+    // ── it11 #13: 전체 재촬영 카운터(컷별 재촬영은 후속) ──
+
+    [Fact]
+    public void BeginFullRetake_Increments_And_Clears()
+    {
+        var s = new CaptureSession();
+        var frame = MakeFrame(4);
+        s.Begin(frame, 6);
+        for (int i = 0; i < 6; i++) s.AddCut(MakeStill());
+        s.ToggleSelection(0);
+
+        Assert.Equal(0, s.FullRetakeCount);
+        Assert.False(s.HasFullRetaken);
+
+        s.BeginFullRetake();
+
+        Assert.Equal(1, s.FullRetakeCount);
+        Assert.True(s.HasFullRetaken);
+        Assert.Empty(s.Cuts);          // 컷 폐기
+        Assert.Empty(s.Selection);     // 선택 폐기
+        Assert.Same(frame, s.Frame);   // 프레임 유지(촬영 전 선택 고정)
+    }
+
+    [Fact]
+    public void CanFullRetake_Respects_Limit_Boundary()
+    {
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(4), 6);
+
+        // limit=1: 0회 때 가능, 1회 후 불가.
+        Assert.True(s.CanFullRetake(1));
+        s.BeginFullRetake();
+        Assert.False(s.CanFullRetake(1));
+
+        // limit=3: 1회 소진 상태여도 3회까지 여유.
+        Assert.True(s.CanFullRetake(3));
+        s.BeginFullRetake();
+        s.BeginFullRetake();
+        Assert.Equal(3, s.FullRetakeCount);
+        Assert.False(s.CanFullRetake(3)); // 3회 도달 → 초과 차단
+    }
+
+    [Fact]
+    public void CanFullRetake_Zero_Limit_Always_False()
+    {
+        // 경계: limit 0이면 0회 때도 불가(방어).
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(4), 6);
+        Assert.False(s.CanFullRetake(0));
+    }
+
+    [Fact]
+    public void Discard_Resets_Retake_Counter()
+    {
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(4), 6);
+        s.BeginFullRetake();
+        Assert.Equal(1, s.FullRetakeCount);
+
+        s.Discard();
+        Assert.Equal(0, s.FullRetakeCount);
+        Assert.False(s.HasFullRetaken);
+    }
+
+    [Fact]
+    public void ResetForRetake_Does_Not_Touch_Counter()
+    {
+        // 레거시 경로는 카운터를 건드리지 않음(회귀 방지). 컷·선택만 폐기.
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(4), 6);
+        for (int i = 0; i < 6; i++) s.AddCut(MakeStill());
+
+        s.ResetForRetake();
+        Assert.Empty(s.Cuts);
+        Assert.Equal(0, s.FullRetakeCount); // 카운터 불변
+    }
 }

@@ -34,6 +34,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _mirrorMode;
     [ObservableProperty] private bool _flashMode;
     [ObservableProperty] private bool _shutterSound;   // 기능#7
+    [ObservableProperty] private bool _retakeEnabled;  // it11 #13: 재촬영 사용(상위 토글)
+    [ObservableProperty] private int _retakeLimit;     // it11 #13: 재촬영 횟수 제한(1~3)
     [ObservableProperty] private bool _enableQrDelivery;
     [ObservableProperty] private bool _sendPhoto;       // QR 하위: 사진 전송 (it7 F2)
     [ObservableProperty] private bool _sendTimelapse;   // QR 하위: 타임랩스 전송 (it7 F2)
@@ -75,6 +77,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public IReadOnlyList<int> CutCountOptions { get; } = AppSettings.AllowedCutCounts;
     /// <summary>카운트다운 옵션.</summary>
     public IReadOnlyList<int> CountdownOptions { get; } = AppSettings.AllowedCountdownSecs;
+    /// <summary>재촬영 횟수 제한 옵션(1~3). (it11 #13)</summary>
+    public IReadOnlyList<int> RetakeLimitOptions { get; } = AppSettings.AllowedRetakeLimits;
     /// <summary>출력 포맷 옵션.</summary>
     public IReadOnlyList<OutputFormat> OutputFormatOptions { get; } = new[] { OutputFormat.Jpg, OutputFormat.Png };
     /// <summary>표시 모드 옵션(한글 라벨). 값=DisplayMode, 표시=전체화면/창모드. (it9 후속)</summary>
@@ -168,6 +172,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             MirrorMode = s.MirrorMode;
             FlashMode = s.FlashMode;
             ShutterSound = s.ShutterSound;
+            RetakeEnabled = s.RetakeEnabled;
+            RetakeLimit = s.RetakeLimit;
             EnableQrDelivery = s.EnableQrDelivery;
             SendPhoto = s.SendPhoto;
             SendTimelapse = s.SendTimelapse;
@@ -238,6 +244,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.MirrorMode = MirrorMode;
         s.FlashMode = FlashMode;
         s.ShutterSound = ShutterSound;
+        s.RetakeEnabled = RetakeEnabled;   // it11 #13: 촬영 옵션(게스트 게이트 대상 아님)
+        s.RetakeLimit = RetakeLimit;
         // 게스트는 QR/Firebase 설정을 저장하지 않음(ini 원값 보존 → 관리자 값 클로버 방지). (보완#1)
         if (!IsGuest)
         {

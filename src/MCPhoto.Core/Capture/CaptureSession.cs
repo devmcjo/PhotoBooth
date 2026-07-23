@@ -10,6 +10,7 @@ public sealed class CaptureSession
 {
     private readonly List<CapturedStill> _cuts = new();
     private readonly List<int> _selection = new(); // 선택 순서 = 슬롯 순서
+    private int _fullRetakeCount;                   // 전체 재촬영 실행 횟수 (it11 #13)
 
     /// <summary>선택된 프레임(촬영 전 고정).</summary>
     public FrameTemplate? Frame { get; private set; }
@@ -68,11 +69,30 @@ public sealed class CaptureSession
     public IReadOnlyList<CapturedStill> GetSelectedCuts()
         => _selection.Select(i => _cuts[i]).ToList();
 
-    /// <summary>재촬영: 컷·선택 폐기(프레임 유지). 세션 전체 재촬영.</summary>
+    /// <summary>재촬영: 컷·선택 폐기(프레임 유지). 세션 전체 재촬영. (레거시 경로 — 카운터 미증가, 회귀 방지 유지)</summary>
     public void ResetForRetake()
     {
         _cuts.Clear();
         _selection.Clear();
+    }
+
+    // ── 전체 재촬영 카운터 (it11 #13). 컷별 재촬영은 후속 이터레이션(제외). ──
+
+    /// <summary>지금까지 실행한 전체 재촬영 횟수.</summary>
+    public int FullRetakeCount => _fullRetakeCount;
+
+    /// <summary>전체 재촬영을 1회 이상 했는가.</summary>
+    public bool HasFullRetaken => _fullRetakeCount > 0;
+
+    /// <summary>전체 재촬영 가능 여부(limit 미도달). limit는 호출측이 전달(설정 의존 제거).</summary>
+    public bool CanFullRetake(int limit) => _fullRetakeCount < limit;
+
+    /// <summary>전체 재촬영 실행: 컷·선택 폐기 + 카운터 증가.</summary>
+    public void BeginFullRetake()
+    {
+        _cuts.Clear();
+        _selection.Clear();
+        _fullRetakeCount++;
     }
 
     /// <summary>세션 완전 폐기(취소·완료·유휴).</summary>
@@ -82,5 +102,6 @@ public sealed class CaptureSession
         _cuts.Clear();
         _selection.Clear();
         CutCount = 0;
+        _fullRetakeCount = 0;
     }
 }

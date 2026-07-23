@@ -21,6 +21,13 @@ public sealed partial class CutSelectViewModel : ViewModelBase
     /// <summary>대표 슬롯 종횡비(가로/세로). 썸네일 컨테이너 비율 = 컷 크롭 비율(WYSIWYG, it5 §3 B7). 기본 3:4.</summary>
     [ObservableProperty] private double _slotAspectRatio = 3.0 / 4.0;
 
+    /// <summary>재촬영 UI 노출 여부(설정 on). off면 "다시 촬영" 버튼 미노출. (it11 #13)</summary>
+    public bool RetakeEnabled => _shell.Settings.Current.RetakeEnabled;
+
+    /// <summary>전체 재촬영 가능(설정 on AND 횟수 제한 미도달). "다시 촬영" 버튼 IsEnabled. (it11 #13)</summary>
+    public bool CanFullRetake =>
+        RetakeEnabled && _shell.Session.Capture.CanFullRetake(_shell.Settings.Current.RetakeLimit);
+
     public CutSelectViewModel(AppShellViewModel shell) => _shell = shell;
 
     public override Task OnEnterAsync()
@@ -40,6 +47,10 @@ public sealed partial class CutSelectViewModel : ViewModelBase
             Cuts.Add(thumb);
         }
         UpdateState();
+
+        // 재촬영 UI 상태는 진입마다 최신 설정·카운터를 반영(계산 속성이라 명시 통지). (it11 #13)
+        OnPropertyChanged(nameof(RetakeEnabled));
+        OnPropertyChanged(nameof(CanFullRetake));
         return Task.CompletedTask;
     }
 
@@ -76,11 +87,12 @@ public sealed partial class CutSelectViewModel : ViewModelBase
         await _shell.NavigateAsync(AppState.Result);
     }
 
-    /// <summary>재촬영(세션 전체). CutSelect→Guide.</summary>
+    /// <summary>재촬영(세션 전체). 횟수 제한 미도달 시에만. CutSelect→Guide(기존 전이 재사용). (it11 #13)</summary>
     [RelayCommand]
     private async Task Retake()
     {
-        _shell.Session.Capture.ResetForRetake();
+        if (!CanFullRetake) return;               // 방어(버튼 비활성이어도 이중 확인)
+        _shell.Session.Capture.BeginFullRetake(); // 컷·선택 폐기 + 카운터 증가
         await _shell.NavigateAsync(AppState.Guide);
     }
 

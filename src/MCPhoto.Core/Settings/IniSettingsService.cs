@@ -133,6 +133,8 @@ public sealed class IniSettingsService : ISettingsService
         s.MirrorMode = ini.GetBool(Section, nameof(s.MirrorMode), s.MirrorMode);
         s.FlashMode = ini.GetBool(Section, nameof(s.FlashMode), s.FlashMode);
         s.ShutterSound = ini.GetBool(Section, nameof(s.ShutterSound), s.ShutterSound);
+        s.RetakeEnabled = ini.GetBool(Section, nameof(s.RetakeEnabled), s.RetakeEnabled);
+        s.RetakeLimit = ini.GetInt(Section, nameof(s.RetakeLimit), s.RetakeLimit);
         s.OutputFormat = ini.GetEnum(Section, nameof(s.OutputFormat), s.OutputFormat);
         s.RetentionHours = ini.GetInt(Section, nameof(s.RetentionHours), s.RetentionHours);
         s.EnableQrDelivery = ini.GetBool(Section, nameof(s.EnableQrDelivery), s.EnableQrDelivery);
@@ -161,6 +163,8 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetBool(Section, nameof(s.MirrorMode), s.MirrorMode);
         ini.SetBool(Section, nameof(s.FlashMode), s.FlashMode);
         ini.SetBool(Section, nameof(s.ShutterSound), s.ShutterSound);
+        ini.SetBool(Section, nameof(s.RetakeEnabled), s.RetakeEnabled);
+        ini.SetInt(Section, nameof(s.RetakeLimit), s.RetakeLimit);
         ini.SetEnum(Section, nameof(s.OutputFormat), s.OutputFormat);
         ini.SetInt(Section, nameof(s.RetentionHours), s.RetentionHours);
         ini.SetBool(Section, nameof(s.EnableQrDelivery), s.EnableQrDelivery);

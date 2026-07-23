@@ -225,6 +225,67 @@ public class SettingsTests : IDisposable
         Assert.Contains(s.CountdownSec, AppSettings.AllowedCountdownSecs);
     }
 
+    // ── it11 #13: 재촬영 설정 ──
+
+    [Fact]
+    public void Retake_Defaults_Off_Limit_One()
+    {
+        // 기본: 재촬영 off, 횟수 제한 1.
+        var s = new IniSettingsService(iniPath: _tempPath).Load();
+        Assert.False(s.RetakeEnabled);
+        Assert.Equal(1, s.RetakeLimit);
+    }
+
+    [Fact]
+    public void RetakeLimit_Clamped_Above_To_Three()
+    {
+        var s = new AppSettings { RetakeLimit = 5 };
+        s.Clamp();
+        Assert.Equal(3, s.RetakeLimit); // 5는 허용값(1,2,3) 중 3에 가장 가까움
+    }
+
+    [Fact]
+    public void RetakeLimit_Clamped_Below_To_One()
+    {
+        var s = new AppSettings { RetakeLimit = 0 };
+        s.Clamp();
+        Assert.Equal(1, s.RetakeLimit); // 0은 1로 보정(하한)
+    }
+
+    [Fact]
+    public void RetakeLimit_Snapped_To_Allowed()
+    {
+        var s = new AppSettings { RetakeLimit = 2 };
+        s.Clamp();
+        Assert.Contains(s.RetakeLimit, AppSettings.AllowedRetakeLimits);
+        Assert.Equal(2, s.RetakeLimit); // 유효값은 그대로
+    }
+
+    [Fact]
+    public void Retake_Settings_RoundTrip()
+    {
+        // 재촬영 on + 제한 3 저장 → 새 인스턴스 로드 시 보존.
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.RetakeEnabled = true;
+        s.RetakeLimit = 3;
+        Assert.True(svc.Save());
+
+        var s2 = new IniSettingsService(iniPath: _tempPath).Load();
+        Assert.True(s2.RetakeEnabled);
+        Assert.Equal(3, s2.RetakeLimit);
+    }
+
+    [Fact]
+    public void Retake_Fields_Cloned()
+    {
+        // 편집 취소 대비 얕은 복제에 재촬영 필드 포함.
+        var s = new AppSettings { RetakeEnabled = true, RetakeLimit = 2 };
+        var c = s.Clone();
+        Assert.True(c.RetakeEnabled);
+        Assert.Equal(2, c.RetakeLimit);
+    }
+
     [Fact]
     public void WindowBounds_Minimum_Enforced()
     {

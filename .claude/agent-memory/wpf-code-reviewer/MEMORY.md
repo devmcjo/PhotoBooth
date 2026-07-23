@@ -1,0 +1,1 @@
+- [Settings 왕복 4곳 관례](photobooth-settings-roundtrip-convention.md) — AppSettings 신규 필드=필드+Clamp+Clone+INI 4곳 동시반영, 누락 시 조용히 깨짐. 리뷰 시 1건씩 대조

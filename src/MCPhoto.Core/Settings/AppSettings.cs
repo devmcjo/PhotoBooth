@@ -35,6 +35,7 @@ public sealed class AppSettings
     // ── 허용 옵션 목록 (PRD §10 촬영 설정) ──
     public static readonly int[] AllowedCutCounts = { 6, 8, 10 };
     public static readonly int[] AllowedCountdownSecs = { 3, 6, 8, 10 };
+    public static readonly int[] AllowedRetakeLimits = { 1, 2, 3 };
     public const int MinRetentionHours = 1;
     public const int MaxRetentionHours = 72;
     public const int MinSlots = 1;
@@ -55,6 +56,13 @@ public sealed class AppSettings
 
     /// <summary>셔터음(촬영 순간 효과음). 기본 off. (기능#7)</summary>
     public bool ShutterSound { get; set; }
+
+    // ── 재촬영 (it11 #13) ──
+    /// <summary>재촬영 사용(상위 토글). 기본 off. off면 재촬영 UI 전부 미노출.</summary>
+    public bool RetakeEnabled { get; set; }
+
+    /// <summary>재촬영 횟수 제한(전체 재촬영 상한). 기본 1, 범위 1~3. RetakeEnabled on일 때만 의미.</summary>
+    public int RetakeLimit { get; set; } = 1;
 
     // ── 출력 (PRD §F4) ──
     /// <summary>최종 이미지 포맷. 기본 JPG.</summary>
@@ -123,6 +131,9 @@ public sealed class AppSettings
         if (Array.IndexOf(AllowedCountdownSecs, CountdownSec) < 0)
             CountdownSec = ClosestFrom(CountdownSec, AllowedCountdownSecs, 6);
 
+        if (Array.IndexOf(AllowedRetakeLimits, RetakeLimit) < 0)
+            RetakeLimit = ClosestFrom(RetakeLimit, AllowedRetakeLimits, 1);
+
         RetentionHours = Math.Clamp(RetentionHours, MinRetentionHours, MaxRetentionHours);
 
         if (WindowBounds.Width < 1280) WindowBounds.Width = 1280;
@@ -169,6 +180,8 @@ public sealed class AppSettings
         MirrorMode = MirrorMode,
         FlashMode = FlashMode,
         ShutterSound = ShutterSound,
+        RetakeEnabled = RetakeEnabled,
+        RetakeLimit = RetakeLimit,
         OutputFormat = OutputFormat,
         RetentionHours = RetentionHours,
         EnableQrDelivery = EnableQrDelivery,

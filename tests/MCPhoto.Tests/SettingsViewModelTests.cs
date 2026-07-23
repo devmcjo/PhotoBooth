@@ -107,6 +107,27 @@ public class SettingsViewModelTests
         Assert.False(vm.SendTimelapse); // 로드값 보존(강제 on 안 됨)
     }
 
+    // ── it11 #13: 재촬영 설정 왕복(게스트 게이트 대상 아님 — 촬영 옵션) ──
+
+    [Fact]
+    public async Task Retake_Settings_Save_And_Load_RoundTrip()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var vm = MakeVm(settings: settings);   // 게스트(로그인 안 함) — 재촬영은 게스트도 저장 가능
+        await vm.OnEnterAsync();
+
+        Assert.False(vm.RetakeEnabled);        // 기본 off
+        Assert.Equal(1, vm.RetakeLimit);       // 기본 1
+
+        vm.RetakeEnabled = true;
+        vm.RetakeLimit = 3;
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.RetakeEnabled);          // 게스트여도 촬영 옵션은 저장됨
+        Assert.Equal(3, r.RetakeLimit);
+    }
+
     // ── it9 C1: 카메라 열거 ──
 
     [Fact]

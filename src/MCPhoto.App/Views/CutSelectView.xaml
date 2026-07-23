@@ -57,7 +57,10 @@
         </ListBox>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,28">
+            <!-- it11 #13: 재촬영 설정 off면 미노출, 횟수 제한 도달 시 Disable. -->
             <Button Content="다시 촬영" Command="{Binding RetakeCommand}"
+                    IsEnabled="{Binding CanFullRetake}"
+                    Visibility="{Binding RetakeEnabled, Converter={StaticResource BoolToVis}}"
                     Style="{StaticResource Button.Secondary}" Margin="8,0" />
             <Button Content="다음" Command="{Binding NextCommand}" IsEnabled="{Binding CanProceed}"
                     Style="{StaticResource Button.Primary}" Padding="48,0" Margin="8,0" />

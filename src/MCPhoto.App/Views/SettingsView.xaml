@@ -106,6 +106,28 @@
                                     <TextBlock Grid.Column="0" Text="셔터음" Style="{StaticResource RowLabel}" />
                                     <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding ShutterSound}" />
                                 </Grid>
+                                <!-- it11 #13: 재촬영 사용(상위 토글). on일 때만 하위(횟수 제한) 노출. 컷별 재촬영은 후속. -->
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="재촬영 사용" Style="{StaticResource RowLabel}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding RetakeEnabled}" />
+                                </Grid>
+                                <!-- 재촬영 하위(횟수 제한): 재촬영 on일 때만 노출. 들여쓰기로 하위 계층 표현(QR 하위 패턴 재사용). -->
+                                <StackPanel Margin="20,0,0,0"
+                                            Visibility="{Binding RetakeEnabled, Converter={StaticResource BoolToVis}}">
+                                    <Grid Style="{StaticResource SettingRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="↳ 재촬영 횟수 제한" Style="{StaticResource RowLabel}" />
+                                        <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="140"
+                                                  ItemsSource="{Binding RetakeLimitOptions}" SelectedItem="{Binding RetakeLimit}" />
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
 
                             <!-- 열 간격 -->
