@@ -306,23 +306,27 @@
         <Border Grid.Row="1" Background="{StaticResource Brush.Bg}" BorderThickness="0,1,0,0"
                 BorderBrush="{StaticResource Brush.Divider}" Effect="{StaticResource Shadow.Sm}"
                 Padding="40,12">
-            <!-- 2열 분리(*/Auto): 좌=저장+토스트, 우=닫기. 어떤 폭에서도 겹치지 않음. (it9 §3 C2) -->
+            <!-- 저장/닫기만. 저장 안내는 상단 토스트로 분리(버튼 가림 방지). -->
             <Grid MaxWidth="1200" HorizontalAlignment="Center">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />     <!-- 좌: 저장 + 토스트 -->
-                    <ColumnDefinition Width="Auto" />  <!-- 우: 닫기 -->
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,12,0">
-                    <Button Content="저장" Style="{StaticResource Button.Primary}"
-                            Command="{Binding SaveSettingsCommand}" Margin="0,0,12,0" />
-                    <!-- 성공=Success(민트 계열), 실패=Danger(로즈 계열) 색 분기(it3 §3). 좌 열 내에서만 잘림(닫기 침범 불가). -->
-                    <TextBlock Text="{Binding SavedNotice}" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{Binding SavedNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
-                </StackPanel>
+                <Button Grid.Column="0" Content="저장" Style="{StaticResource Button.Primary}"
+                        Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left" />
                 <Button Grid.Column="1" Content="닫기" Style="{StaticResource Button.Ghost}"
                         Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
             </Grid>
+        </Border>
+
+        <!-- 저장 결과 토스트: 상단 중앙, 자동 숨김(3~6초). 하단 버튼과 분리해 가림 방지. 클릭 비간섭. -->
+        <Border Grid.RowSpan="2" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,96,0,0"
+                IsHitTestVisible="False"
+                Background="{StaticResource Brush.Surface}" CornerRadius="{StaticResource Radius.Pill}"
+                Padding="24,12" Effect="{StaticResource Shadow.Pop}"
+                Visibility="{Binding HasSavedNotice, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="{Binding SavedNotice}" Style="{StaticResource Text.Body}"
+                       Foreground="{Binding SavedNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
         </Border>
     </Grid>
 </UserControl>

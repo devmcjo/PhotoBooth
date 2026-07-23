@@ -46,8 +46,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private DisplayMode _displayMode;
     [ObservableProperty] private string _storageBucket = string.Empty;
 
-    [ObservableProperty] private string _savedNotice = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSavedNotice))]
+    private string _savedNotice = string.Empty;
     [ObservableProperty] private bool _savedNoticeIsError; // 성공=false(민트/성공색), 실패=true(로즈/danger)
+
+    /// <summary>저장 안내 토스트 표시 여부(문구가 있을 때만).</summary>
+    public bool HasSavedNotice => !string.IsNullOrEmpty(SavedNotice);
 
     // ── 보완#1: 권한 게이트 ──
     /// <summary>로그인 여부(게스트=false). QR/Firebase 편집 가능 여부. 설정 진입 중 불변.</summary>
