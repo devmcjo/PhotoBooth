@@ -22,29 +22,21 @@
 | ~~Preview 데드코드~~ | `PreviewView`/`PreviewViewModel` 미매핑 | — | **정리 완료(2026-07-23)**: 파일·DI 등록 제거 |
 | 만료 물리삭제는 인프라 의존 | `PurgeExpiredAsync` 코드 존재하나 앱에서 호출 안 함 → GCS Lifecycle/Firestore TTL 설정에 의존 | `Firebase/UploadService.cs` | 의도된 설계([50](./50-infra-gcp-lifecycle-and-ttl.md)). 인프라 미설정 시 미삭제 주의 |
 
-## 2. 다음 착수 예정 (우선순위 큐 — 사용자 확정, 태스크 등록됨)
+## 2. 다음 착수 예정 (우선순위 큐)
 
-> 다음 개발 세션에서 이 순서로 진행. (2026-07-23 기준)
+> it11에서 대기 큐를 파이프라인(Opus 설계→개발→리뷰, Fable 최종검증)으로 진행(2026-07-24).
+> **#14·#15·#16 완료, #13은 전체 재촬영만 완료.** 아래 컷별 재촬영만 남음.
 
-### #13 재촬영 (기능) — 설정 옵션 + 촬영 플로우
-- **설정 옵션(계층)**:
-  - 재촬영 사용 **토글**(상위).
-  - (on일 때) **재촬영 횟수 제한 콤보 1~3**.
-  - (on일 때) **컷별 재촬영 활성화 토글**.
-- **동작 규칙**:
-  - **전체 재촬영**: 세션 전체를 다시 촬영(횟수 제한까지). 기존 `CutSelect→Guide` 경로 재사용 가능.
-  - **컷별 재촬영**: "컷별 재촬영 활성화"가 켜진 경우에만 제공. **각 컷 1회만**. 단 **전체 재촬영을 한 번이라도 한 세션에서는 컷별 재촬영 미제공**.
-- **영향**: `AppSettings`(RetakeEnabled/RetakeLimit/PerCutRetake) + INI 매핑 + `SettingsView` + `CaptureViewModel`/`CutSelectViewModel` 플로우 + 테스트.
+### #13 컷별 재촬영 (기능) — **남은 부분, USER-DECISION 대기**
+- it11에서 **전체 재촬영 + 설정(재촬영 토글·횟수 1~3)** 완료(`8f0d2fc`). 컷별 재촬영만 미구현.
+- **보류 사유**: 컷별 재촬영 **버튼의 UI 배치·인터랙션**(썸네일 우하단 ↺ 오버레이 vs 별도 모드)이 사용자 결정 필요.
+- 승인 시 한 덩어리로: `AppSettings.PerCutRetake` + "컷별 재촬영 활성화" 토글 + `CaptureSession` per-cut 카운터(`ReplaceCut`/`CanPerCutRetake`) + `SessionContext.RetakeTargetCut` + `SessionStateMachine`의 `CutSelect→Capture` 전이(**회귀 테스트 필수**) + `CaptureViewModel` 단일 컷 플로우 + 썸네일 ↺ 버튼. 규칙: **각 컷 1회만**, **전체 재촬영을 한 세션에선 컷별 미제공**. 설계 상세 [it11](../design/wpf-it11-deferred-features-design.md).
 
-### #14 진단/상태 화면 (기능)
-- 카메라(연결·선택 상태)·ffmpeg(`IsAvailable`·경로)·Firebase(`IsInitialized`·버킷) **헬스체크** + **로그 폴더 경로·열기**.
-- 진입: **로그인 상태에서 설정 화면 내 버튼**(권장). 관리자 현장 트러블슈팅용. 로그 위치는 [70](./70-logging-and-troubleshooting.md) 참조.
+### ~~#14 진단/상태 화면~~ — **완료(it11, `eb465df`)**: 설정 [고급] 로그인 전용 버튼 → 모달(카메라/ffmpeg/Firebase 헬스체크 + 로그 폴더 열기).
+### ~~#15 카메라 장치 FriendlyName~~ — **완료(it11, `10a8d02`)**: WMI best-effort 이름 + 인덱스 기준 동작·폴백.
+### ~~#16 업로드 진행률/재시도 UX~~ — **완료(it11, `0532df0`)**: GCS 파일단위 진행률 배선 + 진행 바/재시도.
 
-### #15 카메라 장치 FriendlyName (보완)
-- 현재 `"Camera {index}"`(DShow FriendlyName 미조회) → 실제 장치명 조회로 여러 대 구분. 의존성(`System.Management`/P-Invoke) 검토.
-
-### #16 업로드 진행률/재시도 UX (보완)
-- QR 업로드(특히 타임랩스) **진행률 표시 + 재시도**. `IProgress` 배선(`UploadService`→`QrPopupViewModel`).
+> **it11 세부 문서 동기화 대기(11·12)**: 재촬영·진단·카메라명·업로드 진행률을 세부 문서에 반영(§1 "문서 동기화 지연" 항목과 함께).
 
 ## 2.1 추후 개선 (장기 — 미룸, 사용자 "추후 개선" 확정)
 
