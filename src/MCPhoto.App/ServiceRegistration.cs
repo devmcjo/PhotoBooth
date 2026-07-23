@@ -30,6 +30,8 @@ internal static class ServiceRegistration
 
         // it9 C1: 카메라 테스트 모달 오픈(다이얼로그 서비스 — VM이 Window 미참조).
         services.AddSingleton<ICameraTestDialogService, CameraTestDialogService>();
+        // 보완#1: 설정 진입 전 비밀번호 확인 모달.
+        services.AddSingleton<IPasswordPromptDialogService, PasswordPromptDialogService>();
 
         // Step 2: 설정(INI)
         services.AddSingleton<ISettingsService, IniSettingsService>();

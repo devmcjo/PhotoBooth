@@ -283,6 +283,14 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private async Task OpenSettings()
     {
         IsAccountPopupOpen = false;
+        // 로그인 사용자는 설정 진입 '전'에 비밀번호 확인(게스트는 무가드). 취소/불일치면 진입하지 않음. (보완#1)
+        var user = _session.CurrentUser;
+        if (user is not null)
+        {
+            var prompt = _services.GetService<Services.IPasswordPromptDialogService>();
+            if (prompt is not null && !prompt.Prompt(user.Password ?? string.Empty))
+                return;
+        }
         await NavigateToOverlayAsync(AppState.Settings);
     }
 

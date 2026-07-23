@@ -324,27 +324,5 @@
                         Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
             </Grid>
         </Border>
-
-        <!-- 보완#1: 로그인 사용자 설정 진입 비밀번호 가드. 잠금 해제 전까지 오버레이로 설정 상호작용 차단. -->
-        <Grid Grid.RowSpan="2" Background="{StaticResource Brush.Scrim}"
-              Visibility="{Binding IsUnlocked, Converter={StaticResource InverseBoolToVis}}">
-            <Border Style="{StaticResource Card}" Padding="32" Effect="{StaticResource Shadow.Pop}"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="360"
-                    Background="{StaticResource Brush.Bg}">
-                <StackPanel>
-                    <TextBlock Text="설정 잠김" Style="{StaticResource Text.H2}" HorizontalAlignment="Center" Margin="0,0,0,8" />
-                    <TextBlock Text="현재 로그인 계정의 비밀번호를 입력하세요." Style="{StaticResource Text.Body}"
-                               Foreground="{StaticResource Brush.Text.Muted}" HorizontalAlignment="Center" Margin="0,0,0,16" />
-                    <PasswordBox x:Name="GatePassword" Width="260" Height="40"
-                                 VerticalContentAlignment="Center" Padding="10,0" KeyDown="OnGatePasswordKeyDown" />
-                    <TextBlock Text="{Binding GateError}" Foreground="{StaticResource Brush.Danger}"
-                               HorizontalAlignment="Center" Margin="0,8,0,0" />
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
-                        <Button Content="확인" Style="{StaticResource Button.Primary}" Margin="0,0,12,0" Click="OnUnlockClick" />
-                        <Button Content="닫기" Style="{StaticResource Button.Ghost}" Command="{Binding CancelGateCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-        </Grid>
     </Grid>
 </UserControl>

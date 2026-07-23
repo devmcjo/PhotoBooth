@@ -55,11 +55,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>게스트 여부. QR/Firebase는 소스단에서 off 표시·저장 제외(ini 원값 보존).</summary>
     public bool IsGuest => !_shell.IsLoggedIn;
 
-    /// <summary>설정 잠금 해제 여부. 게스트=무가드(항상 해제), 로그인=비밀번호 확인 후 해제.</summary>
-    [ObservableProperty] private bool _isUnlocked;
-    /// <summary>비밀번호 가드 오류 메시지.</summary>
-    [ObservableProperty] private string _gateError = string.Empty;
-
     // ── it9 C1: 카메라 장치(ComboBox) ──
     /// <summary>연결된 카메라 목록(설정 진입 시 백그라운드 열거). 빈 목록이면 ComboBox Disable.</summary>
     public ObservableCollection<CameraDevice> CameraDevices { get; } = new();
@@ -94,8 +89,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public override async Task OnEnterAsync()
     {
-        IsUnlocked = IsGuest;   // 게스트=무가드, 로그인=비밀번호 가드 (보완#1)
-        GateError = string.Empty;
         LoadSettings();
         await RefreshCamerasAsync();
     }
@@ -256,26 +249,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>[닫기]: 오버레이 복귀(직전 화면). 세션 보존.</summary>
     [RelayCommand]
     private async Task Close() => await _shell.ReturnFromOverlay();
-
-    /// <summary>설정 잠금 해제: 현재 로그인 계정의 비밀번호 확인. (보완#1)</summary>
-    [RelayCommand]
-    private void Unlock(string? password)
-    {
-        var current = _shell.Session.CurrentUser;
-        if (current is not null && string.Equals(password, current.Password, StringComparison.Ordinal))
-        {
-            IsUnlocked = true;
-            GateError = string.Empty;
-        }
-        else
-        {
-            GateError = "비밀번호가 일치하지 않습니다.";
-        }
-    }
-
-    /// <summary>비밀번호 가드에서 취소 → 설정 닫기(오버레이 복귀).</summary>
-    [RelayCommand]
-    private async Task CancelGate() => await _shell.ReturnFromOverlay();
 
     private void ShowNotice(string text, bool isError = false)
     {

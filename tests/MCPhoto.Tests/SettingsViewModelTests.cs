@@ -136,13 +136,12 @@ public class SettingsViewModelTests
     // ── 보완#1: 권한 게이트 ──
 
     [Fact]
-    public async Task Guest_Is_Unlocked_And_Qr_Forced_Off()
+    public async Task Guest_Qr_Forced_Off()
     {
         var vm = MakeVm(); // 게스트(로그인 안 함)
         await vm.OnEnterAsync();
 
         Assert.True(vm.IsGuest);
-        Assert.True(vm.IsUnlocked);        // 무가드(비밀번호 없음)
         Assert.False(vm.EnableQrDelivery); // 소스단 강제 off 표시
     }
 
@@ -165,21 +164,6 @@ public class SettingsViewModelTests
         Assert.Equal("keep-bucket", r.StorageBucket);
     }
 
-    [Fact]
-    public async Task LoggedIn_Requires_Password_To_Unlock()
-    {
-        var session = new SessionContext();
-        session.Login(new User { Id = "admin", Password = "1111", Role = UserRole.Admin });
-        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
-        settings.Load();
-        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
-        var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")), new FakeCameraTestDialog());
-        await vm.OnEnterAsync();
-
-        Assert.False(vm.IsUnlocked);          // 로그인 → 비밀번호 가드
-        vm.UnlockCommand.Execute("wrong");
-        Assert.False(vm.IsUnlocked);
-        vm.UnlockCommand.Execute("1111");
-        Assert.True(vm.IsUnlocked);
-    }
+    // 로그인 사용자 비밀번호 가드는 설정 '진입 전' 모달(PasswordPromptWindow)로 이동 —
+    // AppShellViewModel.OpenSettings에서 처리(UI 모달이라 여기서 단위 테스트하지 않음). (보완#1 후속)
 }
