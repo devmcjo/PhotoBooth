@@ -36,6 +36,10 @@ internal static class ServiceRegistration
         // 보완#1: 설정 진입 전 비밀번호 확인 모달.
         services.AddSingleton<IPasswordPromptDialogService, PasswordPromptDialogService>();
 
+        // it11 #14: 진단·상태 모달(관리자 트러블슈팅). 로그 폴더 서비스 + 다이얼로그 서비스.
+        services.AddSingleton<ILogFolderService, LogFolderService>();
+        services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();
+
         // Step 2: 설정(INI)
         services.AddSingleton<ISettingsService, IniSettingsService>();
 
@@ -100,5 +104,7 @@ internal static class ServiceRegistration
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<UserMgmtViewModel>();
         services.AddTransient<AccountViewModel>();
+        // it11 #14: 진단 VM(모달 진입마다 새 인스턴스 — 최신 카메라·상태 반영).
+        services.AddTransient<DiagnosticsViewModel>();
     }
 }

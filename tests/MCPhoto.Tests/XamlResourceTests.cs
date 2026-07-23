@@ -169,4 +169,51 @@ public class XamlResourceTests
                 $"{file} 이 자체적으로 해석 못 하는 StaticResource: {string.Join(", ", unresolved)}");
         });
     }
+
+    // ── it11 #14: 진단 모달 XAML의 StaticResource 키가 테마에서 전부 해석되는지 정적 검증 ──
+    // Window 인스턴스화(Application/스레드 친화 제약)를 피하고, 소스에서 참조 키를 추출해 테마 조회로만 검증.
+
+    private static string FindAppViewsDir()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "MCPhoto.App", "Views");
+            if (Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        throw new DirectoryNotFoundException("src/MCPhoto.App/Views 를 찾지 못함");
+    }
+
+    [Fact]
+    public void DiagnosticsWindow_StaticResource_Keys_Resolve_In_Theme()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "DiagnosticsWindow.xaml"));
+
+        // 자체 정의 리소스(HealthValue 등 Window.Resources)는 제외하고 테마 참조만 검증.
+        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+
+        // App.xaml에 정의된 공용 컨버터 키(테마 딕셔너리 밖)는 이 검증 대상이 아님.
+        var appKeys = new HashSet<string>
+        {
+            "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
+            "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
+            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "FilePathToImage",
+        };
+
+        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(k => k.Length > 0 && !localKeys.Contains(k) && !appKeys.Contains(k))
+            .Distinct()
+            .ToArray();
+
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var missing = referenced.Where(k => !theme.Contains(k)).ToList();
+            Assert.True(missing.Count == 0,
+                "DiagnosticsWindow.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
+        });
+    }
 }

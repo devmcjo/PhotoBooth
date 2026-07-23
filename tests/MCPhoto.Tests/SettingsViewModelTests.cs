@@ -47,8 +47,15 @@ public class SettingsViewModelTests
         public Task ShowAsync(int deviceIndex) { LastDeviceIndex = deviceIndex; return Task.CompletedTask; }
     }
 
+    /// <summary>진단 모달 페이크 — ShowAsync 호출 횟수만 관측(실제 창 미표시). (it11 #14)</summary>
+    private sealed class FakeDiagnosticsDialog : IDiagnosticsDialogService
+    {
+        public int ShowCount { get; private set; }
+        public Task ShowAsync() { ShowCount++; return Task.CompletedTask; }
+    }
+
     private static SettingsViewModel MakeVm(ICameraService? camera = null, IniSettingsService? settings = null,
-        IFirebaseClient? firebase = null)
+        IFirebaseClient? firebase = null, IDiagnosticsDialogService? diagnostics = null)
     {
         var session = new SessionContext();
         settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
@@ -56,7 +63,8 @@ public class SettingsViewModelTests
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         camera ??= new FakeCameraService(new CameraDevice(0, "Camera 0"));
         firebase ??= new FakeFirebaseClient { IsInitialized = false };
-        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(), firebase);
+        diagnostics ??= new FakeDiagnosticsDialog();
+        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(), diagnostics, firebase);
     }
 
     [Fact]
@@ -91,7 +99,7 @@ public class SettingsViewModelTests
         session.Login(new User { Id = "u1", Password = "pw", Role = UserRole.User }); // QR 로드값 검증은 로그인 사용자 대상(게스트는 소스단 off)
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
-            new FakeCameraTestDialog(), new FakeFirebaseClient { IsInitialized = false });
+            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
         await vm.OnEnterAsync();
 
         Assert.True(vm.EnableQrDelivery);
@@ -189,5 +197,38 @@ public class SettingsViewModelTests
 
         Assert.False(vm.IsServerConnected);
         Assert.Equal("미연결 — 서비스 계정 키 없음(로그 참조)", vm.ServerStatusText);
+    }
+
+    // ── it11 #14: 진단·상태 모달 진입(로그인 게이트) ──
+
+    [Fact]
+    public async Task Guest_OpenDiagnostics_Is_NoOp()
+    {
+        // 게스트(로그인 안 함) → 다이얼로그 서비스 미호출.
+        var diag = new FakeDiagnosticsDialog();
+        var vm = MakeVm(diagnostics: diag);
+
+        Assert.True(vm.IsGuest);
+        await vm.OpenDiagnosticsCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, diag.ShowCount);
+    }
+
+    [Fact]
+    public async Task LoggedIn_OpenDiagnostics_Shows_Dialog_Once()
+    {
+        var diag = new FakeDiagnosticsDialog();
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        settings.Load();
+        var session = new SessionContext();
+        session.Login(new User { Id = "admin", Password = "pw", Role = UserRole.Admin });
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
+        var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
+            new FakeCameraTestDialog(), diag, new FakeFirebaseClient { IsInitialized = false });
+
+        Assert.True(vm.IsLoggedIn);
+        await vm.OpenDiagnosticsCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, diag.ShowCount);
     }
 }

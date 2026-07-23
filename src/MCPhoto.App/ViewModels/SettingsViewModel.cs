@@ -22,6 +22,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly ISettingsService _settings;
     private readonly ICameraService _camera;
     private readonly ICameraTestDialogService _cameraTestDialog;
+    private readonly IDiagnosticsDialogService _diagnostics;
     private readonly IFirebaseClient _firebase;
     private readonly ILogger<SettingsViewModel>? _logger;
 
@@ -85,12 +86,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public SettingsViewModel(AppShellViewModel shell, ISettingsService settings,
         ICameraService camera, ICameraTestDialogService cameraTestDialog,
+        IDiagnosticsDialogService diagnostics,
         IFirebaseClient firebase, ILogger<SettingsViewModel>? logger = null)
     {
         _shell = shell;
         _settings = settings;
         _camera = camera;
         _cameraTestDialog = cameraTestDialog;
+        _diagnostics = diagnostics;
         _firebase = firebase;
         _logger = logger;
     }
@@ -142,6 +145,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
         if (!HasCamera) return;
         try { await _cameraTestDialog.ShowAsync(CameraDevice); }
         catch (Exception ex) { _logger?.LogError(ex, "카메라 테스트 모달 오류"); }
+    }
+
+    /// <summary>진단·상태 모달 열기(관리자 트러블슈팅). 로그인 상태에서만(게스트 no-op). (it11 §3.14.7)</summary>
+    [RelayCommand]
+    private async Task OpenDiagnostics()
+    {
+        if (!IsLoggedIn) return;
+        try { await _diagnostics.ShowAsync(); }
+        catch (Exception ex) { _logger?.LogError(ex, "진단 다이얼로그 오류"); }
     }
 
     private void LoadSettings()

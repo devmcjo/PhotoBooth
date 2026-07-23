@@ -320,6 +320,11 @@
                                 </TextBlock.Style>
                             </TextBlock>
                         </Grid>
+
+                        <!-- it11 #14: 진단·상태 모달 진입. 로그인 상태에서만 활성(게스트 Disable). 관리자 트러블슈팅용. -->
+                        <Button Content="진단·상태" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Left" MinWidth="0" Padding="20,0" Margin="0,4,0,0"
+                                Command="{Binding OpenDiagnosticsCommand}" IsEnabled="{Binding IsLoggedIn}" />
                     </StackPanel>
                 </Border>
             </StackPanel>
