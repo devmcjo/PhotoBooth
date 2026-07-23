@@ -40,7 +40,26 @@
 
         <!-- 플래시 오버레이(흰 화면 펄스, CaptureView와 동일 방식) -->
         <Border x:Name="FlashOverlay" Background="{StaticResource Brush.OnAccent}"
-                Visibility="{Binding FlashActive, Converter={StaticResource BoolToVis}}" />
+                Visibility="{Binding FlashActive, Converter={StaticResource BoolToVis}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Opacity" Value="1" />
+                    <Style.Triggers>
+                        <Trigger Property="Visibility" Value="Visible">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         From="1" To="0.55" Duration="0:0:0.12"
+                                                         AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
 
         <!-- 카메라 로딩/실패 오버레이(Ready 게이트) -->
         <Grid Background="{StaticResource Brush.Scrim}"

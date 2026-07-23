@@ -42,9 +42,30 @@
                 BorderThickness="0" Padding="16,8" Cursor="Hand"
                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="20" />
 
-        <!-- 플래시 오버레이(흰 화면 펄스) -->
-        <Border x:Name="FlashOverlay" Background="{StaticResource Brush.OnAccent}" Opacity="0"
-                Visibility="{Binding FlashActive, Converter={StaticResource BoolToVis}}" />
+        <!-- 플래시 오버레이(흰 화면 펄스): FlashActive=true로 표시되는 순간 즉시 불투명하게 노출되고,
+             표시된 후에는 자연스럽게 밝기가 살짝 빠지는 페이드를 반복해 눈부심을 완화한다.
+             (버그 수정: 이전에는 Opacity="0" 고정이라 FlashActive가 true여도 화면이 보이지 않았음) -->
+        <Border x:Name="FlashOverlay" Background="{StaticResource Brush.OnAccent}"
+                Visibility="{Binding FlashActive, Converter={StaticResource BoolToVis}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Opacity" Value="1" />
+                    <Style.Triggers>
+                        <Trigger Property="Visibility" Value="Visible">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         From="1" To="0.55" Duration="0:0:0.12"
+                                                         AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
 
         <!-- 카메라 로딩 오버레이(U4): CameraState==Initializing일 때만. 스피너 + 안내. (it3 §7.2) -->
         <Grid Background="{StaticResource Brush.Scrim}"
