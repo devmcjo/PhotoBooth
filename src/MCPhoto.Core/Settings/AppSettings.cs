@@ -109,6 +109,15 @@ public sealed class AppSettings
     /// <summary>사용할 웹캠 장치 인덱스. 기본 0.</summary>
     public int CameraDevice { get; set; }
 
+    // ── 외부 장치(추후 지원 · item3 스캐폴드). 로그인 전용 옵션 자리. ──
+    // ⚠️ placeholder: 값은 INI에 저장/복원만 하고 현재 실기능에 배선하지 않는다(미지원 골격).
+    //    실제 하드웨어 연동은 장비 확정 후. 참조: docs/USER-ACTIONS.md §C1.
+    /// <summary>외부 카메라(DSLR 등) 사용. 기본 false(미지원 스캐폴드).</summary>
+    public bool ExternalCameraEnabled { get; set; }
+
+    /// <summary>사진 프린터(BT/WiFi) 사용. 기본 false(미지원 스캐폴드).</summary>
+    public bool PhotoPrinterEnabled { get; set; }
+
     // ── 웹 연동 (firebase-contract §3.5) ──
     /// <summary>다운로드 페이지 Hosting base URL(트레일링 슬래시 제외). downloadPageUrl 조립 기준. 개발 기본값 박음(it9 후속).</summary>
     public string HostingBaseUrl { get; set; } = "https://mcphoto-955fb.web.app";
@@ -251,6 +260,8 @@ public sealed class AppSettings
             Height = WindowBounds.Height
         },
         CameraDevice = CameraDevice,
+        ExternalCameraEnabled = ExternalCameraEnabled,
+        PhotoPrinterEnabled = PhotoPrinterEnabled,
         HostingBaseUrl = HostingBaseUrl,
         StorageBucket = StorageBucket,
         UseBackend = UseBackend,

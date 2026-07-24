@@ -220,6 +220,47 @@ public class SettingsViewModelTests
         Assert.True(r.FilterBeauty);
     }
 
+    // ── item3 스캐폴드: 외부 장치 placeholder(로그인 전용 편집, 저장만·실기능 미배선) ──
+
+    [Fact]
+    public async Task LoggedIn_Saves_External_Device_Placeholders()
+    {
+        // 로그인 사용자는 외부 장치 placeholder 값을 저장·복원할 수 있어야(왕복). UI에선 Disable이지만 저장 경로는 게이트만 검증.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var vm = MakeLoggedInVm(settings: settings);
+        await vm.OnEnterAsync();
+
+        Assert.False(vm.ExternalCameraEnabled); // 기본 off
+        Assert.False(vm.PhotoPrinterEnabled);
+
+        vm.ExternalCameraEnabled = true;
+        vm.PhotoPrinterEnabled = true;
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.ExternalCameraEnabled);
+        Assert.True(r.PhotoPrinterEnabled);
+    }
+
+    [Fact]
+    public async Task Guest_Save_Preserves_Ini_External_Device_Placeholders()
+    {
+        // 게스트는 외부 장치 섹션 미노출 → 저장 시 ini 원값 보존(클로버 방지). QR/필터 게이트와 동형.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.ExternalCameraEnabled = true;   // 관리자가 켜둔 값
+        s.PhotoPrinterEnabled = true;
+        settings.Save();
+
+        var vm = MakeVm(settings: settings); // 게스트
+        await vm.OnEnterAsync();
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.ExternalCameraEnabled);  // ini 원값 보존
+        Assert.True(r.PhotoPrinterEnabled);
+    }
+
     // ── it9 C1: 카메라 열거 ──
 
     [Fact]

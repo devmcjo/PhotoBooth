@@ -344,6 +344,44 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- item3 스캐폴드: 외부 장치(추후 지원). 로그인 전용 노출(게스트는 섹션 자체 Collapsed).
+                             ⚠️ 현재 미지원 — 토글은 항상 Disable + "추후 지원 예정" 안내. 값은 저장만, 실기능 미배선. -->
+                        <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}">
+                            <Border Style="{StaticResource GroupDivider}" />
+                            <TextBlock Text="외부 장치 (추후 지원)" Style="{StaticResource GroupTitle}" />
+                            <TextBlock Text="외부 카메라(DSLR)·프린터 연동은 장비 확정 후 지원됩니다. 현재는 설정 자리만 제공됩니다."
+                                       Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                       TextWrapping="Wrap" Margin="0,0,0,8" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="외부 카메라 사용" Style="{StaticResource RowLabel}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="추후 지원 예정" Style="{StaticResource Text.Caption}"
+                                               Foreground="{StaticResource Brush.Text.Muted}"
+                                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <ToggleButton Style="{StaticResource Toggle}"
+                                                  IsChecked="{Binding ExternalCameraEnabled}" IsEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="프린터 사용" Style="{StaticResource RowLabel}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="추후 지원 예정" Style="{StaticResource Text.Caption}"
+                                               Foreground="{StaticResource Brush.Text.Muted}"
+                                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <ToggleButton Style="{StaticResource Toggle}"
+                                                  IsChecked="{Binding PhotoPrinterEnabled}" IsEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+
                         <Border Style="{StaticResource GroupDivider}" />
 
                         <!-- ── 그룹: 고급 ── -->

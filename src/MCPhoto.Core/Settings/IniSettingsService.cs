@@ -147,6 +147,9 @@ public sealed class IniSettingsService : ISettingsService
         s.LocalSavePath = ini.GetString(Section, nameof(s.LocalSavePath), s.LocalSavePath);
         s.DisplayMode = ini.GetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
         s.CameraDevice = ini.GetInt(Section, nameof(s.CameraDevice), s.CameraDevice);
+        // item3 스캐폴드: 외부 장치 placeholder(저장/복원만, 실기능 미배선).
+        s.ExternalCameraEnabled = ini.GetBool(Section, nameof(s.ExternalCameraEnabled), s.ExternalCameraEnabled);
+        s.PhotoPrinterEnabled = ini.GetBool(Section, nameof(s.PhotoPrinterEnabled), s.PhotoPrinterEnabled);
         s.HostingBaseUrl = ini.GetString(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         s.StorageBucket = ini.GetString(Section, nameof(s.StorageBucket), s.StorageBucket);
         s.UseBackend = ini.GetBool(Section, nameof(s.UseBackend), s.UseBackend);
@@ -181,6 +184,9 @@ public sealed class IniSettingsService : ISettingsService
         ini.Set(Section, nameof(s.LocalSavePath), s.LocalSavePath);
         ini.SetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
         ini.SetInt(Section, nameof(s.CameraDevice), s.CameraDevice);
+        // item3 스캐폴드: 외부 장치 placeholder(저장/복원만, 실기능 미배선).
+        ini.SetBool(Section, nameof(s.ExternalCameraEnabled), s.ExternalCameraEnabled);
+        ini.SetBool(Section, nameof(s.PhotoPrinterEnabled), s.PhotoPrinterEnabled);
         ini.Set(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         ini.Set(Section, nameof(s.StorageBucket), s.StorageBucket);
         ini.SetBool(Section, nameof(s.UseBackend), s.UseBackend);

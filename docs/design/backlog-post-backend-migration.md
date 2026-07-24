@@ -41,9 +41,13 @@
   - 참고: 프레임 출처 구분은 기존 규약(로컬 `local:`/번들 `bundle:`/DB id·`_` 이름 규약) 활용.
 
 ### 3. 장치 연동 — 스캐폴드만 (item 3, 추후 개발)
-- [ ] **3. 카메라(DSLR)·프린터(BT/WiFi) 연동 — 상위 추상 클래스 + 옵션 공간만**
+- [x] **3. 카메라(DSLR)·프린터(BT/WiFi) 연동 — 상위 추상 클래스 + 옵션 공간만** — **완료**(커밋 대기 시 이 문서와 함께). `IExternalCamera`/`IPhotoPrinter` 인터페이스(false/null 반환·크래시 금지 관례) + `NullExternalCamera`/`NullPhotoPrinter` no-op 기본 구현 + DI 등록 + 설정 "외부 장치(추후 지원)" 섹션(로그인 전용 노출, 토글 상시 Disable+안내) + placeholder 필드(`ExternalCameraEnabled`/`PhotoPrinterEnabled`, 저장/복원만·실기능 미배선). Opus 리뷰 PASS(CHANGES 없음), 빌드 0/0·테스트 530/530(신규 8). 실 하드웨어·장비 선정은 USER-ACTIONS §C1(추후).
   - **이번엔 실제 하드웨어 연동 구현 안 함**. 확장 가능하도록 **(가상)상위 클래스/인터페이스**(예: `IExternalCamera`/`IPhotoPrinter`)와 **설정 옵션 자리**(로그인 계정만 노출)만 생성. 기본 구현은 no-op/미지원 상태.
   - 수동/추후[USER-ACTIONS]: 특정 장비(모델)별 SDK/드라이버·연결 방식(BT/WiFi) 조사·선정은 추후. 문서에 "장비 선정 필요" 기록.
+
+## ✅ 백로그 전체 완료 (2026-07-24)
+P1·P3·item0·item1a·item1b·item2·item3 **전부 완료·커밋**. 순차 백로그 종료.
+- **남은 것은 전부 사용자 수동 작업**([USER-ACTIONS.md](../USER-ACTIONS.md)): §A 백엔드 배포(시크릿·IAM·규칙·flag ON·E2E·**A7 키 폐기(불가역·최후)**), §B1 이메일 공급자, §B2 Google OAuth 클라이언트, §C1 장치 선정. 이 작업들 전까지 앱은 레거시 경로(UseBackend 기본 OFF)로 현행 동작 유지.
 
 ## 참고 링크
 - 백엔드 설계: `wpf-backend-proxy-migration-design.md`
