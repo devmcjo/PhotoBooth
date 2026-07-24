@@ -167,7 +167,9 @@
 
 ---
 
-## Step 4: R1(XAML 게이트) + R3(게스트 hover 툴팁)
+## Step 4: R1(XAML 게이트) + R3(게스트 게이트 안내)
+
+> **개정(2026-07-24)**: R3는 hover 툴팁(`Toggle.Gated`) 대신 **인라인 노티**로 구현됨 — 게이트 토글 좌측에 게스트 전용 "로그인 필요" 캡션(`GuestGateNote`, `IsGuest` 시 Visible)을 상시 노출. 아래 툴팁 서술은 초안 기록.
 
 - **Context Brief**: 게스트 게이트 토글에 대해 (a) `IsEnabled="{Binding IsLoggedIn}"`로 컨트롤을 비활성화하고,
   (b) 게스트가 hover하면 "로그인 후 이용 가능합니다." 툴팁을 노출한다. 비활성 컨트롤은 기본적으로 툴팁이 안

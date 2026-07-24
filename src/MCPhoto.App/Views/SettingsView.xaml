@@ -29,13 +29,17 @@
             <Setter Property="Background" Value="{StaticResource Brush.Divider}" />
             <Setter Property="Margin" Value="0,8,0,16" />
         </Style>
-        <!-- it12 R3: 게스트 게이트 토글 공용 스타일. 로그인 시 ToolTip 미설정(=툴팁 없음),
-             게스트일 때만 안내 노출. 비활성 컨트롤에도 뜨도록 ShowOnDisabled=True. -->
-        <Style x:Key="Toggle.Gated" TargetType="ToggleButton" BasedOn="{StaticResource Toggle}">
-            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        <!-- it12(개정): 게스트 미지원 옵션 인라인 노티. hover 툴팁은 시인성이 낮아 폐지 →
+             게이트 토글 좌측에 "로그인 필요" 캡션을 상시 노출(게스트일 때만, 로그인 시 Collapsed). -->
+        <Style x:Key="GuestGateNote" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="Text" Value="로그인 필요" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Muted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsGuest}" Value="True">
-                    <Setter Property="ToolTip" Value="로그인 후 이용 가능합니다." />
+                    <Setter Property="Visibility" Value="Visible" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -97,9 +101,12 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="거울모드(좌우반전)" Style="{StaticResource RowLabel}" />
-                                    <!-- it12 R1/R3: 로그인 전용 편집(게이트) + 게스트 hover 안내 툴팁. -->
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle.Gated}" HorizontalAlignment="Right"
-                                                  IsChecked="{Binding MirrorMode}" IsEnabled="{Binding IsLoggedIn}" />
+                                    <!-- it12 R1: 로그인 전용 편집(게이트). 게스트엔 좌측 "로그인 필요" 노티 상시 노출(개정). -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <ToggleButton Style="{StaticResource Toggle}"
+                                                      IsChecked="{Binding MirrorMode}" IsEnabled="{Binding IsLoggedIn}" />
+                                    </StackPanel>
                                 </Grid>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
@@ -125,9 +132,12 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="재촬영 사용" Style="{StaticResource RowLabel}" />
-                                    <!-- it12 R1/R3: 로그인 전용 편집(게이트) + 게스트 hover 안내 툴팁. -->
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle.Gated}" HorizontalAlignment="Right"
-                                                  IsChecked="{Binding RetakeEnabled}" IsEnabled="{Binding IsLoggedIn}" />
+                                    <!-- it12 R1: 로그인 전용 편집(게이트). 게스트엔 좌측 "로그인 필요" 노티 상시 노출(개정). -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <ToggleButton Style="{StaticResource Toggle}"
+                                                      IsChecked="{Binding RetakeEnabled}" IsEnabled="{Binding IsLoggedIn}" />
+                                    </StackPanel>
                                 </Grid>
                                 <!-- 재촬영 하위(횟수 제한): 재촬영 on일 때만 노출. 들여쓰기로 하위 계층 표현(QR 하위 패턴 재사용). -->
                                 <StackPanel Margin="20,0,0,0"
@@ -230,9 +240,12 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="QR 전송" Style="{StaticResource RowLabel}" />
-                                    <!-- 게스트는 QR/Firebase 비활성(수정 불가). 로그인 시에만 편집. (보완#1, it12 R3 툴팁) -->
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle.Gated}" HorizontalAlignment="Right"
-                                                  IsChecked="{Binding EnableQrDelivery}" IsEnabled="{Binding IsLoggedIn}" />
+                                    <!-- 게스트는 QR/Firebase 비활성(수정 불가). 로그인 시에만 편집. 게스트엔 "로그인 필요" 노티(개정). -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <ToggleButton Style="{StaticResource Toggle}"
+                                                      IsChecked="{Binding EnableQrDelivery}" IsEnabled="{Binding IsLoggedIn}" />
+                                    </StackPanel>
                                 </Grid>
                                 <!-- QR 하위 토글(사진/타임랩스): QR on일 때만 노출. 들여쓰기로 하위 계층 표현. (it7 F2) -->
                                 <StackPanel Margin="20,0,0,0"
@@ -297,8 +310,11 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="흑백" Style="{StaticResource RowLabel}" />
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle.Gated}" HorizontalAlignment="Right"
-                                                  IsChecked="{Binding FilterGrayscale}" IsEnabled="{Binding IsLoggedIn}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <ToggleButton Style="{StaticResource Toggle}"
+                                                      IsChecked="{Binding FilterGrayscale}" IsEnabled="{Binding IsLoggedIn}" />
+                                    </StackPanel>
                                 </Grid>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
@@ -306,8 +322,11 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="밝게" Style="{StaticResource RowLabel}" />
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle.Gated}" HorizontalAlignment="Right"
-                                                  IsChecked="{Binding FilterBrightness}" IsEnabled="{Binding IsLoggedIn}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <ToggleButton Style="{StaticResource Toggle}"
+                                                      IsChecked="{Binding FilterBrightness}" IsEnabled="{Binding IsLoggedIn}" />
+                                    </StackPanel>
                                 </Grid>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
@@ -315,8 +334,11 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="뷰티" Style="{StaticResource RowLabel}" />
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Toggle.Gated}" HorizontalAlignment="Right"
-                                                  IsChecked="{Binding FilterBeauty}" IsEnabled="{Binding IsLoggedIn}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <ToggleButton Style="{StaticResource Toggle}"
+                                                      IsChecked="{Binding FilterBeauty}" IsEnabled="{Binding IsLoggedIn}" />
+                                    </StackPanel>
                                 </Grid>
                             </StackPanel>
                         </Grid>

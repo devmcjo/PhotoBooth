@@ -16,7 +16,7 @@
 |----|----------|-------------|------|
 | R1 | 로그인 전용 설정 확대(거울모드·재촬영·필터 3종) — QR 게이트와 동일 메커니즘 | `SettingsViewModel.cs`, `SettingsView.xaml` | VM + View |
 | R2 | 설정 레이아웃 재배치 — QR 전송·로컬 저장 → "출력·전송" 그룹으로 이동 | `SettingsView.xaml` | View |
-| R3 | 게스트 hover 툴팁 "로그인 후 이용 가능합니다." (`ShowOnDisabled`) | `SettingsView.xaml` | View |
+| R3 | 게스트 게이트 옵션 옆 "로그인 필요" 인라인 노티(상시, **개정** — hover 툴팁에서 변경) | `SettingsView.xaml` | View |
 | R4 | 버전 표기에서 BuildDate 제외 (`v{Version} · {Site}`) | `IniBuildInfoService.cs` | Core |
 
 **범위 밖(건드리지 않음)**: 컷별 재촬영(USER-DECISION 대기), bldinfo 값 관리(사용자), 비밀번호 암호화.
@@ -301,7 +301,9 @@ QR 연동 정규화(`OnSendPhotoChanged`/`OnEnableQrDeliveryChanged`, `:204-222`
 
 ---
 
-## 4. R3 — 게스트 hover 툴팁
+## 4. R3 — 게스트 게이트 안내
+
+> **개정(2026-07-24)**: hover 툴팁은 시인성이 낮아 폐지. 게이트 토글 좌측에 게스트 전용 "로그인 필요" 인라인 노티(`GuestGateNote` 스타일, `Visibility`를 `IsGuest` DataTrigger로 제어)를 **상시** 노출하는 방식으로 변경. 아래 §4.1~는 초안(툴팁) 설계 기록으로 보존.
 
 ### 4.1 기술 이슈
 
