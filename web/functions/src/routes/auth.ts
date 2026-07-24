@@ -9,6 +9,10 @@ import { loadConfig } from "../config";
 import { issueToken } from "../domain/jwt";
 import {
   validateAccountId,
+  validateAuthCode,
+  validateCodeVerifier,
+  validateLoopbackRedirectUri,
+  validateNonce,
   validatePassword,
   validateVerificationCode,
 } from "../domain/validation";
@@ -21,9 +25,14 @@ import {
   confirmPasswordResetByCode,
   confirmPasswordResetByToken,
   login,
+  loginWithGoogleEmail,
   requestEmailVerification,
   requestPasswordReset,
 } from "../services/accounts";
+import {
+  GoogleAuthError,
+  verifyGoogleCodeAndGetEmail,
+} from "../services/googleAuth";
 
 /** idOrEmail/token 등 자유 문자열 필드의 최소 검증(비어있지 않은 문자열·과길이 방어). */
 function nonEmptyString(value: unknown, max = 254): string | null {
@@ -54,6 +63,86 @@ export function authRouter(): Router {
       }
 
       const cfg = loadConfig();
+      const token = issueToken(
+        { id: result.id, role: result.role },
+        cfg.jwtSecret,
+        cfg.jwtExpiresInSeconds
+      );
+      res.status(200).json({
+        token,
+        expiresIn: cfg.jwtExpiresInSeconds,
+        user: result.user,
+      });
+    })
+  );
+
+  // POST /auth/google  (API키) — item1b Google SSO (설계 §5).
+  //   body {code, codeVerifier, redirectUri, nonce?}
+  //   → code 교환 + id_token 검증 → email 매핑(등록·검증된 계정만) → login과 동일 {token, expiresIn, user}.
+  //   비활성(미구성) → 501. 형식 오류 → 400. 매핑 실패/미검증/Google 오류 → 401 일반화(열거 방지, §6.4).
+  router.post(
+    "/google",
+    requireApiKey(),
+    asyncHandler(async (req, res) => {
+      const cfg = loadConfig();
+      // Google SSO 미구성이면 명확한 구성 오류로 응답(sendgrid와 동일한 "사용 시에만 강제" 원칙, §8.2).
+      if (!cfg.googleOAuthEnabled) {
+        throw HttpError.notImplemented("Google 로그인이 구성되지 않았습니다.");
+      }
+
+      // 입력 형식 검증(SSRF·오용 차단). 형식 오류는 400.
+      const codeRes = validateAuthCode(req.body?.code);
+      if (!codeRes.ok) throw HttpError.invalid(codeRes.error);
+      const verifierRes = validateCodeVerifier(req.body?.codeVerifier);
+      if (!verifierRes.ok) throw HttpError.invalid(verifierRes.error);
+      const redirectRes = validateLoopbackRedirectUri(req.body?.redirectUri);
+      if (!redirectRes.ok) throw HttpError.invalid(redirectRes.error);
+
+      // nonce는 선택: 있으면 형식 검증 후 id_token nonce 대조에 사용(§8.4).
+      let nonce: string | undefined;
+      if (req.body?.nonce !== undefined && req.body?.nonce !== null) {
+        const nonceRes = validateNonce(req.body.nonce);
+        if (!nonceRes.ok) throw HttpError.invalid(nonceRes.error);
+        nonce = nonceRes.value;
+      }
+
+      // code 교환 + id_token 검증 → 검증된 email(소문자). 실패는 GoogleAuthError.
+      let email: string;
+      try {
+        email = await verifyGoogleCodeAndGetEmail(
+          {
+            clientId: cfg.googleOAuthClientId,
+            clientSecret: cfg.googleOAuthClientSecret,
+            allowedHd: cfg.googleAllowedHd,
+          },
+          {
+            code: codeRes.value,
+            codeVerifier: verifierRes.value,
+            redirectUri: redirectRes.value,
+            nonce,
+          }
+        );
+      } catch (err) {
+        // Google 검증 실패는 사유를 로그에만 남기고(토큰·email 미포함), 일반화 401(열거 방지, §6.4·§8.6).
+        if (err instanceof GoogleAuthError) {
+          console.warn("Google 로그인 검증 실패:", err.message);
+          throw HttpError.unauthorized(
+            "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요."
+          );
+        }
+        throw err;
+      }
+
+      // 계정 매핑(등록·검증된 계정만). 실패는 일반화 401(사유는 로그만).
+      const result = await loginWithGoogleEmail(email);
+      if (!result) {
+        console.warn("Google 로그인: 매핑되는 등록·검증 계정 없음.");
+        throw HttpError.unauthorized(
+          "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요."
+        );
+      }
+
+      // login과 완전히 동일한 JWT·응답 형식(신규 인증 상태 0, §5.4).
       const token = issueToken(
         { id: result.id, role: result.role },
         cfg.jwtSecret,

@@ -1,0 +1,169 @@
+/**
+ * Google SSO 검증 서비스 (설계 §5.3) — google-auth-library 의존을 이 파일에 격리한다.
+ *
+ * 흐름: 클라가 시스템 브라우저 + loopback + PKCE로 받은 authorization code를 백엔드로 전달하면,
+ *  (1) OAuth2Client.getToken 으로 code 교환(client_secret 백엔드 전용) → id_token 획득,
+ *  (2) verifyIdToken 으로 Google 공개키 서명·exp·iss 검증(라이브러리) + aud/iss/exp/email_verified/
+ *      nonce/hd 를 코드에서 방어적 재확인(A+B 이중화, §4 하이브리드),
+ *  (3) 검증된 email(소문자 정규화)을 반환한다.
+ *
+ * 계정 매핑·JWT 발급은 이 파일의 책임이 아니다(관심사 분리 — routes/auth.ts + services/accounts.ts).
+ * 실패는 모두 GoogleAuthError로 신호하고, 라우트가 일반화 401로 매핑한다(사유는 로그만, §6.4·§8.6).
+ * 토큰·code·email 은 로그에 남기지 않는다(§8.6).
+ */
+import { OAuth2Client } from "google-auth-library";
+import type { TokenPayload } from "google-auth-library";
+
+/** 허용되는 issuer(§5.3-2). */
+const ALLOWED_ISS = ["https://accounts.google.com", "accounts.google.com"];
+
+/**
+ * Google 검증 실패. reason은 서버 로그 전용(email·토큰 미포함). 라우트는 이를 일반화 401로 변환한다.
+ */
+export class GoogleAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GoogleAuthError";
+  }
+}
+
+/** googleAuth가 필요로 하는 OAuth2Client의 최소 표면(테스트에서 mock 주입 가능). */
+export interface OAuth2ClientLike {
+  getToken(options: {
+    code: string;
+    codeVerifier?: string;
+    redirect_uri?: string;
+  }): Promise<{ tokens: { id_token?: string | null } }>;
+  verifyIdToken(options: {
+    idToken: string;
+    audience?: string | string[];
+  }): Promise<{ getPayload(): TokenPayload | undefined }>;
+}
+
+/** OAuth2Client 생성에 필요한 구성. */
+export interface GoogleAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  /** 허용 hosted domain(빈 문자열이면 hd 제한 없음, §6.5). */
+  allowedHd?: string;
+}
+
+/** 검증 입력(클라가 /auth/google로 전달한, 이미 형식 검증된 값). */
+export interface GoogleVerifyInput {
+  code: string;
+  codeVerifier: string;
+  redirectUri: string;
+  /** 있으면 id_token.nonce와 대조(§8.4). 없으면 nonce 검증 생략. */
+  nonce?: string;
+}
+
+/**
+ * OAuth2Client 생성자 팩토리. 테스트에서 mock 주입점.
+ * 기본은 실제 google-auth-library의 OAuth2Client를 생성한다.
+ */
+export type OAuth2ClientFactory = (cfg: GoogleAuthConfig) => OAuth2ClientLike;
+
+const defaultClientFactory: OAuth2ClientFactory = (cfg) =>
+  new OAuth2Client({
+    clientId: cfg.clientId,
+    clientSecret: cfg.clientSecret,
+  });
+
+/**
+ * id_token payload를 코드에서 방어적으로 재확인한다(라이브러리 검증에 더해, §5.3-2).
+ * 실패 시 GoogleAuthError. 성공 시 소문자 정규화된 email 반환.
+ */
+export function assertPayloadAndExtractEmail(
+  payload: TokenPayload | undefined,
+  cfg: GoogleAuthConfig,
+  input: GoogleVerifyInput
+): string {
+  if (!payload) {
+    throw new GoogleAuthError("id_token payload가 비어 있습니다.");
+  }
+  // audience: 우리 client_id와 정확히 일치해야 한다.
+  if (payload.aud !== cfg.clientId) {
+    throw new GoogleAuthError("id_token audience 불일치.");
+  }
+  // issuer: Google 발행 여부.
+  if (!ALLOWED_ISS.includes(payload.iss)) {
+    throw new GoogleAuthError("id_token issuer 불일치.");
+  }
+  // 만료: 라이브러리도 검증하나 방어적 재확인(초 단위 Unix time).
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== "number" || payload.exp <= nowSec) {
+    throw new GoogleAuthError("id_token이 만료되었습니다.");
+  }
+  // nonce: 요청에 nonce가 있으면 payload.nonce와 일치해야 한다(replay 방어, §8.4).
+  if (input.nonce !== undefined) {
+    if (payload.nonce !== input.nonce) {
+      throw new GoogleAuthError("id_token nonce 불일치.");
+    }
+  }
+  // hosted domain(선택): 설정된 경우에만 강제(§6.5).
+  if (cfg.allowedHd && cfg.allowedHd.length > 0) {
+    if (payload.hd !== cfg.allowedHd) {
+      throw new GoogleAuthError("허용되지 않은 hosted domain.");
+    }
+  }
+  // email 소유 확인: Google이 email 소유를 확인했는지(§6.2).
+  if (payload.email_verified !== true) {
+    throw new GoogleAuthError("Google email이 미확인 상태입니다.");
+  }
+  if (typeof payload.email !== "string" || payload.email.length === 0) {
+    throw new GoogleAuthError("id_token에 email이 없습니다.");
+  }
+  // findByIdOrEmail이 소문자 비교하므로 소문자 정규화(§5.3-3).
+  return payload.email.trim().toLowerCase();
+}
+
+/**
+ * code 교환 + id_token 검증 → 검증된 email(소문자) 반환.
+ * @param cfg client id/secret + 허용 hd.
+ * @param input 이미 형식 검증된 code/codeVerifier/redirectUri/nonce.
+ * @param factory OAuth2Client 팩토리(테스트 mock 주입점, 기본은 실제 클라이언트).
+ * @throws GoogleAuthError 검증 실패(라우트가 일반화 401로 매핑).
+ */
+export async function verifyGoogleCodeAndGetEmail(
+  cfg: GoogleAuthConfig,
+  input: GoogleVerifyInput,
+  factory: OAuth2ClientFactory = defaultClientFactory
+): Promise<string> {
+  const client = factory(cfg);
+
+  // (1) code 교환. redirect_uri는 클라가 실제 쓴 loopback 주소와 정확히 일치해야 성공(§4.2).
+  let idToken: string | null | undefined;
+  try {
+    const { tokens } = await client.getToken({
+      code: input.code,
+      codeVerifier: input.codeVerifier,
+      redirect_uri: input.redirectUri,
+    });
+    idToken = tokens.id_token;
+  } catch (err) {
+    // Google 오류 상세는 message만(토큰·code 미노출). 라우트가 401 일반화.
+    throw new GoogleAuthError(
+      `code 교환 실패: ${err instanceof Error ? err.message : "unknown"}`
+    );
+  }
+  if (!idToken) {
+    throw new GoogleAuthError("code 교환 응답에 id_token이 없습니다.");
+  }
+
+  // (2) id_token 검증(서명·exp·iss는 라이브러리, aud 지정). payload 재확인은 (3)에서.
+  let payload: TokenPayload | undefined;
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: cfg.clientId,
+    });
+    payload = ticket.getPayload();
+  } catch (err) {
+    throw new GoogleAuthError(
+      `id_token 검증 실패: ${err instanceof Error ? err.message : "unknown"}`
+    );
+  }
+
+  // (3) payload 방어적 재확인 → email 추출.
+  return assertPayloadAndExtractEmail(payload, cfg, input);
+}

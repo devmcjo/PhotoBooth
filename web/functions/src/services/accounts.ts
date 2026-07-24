@@ -248,6 +248,26 @@ async function findByIdOrEmail(idOrEmail: string): Promise<UserDoc | null> {
 }
 
 /**
+ * item1b: Google SSO 계정 매핑(설계 §6.2). 검증된 Google email(소문자)을 기존 MCPhoto 계정에 매핑한다.
+ * 규칙: email 경로 조회 → 계정 존재 AND doc.email == email(소문자) AND emailVerified === true → LoginResult.
+ *   그 외(계정 없음 / 미검증 / email 불일치)는 null → 라우트가 401 일반화(열거 방지, §6.4).
+ * **자동 계정 생성 없음**(§6.3). 역할은 매핑된 MCPhoto 계정에서 가져온다(§6.1).
+ *
+ * @param email verifyGoogleCodeAndGetEmail이 반환한, 이미 소문자 정규화된 email.
+ */
+export async function loginWithGoogleEmail(email: string): Promise<LoginResult | null> {
+  const normalized = email.trim().toLowerCase();
+  const doc = await findByIdOrEmail(normalized);
+  // 계정 없음 / email 불일치(방어적 재확인) / 미검증은 모두 null(사유 노출 금지 — 호출측 로그만).
+  if (!doc) return null;
+  if ((doc.email ?? null) !== normalized) return null;
+  if (doc.emailVerified !== true) return null;
+
+  const role = parseRole(doc.role);
+  return { id: doc.id, role, user: toResponse(doc) };
+}
+
+/**
  * 이메일 등록/변경(본인/파워, 위계). email 변경 시 반드시 emailVerified=false로 리셋하고
  * 새 email 소유 재확인(verify 메일 발송) — 핵심 보안(설계 §7-2·§8.3).
  */

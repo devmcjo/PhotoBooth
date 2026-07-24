@@ -618,6 +618,47 @@ async function main() {
     check("(item1a/열거방지) 없는 계정 verify 재발송 요청 → 202", r.status === 202, `status=${r.status}`);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // item1b: Google SSO /auth/google (설계 §5·§6)
+  //  실제 Google 왕복은 Emulator에서 불가하므로, API키 게이트 + 미구성(501) + 형식검증(400) 경로만 검증.
+  //  code 교환·id_token 검증·매핑(loginWithGoogleEmail)은 googleAuth 단위 테스트(OAuth2Client mock)로 커버.
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    // API 키 없음 → 401(게이트).
+    const r = await call("POST", "/auth/google", {
+      body: { code: "x", codeVerifier: "A".repeat(43), redirectUri: "http://127.0.0.1:52001/" },
+    });
+    check("(item1b) /auth/google 키 없음 → 401", r.status === 401, `status=${r.status}`);
+  }
+  {
+    // 유효 키 + 요청. GOOGLE_OAUTH_CLIENT_ID/SECRET 구성 여부에 따라 분기:
+    //  - 미구성(기본 .env): 501(구성 오류) — 형식검증 이전에 비활성 반환.
+    //  - 구성됨(GOOGLE_OAUTH_CLIENT_ID/SECRET env): 형식검증이 먼저 → 잘못된 형식은 400.
+    const badForm = await call("POST", "/auth/google", {
+      apiKey: API_KEY,
+      body: { code: "x", codeVerifier: "too-short", redirectUri: "http://evil.com/" },
+    });
+    if (badForm.status === 501) {
+      check("(item1b/미구성) Google 미설정 → 501", true, `status=${badForm.status}`);
+    } else {
+      check(
+        "(item1b/구성됨) 잘못된 codeVerifier/redirectUri 형식 → 400",
+        badForm.status === 400,
+        `status=${badForm.status}`
+      );
+      // 구성된 경우 loopback redirectUri SSRF 차단도 확인(외부 host 거부).
+      const ssrf = await call("POST", "/auth/google", {
+        apiKey: API_KEY,
+        body: { code: "x", codeVerifier: "A".repeat(43), redirectUri: "https://attacker.example/" },
+      });
+      check(
+        "(item1b/보안) 비-loopback redirectUri → 400",
+        ssrf.status === 400,
+        `status=${ssrf.status}`
+      );
+    }
+  }
+
   // --- 404 ---
   {
     const r = await call("GET", "/no-such-endpoint", { apiKey: API_KEY });

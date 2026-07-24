@@ -1,9 +1,13 @@
 import {
   extToFormat,
   validateAccountId,
+  validateAuthCode,
+  validateCodeVerifier,
   validateEmail,
   validateFrameName,
   validateImageSize,
+  validateLoopbackRedirectUri,
+  validateNonce,
   validatePassword,
   validateRetentionHours,
   validateRole,
@@ -118,5 +122,64 @@ describe("validation — 서버 입력 검증(경계 방어)", () => {
     expect(validateVerificationCode("12a456").ok).toBe(false); // 비숫자
     expect(validateVerificationCode(123456).ok).toBe(false); // 숫자 타입
     expect(validateVerificationCode(null).ok).toBe(false);
+  });
+
+  // ── item1b: Google SSO 입력 검증 ──
+
+  test("validateAuthCode: 비어있지 않은 문자열·과길이(≤2048)", () => {
+    expect(validateAuthCode("4/0Adeu5...").ok).toBe(true);
+    const r = validateAuthCode("  abc  ");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe("abc"); // 트림
+    expect(validateAuthCode("").ok).toBe(false);
+    expect(validateAuthCode("   ").ok).toBe(false);
+    expect(validateAuthCode(null).ok).toBe(false);
+    expect(validateAuthCode(123).ok).toBe(false);
+    expect(validateAuthCode("x".repeat(2049)).ok).toBe(false);
+  });
+
+  test("validateCodeVerifier: RFC 7636 43~128자 [A-Za-z0-9-._~]", () => {
+    const good = "A".repeat(43);
+    expect(validateCodeVerifier(good).ok).toBe(true);
+    expect(validateCodeVerifier("A".repeat(128)).ok).toBe(true);
+    expect(validateCodeVerifier("aZ0-._~" + "x".repeat(40)).ok).toBe(true); // 허용 문자
+    expect(validateCodeVerifier("A".repeat(42)).ok).toBe(false); // 42자 미만
+    expect(validateCodeVerifier("A".repeat(129)).ok).toBe(false); // 128자 초과
+    expect(validateCodeVerifier("A".repeat(42) + "!").ok).toBe(false); // 금지 문자(!)
+    expect(validateCodeVerifier("A".repeat(42) + "+").ok).toBe(false); // base64 표준(+/)은 unreserved 아님
+    expect(validateCodeVerifier(null).ok).toBe(false);
+  });
+
+  test("validateLoopbackRedirectUri: 127.0.0.1/localhost loopback만 허용", () => {
+    expect(validateLoopbackRedirectUri("http://127.0.0.1:52001/").ok).toBe(true);
+    expect(validateLoopbackRedirectUri("http://localhost:8080/").ok).toBe(true);
+    expect(validateLoopbackRedirectUri("http://127.0.0.1/").ok).toBe(true); // 포트 없음(기본 80)
+    expect(validateLoopbackRedirectUri("http://127.0.0.1:52001").ok).toBe(true); // 경로 없음
+
+    // 거부: https(loopback은 http), 외부 host, 경로/쿼리/프래그먼트, 인증정보, 잘못된 형식.
+    expect(validateLoopbackRedirectUri("https://127.0.0.1:52001/").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("http://evil.com/").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("http://127.0.0.1:52001/callback").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("http://127.0.0.1:52001/?x=1").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("http://127.0.0.1:52001/#frag").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("http://user:pw@127.0.0.1:52001/").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("ftp://127.0.0.1/").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("not a url").ok).toBe(false);
+    expect(validateLoopbackRedirectUri("").ok).toBe(false);
+    expect(validateLoopbackRedirectUri(null).ok).toBe(false);
+    expect(validateLoopbackRedirectUri("http://127.0.0.1:" + "9".repeat(260) + "/").ok).toBe(false); // 과길이
+  });
+
+  test("validateNonce: 1~256자 [A-Za-z0-9-._~]", () => {
+    expect(validateNonce("abc-123_XY.z~").ok).toBe(true);
+    const r = validateNonce("  nonce1  ");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe("nonce1"); // 트림
+    expect(validateNonce("").ok).toBe(false);
+    expect(validateNonce("has space").ok).toBe(false);
+    expect(validateNonce("bad!char").ok).toBe(false);
+    expect(validateNonce("x".repeat(257)).ok).toBe(false);
+    expect(validateNonce(null).ok).toBe(false);
+    expect(validateNonce(123).ok).toBe(false);
   });
 });

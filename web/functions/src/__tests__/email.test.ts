@@ -17,6 +17,10 @@ function makeConfig(overrides: Partial<AppConfig>): AppConfig {
     emailProvider: "log",
     emailFrom: "",
     sendgridApiKey: "",
+    googleOAuthClientId: "",
+    googleOAuthClientSecret: "",
+    googleOAuthEnabled: false,
+    googleAllowedHd: "",
     ...overrides,
   };
 }

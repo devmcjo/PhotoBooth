@@ -19,6 +19,10 @@ const CLIENT_API_KEYS = defineSecret("CLIENT_API_KEYS");
 // item1a: SendGrid 키. 선언해 둬야 EMAIL_PROVIDER=sendgrid 전환 시 값이 런타임에 주입된다(소스 재수정 불요).
 // 선언된 시크릿은 배포 시 존재해야 하므로, 최초 배포 전 반드시 등록(실키 또는 임시값). log 모드에선 값이 있어도 미사용.
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
+// item1b: Google OAuth client secret(백엔드 전용, code 교환에만 사용). SENDGRID와 동일하게 선언만 해 두면
+// GOOGLE_OAUTH_CLIENT_ID(env)만 켜면 /auth/google 활성화(소스 재수정 불요). 단 선언된 시크릿이라
+// 배포 시 반드시 존재해야 하므로, SSO 미사용이어도 최초 배포 전 임시값이라도 등록(USER-ACTIONS §B2-3).
+const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 
 // 리전은 배포 시 결정(설계 §1.2 USER-DECISION). 기본 서울.
 setGlobalOptions({ region: "asia-northeast3", maxInstances: 10 });
@@ -31,7 +35,7 @@ const app = createApp();
 
 export const api = onRequest(
   {
-    secrets: [JWT_SECRET, CLIENT_API_KEYS, SENDGRID_API_KEY],
+    secrets: [JWT_SECRET, CLIENT_API_KEYS, SENDGRID_API_KEY, GOOGLE_OAUTH_CLIENT_SECRET],
     // 서명 URL PUT은 클라가 직접 하므로 함수 메모리/타임아웃은 소규모로 충분.
     memory: "256MiB",
     timeoutSeconds: 60,

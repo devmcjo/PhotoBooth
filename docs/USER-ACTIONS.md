@@ -68,8 +68,7 @@
 
 ---
 
-## B. (예정) 계정 기능 — 이메일/SSO 관련 콘솔 작업
-> item1a/1b 개발 착수 시 아래를 채운다(현재 코드 미착수 → 자리만).
+## B. 계정 기능 — 이메일/SSO 관련 콘솔 작업
 
 ### B1. 이메일 발송 공급자 (item1a 이메일 인증·비밀번호 찾기)
 > 서버 코드는 완료(이메일 인증·재설정 엔드포인트, 토큰 발급/소비, 이메일 추상화). **개발 기본은 `log` sender로 실제 메일이 발송되지 않는다.** 프로덕션 실발송을 위해 아래를 수동 수행한다. 코드 근거: `web/functions/src/{config.ts, services/email.ts}`, 설계 `docs/design/wpf-accounts-email-verification-design.md §10·§11.2`.
@@ -83,8 +82,20 @@
 - **B1-5. (선택) 토큰 서브컬렉션 TTL 정책** `[ ]`: `users/{id}/tokens` 문서의 `expiresAt`에 Firestore 네이티브 TTL을 걸어 만료 토큰 자동 청소(resultSessions 방식). 서버는 confirm 시 만료를 코드로도 재확인하므로 TTL 미설정이어도 보안엔 무해(청소 목적).
 - **B1-6. Firestore 규칙 점검** `[ ]`: `firestore.rules`의 catch-all `match /{document=**} { allow read, write: if false }`가 `users/{id}/tokens/**` 서브컬렉션까지 전면 deny함을 확인(현행 규칙 이미 충족 — 웹 접근 없음, Admin 서버만 접근). 규칙 변경 불필요.
 
-### B2. Google OAuth 클라이언트 `[ ]` (item1b Google SSO)
-- Google Cloud 콘솔에서 **OAuth 2.0 클라이언트 ID/secret 생성**, 승인 리디렉션 URI·동의화면 설정. 자격증명을 백엔드 시크릿에 등록.
+### B2. Google OAuth 클라이언트 (item1b Google SSO)
+> **서버 코드는 완료** — `/auth/google`(code 교환 + id_token 검증 + email 매핑 + JWT 재사용), 순수 검증(`domain/validation.ts`), Google 검증 격리(`services/googleAuth.ts`), config·시크릿 배선(`config.ts`·`index.ts`). **개발 기본은 client id/secret 미설정 → `/auth/google`가 501(비활성).** 실제 SSO를 켜려면 아래를 수동 수행한다. 코드 근거: `web/functions/src/{config.ts, index.ts, routes/auth.ts, services/googleAuth.ts, domain/validation.ts}`, 설계 `docs/design/wpf-google-sso-design.md §5·§8.2·§9.2`.
+> **사전조건**: item1b는 백엔드 모드(`UseBackend=true`, §A5)에서만 동작 — A 섹션(백엔드 배포·전환)이 선행돼야 SSO 사용 가능.
+
+- **B2-1. OAuth 동의 화면(OAuth consent screen) 구성** `[ ]`: Google Cloud 콘솔 → APIs & Services → OAuth consent screen. User Type(사내 Workspace면 Internal, 외부면 External), 앱 이름·지원 이메일·로고, scope `openid`·`email`·`profile` 추가. External이면 테스트 사용자 등록 또는 게시(verification) 필요.
+- **B2-2. OAuth 2.0 클라이언트 ID 생성(Desktop app)** `[ ]`: Credentials → Create Credentials → OAuth client ID → **Application type: Desktop app**. 생성 후 **Client ID**와 **Client Secret** 확보.
+  - ⚠️ Desktop 클라이언트는 loopback 리디렉션에서 **포트를 무시**하므로 별도 리디렉션 URI 등록이 불필요할 수 있으나, 콘솔이 요구하면 `http://127.0.0.1`·`http://localhost`(포트 없이) 등록. **Web application 유형이 아님에 주의**(Web은 정확한 URI·포트 매칭 요구).
+- **B2-3. 백엔드 자격 등록** `[ ]`: `cd web/functions` →
+  - `firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET` (B2-2의 Client Secret) — **백엔드 전용, 클라(WPF)에 넣지 않음.**
+  - `GOOGLE_OAUTH_CLIENT_ID`(비밀 아님)는 함수 env/param에 설정. **코드/리포에 하드코딩 금지.**
+  - ⚠️ `index.ts`에 `defineSecret("GOOGLE_OAUTH_CLIENT_SECRET")`가 **선언돼 있어 모든 배포에서 존재해야** 하므로, SSO를 아직 안 켜더라도 **최초 배포 전 임시값이라도 등록**(SENDGRID_API_KEY와 동일 주의, §A1). client id/secret이 모두 설정돼야 `/auth/google` 활성화(한쪽만 설정하면 서버가 오구성으로 조기 실패, 둘 다 비우면 501).
+- **B2-4. 클라이언트 설정(배포 PC INI)** `[ ]` (클라 S4~S6 개발 후): 대상 PC `MCPhoto.ini` `[MCPhoto]`에 `GoogleClientId=<B2-2 Client ID>` 추가. **client secret은 클라에 넣지 않음**(백엔드 전용).
+- **B2-5. (선택) 허용 도메인(hd) 제한** `[ ]`: 특정 Workspace 도메인만 허용하려면 함수 env `GOOGLE_ALLOWED_HD=<도메인>` 설정(서버가 id_token.hd와 대조). 미설정이면 email 매핑 화이트리스트로만 통제.
+- **B2-6. 실왕복 스모크(배포/스테이징)** `[ ]`: 코드는 `OAuth2Client` mock 단위 테스트 + Emulator 형식/게이트 스모크로 완결됨(실 Google 왕복은 불가). B2 설정 후 스테이징에서 **운영자 계정 1건 선등록(email + emailVerified=true)** → SSO 로그인 → 화면 진입 수동 확인.
 
 ---
 

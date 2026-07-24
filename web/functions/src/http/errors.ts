@@ -13,6 +13,7 @@ export type ErrorCode =
   | "conflict" // 409 중복
   | "invalid_argument" // 400 입력 검증 실패
   | "not_found" // 404 미존재
+  | "not_implemented" // 501 미구성/미지원 기능(예: Google SSO 미설정, item1b)
   | "internal"; // 500 서버 오류
 
 /** 라우트에서 throw해 상태코드·코드·메시지를 일관되게 응답으로 변환. */
@@ -41,6 +42,9 @@ export class HttpError extends Error {
   }
   static notFound(message = "찾을 수 없습니다.") {
     return new HttpError(404, "not_found", message);
+  }
+  static notImplemented(message = "지원하지 않는 기능입니다.") {
+    return new HttpError(501, "not_implemented", message);
   }
   static internal(message = "서버 오류가 발생했습니다.") {
     return new HttpError(500, "internal", message);

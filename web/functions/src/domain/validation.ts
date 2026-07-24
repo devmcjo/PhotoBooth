@@ -63,6 +63,81 @@ export function validateVerificationCode(value: unknown): ValidationResult<strin
   return ok(v);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// item1b: Google SSO 입력 검증(순수) — /auth/google 요청 필드 경계 방어(설계 §5.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** authorization code: 비어있지 않은 문자열, 과길이 방어(≤2048). 형식은 Google이 정의하므로 길이만 방어. */
+export function validateAuthCode(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("code는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (v.length === 0) return fail("code가 비어 있습니다.");
+  if (v.length > 2048) return fail("code가 너무 깁니다(최대 2048자).");
+  return ok(v);
+}
+
+/** PKCE code_verifier: RFC 7636 — 43~128자, unreserved 문자 [A-Za-z0-9-._~]만. */
+const CODE_VERIFIER_RE = /^[A-Za-z0-9\-._~]{43,128}$/;
+
+export function validateCodeVerifier(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("codeVerifier는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (!CODE_VERIFIER_RE.test(v))
+    return fail("codeVerifier 형식이 올바르지 않습니다(RFC 7636: 43~128자 [A-Za-z0-9-._~]).");
+  return ok(v);
+}
+
+/**
+ * loopback redirect_uri: http://127.0.0.1:{port}/ 또는 http://localhost:{port}/ 형태만 허용.
+ * SSRF/오용 차단(§4.2·§8) — 임의 host·scheme·경로를 code 교환에 넘기지 않기 위한 경계 방어.
+ * - scheme은 반드시 http(loopback), host는 127.0.0.1 또는 localhost.
+ * - 포트는 선택(OS 자동 할당). path는 "/" 또는 없음만 허용(추가 경로·쿼리·프래그먼트 거부).
+ */
+export function validateLoopbackRedirectUri(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("redirectUri는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (v.length === 0) return fail("redirectUri가 비어 있습니다.");
+  if (v.length > 256) return fail("redirectUri가 너무 깁니다(최대 256자).");
+
+  let url: URL;
+  try {
+    url = new URL(v);
+  } catch {
+    return fail("redirectUri 형식이 올바르지 않습니다(URL 파싱 실패).");
+  }
+  if (url.protocol !== "http:")
+    return fail("redirectUri는 http(loopback)만 허용됩니다.");
+  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost")
+    return fail("redirectUri host는 127.0.0.1 또는 localhost만 허용됩니다.");
+  if (url.search.length > 0 || url.hash.length > 0)
+    return fail("redirectUri에 쿼리·프래그먼트는 허용되지 않습니다.");
+  if (url.pathname !== "/" && url.pathname !== "")
+    return fail("redirectUri 경로는 '/'만 허용됩니다.");
+  if (url.username.length > 0 || url.password.length > 0)
+    return fail("redirectUri에 인증 정보는 허용되지 않습니다.");
+  // 포트는 있으면 1~65535 범위(URL 파서가 이미 정수 문자열로 보장). 빈 포트도 허용(기본 80).
+  if (url.port.length > 0) {
+    const port = Number.parseInt(url.port, 10);
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      return fail("redirectUri 포트가 올바르지 않습니다(1~65535).");
+  }
+  return ok(v);
+}
+
+/**
+ * nonce: id_token replay 방어용 난수(§8.4). 있으면 검증, 없으면 생략(옵션).
+ * base64url/hex 등 형식 무관하게 안전 문자·길이만 방어(≤256, [A-Za-z0-9-._~]).
+ */
+const NONCE_RE = /^[A-Za-z0-9\-._~]{1,256}$/;
+
+export function validateNonce(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("nonce는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (!NONCE_RE.test(v))
+    return fail("nonce 형식이 올바르지 않습니다(1~256자 [A-Za-z0-9-._~]).");
+  return ok(v);
+}
+
 /** retentionHours: 정수 1~72(firebase-contract §2.3). */
 export function validateRetentionHours(value: unknown): ValidationResult<number> {
   if (typeof value !== "number" || !Number.isInteger(value))
