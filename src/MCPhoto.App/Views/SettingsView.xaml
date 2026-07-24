@@ -52,8 +52,9 @@
         </Grid.RowDefinitions>
 
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="40,88,40,16">
-            <!-- PC 밀도: 넓은 카드(MaxWidth 1200 — 가로 활용, 우측 여백 축소). 계정·관리자 섹션은 계정 페이지로 분리(C1). -->
-            <StackPanel MaxWidth="1200" HorizontalAlignment="Center">
+            <!-- PC 밀도: 넓은 카드(MaxWidth 1200 — 가로 활용). Stretch로 폭 고정(내용 수축 방지):
+                 게스트/로그인·토글 상태에 따라 보이는 행이 달라도 카드 폭·문구 위치가 흔들리지 않게. -->
+            <StackPanel MaxWidth="1200" HorizontalAlignment="Stretch">
 
                 <TextBlock Text="설정" Style="{StaticResource ScreenTitle}" />
 
