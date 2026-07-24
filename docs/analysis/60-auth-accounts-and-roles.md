@@ -73,13 +73,14 @@ public static bool IsPower(this UserRole role) => role is UserRole.Manager or Us
 | 비밀번호 변경(본인) | × | ○ | ○ | ○ | `ChangePassword`는 `CurrentUser` 있을 때만(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:102-103`); 팝오버 "비밀번호 변경"은 로그인 시 항상 노출(`src/MCPhoto.App/MainWindow.xaml:61-63`) |
 | 관리자 도구(사용자 관리 페이지 진입) | × | × | ○ | ○ | 팝오버 "관리자 도구"는 `IsPower`에서만 노출(`src/MCPhoto.App/MainWindow.xaml:69-72`); `OpenUserManagement`도 `IsPower` 가드(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:175-177`) |
 | 사용자 목록 조회 | × | × | ○ | ○ | 사용자 관리 진입 자체가 파워 전용(위 항목); `GetAllAsync`는 "power 전용" 주석(`src/MCPhoto.Core/Accounts/IAccountService.cs:23`) |
-| 사용자 삭제(cascade) | × | × | ○ | ○ | `UserMgmtViewModel.DeleteUser`(`src/MCPhoto.App/ViewModels/UserMgmtViewModel.cs:56-72`); 자기 계정 삭제 방지(`:60`) |
-| 사용자 비밀번호 초기화("0000") | × | × | ○ | ○ | `ResetUserPassword`(`src/MCPhoto.App/ViewModels/UserMgmtViewModel.cs:74-88`, 상수 `ResetPassword = "0000"` `:16`) |
-| 역할 변경(manager로 승격) | × | × | × | ○ | `PromoteToManager`는 `IsAdmin`일 때만(`src/MCPhoto.App/ViewModels/UserMgmtViewModel.cs:92-94`); `IsAdmin`=`Role == Admin`(`:36`) |
+| 사용자 삭제(cascade) | × | × | ○ | ○ | `UserMgmtViewModel.DeleteUser`; 자기 계정 삭제 방지 + **자기와 같거나 낮은 역할만**(`ActorRole.CanManage(target)` — manager는 admin 삭제 불가). UI 미노출(`RoleActionVis` "Manage") + 명령 가드 이중 방어 |
+| 사용자 비밀번호 초기화("0000") | × | × | ○ | ○ | `ResetUserPassword`(상수 `ResetPassword="0000"`); **자기와 같거나 낮은 역할만**(`CanManage` — manager는 admin 초기화 불가). UI 미노출 + 명령 가드 |
+| 역할 변경(manager로 승격) | × | × | × | ○ | `PromoteToManager`는 `IsAdmin`이고 **대상이 user일 때만**(승격 액션 — 이미 manager/admin 행엔 미노출). UI 노출=`RoleActionVis` "Promote" |
 | 앱 종료(관리자) | × | × | ○ | ○ | "관리자 도구" 페이지의 `ExitApp`(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:180-181`); 도구 페이지 진입이 파워 전용 |
 | 설정(앱 설정) 페이지 접근 | ○ | ○ | ○ | ○ | 우상단 ⚙ 버튼은 상단 바 표시 상태면 누구나(`src/MCPhoto.App/MainWindow.xaml:45-50`, `OpenSettings` 무가드 `src/MCPhoto.App/AppShellViewModel.cs:283-287`) |
 
 주의(사실/가정 구분):
+- **사용자 관리 액션의 역할 위계**(사실): 삭제·비밀번호 초기화는 **행위자와 같거나 낮은 역할**의 계정에만 노출·허용된다(`UserRole.CanManage`, `RoleActionVisibilityConverter`). 예) manager는 admin 계정을 삭제/초기화할 수 없다(상위 역할 관리 금지). manager 지정은 admin이 **user 대상**일 때만. UI 미노출과 VM 명령 가드로 이중 방어(관리자 편의 기능 오남용 방지).
 - **설정 페이지는 현재 권한 게이트가 없다**(사실): `OpenSettings`에 역할 검사가 없으며(`src/MCPhoto.App/AppShellViewModel.cs:283-287`), 상단 바 ⚙ 버튼도 가시성만 상태 기반(`IsTopBarVisible`)이고 역할 조건이 없다(`src/MCPhoto.App/MainWindow.xaml:45-50`). 계정·관리자 기능은 설정에서 분리되어 `Account`/`UserMgmt`로 이동했으므로(it5 C1/C2, `src/MCPhoto.Core/Navigation/AppState.cs:33`), 앱 설정 자체는 키오스크 운영자가 접근하는 열린 화면이라는 것이 코드상 현재 상태다.
 - **역할 변경은 승격(→manager)만 존재**(사실): 강등(manager→user)이나 admin 지정 UI는 없다. `SetRoleAsync`는 임의 역할을 받지만(`src/MCPhoto.Core/Accounts/IAccountService.cs:30`, 구현 `src/MCPhoto.Firebase/AccountService.cs:92-97`), 호출부는 `PromoteToManager`(manager 고정)뿐이다.
 

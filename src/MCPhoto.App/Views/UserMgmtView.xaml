@@ -23,17 +23,38 @@
                         <GridViewColumn Header="작업" Width="440">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
+                                    <!-- 관리 액션은 행위자와 같거나 낮은 역할에만 노출(예: manager는 admin 행에 미노출). manager 지정은 admin이 user 행에만. -->
                                     <StackPanel Orientation="Horizontal">
                                         <Button Content="삭제" Style="{StaticResource Button.Danger}" Margin="0,0,6,0"
                                                 Command="{Binding DataContext.DeleteUserCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}" />
+                                                CommandParameter="{Binding}">
+                                            <Button.Visibility>
+                                                <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Manage">
+                                                    <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                    <Binding Path="Role" />
+                                                </MultiBinding>
+                                            </Button.Visibility>
+                                        </Button>
                                         <Button Content="pw 초기화" Style="{StaticResource Button.Secondary}" Margin="0,0,6,0" MinWidth="0"
                                                 Command="{Binding DataContext.ResetUserPasswordCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}" />
+                                                CommandParameter="{Binding}">
+                                            <Button.Visibility>
+                                                <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Manage">
+                                                    <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                    <Binding Path="Role" />
+                                                </MultiBinding>
+                                            </Button.Visibility>
+                                        </Button>
                                         <Button Content="manager 지정" Style="{StaticResource Button.Ghost}"
-                                                Visibility="{Binding DataContext.IsAdmin, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"
                                                 Command="{Binding DataContext.PromoteToManagerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}" />
+                                                CommandParameter="{Binding}">
+                                            <Button.Visibility>
+                                                <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Promote">
+                                                    <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                    <Binding Path="Role" />
+                                                </MultiBinding>
+                                            </Button.Visibility>
+                                        </Button>
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>

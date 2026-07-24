@@ -23,6 +23,8 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
 
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _isAdmin;
+    /// <summary>행위자(로그인 계정) 역할. 관리 액션 노출·가드 기준(자기와 같거나 낮은 역할만 관리).</summary>
+    [ObservableProperty] private UserRole _actorRole = UserRole.User;
 
     public UserMgmtViewModel(AppShellViewModel shell, IAccountService accounts, ILogger<UserMgmtViewModel>? logger = null)
     {
@@ -33,7 +35,8 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
 
     public override async Task OnEnterAsync()
     {
-        IsAdmin = _shell.Session.CurrentUser?.Role == UserRole.Admin;
+        ActorRole = _shell.Session.CurrentUser?.Role ?? UserRole.User;
+        IsAdmin = ActorRole == UserRole.Admin;
         await ReloadAsync();
     }
 
@@ -58,6 +61,8 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         if (user is null) return;
         // 자기 자신·시드 admin 삭제 방지
         if (user.Id == _shell.Session.CurrentUser?.Id) { StatusMessage = "자기 계정은 삭제할 수 없습니다."; return; }
+        // 권한 가드: 자기와 같거나 낮은 역할만 관리(예: manager는 admin 삭제 불가). UI 미노출과 이중 방어.
+        if (!ActorRole.CanManage(user.Role)) { StatusMessage = "상위 역할 계정은 관리할 수 없습니다."; return; }
         try
         {
             await _accounts.DeleteAsync(user.Id); // cascade(프레임 문서+Storage)
@@ -75,6 +80,8 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     private async Task ResetUserPassword(User? user)
     {
         if (user is null) return;
+        // 권한 가드: 자기와 같거나 낮은 역할만(예: manager는 admin 비번 초기화 불가). UI 미노출과 이중 방어.
+        if (!ActorRole.CanManage(user.Role)) { StatusMessage = "상위 역할 계정은 관리할 수 없습니다."; return; }
         try
         {
             await _accounts.ChangePasswordAsync(user.Id, ResetPassword);
@@ -87,11 +94,11 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         }
     }
 
-    /// <summary>manager 지정(admin만).</summary>
+    /// <summary>manager 지정(admin만, 대상은 user). 승격 액션이라 user 외 대상엔 미적용.</summary>
     [RelayCommand]
     private async Task PromoteToManager(User? user)
     {
-        if (user is null || !IsAdmin) return;
+        if (user is null || !IsAdmin || user.Role != UserRole.User) return;
         try
         {
             await _accounts.SetRoleAsync(user.Id, UserRole.Manager);

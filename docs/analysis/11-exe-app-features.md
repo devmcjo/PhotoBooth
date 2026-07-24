@@ -222,7 +222,7 @@
   - 계정 페이지 모드(`AccountMode`, `AccountViewModel.cs:12-23`): PasswordChange/AccountCreate/Admin. 상단바 팝오버 항목이 지정(`AppShellViewModel.cs:307-317`).
   - 비번 변경(`ChangePassword`, `AccountViewModel.cs:99-128`): 2회 확인, `accounts.ChangePasswordAsync`. PasswordBox는 바인딩 불가라 code-behind 전달.
   - 계정 생성(`CreateAccount`, `:132-169`): **역할 게이트** — acting이 power여야 하고, 생성 가능 역할은 `CreatableRoles`(admin→[User,Manager], manager→[User]; admin→admin 불가, `UserRole.cs:41-51`). 중복/권한/미초기화 예외 안내.
-  - 사용자 관리(`UserMgmtViewModel`): 목록 로드, 삭제(cascade=프레임 문서+Storage; 자기/시드 삭제 방지), 비번 초기화("0000"), manager 지정(admin만). 뒤로=관리자 도구(Account) 복귀.
+  - 사용자 관리(`UserMgmtViewModel`): 목록 로드, 삭제(cascade=프레임 문서+Storage; 자기/시드 삭제 방지), 비번 초기화("0000"), manager 지정(admin만). **관리 액션은 행위자와 같거나 낮은 역할에만 노출**(`UserRole.CanManage`·`RoleActionVis` — 예: manager는 admin 삭제/초기화 불가), manager 지정은 admin이 user 대상에만. UI 미노출 + 명령 가드 이중 방어. 뒤로=관리자 도구(Account) 복귀.
 - **근거**: `AccountViewModel.cs`, `UserMgmtViewModel.cs`, `UserRole.cs`, `MainWindow.xaml:53-78`.
 
 ## 14. 홈 버튼 · 취소(전 화면)

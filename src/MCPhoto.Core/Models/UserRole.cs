@@ -48,4 +48,11 @@ public static class UserRoleExtensions
     /// <summary>actingRole이 role 계정을 생성할 권한이 있는지(게이트 판정).</summary>
     public static bool CanCreate(this UserRole actingRole, UserRole role)
         => actingRole.CreatableRoles().Contains(role);
+
+    /// <summary>
+    /// actingRole이 targetRole 계정을 관리(삭제·비밀번호 초기화 등)할 수 있는지: **자신과 같거나 낮은 역할만**.
+    /// enum 순서 User&lt;Manager&lt;Admin. 예) manager는 admin을 관리 불가, admin은 전부 관리 가능.
+    /// </summary>
+    public static bool CanManage(this UserRole actingRole, UserRole targetRole)
+        => (int)targetRole <= (int)actingRole;
 }
