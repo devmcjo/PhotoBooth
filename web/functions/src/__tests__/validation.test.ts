@@ -1,6 +1,7 @@
 import {
   extToFormat,
   validateAccountId,
+  validateEmail,
   validateFrameName,
   validateImageSize,
   validatePassword,
@@ -8,6 +9,7 @@ import {
   validateRole,
   validateSlots,
   validateUploadFile,
+  validateVerificationCode,
 } from "../domain/validation";
 
 describe("validation — 서버 입력 검증(경계 방어)", () => {
@@ -87,5 +89,34 @@ describe("validation — 서버 입력 검증(경계 방어)", () => {
   test("extToFormat: png만 png, 그 외 jpg", () => {
     expect(extToFormat("png")).toBe("png");
     expect(extToFormat("jpg")).toBe("jpg");
+  });
+
+  test("validateEmail: 형식·길이·소문자 정규화", () => {
+    const r = validateEmail("User@Example.COM");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe("user@example.com"); // 소문자 정규화
+
+    expect(validateEmail("  a@b.co  ").ok).toBe(true); // 트림
+    expect(validateEmail("plainaddress").ok).toBe(false); // @ 없음
+    expect(validateEmail("no@domain").ok).toBe(false); // 도메인에 점 없음
+    expect(validateEmail("a b@c.com").ok).toBe(false); // 공백
+    expect(validateEmail("two@@c.com").ok).toBe(false); // @ 2개
+    expect(validateEmail("").ok).toBe(false);
+    expect(validateEmail(null).ok).toBe(false);
+    expect(validateEmail(123).ok).toBe(false);
+    expect(validateEmail(`${"x".repeat(250)}@example.com`).ok).toBe(false); // 254자 초과
+  });
+
+  test("validateVerificationCode: 정확히 6자리 숫자", () => {
+    const r = validateVerificationCode("012345");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe("012345");
+
+    expect(validateVerificationCode("  654321 ").ok).toBe(true); // 트림
+    expect(validateVerificationCode("12345").ok).toBe(false); // 5자리
+    expect(validateVerificationCode("1234567").ok).toBe(false); // 7자리
+    expect(validateVerificationCode("12a456").ok).toBe(false); // 비숫자
+    expect(validateVerificationCode(123456).ok).toBe(false); // 숫자 타입
+    expect(validateVerificationCode(null).ok).toBe(false);
   });
 });

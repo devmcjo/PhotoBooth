@@ -16,6 +16,9 @@ import { createApp } from "./app";
 // 시크릿 선언 — 배포 시 이 이름으로 Secret Manager에서 주입되어 process.env에 노출된다.
 const JWT_SECRET = defineSecret("JWT_SECRET");
 const CLIENT_API_KEYS = defineSecret("CLIENT_API_KEYS");
+// item1a: SendGrid 키. 선언해 둬야 EMAIL_PROVIDER=sendgrid 전환 시 값이 런타임에 주입된다(소스 재수정 불요).
+// 선언된 시크릿은 배포 시 존재해야 하므로, 최초 배포 전 반드시 등록(실키 또는 임시값). log 모드에선 값이 있어도 미사용.
+const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
 // 리전은 배포 시 결정(설계 §1.2 USER-DECISION). 기본 서울.
 setGlobalOptions({ region: "asia-northeast3", maxInstances: 10 });
@@ -28,7 +31,7 @@ const app = createApp();
 
 export const api = onRequest(
   {
-    secrets: [JWT_SECRET, CLIENT_API_KEYS],
+    secrets: [JWT_SECRET, CLIENT_API_KEYS, SENDGRID_API_KEY],
     // 서명 URL PUT은 클라가 직접 하므로 함수 메모리/타임아웃은 소규모로 충분.
     memory: "256MiB",
     timeoutSeconds: 60,

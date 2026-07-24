@@ -1,15 +1,37 @@
 /**
- * 인증 라우트 — POST /auth/login (설계 §6.2 A1).
- * 자격 검증(해시) 성공 시 JWT 발급. 실패 시 401(현행 계약: 로그인 실패 = null → 401).
+ * 인증 라우트 — 로그인 + 이메일 인증 + 비밀번호 재설정 (설계 §6.2·§8.2·§8.4).
+ *
+ * 로그인 성공 시 JWT 발급. 인증/재설정은 로그인 전 상태이므로 API 키 게이트만 요구(Bearer 불요).
+ * request 계열은 열거 방지를 위해 존재/상태 무관 동일 202로 응답한다(§12).
  */
 import { Router } from "express";
 import { loadConfig } from "../config";
 import { issueToken } from "../domain/jwt";
-import { validateAccountId, validatePassword } from "../domain/validation";
+import {
+  validateAccountId,
+  validatePassword,
+  validateVerificationCode,
+} from "../domain/validation";
 import { asyncHandler } from "../http/async";
 import { requireApiKey } from "../http/auth";
 import { HttpError } from "../http/errors";
-import { login } from "../services/accounts";
+import {
+  confirmEmailVerificationByCode,
+  confirmEmailVerificationByToken,
+  confirmPasswordResetByCode,
+  confirmPasswordResetByToken,
+  login,
+  requestEmailVerification,
+  requestPasswordReset,
+} from "../services/accounts";
+
+/** idOrEmail/token 등 자유 문자열 필드의 최소 검증(비어있지 않은 문자열·과길이 방어). */
+function nonEmptyString(value: unknown, max = 254): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  if (v.length === 0 || v.length > max) return null;
+  return v;
+}
 
 export function authRouter(): Router {
   const router = Router();
@@ -42,6 +64,105 @@ export function authRouter(): Router {
         expiresIn: cfg.jwtExpiresInSeconds,
         user: result.user,
       });
+    })
+  );
+
+  // ── 이메일 인증 (§8.2) ──
+
+  // POST /auth/verify-email/request  (API키) — {idOrEmail} → 202(열거 방지, 재발송 겸용)
+  router.post(
+    "/verify-email/request",
+    requireApiKey(),
+    asyncHandler(async (req, res) => {
+      const idOrEmail = nonEmptyString(req.body?.idOrEmail);
+      if (idOrEmail) {
+        await requestEmailVerification(idOrEmail);
+      }
+      // 입력이 비어도 동일 202(형식 노출 최소화).
+      res.status(202).json({ accepted: true });
+    })
+  );
+
+  // POST /auth/verify-email/confirm  (API키) — {token} 또는 {id, code} → 200 {verified} | 400/401
+  router.post(
+    "/verify-email/confirm",
+    requireApiKey(),
+    asyncHandler(async (req, res) => {
+      const token = nonEmptyString(req.body?.token, 512);
+      if (token) {
+        // 링크 경로: token은 `{tokenId}.{secret}` 결합값. userId는 body.id로 전달받는다.
+        const idRes = validateAccountId(req.body?.id);
+        if (!idRes.ok) throw HttpError.invalid("계정 식별자가 필요합니다.");
+        const result = await confirmEmailVerificationByToken(idRes.value, token);
+        if (!result.verified) {
+          throw HttpError.unauthorized("인증 토큰이 유효하지 않거나 만료되었습니다.");
+        }
+        res.status(200).json(result);
+        return;
+      }
+
+      // 코드 경로: {id, code}.
+      const idRes = validateAccountId(req.body?.id);
+      if (!idRes.ok) throw HttpError.invalid(idRes.error);
+      const codeRes = validateVerificationCode(req.body?.code);
+      if (!codeRes.ok) throw HttpError.invalid(codeRes.error);
+
+      const result = await confirmEmailVerificationByCode(idRes.value, codeRes.value);
+      if (!result.verified) {
+        throw HttpError.unauthorized("인증 코드가 올바르지 않거나 만료되었습니다.");
+      }
+      res.status(200).json(result);
+    })
+  );
+
+  // ── 비밀번호 재설정 (§8.4) ──
+
+  // POST /auth/password-reset/request  (API키) — {idOrEmail} → 항상 202(열거 방지)
+  router.post(
+    "/password-reset/request",
+    requireApiKey(),
+    asyncHandler(async (req, res) => {
+      const idOrEmail = nonEmptyString(req.body?.idOrEmail);
+      if (idOrEmail) {
+        await requestPasswordReset(idOrEmail);
+      }
+      res.status(202).json({ accepted: true });
+    })
+  );
+
+  // POST /auth/password-reset/confirm  (API키)
+  //   {token, newPassword} 또는 {idOrEmail, code, newPassword} → 200 {reset} | 400/401
+  router.post(
+    "/password-reset/confirm",
+    requireApiKey(),
+    asyncHandler(async (req, res) => {
+      const pwRes = validatePassword(req.body?.newPassword);
+      if (!pwRes.ok) throw HttpError.invalid(pwRes.error);
+
+      const token = nonEmptyString(req.body?.token, 512);
+      if (token) {
+        // 링크 경로: token + userId(body.id).
+        const idRes = validateAccountId(req.body?.id);
+        if (!idRes.ok) throw HttpError.invalid("계정 식별자가 필요합니다.");
+        const ok = await confirmPasswordResetByToken(idRes.value, token, pwRes.value);
+        if (!ok) {
+          throw HttpError.unauthorized("재설정 토큰이 유효하지 않거나 만료되었습니다.");
+        }
+        res.status(200).json({ reset: true });
+        return;
+      }
+
+      // 코드 경로: {idOrEmail, code, newPassword}.
+      const idOrEmail = nonEmptyString(req.body?.idOrEmail);
+      if (!idOrEmail) throw HttpError.invalid("idOrEmail이 필요합니다.");
+      const codeRes = validateVerificationCode(req.body?.code);
+      if (!codeRes.ok) throw HttpError.invalid(codeRes.error);
+
+      const ok = await confirmPasswordResetByCode(idOrEmail, codeRes.value, pwRes.value);
+      if (!ok) {
+        throw HttpError.unauthorized("재설정 코드가 올바르지 않거나 만료되었습니다.");
+      }
+      res.status(200).json({ reset: true });
     })
   );
 

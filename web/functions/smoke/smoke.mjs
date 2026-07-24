@@ -8,6 +8,10 @@
  * 종료코드 0 = 전 케이스 PASS.
  */
 import admin from "firebase-admin";
+import { createHash } from "node:crypto";
+
+/** sha256 소문자 hex — 서버 domain/tokens.hashToken과 동일(토큰 문서 심기용). */
+const sha256 = (v) => createHash("sha256").update(v, "utf8").digest("hex");
 
 const PROJECT = process.env.GCLOUD_PROJECT || "mcphoto-955fb";
 const REGION = "asia-northeast3";
@@ -331,6 +335,287 @@ async function main() {
       body: { sessionId: "not-valid", files: [{ kind: "final", ext: "jpg", contentType: "image/jpeg" }] },
     });
     check("(U1/검증) 잘못된 sessionId → 400", badSid.status === 400, `status=${badSid.status}`);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // item1a: 이메일 인증 + 비밀번호 재설정 (설계 §5·§6·§8·§12)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // --- 계정 생성 시 email 수집 + unverified 저장 + verify 토큰 발급 ---
+  {
+    const r = await call("POST", "/accounts", {
+      bearer: adminToken,
+      body: { id: "emailuser", password: "pw", role: "user", email: "Owner@Example.COM" },
+    });
+    const okCreate = r.status === 201;
+    check("(item1a) email 포함 계정 생성 → 201", okCreate, `status=${r.status}`);
+    // 응답에 email(소문자 정규화)·emailVerified=false 포함, 비밀번호/해시 미포함.
+    check(
+      "(item1a) 응답에 email 정규화·emailVerified=false, 비번 미포함",
+      r.json?.email === "owner@example.com" &&
+        r.json?.emailVerified === false &&
+        r.json?.password === undefined,
+      `email=${r.json?.email} verified=${r.json?.emailVerified}`
+    );
+  }
+  {
+    // Firestore에 email·emailVerified 저장 + verify 토큰 서브컬렉션 1건 생성 확인.
+    const u = await db.collection("users").doc("emailuser").get();
+    const okDoc = u.data()?.email === "owner@example.com" && u.data()?.emailVerified === false;
+    const toks = await db.collection("users").doc("emailuser").collection("tokens").get();
+    const verifyToks = toks.docs.filter((d) => d.data().purpose === "verify_email");
+    check("(item1a) users 문서에 email·emailVerified 저장", okDoc);
+    check(
+      "(item1a) verify 토큰 서브컬렉션 1건 발급(해시 저장)",
+      verifyToks.length === 1 && typeof verifyToks[0].data().secretHash === "string",
+      `count=${verifyToks.length}`
+    );
+    // 저장 문서에 평문 secret/code가 없어야 한다(해시만).
+    const td = verifyToks[0]?.data() ?? {};
+    check(
+      "(item1a/보안) 토큰 문서에 평문 secret/code 미저장",
+      td.secret === undefined && td.code === undefined && td.secretHash?.length === 64
+    );
+  }
+
+  // --- email 중복(유일성 강제) → 409 ---
+  {
+    const r = await call("POST", "/accounts", {
+      bearer: adminToken,
+      body: { id: "dupemail", password: "pw", role: "user", email: "owner@example.com" },
+    });
+    check("(item1a/§4.5) 중복 email 생성 → 409", r.status === 409, `status=${r.status}`);
+  }
+  {
+    // 잘못된 email 형식 → 400
+    const r = await call("POST", "/accounts", {
+      bearer: adminToken,
+      body: { id: "bademail", password: "pw", role: "user", email: "not-an-email" },
+    });
+    check("(item1a/검증) 잘못된 email 형식 → 400", r.status === 400, `status=${r.status}`);
+  }
+  {
+    // email 없이도 계정 생성은 허용(서버 null 허용, §5.1) → 201, emailVerified=false
+    const r = await call("POST", "/accounts", {
+      bearer: adminToken,
+      body: { id: "noemail", password: "pw", role: "user" },
+    });
+    check(
+      "(item1a) email 미포함 계정 생성 허용 → 201 (email=null)",
+      r.status === 201 && r.json?.email === null && r.json?.emailVerified === false,
+      `status=${r.status} email=${r.json?.email}`
+    );
+  }
+
+  // --- 이메일 인증 코드 경로(consumeByCode) — 알려진 코드를 Admin으로 심어 검증 ---
+  {
+    // 서버가 발급한 verify 토큰을 알려진 code로 덮어써서(해시 심기) 코드 경로를 검증한다.
+    const KNOWN_CODE = "123456";
+    const col = db.collection("users").doc("emailuser").collection("tokens");
+    const toks = await col.where("purpose", "==", "verify_email").get();
+    await Promise.all(toks.docs.map((d) => d.ref.delete()));
+    await col.doc("known-verify-token").set({
+      id: "known-verify-token",
+      purpose: "verify_email",
+      secretHash: sha256("dummy-secret"),
+      codeHash: sha256(KNOWN_CODE),
+      email: "owner@example.com",
+      createdAt: admin.firestore.Timestamp.now(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 3600_000),
+      consumedAt: null,
+      attempts: 0,
+    });
+
+    // 잘못된 코드 → 401(verified 안 됨)
+    const wrong = await call("POST", "/auth/verify-email/confirm", {
+      apiKey: API_KEY,
+      body: { id: "emailuser", code: "000000" },
+    });
+    check("(item1a) verify 코드 오답 → 401", wrong.status === 401, `status=${wrong.status}`);
+
+    // 올바른 코드 → 200 {verified:true} + emailVerified=true + 토큰 소비(삭제)
+    const okv = await call("POST", "/auth/verify-email/confirm", {
+      apiKey: API_KEY,
+      body: { id: "emailuser", code: KNOWN_CODE },
+    });
+    check(
+      "(item1a) verify 코드 정답 → 200 {verified:true}",
+      okv.status === 200 && okv.json?.verified === true,
+      `status=${okv.status}`
+    );
+    const u = await db.collection("users").doc("emailuser").get();
+    check("(item1a) verify 후 emailVerified=true 반영", u.data()?.emailVerified === true);
+    const remain = await col.doc("known-verify-token").get();
+    check("(item1a/1회성) verify 성공 후 토큰 소비(삭제)", !remain.exists);
+
+    // 같은 코드 재사용 → 401(이미 소비됨)
+    const reuse = await call("POST", "/auth/verify-email/confirm", {
+      apiKey: API_KEY,
+      body: { id: "emailuser", code: KNOWN_CODE },
+    });
+    check("(item1a/1회성) 소비된 코드 재사용 → 401", reuse.status === 401, `status=${reuse.status}`);
+  }
+
+  // --- 토큰 만료 검증(expiresAt 과거) ---
+  {
+    const col = db.collection("users").doc("emailuser").collection("tokens");
+    await col.doc("expired-token").set({
+      id: "expired-token",
+      purpose: "verify_email",
+      secretHash: sha256("x"),
+      codeHash: sha256("999999"),
+      email: "owner@example.com",
+      createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 7200_000),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() - 3600_000), // 1시간 전 만료
+      consumedAt: null,
+      attempts: 0,
+    });
+    const r = await call("POST", "/auth/verify-email/confirm", {
+      apiKey: API_KEY,
+      body: { id: "emailuser", code: "999999" },
+    });
+    check("(item1a/만료) 만료 토큰 코드 → 401", r.status === 401, `status=${r.status}`);
+    const remain = await col.doc("expired-token").get();
+    check("(item1a/만료) 만료 토큰은 정리(삭제)", !remain.exists);
+  }
+
+  // --- 비밀번호 재설정: request 열거 방지(존재/상태 무관 202) ---
+  {
+    const r1 = await call("POST", "/auth/password-reset/request", {
+      apiKey: API_KEY,
+      body: { idOrEmail: "no-such-account-xyz" },
+    });
+    check("(item1a/열거방지) 없는 계정 reset 요청 → 202", r1.status === 202, `status=${r1.status}`);
+
+    const r2 = await call("POST", "/auth/password-reset/request", {
+      apiKey: API_KEY,
+      body: { idOrEmail: "noemail" }, // email 없는 계정
+    });
+    check("(item1a/열거방지) email 없는 계정 reset 요청 → 202", r2.status === 202, `status=${r2.status}`);
+
+    const r3 = await call("POST", "/auth/password-reset/request", {
+      apiKey: API_KEY,
+      body: { idOrEmail: "owner@example.com" }, // verified 계정(emailuser) — 실제 발송(LogEmailSender)
+    });
+    check("(item1a/열거방지) verified 계정 reset 요청 → 202", r3.status === 202, `status=${r3.status}`);
+  }
+  {
+    // verified 계정 요청 시 실제 reset 토큰이 발급됐는지(no-op이 아닌지) 확인.
+    const toks = await db
+      .collection("users")
+      .doc("emailuser")
+      .collection("tokens")
+      .where("purpose", "==", "password_reset")
+      .get();
+    check("(item1a) verified 계정 reset 요청 시 토큰 발급됨", toks.size === 1, `count=${toks.size}`);
+  }
+
+  // --- 비밀번호 재설정 코드 경로 confirm(알려진 코드 심기) ---
+  {
+    const KNOWN = "222333";
+    const col = db.collection("users").doc("emailuser").collection("tokens");
+    const rt = await col.where("purpose", "==", "password_reset").get();
+    await Promise.all(rt.docs.map((d) => d.ref.delete()));
+    await col.doc("known-reset-token").set({
+      id: "known-reset-token",
+      purpose: "password_reset",
+      secretHash: sha256("dummy"),
+      codeHash: sha256(KNOWN),
+      email: "owner@example.com",
+      createdAt: admin.firestore.Timestamp.now(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 3600_000),
+      consumedAt: null,
+      attempts: 0,
+    });
+
+    // idOrEmail(email로도 조회) + 코드 + 새 비번 → 200 {reset:true}
+    const r = await call("POST", "/auth/password-reset/confirm", {
+      apiKey: API_KEY,
+      body: { idOrEmail: "owner@example.com", code: KNOWN, newPassword: "brandnewpw" },
+    });
+    check(
+      "(item1a) reset 코드 정답(email 조회) → 200 {reset:true}",
+      r.status === 200 && r.json?.reset === true,
+      `status=${r.status}`
+    );
+    const remain = await col.doc("known-reset-token").get();
+    check("(item1a/1회성) reset 성공 후 토큰 소비(삭제)", !remain.exists);
+
+    // 새 비번으로 로그인되고, 기존 비번은 실패해야 한다.
+    const login1 = await call("POST", "/auth/login", {
+      apiKey: API_KEY,
+      body: { id: "emailuser", password: "brandnewpw" },
+    });
+    check("(item1a) 재설정된 새 비번으로 로그인 성공", login1.status === 200, `status=${login1.status}`);
+    const login2 = await call("POST", "/auth/login", {
+      apiKey: API_KEY,
+      body: { id: "emailuser", password: "pw" },
+    });
+    check("(item1a) 기존 비번은 로그인 실패 → 401", login2.status === 401, `status=${login2.status}`);
+  }
+
+  // --- 코드 시도 횟수 제한(5회 초과 시 무효화, §12) ---
+  {
+    const col = db.collection("users").doc("newuser1").collection("tokens");
+    const existing = await col.get();
+    await Promise.all(existing.docs.map((d) => d.ref.delete()));
+    await col.doc("attempt-token").set({
+      id: "attempt-token",
+      purpose: "verify_email",
+      secretHash: sha256("x"),
+      codeHash: sha256("111222"),
+      email: "attempt@example.com",
+      createdAt: admin.firestore.Timestamp.now(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 3600_000),
+      consumedAt: null,
+      attempts: 0,
+    });
+    // newuser1이 위에서 email을 갖도록, email 필드도 맞춰 심는다.
+    await db.collection("users").doc("newuser1").set(
+      { email: "attempt@example.com", emailVerified: false },
+      { merge: true }
+    );
+
+    // 5회 오답 → 5회째에 토큰 무효화(삭제).
+    for (let i = 0; i < 5; i++) {
+      await call("POST", "/auth/verify-email/confirm", {
+        apiKey: API_KEY,
+        body: { id: "newuser1", code: "000000" },
+      });
+    }
+    const gone = await col.doc("attempt-token").get();
+    check("(item1a/§12) 코드 5회 오답 후 토큰 무효화(삭제)", !gone.exists);
+  }
+
+  // --- PATCH /accounts/{id}/email — 등록/변경 시 emailVerified=false 리셋 + verify 재발송 ---
+  {
+    // admin이 noemail 계정에 email 지정(파워 경로).
+    const r = await call("PATCH", "/accounts/noemail/email", {
+      bearer: adminToken,
+      body: { email: "later@example.com" },
+    });
+    check("(item1a/§8.3) PATCH email(파워) → 204", r.status === 204, `status=${r.status}`);
+    const u = await db.collection("users").doc("noemail").get();
+    check(
+      "(item1a/§8.3) email 지정 시 emailVerified=false + verify 토큰 발급",
+      u.data()?.email === "later@example.com" && u.data()?.emailVerified === false
+    );
+    const toks = await db
+      .collection("users")
+      .doc("noemail")
+      .collection("tokens")
+      .where("purpose", "==", "verify_email")
+      .get();
+    check("(item1a/§8.3) PATCH email 후 verify 토큰 1건", toks.size === 1, `count=${toks.size}`);
+  }
+
+  // --- verify-email/request 재발송 + 열거 방지 ---
+  {
+    const r = await call("POST", "/auth/verify-email/request", {
+      apiKey: API_KEY,
+      body: { idOrEmail: "no-such-xyz" },
+    });
+    check("(item1a/열거방지) 없는 계정 verify 재발송 요청 → 202", r.status === 202, `status=${r.status}`);
   }
 
   // --- 404 ---

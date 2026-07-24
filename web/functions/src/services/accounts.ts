@@ -5,6 +5,7 @@
  * 근거: src/MCPhoto.Firebase/AccountService.cs, src/MCPhoto.Core/Accounts/IAccountService.cs
  */
 import { Timestamp } from "firebase-admin/firestore";
+import { loadConfig } from "../config";
 import { db } from "../firebase";
 import { hashPassword, verifyPassword } from "../domain/password";
 import {
@@ -13,19 +14,56 @@ import {
   parseRole,
   UserRole,
 } from "../domain/roles";
+import {
+  RESET_TTL_SECONDS,
+  VERIFY_TTL_SECONDS,
+} from "../domain/tokens";
 import { HttpError } from "../http/errors";
 import { UserDoc, UserResponse } from "./dto";
+import { getEmailSender } from "./email";
 import { deleteAllFramesByUser } from "./frames";
+import { consumeByCode, consumeByToken, issueToken } from "./tokens";
 
 const COLLECTION = "users";
 
-/** UserDoc → 응답(비밀번호/해시 제거). */
+/** UserDoc → 응답(비밀번호/해시·토큰 제거, email·emailVerified 포함, §8.5). */
 function toResponse(doc: UserDoc): UserResponse {
   return {
     id: doc.id,
     role: parseRole(doc.role),
     createdAt: doc.createdAt.toDate().toISOString(),
+    email: doc.email ?? null,
+    emailVerified: doc.emailVerified === true,
   };
+}
+
+/**
+ * verify/reset 링크 URL 조립. hostingBaseUrl 미설정(dev)이면 상대 경로만.
+ * 링크 방식(웹 verify 페이지)은 후속이지만, 이메일 본문에 실릴 링크는 지금부터 조립해 둔다(설계 §5.2·§5.3).
+ */
+function buildLink(kind: "verify" | "reset", token: string): string {
+  const base = (loadConfig().hostingBaseUrl ?? "").replace(/\/+$/, "");
+  const path = kind === "verify" ? "verify" : "reset";
+  return `${base}/${path}?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * verify 토큰 발급 + 인증 메일 발송(발송 실패는 삼켜 로그만 — 가용성·열거 방지, §5.2·§10.1).
+ * 계정 생성/이메일 등록·변경 성공 직후 호출한다.
+ */
+async function issueAndSendVerification(userId: string, email: string): Promise<void> {
+  const issued = await issueToken(userId, "verify_email", email, VERIFY_TTL_SECONDS);
+  try {
+    const sender = getEmailSender(loadConfig());
+    await sender.sendVerification(email, {
+      link: buildLink("verify", issued.token),
+      code: issued.code,
+      accountId: userId,
+    });
+  } catch (err) {
+    // 발송 실패는 계정 생성/변경을 롤백하지 않는다. 재발송 경로로 복구(§5.2).
+    console.error(`인증 메일 발송 실패(account=${userId}):`, err);
+  }
 }
 
 /** 로그인 성공 결과(토큰 발급에 필요한 최소 정보). */
@@ -63,14 +101,28 @@ export async function login(id: string, password: string): Promise<LoginResult |
 }
 
 /**
+ * 이메일 유일성 검사(설계 §4.5, 유일성 강제). email이 이미 다른 계정에 있으면 409.
+ * @param excludeId 자기 자신은 제외(email 변경 시 동일 계정 재검사 방지).
+ */
+async function ensureEmailUnique(email: string, excludeId?: string): Promise<void> {
+  const snap = await db().collection(COLLECTION).where("email", "==", email).get();
+  const conflict = snap.docs.find((d) => d.id !== excludeId);
+  if (conflict) {
+    throw HttpError.conflict("이미 사용 중인 이메일입니다.");
+  }
+}
+
+/**
  * 계정 생성. actingRole(토큰에서 도출)이 role을 생성할 권한이 없으면 403.
- * 중복 id면 409. 비번은 해시로 저장.
+ * 중복 id면 409. 비번은 해시로 저장. email이 주어지면 유일성 검사 후 unverified로 저장하고
+ * 인증 메일을 발송한다(설계 §5.1·§5.2·§8.1).
  * 근거: AccountService.CreateAsync (AccountService.cs:54-70)
  */
 export async function createAccount(
   id: string,
   password: string,
   role: UserRole,
+  email: string | null,
   actingRole: UserRole
 ): Promise<UserResponse> {
   if (!canCreate(actingRole, role)) {
@@ -83,15 +135,27 @@ export async function createAccount(
     throw HttpError.conflict(`이미 존재하는 아이디입니다: ${id}`);
   }
 
+  if (email) {
+    await ensureEmailUnique(email);
+  }
+
   const now = Timestamp.now();
   const doc: UserDoc = {
     id,
     password: await hashPassword(password),
     role,
     createdAt: now,
+    email: email ?? null,
+    emailVerified: false,
   };
   await ref.set(doc);
-  return { id, role, createdAt: now.toDate().toISOString() };
+
+  // email이 있으면 인증 메일 발송(발송 실패는 삼켜지고 계정 생성은 유지, §5.2).
+  if (email) {
+    await issueAndSendVerification(id, email);
+  }
+
+  return toResponse(doc);
 }
 
 /** 전체 계정 목록(파워 전용). 비밀번호/해시 제거. */
@@ -165,4 +229,158 @@ export async function setRole(
     throw HttpError.forbidden("admin 계정의 역할은 변경할 수 없습니다.");
   }
   await db().collection(COLLECTION).doc(targetId).update({ role });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// item1a: 이메일 인증 + 비밀번호 재설정 (설계 §5·§6·§8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** id 우선, 없으면 email로 계정 조회. 없으면 null(열거 방지 위해 호출측이 사유 노출 금지). */
+async function findByIdOrEmail(idOrEmail: string): Promise<UserDoc | null> {
+  const byId = await db().collection(COLLECTION).doc(idOrEmail).get();
+  if (byId.exists) return byId.data() as UserDoc;
+
+  // email 조회(소문자 정규화된 값으로 저장돼 있으므로 소문자로 비교).
+  const email = idOrEmail.trim().toLowerCase();
+  const snap = await db().collection(COLLECTION).where("email", "==", email).limit(1).get();
+  if (!snap.empty) return snap.docs[0].data() as UserDoc;
+  return null;
+}
+
+/**
+ * 이메일 등록/변경(본인/파워, 위계). email 변경 시 반드시 emailVerified=false로 리셋하고
+ * 새 email 소유 재확인(verify 메일 발송) — 핵심 보안(설계 §7-2·§8.3).
+ */
+export async function setEmail(
+  targetId: string,
+  email: string,
+  actor: { id: string; role: UserRole }
+): Promise<void> {
+  const targetRole = await getRole(targetId); // 없으면 404
+  const isSelf = actor.id === targetId;
+  if (!isSelf && !canManage(actor.role, targetRole)) {
+    throw HttpError.forbidden("해당 계정의 이메일을 변경할 권한이 없습니다.");
+  }
+
+  await ensureEmailUnique(email, targetId);
+
+  await db()
+    .collection(COLLECTION)
+    .doc(targetId)
+    .update({ email, emailVerified: false });
+
+  // 소유 확인 메일 발송(관리자가 넣어도 자동 verified 아님, §7-2).
+  await issueAndSendVerification(targetId, email);
+}
+
+/**
+ * 이메일 인증 재발송 요청(열거 방지: 존재/상태 무관 동일 처리, 반환 void).
+ * 계정이 있고 email이 있으며 아직 미인증이면 verify 토큰 재발급 + 메일. 이미 인증됐거나 없으면 no-op.
+ */
+export async function requestEmailVerification(idOrEmail: string): Promise<void> {
+  const doc = await findByIdOrEmail(idOrEmail);
+  if (!doc || !doc.email || doc.emailVerified === true) {
+    return; // no-op(응답은 호출측에서 202로 동일)
+  }
+  await issueAndSendVerification(doc.id, doc.email);
+}
+
+/** 이메일 인증 확인 결과. */
+export type VerifyEmailResult = { verified: true } | { verified: false };
+
+/** verify 성공 시 emailVerified=true로 마킹(토큰이 검증한 email과 현재 email이 일치할 때만). */
+async function markEmailVerified(userId: string, verifiedEmail: string): Promise<boolean> {
+  const ref = db().collection(COLLECTION).doc(userId);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+  const doc = snap.data() as UserDoc;
+  // 토큰 발급 후 email이 다시 바뀐 경우는 검증 무효(현재 email과 대조).
+  if ((doc.email ?? null) !== verifiedEmail) return false;
+  await ref.update({ emailVerified: true });
+  return true;
+}
+
+/** 이메일 인증 확인(링크 경로) — 결합 토큰. */
+export async function confirmEmailVerificationByToken(
+  userId: string,
+  token: string
+): Promise<VerifyEmailResult> {
+  const res = await consumeByToken(userId, "verify_email", token);
+  if (!res.ok) return { verified: false };
+  const marked = await markEmailVerified(userId, res.email);
+  return { verified: marked };
+}
+
+/** 이메일 인증 확인(코드 경로, 키오스크) — id + 6자리 코드. */
+export async function confirmEmailVerificationByCode(
+  userId: string,
+  code: string
+): Promise<VerifyEmailResult> {
+  const res = await consumeByCode(userId, "verify_email", code);
+  if (!res.ok) return { verified: false };
+  const marked = await markEmailVerified(userId, res.email);
+  return { verified: marked };
+}
+
+/**
+ * 비밀번호 재설정 요청(열거 방지: 존재/상태 무관 동일 처리, 반환 void).
+ * emailVerified=true + email!=null인 계정만 실제 reset 토큰 + 메일. 그 외 no-op(설계 §6.2·§8.4).
+ */
+export async function requestPasswordReset(idOrEmail: string): Promise<void> {
+  const doc = await findByIdOrEmail(idOrEmail);
+  if (!doc || !doc.email || doc.emailVerified !== true) {
+    return; // no-op(응답은 호출측에서 202로 동일)
+  }
+  const issued = await issueToken(doc.id, "password_reset", doc.email, RESET_TTL_SECONDS);
+  try {
+    const sender = getEmailSender(loadConfig());
+    await sender.sendPasswordReset(doc.email, {
+      link: buildLink("reset", issued.token),
+      code: issued.code,
+      accountId: doc.id,
+    });
+  } catch (err) {
+    // 발송 실패는 삼켜 로그만(열거 방지·가용성, §10.1).
+    console.error(`재설정 메일 발송 실패(account=${doc.id}):`, err);
+  }
+}
+
+/** 재설정된 새 비밀번호를 bcrypt 해시로 저장(토큰 소비는 호출 전 완료). */
+async function applyNewPassword(userId: string, newPassword: string): Promise<void> {
+  await db()
+    .collection(COLLECTION)
+    .doc(userId)
+    .update({ password: await hashPassword(newPassword) });
+}
+
+/**
+ * 비밀번호 재설정 확인(링크 경로) — 결합 토큰 + 새 비번.
+ * 토큰 대조·만료·1회성 통과 시 새 비번 저장. 실패면 false(호출측이 400/401로 매핑).
+ */
+export async function confirmPasswordResetByToken(
+  userId: string,
+  token: string,
+  newPassword: string
+): Promise<boolean> {
+  const res = await consumeByToken(userId, "password_reset", token);
+  if (!res.ok) return false;
+  await applyNewPassword(userId, newPassword);
+  return true;
+}
+
+/**
+ * 비밀번호 재설정 확인(코드 경로) — idOrEmail + 6자리 코드 + 새 비번(설계 §8.4).
+ * idOrEmail로 계정을 조회(email 입력도 허용). 계정 없음·코드 불일치는 모두 false(사유 노출 최소화).
+ */
+export async function confirmPasswordResetByCode(
+  idOrEmail: string,
+  code: string,
+  newPassword: string
+): Promise<boolean> {
+  const doc = await findByIdOrEmail(idOrEmail);
+  if (!doc) return false;
+  const res = await consumeByCode(doc.id, "password_reset", code);
+  if (!res.ok) return false;
+  await applyNewPassword(doc.id, newPassword);
+  return true;
 }

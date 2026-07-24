@@ -38,6 +38,31 @@ export function validateRole(value: unknown): ValidationResult<UserRole> {
   return ok(value);
 }
 
+/**
+ * 이메일: RFC 5322 간이 정규식 + 길이(≤254). 소문자 정규화 반환(설계 §8.6).
+ * 엄밀한 RFC 파싱이 아니라 실무 방어 수준(공백·`@` 1개·도메인에 점 포함).
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function validateEmail(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("이메일은 문자열이어야 합니다.");
+  const v = value.trim().toLowerCase();
+  if (v.length === 0) return fail("이메일이 비어 있습니다.");
+  if (v.length > 254) return fail("이메일이 너무 깁니다(최대 254자).");
+  if (!EMAIL_RE.test(v)) return fail("이메일 형식이 올바르지 않습니다.");
+  return ok(v);
+}
+
+/** 인증/재설정 코드: 정확히 6자리 숫자(설계 §8.6). */
+const CODE_RE = /^\d{6}$/;
+
+export function validateVerificationCode(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("코드는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (!CODE_RE.test(v)) return fail("코드는 6자리 숫자여야 합니다.");
+  return ok(v);
+}
+
 /** retentionHours: 정수 1~72(firebase-contract §2.3). */
 export function validateRetentionHours(value: unknown): ValidationResult<number> {
   if (typeof value !== "number" || !Number.isInteger(value))

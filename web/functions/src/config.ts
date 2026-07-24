@@ -5,6 +5,9 @@
  * 배포는 Functions secrets(firebase functions:secrets:set)로 주입된다.
  */
 
+/** 이메일 공급자 식별자(설계 §10). "log"=개발용 콘솔 sender(외부 의존 0). */
+export type EmailProvider = "log" | "sendgrid";
+
 export interface AppConfig {
   /** JWT 서명 시크릿(HS256). */
   jwtSecret: string;
@@ -16,6 +19,17 @@ export interface AppConfig {
   storageBucket: string;
   /** 모바일 다운로드 페이지 base URL. */
   hostingBaseUrl: string;
+  /** 이메일 공급자(기본 "log" — 개발/Emulator는 실제 메일 미발송, 설계 §10.2). */
+  emailProvider: EmailProvider;
+  /** 발신 주소(sendgrid 사용 시 필수, 콘솔 등록값). */
+  emailFrom: string;
+  /** SendGrid API 키(Secret Manager 주입, sendgrid 사용 시 필수). 로그에 노출 금지. */
+  sendgridApiKey: string;
+}
+
+/** env 문자열 → EmailProvider(미지정/미지원은 "log"로 폴백 = 개발 안전 기본). */
+function parseEmailProvider(value: string | undefined): EmailProvider {
+  return value === "sendgrid" ? "sendgrid" : "log";
 }
 
 /** 쉼표 구분 문자열을 트림된 비어있지 않은 항목 배열로. */
@@ -60,12 +74,30 @@ export function loadConfig(): AppConfig {
     throw new Error("JWT_EXPIRES_IN_SECONDS가 올바르지 않습니다(양의 정수).");
   }
 
+  const emailProvider = parseEmailProvider(process.env.EMAIL_PROVIDER);
+  const emailFrom = process.env.EMAIL_FROM ?? "";
+  const sendgridApiKey = process.env.SENDGRID_API_KEY ?? "";
+  // sendgrid 선택 시에만 자격을 강제(개발 기본 "log"는 외부 의존 0이라 자격 불요).
+  if (emailProvider === "sendgrid") {
+    if (!emailFrom) {
+      throw new Error("EMAIL_FROM 미설정 — sendgrid 사용 시 발신 주소가 필요합니다.");
+    }
+    if (!sendgridApiKey) {
+      throw new Error(
+        "SENDGRID_API_KEY 미설정 — sendgrid 사용 시 API 키가 필요합니다(Functions secrets)."
+      );
+    }
+  }
+
   cached = {
     jwtSecret,
     jwtExpiresInSeconds,
     clientApiKeys,
     storageBucket,
     hostingBaseUrl: process.env.HOSTING_BASE_URL ?? "",
+    emailProvider,
+    emailFrom,
+    sendgridApiKey,
   };
   return cached;
 }

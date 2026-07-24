@@ -16,6 +16,36 @@ export interface UserDoc {
   password: string;
   role: string; // "user" | "manager" | "admin"
   createdAt: Timestamp;
+  /** item1a: 계정 이메일(소문자 정규화). 미수집/레거시 계정은 null(설계 §4.1). */
+  email?: string | null;
+  /** item1a: 이메일 소유 확인 여부. 생성 시 false, verify 성공 시 true(설계 §4.1). */
+  emailVerified?: boolean;
+}
+
+/**
+ * users/{id}/tokens/{tokenId} — 이메일 인증/재설정 토큰(설계 §4.2).
+ * 평문 secret·code는 저장하지 않고 sha256 해시만 보관. 응답·로그에 절대 미노출.
+ * 1회성: consumedAt 마킹(재사용 거부) — 소비 후 문서 삭제도 병행.
+ */
+export interface TokenDoc {
+  /** 문서 ID(selector, 비밀 아님). */
+  id: string;
+  /** 용도. */
+  purpose: "verify_email" | "password_reset";
+  /** secret(verifier)의 sha256 해시. */
+  secretHash: string;
+  /** 6자리 코드의 sha256 해시. */
+  codeHash: string;
+  /** 이 토큰이 검증하려는 이메일(발송·대조 대상). */
+  email: string;
+  /** 생성 시각. */
+  createdAt: Timestamp;
+  /** 만료 시각(Firestore TTL 대상). */
+  expiresAt: Timestamp;
+  /** 소비 시각(1회성 마킹). null이면 미소비. */
+  consumedAt: Timestamp | null;
+  /** 코드 오입력 시도 횟수(§12 브루트포스 방어, 초과 시 무효화). */
+  attempts: number;
 }
 
 /** frameTemplates/{id} */
@@ -40,11 +70,15 @@ export interface ResultSessionDoc {
   downloadPageUrl: string;
 }
 
-/** 클라 응답용 User(비밀번호/해시 절대 미포함, 설계 §6.2). */
+/** 클라 응답용 User(비밀번호/해시·토큰 절대 미포함, 설계 §6.2·§8.5). */
 export interface UserResponse {
   id: string;
   role: string;
   createdAt: string; // ISO8601
+  /** item1a: 계정 이메일(없으면 null). 토큰·해시는 미포함이지만 email 자체는 노출 가능(§8.5). */
+  email: string | null;
+  /** item1a: 이메일 소유 확인 여부. */
+  emailVerified: boolean;
 }
 
 /** 클라 응답용 Frame. */

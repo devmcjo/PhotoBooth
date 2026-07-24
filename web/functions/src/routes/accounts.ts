@@ -6,6 +6,7 @@
 import { Router } from "express";
 import {
   validateAccountId,
+  validateEmail,
   validatePassword,
   validateRole,
 } from "../domain/validation";
@@ -17,6 +18,7 @@ import {
   createAccount,
   deleteAccount,
   listAccounts,
+  setEmail,
   setRole,
 } from "../services/accounts";
 
@@ -26,7 +28,7 @@ export function accountsRouter(): Router {
   // 모든 계정 엔드포인트는 로그인 필수.
   router.use(requireBearer());
 
-  // POST /accounts  (파워) — {id, password, role} → 201 user
+  // POST /accounts  (파워) — {id, password, role, email?} → 201 user
   router.post(
     "/",
     requirePower(),
@@ -38,9 +40,25 @@ export function accountsRouter(): Router {
       const roleRes = validateRole(req.body?.role);
       if (!roleRes.ok) throw HttpError.invalid(roleRes.error);
 
+      // email은 선택(서버는 null 허용, 신규 계정 필수화는 클라 UI가 강제, §5.1).
+      // 값이 주어졌을 때만 형식 검증한다(null/undefined/빈 문자열은 미수집으로 처리).
+      let email: string | null = null;
+      const rawEmail = req.body?.email;
+      if (rawEmail !== undefined && rawEmail !== null && rawEmail !== "") {
+        const emailRes = validateEmail(rawEmail);
+        if (!emailRes.ok) throw HttpError.invalid(emailRes.error);
+        email = emailRes.value;
+      }
+
       // actingRole은 토큰에서(클라 전달 무시). requireBearer가 principal 주입.
       const actingRole = req.principal!.role;
-      const user = await createAccount(idRes.value, pwRes.value, roleRes.value, actingRole);
+      const user = await createAccount(
+        idRes.value,
+        pwRes.value,
+        roleRes.value,
+        email,
+        actingRole
+      );
       res.status(201).json(user);
     })
   );
@@ -64,6 +82,21 @@ export function accountsRouter(): Router {
       if (!pwRes.ok) throw HttpError.invalid(pwRes.error);
 
       await changePassword(idRes.value, pwRes.value, req.principal!);
+      res.status(204).end();
+    })
+  );
+
+  // PATCH /accounts/{id}/email  (본인/파워, 위계) — {email} → 204
+  // email 변경 시 emailVerified=false로 리셋되고 verify 메일이 발송된다(§8.3).
+  router.patch(
+    "/:id/email",
+    asyncHandler(async (req, res) => {
+      const idRes = validateAccountId(req.params.id);
+      if (!idRes.ok) throw HttpError.invalid(idRes.error);
+      const emailRes = validateEmail(req.body?.email);
+      if (!emailRes.ok) throw HttpError.invalid(emailRes.error);
+
+      await setEmail(idRes.value, emailRes.value, req.principal!);
       res.status(204).end();
     })
   );

@@ -21,6 +21,7 @@
 - 강한 랜덤 값으로:
   - `firebase functions:secrets:set JWT_SECRET`  (예: `openssl rand -base64 48`)
   - `firebase functions:secrets:set CLIENT_API_KEYS`  (배포별 클라 API 키, 콤마 구분 가능)
+  - `firebase functions:secrets:set SENDGRID_API_KEY`  (item1a — 코드에 **선언돼 있어 배포 시 반드시 존재해야 함**. 이메일을 아직 안 쓰면 임시값이라도 등록. 실제 발송은 §B1에서 활성화)
 - 일반 설정(비밀 아님)은 함수 env/param: `STORAGE_BUCKET`, `HOSTING_BASE_URL`, `JWT_EXPIRES_IN_SECONDS`(기본 8h).
 - ⚠️ `web/functions/.env`의 개발용 값(특히 `JWT_SECRET`)을 **프로덕션에 쓰지 말 것**. `.env`는 git 미추적(로컬 Emulator 전용).
 
@@ -70,8 +71,17 @@
 ## B. (예정) 계정 기능 — 이메일/SSO 관련 콘솔 작업
 > item1a/1b 개발 착수 시 아래를 채운다(현재 코드 미착수 → 자리만).
 
-### B1. 이메일 발송 공급자 `[ ]` (item1a 이메일 인증·비밀번호 찾기)
-- 이메일 인증/재설정 메일 발송을 위한 공급자 설정 필요(예: SendGrid/SMTP/Firebase Extension). 발신 도메인·API 키 등록은 콘솔 작업. (공급자 선정은 개발 시 합리적 기본안 제시)
+### B1. 이메일 발송 공급자 (item1a 이메일 인증·비밀번호 찾기)
+> 서버 코드는 완료(이메일 인증·재설정 엔드포인트, 토큰 발급/소비, 이메일 추상화). **개발 기본은 `log` sender로 실제 메일이 발송되지 않는다.** 프로덕션 실발송을 위해 아래를 수동 수행한다. 코드 근거: `web/functions/src/{config.ts, services/email.ts}`, 설계 `docs/design/wpf-accounts-email-verification-design.md §10·§11.2`.
+
+- **B1-1. 이메일 공급자 계정·API 키** `[ ]`: SendGrid(권장) 계정 생성 → API 키 발급 → Functions secret 등록:
+  `firebase functions:secrets:set SENDGRID_API_KEY` (web/ 디렉토리에서). **키를 리포/.env에 넣지 말 것.** (대안 SMTP/Firebase Extension 채택 시 별도 설정.)
+- **B1-2. 발신 도메인·발신자 등록** `[ ]`: SendGrid Sender Authentication(도메인 SPF/DKIM 또는 Single Sender)으로 발신 주소 인증. 그 주소를 함수 env `EMAIL_FROM`(예: `no-reply@도메인`)에 설정.
+- **B1-3. 공급자 활성화(콘솔만, 소스 수정 불요)** `[ ]`: 함수 env `EMAIL_PROVIDER=sendgrid` 설정(미설정/`log`면 개발용 로그 sender — 실제 메일 미발송). 프로덕션 실발송 전 `sendgrid`로 전환 + `SENDGRID_API_KEY`에 **실제 키** 등록(A1/B1-1).
+  - ✅ 배포 배선은 **코드에 이미 반영됨**: `index.ts`가 `SENDGRID_API_KEY`를 `defineSecret` 선언 + `api` 함수 `secrets:` 배열에 포함(런타임 주입). 따라서 활성화는 **env 전환 + 시크릿 값**만으로 끝남(소스 편집 불필요). 단 선언된 시크릿이라 **모든 배포에서 존재해야** 하므로 log 모드여도 A1에서 임시값이라도 등록해 둘 것.
+- **B1-4. (링크 방식 채택 시) 웹 verify/reset 페이지** `[ ]`: 이메일 링크 대상 `{hostingBaseUrl}/verify`·`/reset` 정적 페이지(js 팀). **코드 방식(앱 내 6자리 코드 입력)만이면 불요** — item1a 서버는 코드·링크 두 경로를 모두 지원하지만 클라 UI는 코드 경로 우선.
+- **B1-5. (선택) 토큰 서브컬렉션 TTL 정책** `[ ]`: `users/{id}/tokens` 문서의 `expiresAt`에 Firestore 네이티브 TTL을 걸어 만료 토큰 자동 청소(resultSessions 방식). 서버는 confirm 시 만료를 코드로도 재확인하므로 TTL 미설정이어도 보안엔 무해(청소 목적).
+- **B1-6. Firestore 규칙 점검** `[ ]`: `firestore.rules`의 catch-all `match /{document=**} { allow read, write: if false }`가 `users/{id}/tokens/**` 서브컬렉션까지 전면 deny함을 확인(현행 규칙 이미 충족 — 웹 접근 없음, Admin 서버만 접근). 규칙 변경 불필요.
 
 ### B2. Google OAuth 클라이언트 `[ ]` (item1b Google SSO)
 - Google Cloud 콘솔에서 **OAuth 2.0 클라이언트 ID/secret 생성**, 승인 리디렉션 URI·동의화면 설정. 자격증명을 백엔드 시크릿에 등록.
