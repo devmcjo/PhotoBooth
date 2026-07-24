@@ -18,11 +18,11 @@
 
 ### 진행 중 (선행: 백엔드 코드)
 - [x] **P1 — 백엔드 함수(TS Cloud Functions)** 구현 (js-developer, Opus). **완료·커밋 `73bb734`** (tsc0·jest34/34·Emulator36/36, Opus 리뷰 PASS).
-- [ ] **P3 — 클라이언트 HTTP 계층(`MCPhoto.Http`)**: `IFirebaseClient`/`IAccountService`/`IFrameRepository`/`IUploadService` HTTP 구현 + DI **feature flag 전환**(기본 OFF=현행 유지, 안전 불변식). HTTP 경로는 **온라인 전용**(시드 없음). **레거시 오프라인 시드·Admin 경로 삭제는 컷오버(P6 은퇴) 시** — 그 전까지 롤백 위해 공존. UI 무변경.
+- [x] **P3 — 클라이언트 HTTP 계층(`MCPhoto.Http`)** — **완료·커밋 `d4b6be1`** (빌드0·테스트402, Opus 리뷰 PASS). DI feature flag 기본 OFF(현행 유지·롤백), HTTP 경로 온라인 전용. 레거시 Admin·시드는 컷오버(P6) 시 은퇴. UI 무변경.
   > 설계: `docs/design/wpf-backend-proxy-migration-design.md`. 배포·시크릿·IAM·규칙·키폐기(P2/P4/P5/P6)는 [USER-ACTIONS].
 
 ### 0. 사용자 수동 작업 문서화 (item 0)
-- [ ] **`docs/USER-ACTIONS.md` 생성·정리**: 백엔드 키 이관에 대해 **사용자가 콘솔/배포로 직접 해야 할 일** 런북(함수 배포·IAM/ADC·시크릿 등록(JWT/API키)·리전·보안규칙 강화·평문→해시 마이그레이션 실행·**서비스 계정 키 회전/폐기(P6, 최후·불가역)**). 이후 모든 기능의 사용자 수동 작업을 이 문서에 계속 append.
+- [x] **`docs/USER-ACTIONS.md` 생성·정리** — 완료. A절=백엔드 배포 런북(A1 시크릿·A2 IAM signBlob·A3 리전·A4 배포·A5 flag ON·A6 E2E·**A7 키 폐기(불가역·최후)**·A8 규칙·A9 평문 마이그레이션), B/C절=이메일·SSO·장치 자리(해당 기능 착수 시 채움). **이후 모든 기능의 사용자 수동 작업은 이 문서에 append.**
 
 ### 1. 계정 관련 (item 1)
 - [ ] **1a. pw 해시 + 이메일 인증 + 비밀번호 찾기**
