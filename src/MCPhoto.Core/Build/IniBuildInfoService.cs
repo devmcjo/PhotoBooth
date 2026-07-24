@@ -24,14 +24,15 @@ public sealed class IniBuildInfoService : IBuildInfoService
     public string BuildDate { get; } = string.Empty;
     public string Site { get; } = string.Empty;
 
-    /// <summary>"v{Version}"에 Site·BuildDate가 있으면 " · "로 이어붙인 표기 문자열.</summary>
+    /// <summary>"v{Version}"에 Site가 있으면 " · "로 이어붙인 표기 문자열(예: "v1.0.0 · Beta").</summary>
     public string DisplayText
     {
         get
         {
             var parts = new List<string> { $"v{Version}" };
             if (!string.IsNullOrWhiteSpace(Site)) parts.Add(Site);
-            if (!string.IsNullOrWhiteSpace(BuildDate)) parts.Add(BuildDate);
+            // it12 R4: BuildDate는 표기에서 제외(업데이트 지연 시 오래된 앱으로 보일 위험).
+            //          BuildDate 프로퍼티/ini 키는 유지 — 표기에서만 뺀다.
             return string.Join("  ·  ", parts);
         }
     }

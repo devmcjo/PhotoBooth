@@ -67,6 +67,19 @@ public class SettingsViewModelTests
         return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(), diagnostics, firebase);
     }
 
+    /// <summary>로그인 세션(기본 Admin) VM. 게이트 대상 필드(거울모드·재촬영·QR·필터) 편집·저장 가능. (it12 R1)</summary>
+    private static SettingsViewModel MakeLoggedInVm(IniSettingsService? settings = null, ICameraService? camera = null)
+    {
+        var session = new SessionContext();
+        session.Login(new User { Id = "admin", Password = "pw", Role = UserRole.Admin });
+        settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        settings.Load();
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
+        camera ??= new FakeCameraService(new CameraDevice(0, "Camera 0"));
+        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(),
+            new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+    }
+
     [Fact]
     public async Task Qr_Off_Then_On_Forces_Both_Sub_Toggles_On()
     {
@@ -107,13 +120,13 @@ public class SettingsViewModelTests
         Assert.False(vm.SendTimelapse); // 로드값 보존(강제 on 안 됨)
     }
 
-    // ── it11 #13: 재촬영 설정 왕복(게스트 게이트 대상 아님 — 촬영 옵션) ──
+    // ── it11 #13 / it12 R1: 재촬영 설정 왕복(로그인 전용 편집으로 게이트 확대) ──
 
     [Fact]
     public async Task Retake_Settings_Save_And_Load_RoundTrip()
     {
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
-        var vm = MakeVm(settings: settings);   // 게스트(로그인 안 함) — 재촬영은 게스트도 저장 가능
+        var vm = MakeLoggedInVm(settings: settings);   // it12 R1: 재촬영은 로그인 전용 편집(게스트 미기록)
         await vm.OnEnterAsync();
 
         Assert.False(vm.RetakeEnabled);        // 기본 off
@@ -124,8 +137,87 @@ public class SettingsViewModelTests
         vm.SaveSettingsCommand.Execute(null);
 
         var r = new IniSettingsService(iniPath: settings.IniPath).Load();
-        Assert.True(r.RetakeEnabled);          // 게스트여도 촬영 옵션은 저장됨
+        Assert.True(r.RetakeEnabled);          // 로그인 사용자는 재촬영 저장 가능
         Assert.Equal(3, r.RetakeLimit);
+    }
+
+    // ── it12 R1: 거울모드·재촬영·필터 3종 편집 권한 게이트(QR과 동일 3지점 메커니즘) ──
+
+    [Fact]
+    public async Task Guest_Gated_Fields_Forced_Off_On_Load()
+    {
+        // ini에 관리자값(전부 on) 저장 → 게스트 로드 시 소스단 off 표시(편집 권한 게이트).
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.MirrorMode = true;
+        s.RetakeEnabled = true;
+        s.FilterGrayscale = true;
+        s.FilterBrightness = true;
+        s.FilterBeauty = true;
+        settings.Save();
+
+        var vm = MakeVm(settings: settings); // 게스트
+        await vm.OnEnterAsync();
+
+        Assert.True(vm.IsGuest);
+        Assert.False(vm.MirrorMode);       // 표시 전용 off
+        Assert.False(vm.RetakeEnabled);
+        Assert.False(vm.FilterGrayscale);
+        Assert.False(vm.FilterBrightness);
+        Assert.False(vm.FilterBeauty);
+    }
+
+    [Fact]
+    public async Task Guest_Save_Preserves_Ini_Mirror_Retake_Filters()
+    {
+        // 관리자가 켜둔 값이 게스트 저장으로 클로버되지 않아야(ini 원값 보존). QR 보존 테스트와 동형.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.MirrorMode = true;
+        s.RetakeEnabled = true;
+        s.RetakeLimit = 3;
+        s.FilterGrayscale = true;
+        s.FilterBrightness = true;
+        s.FilterBeauty = true;
+        settings.Save();
+
+        var vm = MakeVm(settings: settings); // 게스트
+        await vm.OnEnterAsync();
+        Assert.False(vm.MirrorMode);         // 표시는 off
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.MirrorMode);           // ini 원값 보존(클로버 방지)
+        Assert.True(r.RetakeEnabled);
+        Assert.Equal(3, r.RetakeLimit);
+        Assert.True(r.FilterGrayscale);
+        Assert.True(r.FilterBrightness);
+        Assert.True(r.FilterBeauty);
+    }
+
+    [Fact]
+    public async Task LoggedIn_Saves_Mirror_Retake_Filters()
+    {
+        // 로그인 사용자는 게이트 대상 필드를 편집·저장할 수 있어야(라운드트립).
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var vm = MakeLoggedInVm(settings: settings);
+        await vm.OnEnterAsync();
+
+        vm.MirrorMode = true;
+        vm.RetakeEnabled = true;
+        vm.RetakeLimit = 2;
+        vm.FilterGrayscale = true;
+        vm.FilterBrightness = false; // 필터 기본값은 true — 로그인 사용자가 끄는 값도 기록되는지 검증
+        vm.FilterBeauty = true;
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.MirrorMode);
+        Assert.True(r.RetakeEnabled);
+        Assert.Equal(2, r.RetakeLimit);
+        Assert.True(r.FilterGrayscale);
+        Assert.False(r.FilterBrightness); // 로그인 사용자가 끈 값이 기록됨
+        Assert.True(r.FilterBeauty);
     }
 
     // ── it9 C1: 카메라 열거 ──

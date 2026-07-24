@@ -189,10 +189,11 @@
 - **화면·VM**: `SettingsView`(`SettingsView.xaml`) · `SettingsViewModel`. 서비스: `ISettingsService`, `ICameraService`, `ICameraTestDialogService`, `IDiagnosticsDialogService`(it11 #14).
 - **항목**(2열 그리드 + 그룹, `SettingsView.xaml`):
   - 촬영: 컷 수(6/8/10), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시, **셔터음**, **재촬영 사용**(+on일 때 **횟수 제한 1~3**, it11 #13).
-  - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트, **실제 장치명 표시** it11 #15), 표시 모드(전체화면/창모드), QR 전송(+하위 사진/타임랩스 토글), 로컬 저장.
-  - 출력·전송: 출력 포맷(JPG/PNG), 보관 시간(1~72h), 로컬 저장 경로.
+  - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트, **실제 장치명 표시** it11 #15), 표시 모드(전체화면/창모드).
+  - 출력·전송: 출력 포맷(JPG/PNG), **QR 전송(+하위 사진/타임랩스 토글)**, **로컬 저장**, 로컬 저장 경로, 보관 시간(1~72h). (it12 R2: QR 전송·로컬 저장을 장치·표시 → 출력·전송으로 이동)
   - 필터: 원본(고정 on·Disable), 흑백/밝게/뷰티 노출 토글.
   - 고급: 다운로드 페이지 Base URL, Storage 버킷, **서버 연결 상태**(it10, 읽기전용), **[진단·상태] 버튼**(로그인 전용 → §17, it11 #14).
+  - **로그인 전용 편집(it12 R1)**: 거울모드·재촬영(횟수 포함)·필터(흑백/밝게/뷰티)·QR 전송·다운로드 URL·Storage 버킷은 게스트에겐 OFF 표시·컨트롤 비활성(hover 시 "로그인 후 이용 가능합니다." 툴팁, it12 R3). 런타임 동작은 ini(관리자값)대로 — 편집 권한만 제한.
 - **설정 진입 시 상단 설정(⚙) 버튼 숨김**(자기 화면 재진입 방지, `IsSettings`). 취소/닫기 등 공용 버튼은 아웃라인 스타일(`Button.Ghost`)로 CTA와 정렬.
 - **핵심 규칙**:
   - 카메라 열거(`RefreshCamerasAsync`, `SettingsViewModel.cs:90-113`): `EnumerateDevices()`를 `Task.Run` 백그라운드(수백 ms~초), 목록 비면 ComboBox/테스트 Disable + 안내, 저장 인덱스 없으면 첫 장치로 보정.
@@ -253,6 +254,6 @@
 
 ## 18. 앱 버전 표기 (it11, bldinfo.ini)
 
-- **목적**: 실행 중 버전·빌드일·배포 채널을 항상 확인.
-- **규칙**: `bldinfo.ini`(`[General]` Version/BuildDate/Site)를 시작 시 로드(`IBuildInfoService`), `DisplayText`(예 `v1.0.0 · Beta · 2026-07-23`)를 **앱 하단 우측에 로그인 여부 무관 상시** 노출(흐린 캡션, 클릭 비간섭). 파일/키 부재 시 `v0.0.0` 폴백.
+- **목적**: 실행 중 버전·배포 채널을 항상 확인.
+- **규칙**: `bldinfo.ini`(`[General]` Version/BuildDate/Site)를 시작 시 로드(`IBuildInfoService`), `DisplayText`(예 `v1.0.0 · Beta`)를 **앱 하단 우측에 로그인 여부 무관 상시** 노출(흐린 캡션, 클릭 비간섭). 파일/키 부재 시 `v0.0.0` 폴백. (it12 R4: BuildDate는 표기에서 제외 — 업데이트 지연 시 오래된 앱으로 보일 위험. `BuildDate` 프로퍼티·ini 키·로드 로직은 유지)
 - **근거**: `MainWindow.xaml`, `AppShellViewModel.cs`(`VersionText`), `IniBuildInfoService.cs`. 파일 규약·배포 상세 [12](./12-exe-app-settings-and-config.md) §6.

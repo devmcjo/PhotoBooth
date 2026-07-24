@@ -45,6 +45,8 @@
 
 보조 상수(`AppSettings.cs:36-42`): `AllowedCutCounts={6,8,10}`, `AllowedCountdownSecs={3,6,8,10}`, `AllowedRetakeLimits={1,2,3}`, `MinRetentionHours=1`, `MaxRetentionHours=72`, `MinSlots=1`, `MaxSlots=6`.
 
+> **it12 R1 — 로그인 전용 편집(게이트)**: 게스트(비로그인) 설정 화면에서 `MirrorMode`·`RetakeEnabled`·`RetakeLimit`·`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`·`EnableQrDelivery`(+`SendPhoto`/`SendTimelapse`)·`HostingBaseUrl`·`StorageBucket`는 OFF 표시·컨트롤 비활성(hover 시 "로그인 후 이용 가능합니다." 툴팁, R3)이며 저장 시 미기록(ini 원값 보존=클로버 금지). 게이트는 `SettingsViewModel`(VM)에만 존재 — `AppSettings` 모델은 전 필드 항상 직렬화되고, 촬영/필터 런타임은 `Settings.Current`(ini=관리자값)대로 동작한다(편집 권한만 제한, 기능은 불변).
+
 ### 1.1 오늘(2026-07-23) 확정 기본값
 
 - `DisplayMode = DisplayMode.Windowed` — **개발 기간 기본**(배포 시 Fullscreen으로 되돌릴 것; `AppSettings.cs:91-92` 주석).
@@ -151,7 +153,7 @@
 - **파일**: `bldinfo.ini`, 섹션 `[General]`, 키 `Version`(예 `1.0.0`) · `BuildDate`(예 `2026-07-23`) · `Site`(예 `Beta`).
 - **탐색 경로 순서**(`Candidates`): ① 실행 경로 `{AppContext.BaseDirectory}\bldinfo.ini` → ② `%ProgramData%\MCPhoto\bldinfo.ini`. 존재하는 첫 파일 사용.
 - **폴백**: 파일/키 부재·손상 → `Version="0.0.0"`, `BuildDate`·`Site` 빈 문자열. 크래시 금지. UTF-8 명시 읽기, `IniFile` 파서 재사용(`;`/`#` 주석 무시).
-- **표기**: `DisplayText`(예 `v1.0.0 · Beta · 2026-07-23`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭).
+- **표기**: `DisplayText`(예 `v1.0.0 · Beta`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭). (it12 R4: `BuildDate`는 표기에서 제외 — 업데이트 지연 시 오래된 앱으로 보일 위험. 프로퍼티·ini 키·로드 로직은 유지)
 - **배포**: 실행 폴더 동봉(`MCPhoto.App.csproj`의 `None CopyToOutputDirectory`) + `publish.ps1`이 publish 산출물에 명시 복사(`publish.bat`/`publish-nokey.bat` 공통). `.gitignore`는 `*.ini` 무시 + `!bldinfo.ini` 예외로 추적. **버전 값은 배포 시 사용자가 직접 관리**(현재 미배포).
 - 근거: `IBuildInfoService.cs`, `IniBuildInfoService.cs`, `MainWindow.xaml`, `AppShellViewModel.cs`, `publish.ps1`, `bldinfo.ini`.
 

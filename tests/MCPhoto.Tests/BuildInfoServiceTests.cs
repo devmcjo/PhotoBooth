@@ -45,8 +45,8 @@ public class BuildInfoServiceTests
         var verOnly = TempIni("[General]\nVersion=2.1.0\n");
         try
         {
-            Assert.Equal("v1.0.0  ·  Beta  ·  2026-07-23", new IniBuildInfoService(full).DisplayText);
-            Assert.Equal("v2.1.0", new IniBuildInfoService(verOnly).DisplayText); // Site·BuildDate 없으면 생략
+            Assert.Equal("v1.0.0  ·  Beta", new IniBuildInfoService(full).DisplayText); // it12 R4: BuildDate 표기 제외
+            Assert.Equal("v2.1.0", new IniBuildInfoService(verOnly).DisplayText); // Site 없으면 생략
         }
         finally { File.Delete(full); File.Delete(verOnly); }
     }

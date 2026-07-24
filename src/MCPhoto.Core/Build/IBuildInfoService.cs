@@ -16,6 +16,6 @@ public interface IBuildInfoService
     /// <summary>배포 사이트·채널(예: "Beta"). 부재 시 빈 문자열.</summary>
     string Site { get; }
 
-    /// <summary>UI 표기용 요약(예: "v1.0.0 · Beta · 2026-07-23"). 값이 없는 항목은 생략.</summary>
+    /// <summary>UI 표기용 요약(예: "v1.0.0 · Beta"). 값이 없는 항목은 생략(BuildDate는 표기 제외).</summary>
     string DisplayText { get; }
 }

@@ -195,6 +195,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 EnableQrDelivery = false;
                 SendPhoto = false;
                 SendTimelapse = false;
+                // it12 R1: 편집 권한 게이트 확대(표시 전용 off, ini 원값은 SaveSettings에서 보존).
+                //          RetakeLimit은 int·재촬영 하위(상위 off 시 숨김)라 강제하지 않음(로드값 유지, 무해).
+                MirrorMode = false;
+                RetakeEnabled = false;
+                FilterGrayscale = false;
+                FilterBrightness = false;
+                FilterBeauty = false;
             }
         }
         finally { _normalizing = false; }
@@ -241,21 +248,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var s = _settings.Current;
         s.CutCount = CutCount;
         s.CountdownSec = CountdownSec;
-        s.MirrorMode = MirrorMode;
         s.FlashMode = FlashMode;
         s.ShutterSound = ShutterSound;
-        s.RetakeEnabled = RetakeEnabled;   // it11 #13: 촬영 옵션(게스트 게이트 대상 아님)
-        s.RetakeLimit = RetakeLimit;
-        // 게스트는 QR/Firebase 설정을 저장하지 않음(ini 원값 보존 → 관리자 값 클로버 방지). (보완#1)
+        // 게스트는 게이트 대상 필드를 저장하지 않음(ini 원값 보존 → 관리자 값 클로버 방지). (보완#1, it12 R1)
+        // it12 R1: 거울모드·재촬영(횟수 포함)·필터 3종도 QR/Firebase와 동일하게 로그인 전용 편집으로 확대.
+        if (!IsGuest) s.MirrorMode = MirrorMode;
+        if (!IsGuest)
+        {
+            s.RetakeEnabled = RetakeEnabled;
+            s.RetakeLimit = RetakeLimit;
+        }
         if (!IsGuest)
         {
             s.EnableQrDelivery = EnableQrDelivery;
             s.SendPhoto = SendPhoto;
             s.SendTimelapse = SendTimelapse;
         }
-        s.FilterGrayscale = FilterGrayscale;
-        s.FilterBrightness = FilterBrightness;
-        s.FilterBeauty = FilterBeauty;
+        if (!IsGuest)
+        {
+            s.FilterGrayscale = FilterGrayscale;
+            s.FilterBrightness = FilterBrightness;
+            s.FilterBeauty = FilterBeauty;
+        }
         s.SaveLocalCopy = SaveLocalCopy;
         s.RetentionHours = RetentionHours;
         s.LocalSavePath = LocalSavePath;

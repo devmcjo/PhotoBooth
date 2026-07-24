@@ -216,4 +216,40 @@ public class XamlResourceTests
                 "DiagnosticsWindow.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
         });
     }
+
+    // ── it12 R2/R3: SettingsView 레이아웃 재배치 + Toggle.Gated 파생 스타일 정적 안전망 ──
+    // Toggle.Gated(BasedOn Toggle)를 포함해 SettingsView가 참조하는 모든 테마 StaticResource가
+    // 해석되는지 headless로 검증(창 미표시). 로컬 키·App 컨버터 키는 제외.
+
+    [Fact]
+    public void SettingsView_StaticResource_Keys_Resolve_In_Theme()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+
+        // 자체 정의 리소스(RowLabel/SettingRow/FullRow/GroupTitle/GroupDivider/Toggle.Gated 등 UserControl.Resources)는 제외.
+        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+
+        // App.xaml에 정의된 공용 컨버터 키(테마 딕셔너리 밖)는 이 검증 대상이 아님.
+        var appKeys = new HashSet<string>
+        {
+            "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
+            "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
+            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "FilePathToImage",
+        };
+
+        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(k => k.Length > 0 && !localKeys.Contains(k) && !appKeys.Contains(k))
+            .Distinct()
+            .ToArray();
+
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var missing = referenced.Where(k => !theme.Contains(k)).ToList();
+            Assert.True(missing.Count == 0,
+                "SettingsView.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
+        });
+    }
 }
