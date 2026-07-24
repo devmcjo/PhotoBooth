@@ -22,6 +22,7 @@ import {
   getDefaultFrames,
   getUserFrames,
   saveFrame,
+  updateFrame,
 } from "../services/frames";
 
 export function framesRouter(): Router {
@@ -78,6 +79,40 @@ export function framesRouter(): Router {
         contentType: "image/png",
       });
       res.status(201).json(result);
+    })
+  );
+
+  // PUT /frames/{id}  (Bearer 파워) — 기존 공용 기본 프레임 업데이트(같은 id 덮어쓰기).
+  // {name, imageSize, slots, replaceImage?} → 200 {frame, upload?}
+  // POST /frames와 요청/응답 DTO 일관(클라 재사용). isDefault·userId는 서버가 보존한다.
+  router.put(
+    "/:id",
+    requireBearer(),
+    requirePower(),
+    asyncHandler(async (req, res) => {
+      const frameId = req.params.id;
+      if (typeof frameId !== "string" || frameId.length === 0) {
+        throw HttpError.invalid("프레임 id가 필요합니다.");
+      }
+      const nameRes = validateFrameName(req.body?.name);
+      if (!nameRes.ok) throw HttpError.invalid(nameRes.error);
+      const sizeRes = validateImageSize(req.body?.imageSize);
+      if (!sizeRes.ok) throw HttpError.invalid(sizeRes.error);
+      const slotsRes = validateSlots(req.body?.slots);
+      if (!slotsRes.ok) throw HttpError.invalid(slotsRes.error);
+
+      // replaceImage: 클라 diff 결과. 미지정/false면 메타만 갱신(이미지 보존, 서명 URL 미발급).
+      const replaceImage = req.body?.replaceImage === true;
+
+      const result = await updateFrame({
+        frameId,
+        name: nameRes.value,
+        imageSize: sizeRes.value,
+        slots: slotsRes.value,
+        replaceImage,
+        contentType: "image/png",
+      });
+      res.status(200).json(result);
     })
   );
 

@@ -58,6 +58,27 @@ export interface SaveFrameResult {
   upload: SignedUpload;
 }
 
+export interface UpdateFrameInput {
+  /** 업데이트 대상 문서 id(경로 파라미터). */
+  frameId: string;
+  name: string;
+  imageSize: ImageSize;
+  slots: Slot[];
+  /** true면 이미지 바이트를 교체(서명 PUT URL 발급). false면 메타만 갱신(URL 없음). */
+  replaceImage: boolean;
+  /** 이미지 파일 확장자(항상 png — 프레임 규약). replaceImage=true일 때만 사용. */
+  contentType: string;
+}
+
+export interface UpdateFrameResult {
+  frame: FrameResponse;
+  /**
+   * 이미지 교체 시(replaceImage=true) 발급되는 서명 PUT URL + 필수 헤더.
+   * 이미지 미변경(replaceImage=false)이면 undefined(클라는 이미지를 PUT하지 않는다).
+   */
+  upload?: SignedUpload;
+}
+
 /**
  * 프레임 저장: 메타 검증 → 서명 PUT URL + 다운로드 토큰 URL 발급 → 문서 생성(imageUrl=다운로드URL).
  * 이미지 바이트는 클라가 서명 URL로 직접 PUT한다(설계 §5.4-A, 함수 비용 최소).
@@ -99,6 +120,58 @@ export async function saveFrame(input: SaveFrameInput): Promise<SaveFrameResult>
   await db().collection(COLLECTION).doc(frameId).set(doc);
 
   return { frame: toResponse(doc), upload };
+}
+
+/**
+ * 기존 공용 기본 프레임 업데이트(같은 frameId 덮어쓰기, 설계 §3·§5.1 옵션 B).
+ * WPF `FrameRepository.SaveAsync`가 `SetAsync(frame.Id)`로 하던 "같은 문서 덮어쓰기"를 HTTP로 노출.
+ *
+ * - 대상 문서가 없으면 404.
+ * - 기본 프레임(isDefault=true, userId=null)만 업데이트 가능. user 소유 문서(userId!=null)는 거부(403).
+ *   (user 커스텀 프레임은 it8 A2로 로컬 전용 — 서버에는 존재하지 않아야 하나, 레거시 문서 방어.)
+ * - name·slots·imageSize만 갱신. isDefault·userId·createdAt·id는 보존(불변).
+ * - replaceImage=true면 같은 Storage 경로(frames/default/{id}.png)에 새 서명 PUT URL 발급(덮어쓰기).
+ *   기존 imageUrl(다운로드 토큰 URL)은 새 토큰으로 교체된다. replaceImage=false면 imageUrl 그대로 보존.
+ *
+ * 10개 제한은 기본 프레임(userId=null)에 미적용(신규 생성 아님, 카운트 무관).
+ */
+export async function updateFrame(input: UpdateFrameInput): Promise<UpdateFrameResult> {
+  const cfg = loadConfig();
+  const ref = db().collection(COLLECTION).doc(input.frameId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw HttpError.notFound("프레임을 찾을 수 없습니다.");
+  }
+
+  const current = snap.data() as FrameTemplateDoc;
+  // 공용 기본 프레임만 업데이트 대상(설계 §3: 기본프레임=null·isDefault=true 보존).
+  if (current.userId !== null || current.isDefault !== true) {
+    throw HttpError.forbidden("공용 기본 프레임만 업데이트할 수 있습니다.");
+  }
+
+  // 갱신 필드(name·slots·imageSize). 보존 필드(id·userId·isDefault·createdAt)는 current에서 유지.
+  const updated: FrameTemplateDoc = {
+    id: current.id,
+    userId: null,
+    isDefault: true,
+    name: input.name,
+    imageUrl: current.imageUrl,
+    imageSize: input.imageSize,
+    slots: input.slots,
+    createdAt: current.createdAt,
+  };
+
+  let upload: SignedUpload | undefined;
+  if (input.replaceImage) {
+    // 이미지 교체: 같은 owner 경로(default)·같은 frameId 키에 덮어쓰기. 새 다운로드 토큰 URL로 갱신.
+    const storagePath = `frames/default/${current.id}.png`;
+    upload = await createSignedUpload(cfg.storageBucket, storagePath, input.contentType);
+    updated.imageUrl = upload.downloadUrl;
+  }
+
+  await ref.set(updated);
+
+  return { frame: toResponse(updated), upload };
 }
 
 /**

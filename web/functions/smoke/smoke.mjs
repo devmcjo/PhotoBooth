@@ -265,6 +265,86 @@ async function main() {
     const found = Array.isArray(r.json) && r.json.some((f) => f.id === frameId);
     check("(F1) 저장한 공용 기본 프레임이 default 목록에 노출", found, `count=${Array.isArray(r.json) ? r.json.length : "?"}`);
   }
+
+  // --- 프레임 업데이트 PUT /frames/{id} (같은 id 덮어쓰기, item2 서버 파트) ---
+  {
+    // Bearer 없음 → 401
+    const r = await call("PUT", `/frames/${frameId}`, {
+      body: { name: "겨울", imageSize: { width: 1200, height: 1800 }, slots: [{ index: 0, x: 20, y: 20, width: 200, height: 200 }] },
+    });
+    check("(F5) PUT Bearer 없음 → 401", r.status === 401, `status=${r.status}`);
+  }
+  {
+    // user(비파워) 권한 → 403. 이 시점 비파워 계정을 admin이 새로 만들어 로그인(요구 3 권한 게이트 검증).
+    await call("POST", "/accounts", {
+      bearer: adminToken,
+      body: { id: "frameuser", password: "fupw", role: "user" },
+    });
+    const userTok = (await call("POST", "/auth/login", { apiKey: API_KEY, body: { id: "frameuser", password: "fupw" } })).json?.token;
+    const r = await call("PUT", `/frames/${frameId}`, {
+      bearer: userTok,
+      body: { name: "겨울", imageSize: { width: 1200, height: 1800 }, slots: [{ index: 0, x: 20, y: 20, width: 200, height: 200 }] },
+    });
+    check("(F5/권한) user가 PUT → 403", r.status === 403, `status=${r.status}`);
+  }
+  {
+    // 없는 id → 404
+    const r = await call("PUT", `/frames/nonexistent-id`, {
+      bearer: adminToken,
+      body: { name: "겨울", imageSize: { width: 1200, height: 1800 }, slots: [{ index: 0, x: 20, y: 20, width: 200, height: 200 }] },
+    });
+    check("(F5) 없는 프레임 PUT → 404", r.status === 404, `status=${r.status}`);
+  }
+  {
+    // 이름 '_' 금지 → 400
+    const r = await call("PUT", `/frames/${frameId}`, {
+      bearer: adminToken,
+      body: { name: "겨울_x", imageSize: { width: 1200, height: 1800 }, slots: [{ index: 0, x: 20, y: 20, width: 200, height: 200 }] },
+    });
+    check("(F5/검증) PUT 이름 '_' 금지 → 400", r.status === 400, `status=${r.status}`);
+  }
+  {
+    // 이미지 미변경(replaceImage 없음) 메타 갱신 → 200, upload 없음, name/slots 반영, isDefault·userId 보존
+    const r = await call("PUT", `/frames/${frameId}`, {
+      bearer: adminToken,
+      body: { name: "겨울", imageSize: { width: 1200, height: 1800 }, slots: [{ index: 0, x: 20, y: 20, width: 200, height: 200 }] },
+    });
+    const okMeta =
+      r.status === 200 &&
+      r.json?.frame?.id === frameId &&
+      r.json.frame.name === "겨울" &&
+      r.json.frame.isDefault === true &&
+      r.json.frame.userId === null &&
+      Array.isArray(r.json.frame.slots) &&
+      r.json.frame.slots[0]?.x === 20 &&
+      r.json.upload === undefined;
+    check("(F5) 이미지 미변경 PUT → 200 메타 갱신(upload 없음, 보존필드 유지)", okMeta, `status=${r.status}`);
+  }
+  {
+    // Firestore에 갱신 반영·보존 필드 확인(같은 문서 덮어쓰기, 중복 문서 없음).
+    const snap = await db.collection("frameTemplates").where("isDefault", "==", true).get();
+    const docs = snap.docs.filter((d) => d.id === frameId);
+    const doc = docs[0]?.data();
+    check(
+      "(F5) 같은 frameId 문서 1건 유지 + name/isDefault/userId 보존",
+      docs.length === 1 && doc?.name === "겨울" && doc?.isDefault === true && (doc?.userId ?? null) === null,
+      `count=${docs.length} name=${doc?.name}`
+    );
+  }
+  {
+    // 이미지 교체(replaceImage=true) → 200 + 서명 PUT URL 발급
+    const r = await call("PUT", `/frames/${frameId}`, {
+      bearer: adminToken,
+      body: { name: "겨울", imageSize: { width: 1200, height: 1800 }, slots: [{ index: 0, x: 20, y: 20, width: 200, height: 200 }], replaceImage: true },
+    });
+    const okReplace =
+      r.status === 200 &&
+      typeof r.json?.upload?.putUrl === "string" &&
+      typeof r.json?.upload?.downloadUrl === "string" &&
+      r.json.frame?.imageUrl === r.json.upload.downloadUrl;
+    check("(F5) 이미지 교체 PUT(replaceImage) → 200 서명 PUT URL 발급", okReplace, `status=${r.status}`);
+  }
+
   {
     const r = await call("DELETE", `/frames/${frameId}`, { bearer: adminToken });
     check("(F4) 프레임 삭제 → 200 {deleted:true}", r.status === 200 && r.json?.deleted === true, `status=${r.status}`);
