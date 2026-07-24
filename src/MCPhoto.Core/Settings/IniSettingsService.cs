@@ -149,6 +149,9 @@ public sealed class IniSettingsService : ISettingsService
         s.CameraDevice = ini.GetInt(Section, nameof(s.CameraDevice), s.CameraDevice);
         s.HostingBaseUrl = ini.GetString(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         s.StorageBucket = ini.GetString(Section, nameof(s.StorageBucket), s.StorageBucket);
+        s.UseBackend = ini.GetBool(Section, nameof(s.UseBackend), s.UseBackend);
+        s.BackendBaseUrl = ini.GetString(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
+        s.BackendApiKey = ini.GetString(Section, nameof(s.BackendApiKey), s.BackendApiKey);
 
         s.WindowBounds.Left = ini.GetDouble(Section, "WindowLeft", s.WindowBounds.Left);
         s.WindowBounds.Top = ini.GetDouble(Section, "WindowTop", s.WindowBounds.Top);
@@ -179,6 +182,9 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetInt(Section, nameof(s.CameraDevice), s.CameraDevice);
         ini.Set(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         ini.Set(Section, nameof(s.StorageBucket), s.StorageBucket);
+        ini.SetBool(Section, nameof(s.UseBackend), s.UseBackend);
+        ini.Set(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
+        ini.Set(Section, nameof(s.BackendApiKey), s.BackendApiKey);
 
         ini.SetDouble(Section, "WindowLeft", s.WindowBounds.Left);
         ini.SetDouble(Section, "WindowTop", s.WindowBounds.Top);

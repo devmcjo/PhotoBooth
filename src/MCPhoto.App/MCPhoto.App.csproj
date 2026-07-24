@@ -23,6 +23,13 @@
     <ProjectReference Include="..\MCPhoto.Core\MCPhoto.Core.csproj" />
     <ProjectReference Include="..\MCPhoto.Capture\MCPhoto.Capture.csproj" />
     <ProjectReference Include="..\MCPhoto.Firebase\MCPhoto.Firebase.csproj" />
+    <!-- 백엔드 프록시 HTTP 계층(방향 B). DI feature flag(AppSettings.UseBackend)로 분기, 기본 OFF. -->
+    <ProjectReference Include="..\MCPhoto.Http\MCPhoto.Http.csproj" />
+  </ItemGroup>
+
+  <!-- DI feature flag 분기(RegisterBackendOrFirebase) 단위 테스트를 위해 내부 가시성 부여. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MCPhoto.Tests" />
   </ItemGroup>
 
   <!-- ffmpeg 번들(타임랩스 녹화·변환에 필수). ffprobe는 코드 미사용이라 제외(용량 절약). architecture §1.2 -->

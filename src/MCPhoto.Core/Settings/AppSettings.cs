@@ -120,6 +120,25 @@ public sealed class AppSettings
     /// </summary>
     public string StorageBucket { get; set; } = "mcphoto-955fb.firebasestorage.app";
 
+    // ── 백엔드 프록시(방향 B, 설계 §8.1). 안전 불변식: 기본 OFF = 현행 Firebase 경로 유지(롤백 가능). ──
+    /// <summary>
+    /// 백엔드 HTTPS API 경유 여부. 기본 off(현행 Firebase Admin 직결 유지 — 배포 전 앱 계속 동작·롤백 가능).
+    /// on이면 DI가 Http* 구현으로 분기. on인데 <see cref="BackendBaseUrl"/>이 비면 Clamp가 다시 off로 되돌린다.
+    /// </summary>
+    public bool UseBackend { get; set; }
+
+    /// <summary>
+    /// 백엔드 base URL(엔드포인트 주소, 공개값). 예: https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api.
+    /// 트레일링 슬래시는 제거하지 않는다(HttpClient BaseAddress는 슬래시로 끝나야 상대경로가 안전히 결합됨).
+    /// </summary>
+    public string BackendBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 배포별 클라이언트 API 키(반비밀, 게스트 엔드포인트 게이트). X-MCPhoto-Client 헤더로 전송.
+    /// ⚠️ INI에 평문 저장 — exe/설정 유출 시 서버에서 해당 키만 폐기(설계 §8.1 트레이드오프).
+    /// </summary>
+    public string BackendApiKey { get; set; } = string.Empty;
+
     /// <summary>
     /// 값 범위·옵션 제약을 강제(로드/저장 시 호출). 잘못된 값은 가장 가까운 허용값으로 보정.
     /// </summary>
@@ -143,7 +162,29 @@ public sealed class AppSettings
 
         HostingBaseUrl = HostingBaseUrl.TrimEnd('/');
 
+        NormalizeBackend();
+
         NormalizeQr();
+    }
+
+    /// <summary>
+    /// 백엔드 설정 정규화(안전 불변식, 설계 §8.1): base URL이 비어 있으면 UseBackend를 강제 off한다
+    /// (잘못된 on 설정으로 HTTP 경로가 빈 URL에 붙는 것을 방지 — 현행 Firebase 경로로 안전 폴백).
+    /// HttpClient.BaseAddress가 상대경로를 안전히 결합하도록 base URL이 슬래시로 끝나게 보정한다.
+    /// </summary>
+    public void NormalizeBackend()
+    {
+        BackendBaseUrl = (BackendBaseUrl ?? string.Empty).Trim();
+        BackendApiKey = (BackendApiKey ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(BackendBaseUrl))
+        {
+            UseBackend = false;
+            return;
+        }
+
+        if (!BackendBaseUrl.EndsWith('/'))
+            BackendBaseUrl += "/";
     }
 
     /// <summary>
@@ -202,6 +243,9 @@ public sealed class AppSettings
         },
         CameraDevice = CameraDevice,
         HostingBaseUrl = HostingBaseUrl,
-        StorageBucket = StorageBucket
+        StorageBucket = StorageBucket,
+        UseBackend = UseBackend,
+        BackendBaseUrl = BackendBaseUrl,
+        BackendApiKey = BackendApiKey
     };
 }

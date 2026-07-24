@@ -17,8 +17,8 @@
 ## 진행 순서 & 상태
 
 ### 진행 중 (선행: 백엔드 코드)
-- [ ] **P1 — 백엔드 함수(TS Cloud Functions)** 구현 (현재 파이프라인, js-developer). 완료 시 검증→커밋.
-- [ ] **P3 — 클라이언트 HTTP 계층(`MCPhoto.Http`)**: `IFirebaseClient`/`IAccountService`/`IFrameRepository`/`IUploadService` HTTP 구현 + DI 전환 + 오프라인 시드 로그인 제거(온라인 전용, 사용자 확정). UI 무변경.
+- [x] **P1 — 백엔드 함수(TS Cloud Functions)** 구현 (js-developer, Opus). **완료·커밋 `73bb734`** (tsc0·jest34/34·Emulator36/36, Opus 리뷰 PASS).
+- [ ] **P3 — 클라이언트 HTTP 계층(`MCPhoto.Http`)**: `IFirebaseClient`/`IAccountService`/`IFrameRepository`/`IUploadService` HTTP 구현 + DI **feature flag 전환**(기본 OFF=현행 유지, 안전 불변식). HTTP 경로는 **온라인 전용**(시드 없음). **레거시 오프라인 시드·Admin 경로 삭제는 컷오버(P6 은퇴) 시** — 그 전까지 롤백 위해 공존. UI 무변경.
   > 설계: `docs/design/wpf-backend-proxy-migration-design.md`. 배포·시크릿·IAM·규칙·키폐기(P2/P4/P5/P6)는 [USER-ACTIONS].
 
 ### 0. 사용자 수동 작업 문서화 (item 0)

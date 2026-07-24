@@ -11,8 +11,11 @@ using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
 using MCPhoto.Firebase;
+using MCPhoto.Http;
+using MCPhoto.Http.Session;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Net.Http;
 
 namespace MCPhoto.App;
 
@@ -60,23 +63,12 @@ internal static class ServiceRegistration
         // Step 7: 합성. 세션 상태는 화면 통합(Step 9)에서 스코프 생성.
         services.AddSingleton<ICompositionService, CompositionService>();
 
-        // Step 8: Firebase 업로드·QR. 키 없으면 IsInitialized=false로 안전(완화 경로).
-        // FirebaseClient 구상 인스턴스 하나를 IFirebaseClient·FirebaseClient 둘로 공유.
-        // 버킷은 AppSettings.StorageBucket로 주입(빈 값이면 project_id에서 유도 + 경고 로그).
-        services.AddSingleton<FirebaseClient>(sp =>
-        {
-            var bucket = sp.GetRequiredService<ISettingsService>().Current.StorageBucket;
-            return new FirebaseClient(
-                sp.GetService<ILogger<FirebaseClient>>(),
-                bucket: string.IsNullOrWhiteSpace(bucket) ? null : bucket);
-        });
-        services.AddSingleton<IFirebaseClient>(sp => sp.GetRequiredService<FirebaseClient>());
+        // Step 8: 업로드·QR + 계정·프레임.
+        // 안전 불변식(설계 §8.1): AppSettings.UseBackend가 기본 OFF면 현행 Firebase(Admin) 경로 유지(롤백 가능).
+        // ON이면 백엔드 HTTPS API 경유(MCPhoto.Http)로 분기. 분기는 각 인터페이스 팩토리에서 설정을 읽어 결정한다.
+        RegisterBackendOrFirebase(services);
         services.AddSingleton<IUploadService, UploadService>();
         services.AddSingleton<IQrService, QrService>();
-
-        // Step 10/11 서비스(화면 통합에 필요): 프레임·계정. Firebase 미초기화 시 오프라인 안전.
-        services.AddSingleton<IFrameRepository, FrameRepository>();
-        services.AddSingleton<IAccountService, AccountService>();
 
         // it8 A2(정정): 로컬 프레임 저장소 = 실행 폴더 Frame\ (번들과 동일 폴더, 번들+파워캐시+user 공존).
         services.AddSingleton<ILocalFrameStore>(_ =>
@@ -86,6 +78,85 @@ internal static class ServiceRegistration
         services.AddSingleton<SessionContext>();
         services.AddSingleton<FrameCatalogService>();
         RegisterScreens(services);
+    }
+
+    /// <summary>
+    /// 업로드·프레임·계정 구현을 feature flag(AppSettings.UseBackend)로 분기 등록(설계 §5.5·§8.1).
+    ///
+    /// - OFF(기본): 현행 Firebase(Admin SDK) 경로. FirebaseClient 구상 싱글턴 1개를 IFirebaseClient·FirebaseClient로 공유.
+    /// - ON: 백엔드 HTTPS API 경유. IHttpClientFactory("backend") + IBackendSession(JWT 홀더) + Http* 구현.
+    ///
+    /// 각 인터페이스는 팩토리 람다로 등록하고, 첫 해석 시점에 ISettingsService.Current.UseBackend를 읽어
+    /// 실제 구현을 고른다(설정이 이미 로드된 뒤라 안전). 빈 URL이면 Clamp가 UseBackend를 off로 되돌린다.
+    /// </summary>
+    internal static void RegisterBackendOrFirebase(IServiceCollection services)
+    {
+        // ── 공통(백엔드 ON일 때만 사용되지만 등록은 무해) ──
+        // IHttpClientFactory 명명 클라이언트: base URL·타임아웃을 설정에서 주입.
+        services.AddHttpClient(HttpBackendClient.HttpClientName, (sp, client) =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            if (!string.IsNullOrWhiteSpace(s.BackendBaseUrl))
+                client.BaseAddress = new Uri(s.BackendBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(100);
+        });
+        services.AddSingleton<IBackendSession, BackendSession>();
+
+        // ── Firebase(현행) 구상 등록: OFF 경로에서 사용. FirebaseClient 싱글턴 공유. ──
+        services.AddSingleton<FirebaseClient>(sp =>
+        {
+            var bucket = sp.GetRequiredService<ISettingsService>().Current.StorageBucket;
+            return new FirebaseClient(
+                sp.GetService<ILogger<FirebaseClient>>(),
+                bucket: string.IsNullOrWhiteSpace(bucket) ? null : bucket);
+        });
+
+        // ── 인터페이스 분기(팩토리) ──
+        services.AddSingleton<IFirebaseClient>(sp =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            if (!s.UseBackend)
+                return sp.GetRequiredService<FirebaseClient>();
+
+            return new HttpFirebaseClient(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IBackendSession>(),
+                s.BackendApiKey,
+                s.StorageBucket,
+                configured: !string.IsNullOrWhiteSpace(s.BackendBaseUrl),
+                sp.GetService<ILogger<HttpFirebaseClient>>());
+        });
+
+        services.AddSingleton<IFrameRepository>(sp =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            if (!s.UseBackend)
+                return new FrameRepository(
+                    sp.GetRequiredService<FirebaseClient>(),
+                    sp.GetService<ILogger<FrameRepository>>());
+
+            return new HttpFrameRepository(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IBackendSession>(),
+                s.BackendApiKey,
+                sp.GetService<ILogger<HttpFrameRepository>>());
+        });
+
+        services.AddSingleton<IAccountService>(sp =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            if (!s.UseBackend)
+                return new AccountService(
+                    sp.GetRequiredService<FirebaseClient>(),
+                    sp.GetRequiredService<IFrameRepository>(),
+                    sp.GetService<ILogger<AccountService>>());
+
+            return new HttpAccountService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IBackendSession>(),
+                s.BackendApiKey,
+                sp.GetService<ILogger<HttpAccountService>>());
+        });
     }
 
     /// <summary>상태별 화면 ViewModel 등록(Transient — 진입마다 새 인스턴스).</summary>

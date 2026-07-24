@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>MCPhoto.Http</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 백엔드 프록시 HTTP 계층(방향 B). HttpClient는 IHttpClientFactory로 관리(소켓 고갈 방지). -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MCPhoto.Core\MCPhoto.Core.csproj" />
+  </ItemGroup>
+
+</Project>
