@@ -29,7 +29,7 @@
   - 계정 생성 시 비밀번호 해시(bcrypt, 백엔드). **이메일 인증**(가입/소유 확인) + **비밀번호 찾기(재설정)** 플로우.
   - 코드[내]: 백엔드 엔드포인트(가입/인증메일 발송 요청·토큰 검증·재설정), 클라 화면·플로우, 토큰/만료 로직(순수 테스트).
   - 수동[USER-ACTIONS]: **이메일 발송 공급자 설정**(SMTP/SendGrid/Firebase Extension 등)·도메인/발신자·API 키 등록. 결정: 공급자는 조사 후 합리적 기본안 채택, 자격증명 등록은 사용자 몫.
-- [ ] **1b. Google SSO 연동**
+- [x] **1b. Google SSO 연동** — **완료**(서버 `08cffb1` + 클라 `4fc8faf`). 데스크톱 OAuth(브라우저+loopback+PKCE), 백엔드 code 교환/verifyIdToken, email로 기존 계정 매핑. 버튼은 백엔드+GoogleClientId 설정 시만(opt-in). Opus 리뷰 PASS. Google OAuth 클라이언트는 USER-ACTIONS §B2(콘솔).
   - 코드[내]: 백엔드 OAuth 콜백·토큰 교환·계정 매핑, 클라 로그인 화면 "Google로 로그인".
   - 수동[USER-ACTIONS]: **Google Cloud OAuth 클라이언트 생성**(client id/secret)·승인 리디렉션 URI·동의화면 설정. 자격증명 등록은 사용자 몫.
 
