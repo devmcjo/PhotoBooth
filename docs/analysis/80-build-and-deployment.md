@@ -140,7 +140,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 ### 6.2 서비스 계정 키 차단 (보안)
 
 - `[Files]`의 `Excludes`가 서비스 계정/자격증명 키를 **이중 차단**한다: `*serviceaccount*.json`, `*service-account*.json`, `*firebase*credentials*.json`, `*firebase-adminsdk*.json`, `serviceAccountKey.json`, `*.pem`, `*.key`(`MCPhoto.iss:38-39`).
-- 빌드 산출물에 원래 없어야 하지만 방어적 이중 차단이다(`MCPhoto.iss:37`, architecture §6.4). 서비스 계정 키는 실행경로/`%ProgramData%\MCPhoto\`에서 런타임 로드하며 git·인스톨러에 포함하지 않는다([50번](./50-infra-gcp-lifecycle-and-ttl.md), `src/MCPhoto.Firebase/FirebaseClient.cs:14-15,92-102`).
+- 빌드 산출물에 원래 없어야 하지만 방어적 이중 차단이다(`MCPhoto.iss:37`, architecture §6.4). 서비스 계정 키는 **실행경로 전용**으로 런타임 로드하며(과거 `%ProgramData%\MCPhoto\` 폴백은 제거) git·인스톨러에 포함하지 않는다([50번](./50-infra-gcp-lifecycle-and-ttl.md), `src/MCPhoto.Firebase/FirebaseClient.cs`).
 
 ### 6.3 데이터 폴더·아이콘·언인스톨
 

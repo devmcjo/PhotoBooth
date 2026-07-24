@@ -96,23 +96,21 @@ public sealed class FirebaseClient : IFirebaseClient
     }
 
     /// <summary>
-    /// 서비스 계정 키 탐색 후보(우선순위 순): ①실행경로\serviceAccountKey.json ②%ProgramData%\MCPhoto\serviceAccountKey.json. (it6 #2, it10 S4-1)
+    /// 서비스 계정 키 탐색 후보: 실행경로\serviceAccountKey.json (실행 폴더 전용). (it6 #2, it10 S4-1; ProgramData 후보 제거 — 사용자 결정)
     /// 진단 로그·기본 경로 결정 모두 이 목록을 단일 소스로 사용한다.
-    /// ⚠️ 키는 비밀: .gitignore가 serviceAccountKey.json 커버, 인스톨러 미포함. 실행경로 배치는 포터블 편의.
+    /// ⚠️ 키는 비밀: .gitignore가 serviceAccountKey.json 커버, 인스톨러 미포함. publish가 실행 폴더에 동봉.
     /// </summary>
     public static string[] KeyCandidatePaths()
     {
         const string fileName = "serviceAccountKey.json";
 
         var exePath = Path.Combine(AppContext.BaseDirectory, fileName);
-        var programDataPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MCPhoto", fileName);
-        return new[] { exePath, programDataPath };
+        return new[] { exePath };
     }
 
     /// <summary>
-    /// 기본 키 경로: <see cref="KeyCandidatePaths"/> 중 첫 존재 파일. 둘 다 없으면 마지막 후보(ProgramData) 반환
-    /// (존재하지 않음 → 호출측 오프라인 완화). 동작 불변(실행경로 우선).
+    /// 기본 키 경로: <see cref="KeyCandidatePaths"/> 중 첫 존재 파일. 없으면 마지막 후보(=실행경로) 반환
+    /// (존재하지 않음 → 호출측 오프라인 완화).
     /// </summary>
     public static string DefaultKeyPath()
     {

@@ -50,15 +50,15 @@ MC포토의 백엔드 접근은 `MCPhoto.Firebase` 어셈블리 한 곳에 격�
 
 ### 2.2 서비스 계정 키 탐색 (`DefaultKeyPath`)
 
-파일명은 고정 `serviceAccountKey.json`(`FirebaseClient.cs:94`). 탐색 우선순위:
+파일명은 고정 `serviceAccountKey.json`. 탐색 경로는 **실행 폴더 전용**(단일 후보, `KeyCandidatePaths`):
 
 | 순위 | 경로 | 근거 |
 |------|------|------|
-| 1 | `{실행경로}\serviceAccountKey.json` (`AppContext.BaseDirectory`) — 포터블 편의 | `FirebaseClient.cs:96-97` |
-| 2 | `%ProgramData%\MCPhoto\serviceAccountKey.json` (`SpecialFolder.CommonApplicationData`) — 폴백 | `FirebaseClient.cs:99-101` |
+| 1 | `{실행경로}\serviceAccountKey.json` (`AppContext.BaseDirectory`) — publish가 동봉 | `FirebaseClient.cs`(`KeyCandidatePaths`) |
 
-- 둘 다 없으면 **2번 ProgramData 경로 문자열을 그대로 반환**한다(존재하지 않음). 호출측(생성자)에서 `File.Exists` 실패로 미초기화 처리(`FirebaseClient.cs:48`).
-- 키는 비밀이다: `.gitignore`가 `serviceAccountKey.json`을 커버(`.gitignore:41`), 인스톨러 미포함(소스 주석 `FirebaseClient.cs:15,90`).
+- 과거의 `%ProgramData%\MCPhoto\` 폴백 후보는 **제거됨**(사용자 결정). 이제 실행 폴더에만 둔다.
+- 파일이 없으면 실행경로 문자열을 그대로 반환한다(존재하지 않음). 호출측(생성자)에서 `File.Exists` 실패로 미초기화 처리.
+- 키는 비밀이다: `.gitignore`가 `serviceAccountKey.json`을 커버(`.gitignore:41`), 인스톨러 미포함(소스 주석).
 
 ### 2.3 Storage 버킷 결정
 

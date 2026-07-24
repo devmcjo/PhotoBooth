@@ -210,10 +210,9 @@ QR·계정 쓰기·프레임 서버 삭제가 전부 안 되면 근본 원인은
 
 `FirebaseClient.DefaultKeyPath()`(`src/MCPhoto.Firebase/FirebaseClient.cs:92-102`):
 
-1. `{실행경로}\serviceAccountKey.json` (포터블 편의)
-2. 없으면 `C:\ProgramData\MCPhoto\serviceAccountKey.json` (폴백)
+1. `{실행경로}\serviceAccountKey.json` (**실행 폴더 전용**, publish가 동봉)
 
-둘 다 없으면 ProgramData 경로를 반환하되 파일이 없으므로 미초기화로 진행한다(`:88-89`, `:47-52`). 키는 비밀이라 git/인스톨러에 포함하지 않는다(주석 `:15`, `:91`).
+과거 `%ProgramData%\MCPhoto\` 폴백은 **제거됨**(사용자 결정). 파일이 없으면 실행경로를 반환하되 파일이 없으므로 미초기화로 진행한다(`:47-52`). 키는 비밀이라 git/인스톨러에 포함하지 않는다.
 
 ### 6.2 초기화 결과별 로그
 
@@ -236,7 +235,7 @@ QR·계정 쓰기·프레임 서버 삭제가 전부 안 되면 근본 원인은
 
 진단 절차:
 1. `logs`에서 `"서비스 계정 키 없음"` 또는 `"Firebase 초기화 실패"`를 찾는다. 있으면 키 문제 확정.
-2. `{실행경로}\serviceAccountKey.json` 또는 `C:\ProgramData\MCPhoto\serviceAccountKey.json` 존재/유효성 확인.
+2. `{실행경로}\serviceAccountKey.json`(실행 폴더 전용) 존재/유효성 확인.
 3. 초기화는 됐는데 업로드만 실패하면 `"Storage 버킷 미지정"` 경고와 설정 `StorageBucket` 값(기본 `mcphoto-955fb.firebasestorage.app`, `AppSettings.cs:110`)이 실제 프로젝트 버킷과 일치하는지 확인. 신규 프로젝트는 `*.firebasestorage.app`, 레거시는 `*.appspot.com`이라 불일치 시 업로드 실패.
 
 계정·역할 관점의 폴백 요약은 [60 §4.5](./60-auth-accounts-and-roles.md#45-미초기화-폴백-요약)를 참조.
