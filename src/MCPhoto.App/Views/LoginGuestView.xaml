@@ -36,6 +36,13 @@
                         Command="{Binding LoginCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
                         HorizontalAlignment="Stretch" Margin="0,0,0,12" />
 
+                <!-- item1b §7.1: Google SSO 로그인(백엔드 모드 AND GoogleClientId 설정 시에만 노출 — SSO opt-in). -->
+                <Button Content="Google로 로그인" Style="{StaticResource Button.Secondary}"
+                        Command="{Binding LoginWithGoogleCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                        Visibility="{Binding IsGoogleSignInAvailable, Converter={StaticResource BoolToVis}}"
+                        HorizontalAlignment="Stretch" Margin="0,0,0,12" />
+
                 <!-- item1a §9.4: 비밀번호 찾기(백엔드 모드 전용). 레거시 경로엔 재설정 인프라 없음. -->
                 <Button Content="비밀번호를 잊으셨나요?" Style="{StaticResource Button.Ghost}"
                         Command="{Binding ForgotPasswordCommand}" HorizontalAlignment="Center" Margin="0,0,0,4"

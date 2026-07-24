@@ -140,6 +140,13 @@ public sealed class AppSettings
     public string BackendApiKey { get; set; } = string.Empty;
 
     /// <summary>
+    /// Google SSO OAuth 클라이언트 ID(item1b §7.2·§8.2). **비밀 아님**(client secret은 백엔드 전용, 클라에 미보관).
+    /// authorize URL 조립에 사용된다. 빈 값이면 SSO opt-out — 로그인 화면에 "Google로 로그인" 버튼을 숨긴다
+    /// (잠금 키오스크 배려). 백엔드 모드(UseBackend)에서만 의미가 있다.
+    /// </summary>
+    public string GoogleClientId { get; set; } = string.Empty;
+
+    /// <summary>
     /// 값 범위·옵션 제약을 강제(로드/저장 시 호출). 잘못된 값은 가장 가까운 허용값으로 보정.
     /// </summary>
     public void Clamp()
@@ -176,6 +183,8 @@ public sealed class AppSettings
     {
         BackendBaseUrl = (BackendBaseUrl ?? string.Empty).Trim();
         BackendApiKey = (BackendApiKey ?? string.Empty).Trim();
+        // GoogleClientId는 비밀이 아니지만 배포별 값이므로 앞뒤 공백만 정리(빈 값이면 SSO opt-out, §7.2).
+        GoogleClientId = (GoogleClientId ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(BackendBaseUrl))
         {
@@ -246,6 +255,7 @@ public sealed class AppSettings
         StorageBucket = StorageBucket,
         UseBackend = UseBackend,
         BackendBaseUrl = BackendBaseUrl,
-        BackendApiKey = BackendApiKey
+        BackendApiKey = BackendApiKey,
+        GoogleClientId = GoogleClientId
     };
 }

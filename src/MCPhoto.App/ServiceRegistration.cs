@@ -39,6 +39,10 @@ internal static class ServiceRegistration
         // 보완#1: 설정 진입 전 비밀번호 확인 모달.
         services.AddSingleton<IPasswordPromptDialogService, PasswordPromptDialogService>();
 
+        // item1b §7.8: Google SSO(시스템 브라우저 + loopback + PKCE). ISettingsService(client_id)·ILogger 주입.
+        // VM은 System.Net·Process 미의존(이 서비스에 캡슐화). 백엔드 교환·검증은 IAccountService가 담당.
+        services.AddSingleton<IGoogleSignInService, GoogleSignInService>();
+
         // it11 #14: 진단·상태 모달(관리자 트러블슈팅). 로그 폴더 서비스 + 다이얼로그 서비스.
         services.AddSingleton<ILogFolderService, LogFolderService>();
         services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();

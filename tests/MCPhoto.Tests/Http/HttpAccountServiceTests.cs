@@ -363,4 +363,85 @@ public class HttpAccountServiceTests
         Assert.Equal("u@x.com", user!.Email);
         Assert.True(user.EmailVerified); // 로그인 응답의 emailVerified가 세션 User에 반영
     }
+
+    // ── item1b: Google SSO (§5·§7.6) ──
+
+    [Fact]
+    public async Task LoginWithGoogle_Success_Stores_Token_And_Sends_ApiKey_Not_Bearer()
+    {
+        var (svc, handler, session) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt-g\",\"expiresIn\":3600,\"user\":{\"id\":\"boss\",\"role\":\"manager\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"boss@x.com\",\"emailVerified\":true}}");
+
+        var user = await svc.LoginWithGoogleAsync("auth-code", "verifier-123", "http://127.0.0.1:5000/", "nonce-1");
+
+        Assert.NotNull(user);
+        Assert.Equal("boss", user!.Id);
+        Assert.Equal(UserRole.Manager, user.Role); // 역할은 매핑된 MCPhoto 계정에서(Google 아님)
+        Assert.Equal("boss@x.com", user.Email);
+        Assert.True(user.EmailVerified);
+        Assert.Equal(string.Empty, user.Password);  // 비번은 응답에 없음
+        Assert.Equal("jwt-g", session.Token);        // 토큰 세션 저장
+
+        var req = handler.Requests[0];
+        Assert.Contains("auth/google", req.Uri!.ToString());
+        Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API키 게이트
+        Assert.Null(req.AuthorizationScheme);        // Bearer 아님(로그인 전 상태)
+    }
+
+    [Fact]
+    public async Task LoginWithGoogle_Sends_Code_Verifier_RedirectUri_Nonce_In_Body()
+    {
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"u1\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        await svc.LoginWithGoogleAsync("the-code", "the-verifier", "http://127.0.0.1:5000/", "the-nonce");
+
+        var body = handler.Requests[0].Body!;
+        Assert.Contains("\"code\":\"the-code\"", body);
+        Assert.Contains("\"codeVerifier\":\"the-verifier\"", body);
+        Assert.Contains("\"redirectUri\":\"http://127.0.0.1:5000/\"", body);
+        Assert.Contains("\"nonce\":\"the-nonce\"", body);
+    }
+
+    [Fact]
+    public async Task LoginWithGoogle_Failure_401_Returns_Null()
+    {
+        var (svc, handler, session) = Make();
+        // 매핑 실패/미검증/Google 검증 실패 → 서버 401 일반화(§6.4).
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.Unauthorized,
+            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요.\"}}");
+
+        var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
+
+        Assert.Null(user);            // 자격 문제 = null(LoginAsync와 동일 계약)
+        Assert.Null(session.Token);   // 세션 미변경
+    }
+
+    [Fact]
+    public async Task LoginWithGoogle_501_Throws_NotConfigured_Not_Null()
+    {
+        var (svc, handler, _) = Make();
+        // 서버 SSO 미구성 → 501(HttpError.notImplemented) → 전용 예외(자격 문제·네트워크와 구분).
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.NotImplemented,
+            "{\"error\":{\"code\":\"not_implemented\",\"message\":\"Google 로그인이 구성되지 않았습니다.\"}}");
+
+        var ex = await Assert.ThrowsAsync<MCPhoto.Core.Accounts.GoogleSsoNotConfiguredException>(
+            () => svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce"));
+        Assert.Contains("구성되지 않았습니다", ex.Message);
+    }
+
+    [Fact]
+    public async Task LoginWithGoogle_Null_Nonce_Serialized_As_Null()
+    {
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"u1\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", nonce: null);
+
+        // nonce 없이 호출 시 null 직렬화(서버가 nonce 검증 생략).
+        Assert.Contains("\"nonce\":null", handler.Requests[0].Body!);
+    }
 }

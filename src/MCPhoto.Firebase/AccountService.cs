@@ -121,6 +121,13 @@ public sealed class AccountService : IAccountService
         }
     }
 
+    // ── item1b: Google SSO (HTTP 전용 기능) ──
+    // 레거시 Firebase 경로엔 SSO 인프라(code 교환·id_token 검증 백엔드)가 없다. SSO 버튼이 백엔드 모드에서만
+    // 노출되므로 아래는 도달하지 않는다(도달하면 설정 오류 → 명확히 실패시킨다). (item1b §7.6)
+    public Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
+        string? nonce = null, CancellationToken ct = default)
+        => throw new NotSupportedException("Google 로그인은 백엔드 모드에서만 지원됩니다.");
+
     // ── item1a: 이메일 인증 + 비밀번호 재설정 (HTTP 전용 기능) ──
     // 레거시 Firebase 경로엔 이메일 인프라(토큰 서브컬렉션·메일 발송)가 없다. UI가 백엔드 모드에서만
     // 이 기능을 노출하므로 아래는 도달하지 않는다(도달하면 설정 오류 → 명확히 실패시킨다). (item1a §9.1)

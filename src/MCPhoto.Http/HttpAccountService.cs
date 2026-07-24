@@ -56,6 +56,45 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
     }
 
+    public async Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
+        string? nonce = null, CancellationToken ct = default)
+    {
+        try
+        {
+            // API키 게이트(로그인 전 상태, Bearer 불가 — LoginAsync와 동일). 응답은 login과 동일한 {token, expiresIn, user}.
+            var res = await SendJsonAsync<LoginResponse>(
+                HttpMethod.Post, "auth/google",
+                new GoogleLoginRequest
+                {
+                    Code = code,
+                    CodeVerifier = codeVerifier,
+                    RedirectUri = redirectUri,
+                    Nonce = nonce,
+                },
+                bearer: false, ct).ConfigureAwait(false);
+
+            var user = ToUser(res.User) ?? new User { Id = string.Empty, Role = UserRole.User };
+            Session.SignIn(res.Token, user);
+            return user;
+        }
+        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // 매핑 실패(등록 안 됨/미검증/Google 검증 실패)는 서버가 401로 일반화(열거 방지, §6.4) → null.
+            // LoginAsync 401 처리와 동일 계약: 자격 문제는 예외가 아니라 null로 신호한다.
+            return null;
+        }
+        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.NotImplemented)
+        {
+            // 501 = 서버에 Google SSO 미구성(§5.1). 자격 문제(401→null)·네트워크 오류와 구분되는 전용 예외로 신호한다.
+            throw new GoogleSsoNotConfiguredException(
+                string.IsNullOrWhiteSpace(ex.Message) ? "Google 로그인이 구성되지 않았습니다." : ex.Message);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
     public async Task<User> CreateAsync(
         string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
     {

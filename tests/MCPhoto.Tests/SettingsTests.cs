@@ -99,6 +99,19 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void GoogleClientId_RoundTrips()
+    {
+        // item1b §7.2: GoogleClientId INI 영속(비밀 아님, 배포별 값).
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.GoogleClientId = "999-xyz.apps.googleusercontent.com";
+        Assert.True(svc.Save());
+
+        var svc2 = new IniSettingsService(iniPath: _tempPath);
+        Assert.Equal("999-xyz.apps.googleusercontent.com", svc2.Load().GoogleClientId);
+    }
+
+    [Fact]
     public void SendPhoto_SendTimelapse_RoundTrip()
     {
         // it7 F2: QR 하위 토글 INI 영속. 사진만 켜고 저장 → 로드 시 유지(QR은 하나라도 on이라 유지).

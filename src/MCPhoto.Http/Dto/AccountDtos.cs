@@ -16,6 +16,22 @@ internal sealed class LoginResponse
 }
 
 /// <summary>
+/// POST /auth/google 요청(item1b Google SSO, 설계 §5.1): {code, codeVerifier, redirectUri, nonce?}. API키.
+/// 브라우저 loopback으로 받은 authorization code(+PKCE verifier·실제 redirectUri)를 백엔드가 교환·검증한다.
+/// client secret은 백엔드 전용 — 이 요청에 담지 않는다. 응답은 login과 동일한 <see cref="LoginResponse"/>.
+/// (functions src/routes/auth.ts)
+/// </summary>
+internal sealed class GoogleLoginRequest
+{
+    public string Code { get; set; } = string.Empty;
+    public string CodeVerifier { get; set; } = string.Empty;
+    public string RedirectUri { get; set; } = string.Empty;
+
+    /// <summary>id_token replay 방어용 nonce(설계 §8.4). 서버는 null이면 nonce 검증을 생략한다.</summary>
+    public string? Nonce { get; set; }
+}
+
+/// <summary>
 /// POST /accounts 요청: {id, password, role, email?}. actingRole은 서버가 토큰에서 도출(클라 전달 무시).
 /// email은 선택(null/미포함이면 서버가 미수집 처리, item1a §8.1). (src/routes/accounts.ts)
 /// </summary>

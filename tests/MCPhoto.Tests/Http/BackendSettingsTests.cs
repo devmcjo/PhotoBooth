@@ -57,4 +57,29 @@ public class BackendSettingsTests
         Assert.Equal("https://x.test/", c.BackendBaseUrl);
         Assert.Equal("abc", c.BackendApiKey);
     }
+
+    // ── item1b: GoogleClientId (§7.2) ──
+
+    [Fact]
+    public void Default_GoogleClientId_Is_Empty()
+    {
+        var s = new AppSettings();
+        Assert.Equal(string.Empty, s.GoogleClientId); // 기본 SSO opt-out
+    }
+
+    [Fact]
+    public void Clamp_Trims_GoogleClientId()
+    {
+        var s = new AppSettings { GoogleClientId = "  123-abc.apps.googleusercontent.com  " };
+        s.Clamp();
+        Assert.Equal("123-abc.apps.googleusercontent.com", s.GoogleClientId);
+    }
+
+    [Fact]
+    public void Clone_Copies_GoogleClientId()
+    {
+        var s = new AppSettings { GoogleClientId = "cid-xyz" };
+        var c = s.Clone();
+        Assert.Equal("cid-xyz", c.GoogleClientId);
+    }
 }

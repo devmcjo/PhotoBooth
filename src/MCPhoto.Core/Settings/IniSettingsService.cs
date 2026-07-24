@@ -152,6 +152,7 @@ public sealed class IniSettingsService : ISettingsService
         s.UseBackend = ini.GetBool(Section, nameof(s.UseBackend), s.UseBackend);
         s.BackendBaseUrl = ini.GetString(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
         s.BackendApiKey = ini.GetString(Section, nameof(s.BackendApiKey), s.BackendApiKey);
+        s.GoogleClientId = ini.GetString(Section, nameof(s.GoogleClientId), s.GoogleClientId);
 
         s.WindowBounds.Left = ini.GetDouble(Section, "WindowLeft", s.WindowBounds.Left);
         s.WindowBounds.Top = ini.GetDouble(Section, "WindowTop", s.WindowBounds.Top);
@@ -185,6 +186,7 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetBool(Section, nameof(s.UseBackend), s.UseBackend);
         ini.Set(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
         ini.Set(Section, nameof(s.BackendApiKey), s.BackendApiKey);
+        ini.Set(Section, nameof(s.GoogleClientId), s.GoogleClientId);
 
         ini.SetDouble(Section, "WindowLeft", s.WindowBounds.Left);
         ini.SetDouble(Section, "WindowTop", s.WindowBounds.Top);

@@ -11,6 +11,17 @@ public interface IAccountService
     Task<User?> LoginAsync(string id, string password, CancellationToken ct = default);
 
     /// <summary>
+    /// Google SSO 로그인(item1b §5·§7.6). 브라우저 loopback으로 받은 authorization code(+PKCE verifier·실제
+    /// redirectUri·nonce)를 백엔드 POST /auth/google로 전달해 code 교환·id_token 검증·계정 매핑을 거쳐 JWT를 받는다.
+    /// 성공 시 세션에 토큰·사용자를 저장하고 <see cref="User"/>를 반환한다.
+    /// 매핑 실패(등록 안 됨/미검증/Google 오류)는 서버 401 → <c>null</c>(현행 <see cref="LoginAsync"/> 계약과 정합).
+    /// 서버가 SSO 미구성(501)이면 <see cref="GoogleSsoNotConfiguredException"/>(자격 문제·네트워크 오류와 구분).
+    /// — HTTP 전용. 레거시 Firebase 경로는 <see cref="NotSupportedException"/>(SSO 버튼이 백엔드 모드에서만 노출됨).
+    /// </summary>
+    Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
+        string? nonce = null, CancellationToken ct = default);
+
+    /// <summary>
     /// 계정 생성. actingRole(호출자 역할) 기준으로 권한 게이트를 서비스가 강제한다(it2 §7):
     /// admin→{user,manager}, manager→{user}만, 그 외 거부. admin→admin 거부(최종 1인).
     /// 위반 시 <see cref="UnauthorizedAccessException"/>. 중복 id면 예외.
