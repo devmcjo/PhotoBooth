@@ -210,14 +210,14 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         await _shell.OpenFrameEditor(SelectedFrame);
     }
 
-    /// <summary>이 프레임을 현재 역할로 편집 가능한지(삭제 규칙과 동일: 본인 로컬 or 파워, 번들/fallback 제외).</summary>
+    /// <summary>
+    /// 이 프레임을 현재 역할로 편집 가능한지. 권한 규칙은 순수 함수 <see cref="FrameEditPolicy.CanEdit"/>에 위임.
+    /// user=본인 로컬 생성분(UserId 검증)만, power=본인 로컬+DB 공용 기본, 번들/fallback·게스트=불가. (item2 §3)
+    /// </summary>
     private bool CanEdit(FrameTemplate f)
     {
-        if (!CanDeleteFrames || string.IsNullOrEmpty(f.Id)) return false;
-        if (f.Id.StartsWith("bundle:", StringComparison.Ordinal)
-            || f.Id.StartsWith("fallback", StringComparison.Ordinal)) return false;
-        if (f.Id.StartsWith("local:", StringComparison.Ordinal)) return true; // 본인 로컬
-        return IsPower; // 공용/DB=파워
+        var user = _shell.Session.CurrentUser;
+        return FrameEditPolicy.CanEdit(f, user?.Role, user?.Id);
     }
 
     partial void OnSelectedFrameChanged(FrameTemplate? value)

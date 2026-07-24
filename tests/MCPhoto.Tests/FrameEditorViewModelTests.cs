@@ -18,6 +18,11 @@ public class FrameEditorViewModelTests : IDisposable
     private sealed class CapturingFrameRepository : IFrameRepository
     {
         public FrameTemplate? Saved { get; private set; }
+        public FrameTemplate? Updated { get; private set; }
+        public bool? LastReplaceImage { get; private set; }
+        /// <summary>update-by-id 지원 여부(테스트별 조정). 기본 레거시 의미로 true.</summary>
+        public bool SupportsUpdateById { get; set; } = true;
+
         public Task<IReadOnlyList<FrameTemplate>> GetDefaultFramesAsync(CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
@@ -25,6 +30,12 @@ public class FrameEditorViewModelTests : IDisposable
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
         {
             Saved = frame;
+            return Task.FromResult(frame);
+        }
+        public Task<FrameTemplate> UpdateAsync(FrameTemplate frame, byte[] imageBytes, bool replaceImage, CancellationToken ct = default)
+        {
+            Updated = frame;
+            LastReplaceImage = replaceImage;
             return Task.FromResult(frame);
         }
         public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default) => Task.FromResult(true);
@@ -140,5 +151,136 @@ public class FrameEditorViewModelTests : IDisposable
         Assert.Equal(6, repo.Saved.Slots.Count);
         Assert.NotNull(local.SavedFrame);           // 로컬 캐시도
         Assert.Null(local.SavedOwner);              // 파워 캐시는 ownerName null(frameId 기반)
+    }
+
+    // ── item2 Step 5: manager 기본 프레임 편집 저장 팝업 + diff 플로우 ──
+
+    /// <summary>DB 공용 기본 프레임(접두 없는 실 DB id, isDefault=true)을 편집 대상으로 로드.</summary>
+    private FrameTemplate DbDefaultFrame() => new()
+    {
+        Id = "GUID-abc", Name = "공용프레임", UserId = null, IsDefault = true,
+        ImageUrl = _imagePath, // LoadForEdit가 읽을 로컬 png(File.Exists 성립)
+        ImageSize = new ImageSize { Width = 1200, Height = 1600 },
+        Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
+    };
+
+    [Fact]
+    public async Task Power_Editing_Db_Default_Save_Shows_Prompt_And_Defers()
+    {
+        var (vm, repo, _, _) = MakeVm(UserRole.Admin);
+        vm.LoadForEdit(DbDefaultFrame());
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsDbUpdatePromptVisible);   // 팝업 표시
+        Assert.Null(repo.Saved);                    // 아직 미저장(신규 생성 경로 안 탐)
+        Assert.Null(repo.Updated);                  // 업데이트도 아직 안 함
+    }
+
+    [Fact]
+    public async Task SaveLocalOnly_Skips_Db_And_Caches_Locally()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        vm.LoadForEdit(DbDefaultFrame());
+        await vm.SaveCommand.ExecuteAsync(null);    // 팝업 표시
+
+        await vm.SaveLocalOnlyCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(repo.Updated);                  // DB 미호출
+        Assert.NotNull(local.SavedFrame);           // 로컬 캐시 갱신
+        Assert.Equal("GUID-abc", local.SavedFrame!.Id); // 같은 Id(#dbid 보존)
+        Assert.Null(local.SavedOwner);              // 공용 캐시
+        Assert.False(vm.IsDbUpdatePromptVisible);
+    }
+
+    [Fact]
+    public async Task SaveToDb_No_Change_Skips_Db_Call()
+    {
+        // 원본 그대로 저장(아무 조작 없음) → diff 무변경 → DB 미호출, 로컬만.
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        vm.LoadForEdit(DbDefaultFrame());
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        await vm.SaveToDbCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Updated);                  // 변경 없음 → DB 미호출
+        Assert.NotNull(local.SavedFrame);           // 로컬 캐시는 갱신
+        Assert.False(vm.DbUpdateNoticeIsError);
+        Assert.Contains("변경 사항이 없어", vm.DbUpdateNotice);
+    }
+
+    [Fact]
+    public async Task SaveToDb_With_Slot_Change_Updates_Same_Id()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        vm.LoadForEdit(DbDefaultFrame());
+        // 슬롯 변경(스케일) → SlotsChanged=true, 이미지 미변경 → replaceImage=false.
+        vm.SlotScalePercent = 80;
+
+        await vm.SaveCommand.ExecuteAsync(null);    // 팝업
+        await vm.SaveToDbCommand.ExecuteAsync(null);
+
+        Assert.NotNull(repo.Updated);
+        Assert.Equal("GUID-abc", repo.Updated!.Id); // 같은 문서 업데이트
+        Assert.Null(repo.Updated.UserId);
+        Assert.True(repo.Updated.IsDefault);
+        Assert.False(repo.LastReplaceImage);        // 슬롯만 변경 → 이미지 미교체
+        Assert.NotNull(local.SavedFrame);
+        Assert.Null(local.SavedOwner);
+        Assert.False(vm.IsDbUpdatePromptVisible);
+    }
+
+    [Fact]
+    public async Task SaveToDb_With_Image_Change_Sets_ReplaceImage()
+    {
+        var (vm, repo, _, _) = MakeVm(UserRole.Admin);
+        vm.LoadForEdit(DbDefaultFrame());
+        // 새 이미지 로드(다른 크기) → 이미지 바이트 변경 → replaceImage=true.
+        var otherPath = Path.Combine(Path.GetTempPath(), $"mcphoto_other_{Guid.NewGuid():N}.png");
+        using (var mat = new OpenCvSharp.Mat(1000, 800, OpenCvSharp.MatType.CV_8UC3, OpenCvSharp.Scalar.All(50)))
+            OpenCvSharp.Cv2.ImWrite(otherPath, mat);
+        try
+        {
+            Assert.True(vm.LoadImage(otherPath));
+
+            await vm.SaveCommand.ExecuteAsync(null);
+            await vm.SaveToDbCommand.ExecuteAsync(null);
+
+            Assert.NotNull(repo.Updated);
+            Assert.True(repo.LastReplaceImage);     // 이미지 변경 → 교체
+        }
+        finally { try { File.Delete(otherPath); } catch { /* 무시 */ } }
+    }
+
+    [Fact]
+    public async Task SaveToDb_When_Not_Supported_Falls_Back_To_Local_With_Warning()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        repo.SupportsUpdateById = false;            // 미지원 저장소 가정
+        vm.LoadForEdit(DbDefaultFrame());
+        vm.SlotScalePercent = 80;                   // 변경 발생
+
+        await vm.SaveCommand.ExecuteAsync(null);
+        await vm.SaveToDbCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Updated);                  // DB 미호출
+        Assert.NotNull(local.SavedFrame);           // 로컬만 적용
+        Assert.True(vm.DbUpdateNoticeIsError);
+    }
+
+    [Fact]
+    public async Task CancelDbUpdatePrompt_Keeps_Editing_No_Save()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        vm.LoadForEdit(DbDefaultFrame());
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.CancelDbUpdatePromptCommand.Execute(null);
+
+        Assert.False(vm.IsDbUpdatePromptVisible);
+        Assert.Null(repo.Saved);
+        Assert.Null(repo.Updated);
+        Assert.Null(local.SavedFrame);              // 저장 없음
     }
 }

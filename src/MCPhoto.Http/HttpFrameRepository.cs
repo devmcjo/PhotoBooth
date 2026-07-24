@@ -96,6 +96,47 @@ public sealed class HttpFrameRepository : HttpBackendClient, IFrameRepository
         }
     }
 
+    /// <summary>서버에 PUT /frames/{id} 업데이트 엔드포인트가 있어 같은 id 덮어쓰기를 지원한다. (item2 §5)</summary>
+    public bool SupportsUpdateById => true;
+
+    /// <summary>
+    /// 기존 공용 기본 프레임 업데이트(PUT /frames/{id}, Bearer 파워). name·slots·imageSize 갱신,
+    /// id·userId(null)·isDefault(true)·createdAt은 서버가 보존. replaceImage=true면 응답의 서명 URL로
+    /// 이미지 바이트를 별도 PUT(같은 Storage 키 덮어쓰기). (item2 §5.2, functions src/routes/frames.ts PUT /:id)
+    /// </summary>
+    public async Task<FrameTemplate> UpdateAsync(FrameTemplate frame, byte[] imageBytes, bool replaceImage, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(frame.Id))
+            throw new InvalidOperationException("업데이트할 프레임 id가 없습니다.");
+        try
+        {
+            // 1) 메타 PUT → (replaceImage=true면) 서명 PUT URL + 서버가 확정한 프레임(id·imageUrl 보존/갱신).
+            var req = new UpdateFrameRequest
+            {
+                Name = frame.Name,
+                ImageSize = new ImageSizeDto { Width = frame.ImageSize.Width, Height = frame.ImageSize.Height },
+                Slots = frame.Slots.Select(s => new SlotDto
+                {
+                    Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height
+                }).ToList(),
+                ReplaceImage = replaceImage,
+            };
+            var res = await SendJsonAsync<UpdateFrameResponse>(
+                HttpMethod.Put, $"frames/{Uri.EscapeDataString(frame.Id)}", req, bearer: true, ct)
+                .ConfigureAwait(false);
+
+            // 2) 이미지 교체 시에만 서명 URL로 바이트 PUT. 미변경이면 서버가 upload를 주지 않는다.
+            if (replaceImage && res.Upload is not null)
+                await PutImageAsync(res.Upload, imageBytes, ct).ConfigureAwait(false);
+
+            return ToTemplate(res.Frame);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
     public async Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
     {
         try

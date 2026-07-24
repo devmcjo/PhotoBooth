@@ -73,6 +73,56 @@ public sealed class FrameRepository : IFrameRepository
         return frame;
     }
 
+    /// <summary>레거시(Admin)는 SetAsync(frame.Id)로 같은 문서 덮어쓰기가 성립 → update 지원. (item2 §5.1)</summary>
+    public bool SupportsUpdateById => true;
+
+    /// <summary>
+    /// 기존 공용 기본 프레임 업데이트(같은 frame.Id). name·slots·imageSize 갱신, id·userId(null)·isDefault(true)·
+    /// createdAt은 기존 문서에서 보존. replaceImage=true면 같은 Storage 키에 이미지 재업로드(덮어쓰기). (item2 §5.1)
+    /// 서버 updateFrame(services/frames.ts)의 보존 규칙과 정합.
+    /// </summary>
+    public async Task<FrameTemplate> UpdateAsync(FrameTemplate frame, byte[] imageBytes, bool replaceImage, CancellationToken ct = default)
+    {
+        EnsureInit();
+        if (string.IsNullOrEmpty(frame.Id))
+            throw new InvalidOperationException("업데이트할 프레임 id가 없습니다.");
+
+        var docRef = Db!.Collection(Collection).Document(frame.Id);
+        var snap = await docRef.GetSnapshotAsync(ct);
+        if (!snap.Exists)
+            throw new InvalidOperationException("프레임을 찾을 수 없습니다.");
+
+        var current = snap.ConvertTo<FrameTemplateDoc>();
+        // 공용 기본 프레임만 업데이트 대상(서버 규칙과 동일: userId=null·isDefault=true 보존).
+        if (!string.IsNullOrEmpty(current.UserId) || !current.IsDefault)
+            throw new InvalidOperationException("공용 기본 프레임만 업데이트할 수 있습니다.");
+
+        // 보존 필드: id·userId(null)·isDefault(true)·createdAt. 갱신 필드: name·slots·imageSize·imageUrl.
+        frame.UserId = null;
+        frame.IsDefault = true;
+        frame.CreatedAt = current.CreatedAt.ToDateTime();
+        frame.ImageUrl = current.ImageUrl; // 기본은 기존 이미지 URL 유지
+
+        if (replaceImage)
+        {
+            // 같은 Storage 키(frames/default/{id}.png) 덮어쓰기 → 새 다운로드 토큰 URL로 갱신.
+            var storagePath = $"frames/default/{frame.Id}.png";
+            var tmp = Path.Combine(Path.GetTempPath(), $"mcphoto_frame_{frame.Id}.png");
+            await File.WriteAllBytesAsync(tmp, imageBytes, ct);
+            try
+            {
+                var token = await _client.UploadFileAsync(storagePath, tmp, "image/png", ct: ct);
+                frame.ImageUrl = MCPhoto.Core.Upload.UploadContract.TokenDownloadUrl(_client.Bucket, storagePath, token);
+            }
+            finally { try { File.Delete(tmp); } catch { /* 무시 */ } }
+        }
+
+        var doc = ToDoc(frame);
+        await docRef.SetAsync(doc, cancellationToken: ct);
+        _logger?.LogInformation("프레임 서버 업데이트 완료 id={Id} (이미지교체={Replace})", frame.Id, replaceImage);
+        return frame;
+    }
+
     public async Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
     {
         EnsureInit();

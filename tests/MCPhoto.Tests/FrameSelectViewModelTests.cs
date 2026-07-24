@@ -27,6 +27,9 @@ public class FrameSelectViewModelTests
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
+        public bool SupportsUpdateById => true;
+        public Task<FrameTemplate> UpdateAsync(FrameTemplate frame, byte[] imageBytes, bool replaceImage, CancellationToken ct = default)
+            => Task.FromResult(frame);
         public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
         {
             DeleteCalls++; DeletedId = frameId; return Task.FromResult(ExistingServerIds.Remove(frameId));
@@ -206,5 +209,86 @@ public class FrameSelectViewModelTests
         await vm.ConfirmDeleteCommand.ExecuteAsync(null);
 
         Assert.True(vm.DeleteNoticeIsError);            // 성공 오인 금지: 실패 안내
+    }
+
+    // ── item2 Step 2: 편집 게이트(FrameEditPolicy 위임) ──
+
+    private static FrameTemplate OwnedLocalFrame() => new()
+    {
+        Id = "local:u1_myframe", Name = "myframe", UserId = "u1",
+        ImageSize = new ImageSize { Width = 100, Height = 100 }
+    };
+
+    private static FrameTemplate DbDefaultFrame() => new()
+    {
+        Id = "GUID-abc", Name = "공용", UserId = null, IsDefault = true,
+        ImageSize = new ImageSize { Width = 100, Height = 100 }
+    };
+
+    [Fact]
+    public async Task Guest_Cannot_Edit_Any_Frame()
+    {
+        var (vm, _, _) = MakeVm(role: null);
+        await vm.OnEnterAsync();
+        vm.SelectedFrame = OwnedLocalFrame();
+        Assert.False(vm.CanEditSelected);
+        vm.SelectedFrame = DbDefaultFrame();
+        Assert.False(vm.CanEditSelected);
+    }
+
+    [Fact]
+    public async Task User_Can_Edit_Own_Local_But_Not_Db_Default()
+    {
+        var (vm, _, _) = MakeVm(UserRole.User);
+        await vm.OnEnterAsync();
+
+        vm.SelectedFrame = OwnedLocalFrame();
+        Assert.True(vm.CanEditSelected);       // 본인 로컬 편집 가능
+
+        vm.SelectedFrame = DbDefaultFrame();
+        Assert.False(vm.CanEditSelected);      // DB 기본은 user 편집 불가
+    }
+
+    [Fact]
+    public async Task User_Cannot_Edit_Other_Users_Local()
+    {
+        var (vm, _, _) = MakeVm(UserRole.User); // 세션 계정 = u1
+        await vm.OnEnterAsync();
+        vm.SelectedFrame = new FrameTemplate
+        {
+            Id = "local:u2_frame", Name = "남의것", UserId = "u2",
+            ImageSize = new ImageSize { Width = 100, Height = 100 }
+        };
+        Assert.False(vm.CanEditSelected);
+    }
+
+    [Fact]
+    public async Task Power_Can_Edit_Db_Default_And_Own_Local()
+    {
+        var (vm, _, _) = MakeVm(UserRole.Admin); // 세션 계정 = u1
+        await vm.OnEnterAsync();
+
+        vm.SelectedFrame = DbDefaultFrame();
+        Assert.True(vm.CanEditSelected);       // power는 DB 기본 편집 가능
+
+        vm.SelectedFrame = new FrameTemplate
+        {
+            Id = "local:u1_myframe", Name = "myframe", UserId = "u1",
+            ImageSize = new ImageSize { Width = 100, Height = 100 }
+        };
+        Assert.True(vm.CanEditSelected);       // 본인 로컬도 가능
+    }
+
+    [Fact]
+    public async Task Bundle_And_Fallback_Not_Editable_By_Anyone()
+    {
+        var (vm, _, _) = MakeVm(UserRole.Admin);
+        await vm.OnEnterAsync();
+
+        vm.SelectedFrame = new FrameTemplate { Id = "bundle:classic", IsDefault = true };
+        Assert.False(vm.CanEditSelected);
+
+        vm.SelectedFrame = new FrameTemplate { Id = "fallback", IsDefault = true };
+        Assert.False(vm.CanEditSelected);
     }
 }

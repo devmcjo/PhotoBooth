@@ -60,6 +60,30 @@ internal sealed class SaveFrameResponse
     public SignedUploadDto Upload { get; set; } = new();
 }
 
+/// <summary>
+/// PUT /frames/{id} 요청 본문(메타). 서버가 id·userId(null)·isDefault(true)·createdAt을 보존한다.
+/// replaceImage=true면 응답에 서명 PUT URL이 포함(이미지 바이트를 별도 PUT). (functions src/routes/frames.ts PUT /:id)
+/// </summary>
+internal sealed class UpdateFrameRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public ImageSizeDto ImageSize { get; set; } = new();
+    public List<SlotDto> Slots { get; set; } = new();
+    /// <summary>이미지 바이트 교체 여부(클라 diff 결과). false면 메타만 갱신(서명 URL 미발급).</summary>
+    public bool ReplaceImage { get; set; }
+}
+
+/// <summary>
+/// PUT /frames/{id} 응답: {frame, upload?}. upload는 replaceImage=true일 때만 존재.
+/// (functions src/services/frames.ts UpdateFrameResult)
+/// </summary>
+internal sealed class UpdateFrameResponse
+{
+    public FrameResponse Frame { get; set; } = new();
+    /// <summary>이미지 교체 시에만 발급되는 서명 PUT URL. 미변경이면 null.</summary>
+    public SignedUploadDto? Upload { get; set; }
+}
+
 /// <summary>DELETE /frames/{id} 응답: {deleted:bool}. (functions src/routes/frames.ts)</summary>
 internal sealed class DeleteFrameResponse
 {

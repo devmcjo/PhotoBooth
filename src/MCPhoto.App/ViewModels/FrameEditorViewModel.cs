@@ -25,9 +25,16 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     private byte[]? _imageBytes;
 
     // 편집 모드 상태(기존 프레임 편집 시 LoadForEdit가 set). 신규 생성이면 _isEditing=false.
+    // FrameEditorViewModel은 Transient 등록(ServiceRegistration.cs) → 진입마다 새 인스턴스라 재진입 잔존 없음.
     private bool _isEditing;
     private string? _editingFrameId;
     private bool _suppressArrange; // LoadForEdit 중 SlotCount 설정이 기존 슬롯을 자동 배치로 덮어쓰지 않도록.
+
+    // ── item2 §4.3: 원본 스냅샷(diff 기준). LoadForEdit 진입 시 세팅, 신규 생성에서는 비움. ──
+    private byte[]? _originalImageBytes;
+    private readonly List<Slot> _originalSlots = new();
+    private string _originalName = string.Empty;
+    private FrameTemplate? _editingFrame; // 편집 대상 원본 참조(Id·IsDefault·UserId 보존)
 
     [ObservableProperty] private ImageSource? _frameImage;
     [ObservableProperty] private int _frameWidth;
@@ -37,6 +44,14 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     [ObservableProperty] private string _editorTitle = "새 프레임 만들기";
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _canSave;
+
+    // ── item2 §4.4: 기본 프레임 DB 업데이트 확인 팝업(power가 DB 공용 기본 프레임 편집·저장 시) ──
+    /// <summary>"로컬만 / DB도 업데이트 / 취소" 확인 팝업 오버레이 표시.</summary>
+    [ObservableProperty] private bool _isDbUpdatePromptVisible;
+    /// <summary>DB 업데이트 결과 안내(성공/변경없음/실패).</summary>
+    [ObservableProperty] private string _dbUpdateNotice = string.Empty;
+    /// <summary>안내가 오류인지(색상 구분용).</summary>
+    [ObservableProperty] private bool _dbUpdateNoticeIsError;
 
     /// <summary>슬롯 종횡비(편집기 전역, MVP). 변경 시 재배치. (it4 §3)</summary>
     [ObservableProperty] private SlotAspect _slotAspect = SlotAspect.Ratio3x4;
@@ -124,8 +139,16 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     {
         _isEditing = true;
         _editingFrameId = frame.Id;
+        _editingFrame = frame; // 원본 참조(Id·IsDefault·UserId 보존, diff·업데이트 대상)
         EditorTitle = "프레임 편집";
         FrameName = frame.Name;
+
+        // 원본 스냅샷(diff 기준) — 이름·슬롯은 즉시 확정, 이미지는 아래 파일 로드 후.
+        _originalName = frame.Name;
+        _originalSlots.Clear();
+        foreach (var s in frame.Slots)
+            _originalSlots.Add(new Slot { Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height });
+        _originalImageBytes = null; // 이미지 로드 성공 시 세팅(실패 시 null → diff에서 변경으로 보수 판정)
 
         if (string.IsNullOrEmpty(frame.ImageUrl) || !File.Exists(frame.ImageUrl))
         {
@@ -135,6 +158,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         try
         {
             _imageBytes = File.ReadAllBytes(frame.ImageUrl); // 로컬 저장분은 이미 PNG(가공본)
+            _originalImageBytes = (byte[])_imageBytes.Clone(); // diff 기준 원본 스냅샷
             FrameImage = StillImageConverter.FromPngBytes(_imageBytes);
             if (frame.ImageSize.Width > 0) FrameWidth = frame.ImageSize.Width;
             if (frame.ImageSize.Height > 0) FrameHeight = frame.ImageSize.Height;
@@ -252,6 +276,15 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             return;
         }
 
+        // item2 §4.1: power가 DB 공용 기본 프레임을 편집·저장하면 "로컬만/DB도 업데이트" 확인 팝업을 띄우고 보류.
+        if (_editingFrame is { } editing && FrameEditPolicy.RequiresDbUpdatePrompt(editing, user.Role))
+        {
+            DbUpdateNotice = string.Empty;
+            DbUpdateNoticeIsError = false;
+            IsDbUpdatePromptVisible = true;
+            return; // 저장 보류 — 팝업 버튼(SaveLocalOnly/SaveToDb/Cancel)이 이어받음
+        }
+
         try
         {
             StatusMessage = "저장 중...";
@@ -260,10 +293,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             if (isPower)
             {
                 // 파워: 공용 기본 프레임 → DB(isDefault=true, userId=null) + 로컬 캐시. (it8 §3 A2)
-                // 편집이고 실 DB 문서 id를 가진 경우 그 id로 SetAsync → DB 문서·Storage·슬롯 update. (기능 요청)
+                // 이 경로는 신규 생성(EditingServerId=null)만 도달한다. DB 기본 편집은 위에서 팝업으로 분기됨.
                 var frame = new FrameTemplate
                 {
-                    Id = EditingServerId() ?? string.Empty, // 빈 값이면 SaveAsync가 새 GUID 부여(신규), 있으면 그 문서 갱신
+                    Id = EditingServerId() ?? string.Empty, // 빈 값이면 SaveAsync가 새 GUID 부여(신규)
                     UserId = null,
                     IsDefault = true,
                     Name = FrameName,
@@ -300,6 +333,113 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             StatusMessage = "저장에 실패했습니다.";
         }
     }
+
+    // ── item2 §4.4: 기본 프레임 저장 팝업 버튼 ──
+
+    /// <summary>[로컬에만 적용]: DB 미호출, 로컬 공용 캐시만 갱신(#dbid 보존). (item2 §4.4)</summary>
+    [RelayCommand]
+    private async Task SaveLocalOnly()
+    {
+        if (_editingFrame is null || _imageBytes is null) { IsDbUpdatePromptVisible = false; return; }
+        try
+        {
+            var frame = BuildDbFrame(); // 같은 Id(#dbid 보존), userId=null, isDefault=true
+            _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "프레임 로컬 저장 실패");
+            IsDbUpdatePromptVisible = false;
+            StatusMessage = "저장에 실패했습니다."; // 편집 화면 유지(이동 없음)
+            return;
+        }
+        IsDbUpdatePromptVisible = false;
+        await GoToFrameSelectAsync(); // 저장 성공 후 화면 전환(전환 실패는 저장 결과에 영향 없음)
+    }
+
+    /// <summary>
+    /// [DB에도 업데이트]: diff로 변경 판정 → 변경 있으면 같은 frameId 업데이트(레포)+로컬 캐시,
+    /// 변경 없으면 DB 미호출(로컬만). 실패 시 화면 유지. (item2 §4.4)
+    /// </summary>
+    [RelayCommand]
+    private async Task SaveToDb()
+    {
+        if (_editingFrame is null || _imageBytes is null) { IsDbUpdatePromptVisible = false; return; }
+
+        var change = FrameDiff.Compare(
+            _originalImageBytes, _imageBytes,
+            _originalSlots, Slots.ToList(),
+            _originalName, FrameName);
+
+        // 저장(로컬/DB)과 결과 안내를 먼저 확정한다. 화면 전환 실패가 저장 결과 안내를 뒤엎지 않도록 분리.
+        try
+        {
+            var frame = BuildDbFrame();
+
+            if (!change.HasAnyChange)
+            {
+                // 변경 없음: DB 미호출(no-op), 로컬 캐시만 갱신.
+                _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
+                DbUpdateNoticeIsError = false;
+                DbUpdateNotice = "변경 사항이 없어 DB 업데이트를 건너뛰었습니다.";
+            }
+            else if (!_repository.SupportsUpdateById)
+            {
+                // 이론상 도달하지 않음(레거시·HTTP 모두 지원). 방어적: 로컬만 적용 + 경고.
+                _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
+                DbUpdateNoticeIsError = true;
+                DbUpdateNotice = "현재 서버 모드에서는 기본 프레임 DB 업데이트를 지원하지 않습니다(로컬만 적용됨).";
+            }
+            else
+            {
+                // 변경 있음 + 지원 모드: 같은 frameId 업데이트(이미지 변경 시에만 replaceImage=true).
+                var saved = await _repository.UpdateAsync(frame, _imageBytes, replaceImage: change.ImageChanged);
+                _localStore.SaveLocal(saved, _imageBytes, ownerName: null); // saved.Id=원본 GUID → #dbid 보존
+                DbUpdateNoticeIsError = false;
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // 업데이트 대상 미발견·10개 초과 등. 화면 유지 + 안내.
+            IsDbUpdatePromptVisible = false;
+            DbUpdateNoticeIsError = true;
+            StatusMessage = ex.Message;
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "프레임 DB 업데이트 실패");
+            IsDbUpdatePromptVisible = false;
+            DbUpdateNoticeIsError = true;
+            StatusMessage = "DB 업데이트에 실패했습니다.";
+            return;
+        }
+
+        IsDbUpdatePromptVisible = false;
+        await GoToFrameSelectAsync();
+    }
+
+    /// <summary>저장 성공 후 프레임 선택 화면으로 전환. 전환 자체 실패는 저장 결과에 영향 없음(안내만 로그).</summary>
+    private async Task GoToFrameSelectAsync()
+    {
+        try { await _shell.NavigateAsync(AppState.FrameSelect); }
+        catch (Exception ex) { _logger?.LogError(ex, "프레임 선택 화면 전환 실패(저장은 완료)"); }
+    }
+
+    /// <summary>[취소]: 팝업만 닫고 편집 유지(저장·이동 없음). (item2 §4.4)</summary>
+    [RelayCommand]
+    private void CancelDbUpdatePrompt() => IsDbUpdatePromptVisible = false;
+
+    /// <summary>DB 공용 기본 프레임 저장용 템플릿(같은 Id로 #dbid 보존, userId=null, isDefault=true).</summary>
+    private FrameTemplate BuildDbFrame() => new()
+    {
+        Id = _editingFrame!.Id,
+        UserId = null,
+        IsDefault = true,
+        Name = FrameName,
+        ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
+        Slots = Slots.ToList()
+    };
 
     [RelayCommand]
     private async Task Cancel() => await _shell.NavigateAsync(AppState.FrameSelect);

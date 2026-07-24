@@ -54,11 +54,21 @@
   - 크기 스케일(`OnSlotScalePercentChanged`, `:116-125` / `SlotLayout.ScaleSlots`, `:118-134`): 항상 원본 `_baseSlots` 기준으로 스케일(누적 오차 방지), 70~130 클램프, 중심 유지.
   - 드래그(`UpdateSlot`, `:147-172`): 경계 클램프 + `_baseSlots` 중심 동기화. **좌표 변환은 순수함수 `EditorTransform`**(`EditorTransform.cs`)로 표시·드래그·클램프가 동일 변환(Uniform 스케일 + 중앙 레터박스) → WYSIWYG. 캔버스 기준은 `SlotCanvas.ActualWidth/Height`(`FrameEditorView.xaml.cs:70-73`), 절대 위치 이동(그랩 오프셋, `:106-143`).
   - 저장 유효성(`SlotLayout.IsValid`, `:165-175`): 개수 1~6, 경계 내, 겹침 없음.
-  - 저장(`Save`, `:177-233`) **역할별 분기**:
-    - **power**(admin/manager): 공용 기본 프레임 → DB(`isDefault=true, userId=null`) + 로컬 캐시(frameId 기반, 접두 없음).
+  - 저장(`Save`) **역할별 분기**:
+    - **power**(admin/manager) **신규 생성**: 공용 기본 프레임 → DB(`isDefault=true, userId=null`) + 로컬 캐시(frameId 기반, 접두 없음).
     - **user**: 로컬 전용(DB 미저장), `{계정}_{이름}.png` 접두.
     - 10개 초과 등은 `InvalidOperationException` 메시지 노출.
-- **근거**: `FrameEditorViewModel.cs`, `FrameEditorView.xaml.cs`, `EditorTransform.cs`, `SlotLayout.cs`, `SlotAspect.cs`.
+- **편집 권한 규칙(역할×출처, item2)**: 편집 진입·"선택 편집" 버튼 노출은 순수 함수 `FrameEditPolicy.CanEdit`가 게이트한다.
+  - 출처 판정 `FrameOrigin.Classify`(`FrameOrigin.cs`): `local:`=본인 로컬 생성분, 접두 없는 실 DB id+`isDefault`=DB 공용 기본, `bundle:`=번들, `fallback`/빈 Id=코드 생성.
+  - **게스트**: 편집 불가(전부). **user**: 본인 로컬 생성분만(`UserId==현재계정` 검증). **power**: 본인 로컬 + DB 공용 기본. **번들·fallback**: 누구도 불가.
+  - `FrameSelectViewModel.CanEdit`는 이 순수 함수에 위임(기존 `local:` 무검증 결함 제거). 진입(`EditFrame`)·버튼(`CanEditSelected`) 이중 게이트.
+- **power 기본 프레임 편집 저장 플로우(item2 §4)**: power가 DB 공용 기본 프레임을 편집·저장하면 확인 팝업(`IsDbUpdatePromptVisible`) 표시.
+  - **[로컬에만 적용]**(`SaveLocalOnly`): DB 미호출, 로컬 공용 캐시만 갱신(`#dbid` 보존).
+  - **[DB에도 업데이트]**(`SaveToDb`): `FrameDiff.Compare`(`FrameDiff.cs`, 이미지=SHA-256·슬롯=좌표 정수일치·이름)로 변경 판정 → 변경 있으면 같은 frameId `IFrameRepository.UpdateAsync`(레거시=`SetAsync` 덮어쓰기 / HTTP=`PUT /frames/{id}`) + 로컬 캐시, 이미지 변경 시에만 `replaceImage=true`. **변경 없으면 DB 미호출**(로컬만·"변경 없음" 안내).
+  - **[취소]**: 팝업만 닫고 편집 유지(저장·이동 없음). 저장 실패 시 화면 유지 + 안내.
+  - 업데이트 대상은 id·`userId(null)`·`isDefault(true)`·`createdAt` 보존, name·slots·imageSize만 갱신(서버 `updateFrame`와 정합).
+- **저장소 update capability(item2 §5)**: `IFrameRepository.SupportsUpdateById`(레거시=true, HTTP=true) + `UpdateAsync(frame, imageBytes, replaceImage)`. **레거시·백엔드 양 모드 모두 완전 지원**(HTTP는 `PUT /frames/{id}` 파워 엔드포인트).
+- **근거**: `FrameEditorViewModel.cs`, `FrameEditorView.xaml`(+ code-behind), `FrameOrigin.cs`, `FrameEditPolicy.cs`, `FrameDiff.cs`, `IFrameRepository.cs`, `FrameRepository.cs`, `HttpFrameRepository.cs`, `EditorTransform.cs`, `SlotLayout.cs`, `SlotAspect.cs`.
 
 ### 4.2 삭제(역할별)
 

@@ -115,6 +115,94 @@ public class HttpFrameRepositoryTests
         Assert.Contains("최대 10개", ex.Message);
     }
 
+    // ── item2 §5: PUT /frames/{id} 업데이트 계약 정합(fake-handler) ──
+
+    [Fact]
+    public async Task Update_ReplaceImage_Puts_Meta_Then_Image_With_Headers()
+    {
+        // replaceImage=true: PUT /frames/{id} → 응답 upload 서명 URL로 이미지 바이트 별도 PUT.
+        var (repo, handler, session) = Make();
+        session.SignIn("jwt-1", new User { Id = "boss", Role = UserRole.Admin });
+
+        handler.WhenJson(HttpMethod.Put, "frames/GUID-abc", HttpStatusCode.OK,
+            "{\"frame\":{\"id\":\"GUID-abc\",\"userId\":null,\"isDefault\":true,\"name\":\"수정됨\"," +
+            "\"imageUrl\":\"https://fb/o/frames%2Fdefault%2FGUID-abc.png?alt=media&token=newtok\"," +
+            "\"imageSize\":{\"width\":800,\"height\":1000},\"slots\":[{\"index\":0,\"x\":5,\"y\":6,\"width\":7,\"height\":8}]," +
+            "\"createdAt\":\"2026-01-01T00:00:00Z\"}," +
+            "\"upload\":{\"putUrl\":\"https://signed.example/put2\",\"downloadUrl\":\"https://fb/o/frames%2Fdefault%2FGUID-abc.png?alt=media&token=newtok\"," +
+            "\"requiredHeaders\":{\"Content-Type\":\"image/png\",\"x-goog-meta-firebaseStorageDownloadTokens\":\"newtok\"}}}");
+        handler.When(HttpMethod.Put, "signed.example/put2", _ => FakeHttpMessageHandler.NoContent(HttpStatusCode.OK));
+
+        var frame = new FrameTemplate
+        {
+            Id = "GUID-abc", UserId = null, IsDefault = true, Name = "수정됨",
+            ImageSize = new MCPhoto.Core.Models.ImageSize { Width = 800, Height = 1000 },
+        };
+        frame.Slots.Add(new Slot { Index = 0, X = 5, Y = 6, Width = 7, Height = 8 });
+
+        var updated = await repo.UpdateAsync(frame, new byte[] { 9, 9, 9 }, replaceImage: true);
+
+        Assert.Equal("GUID-abc", updated.Id);              // 같은 문서 id 보존
+        Assert.Contains("token=newtok", updated.ImageUrl); // 갱신된 다운로드 URL
+
+        // 순서: PUT /frames/{id} → PUT 서명URL(이미지)
+        Assert.Equal(2, handler.Requests.Count);
+        var meta = handler.Requests[0];
+        Assert.Equal(HttpMethod.Put, meta.Method);
+        Assert.Contains("frames/GUID-abc", meta.Uri!.ToString());
+        Assert.Equal("Bearer", meta.AuthorizationScheme);
+        Assert.Contains("\"replaceImage\":true", meta.Body!);
+        Assert.Contains("\"slots\":[{\"index\":0", meta.Body!); // 슬롯 메타 전송
+        Assert.DoesNotContain("\"isDefault\"", meta.Body!);  // 서버가 보존 — 요청 본문에 없음
+        Assert.DoesNotContain("\"userId\"", meta.Body!);
+
+        var put = handler.Requests[1];
+        Assert.Equal("https://signed.example/put2", put.Uri!.ToString());
+        Assert.Equal("image/png", put.HeaderValue("Content-Type"));
+        Assert.Equal("newtok", put.HeaderValue("x-goog-meta-firebaseStorageDownloadTokens"));
+    }
+
+    [Fact]
+    public async Task Update_MetaOnly_Skips_Image_Put_When_No_Upload()
+    {
+        // replaceImage=false: 메타만 PUT, 응답 upload 없음 → 이미지 PUT 안 함(요청 1건).
+        var (repo, handler, session) = Make();
+        session.SignIn("jwt-1", new User { Id = "boss", Role = UserRole.Admin });
+
+        handler.WhenJson(HttpMethod.Put, "frames/GUID-abc", HttpStatusCode.OK,
+            "{\"frame\":{\"id\":\"GUID-abc\",\"userId\":null,\"isDefault\":true,\"name\":\"슬롯만\"," +
+            "\"imageUrl\":\"https://fb/o/frames%2Fdefault%2FGUID-abc.png?alt=media&token=orig\"," +
+            "\"imageSize\":{\"width\":100,\"height\":200},\"slots\":[],\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        var frame = new FrameTemplate
+        {
+            Id = "GUID-abc", UserId = null, IsDefault = true, Name = "슬롯만",
+            ImageSize = new MCPhoto.Core.Models.ImageSize { Width = 100, Height = 200 },
+        };
+
+        var updated = await repo.UpdateAsync(frame, new byte[] { 1, 2 }, replaceImage: false);
+
+        Assert.Equal("GUID-abc", updated.Id);
+        Assert.Contains("token=orig", updated.ImageUrl); // 기존 이미지 URL 보존
+        Assert.Single(handler.Requests);                  // PUT 메타만(이미지 PUT 없음)
+        Assert.Contains("\"replaceImage\":false", handler.Requests[0].Body!);
+    }
+
+    [Fact]
+    public async Task Update_Missing_404_Maps_To_InvalidOperation()
+    {
+        // 서버가 대상 문서 없음(404) → InvalidOperationException으로 매핑(화면 유지 경로).
+        var (repo, handler, session) = Make();
+        session.SignIn("jwt-1", new User { Id = "boss", Role = UserRole.Admin });
+        handler.WhenJson(HttpMethod.Put, "frames/gone", HttpStatusCode.NotFound,
+            "{\"error\":{\"code\":\"not_found\",\"message\":\"프레임을 찾을 수 없습니다.\"}}");
+
+        var frame = new FrameTemplate { Id = "gone", Name = "x", ImageSize = new MCPhoto.Core.Models.ImageSize { Width = 1, Height = 1 } };
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => repo.UpdateAsync(frame, new byte[] { 1 }, replaceImage: false));
+        Assert.Contains("찾을 수 없습니다", ex.Message);
+    }
+
     [Fact]
     public async Task Delete_Returns_Deleted_Flag()
     {
