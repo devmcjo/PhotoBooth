@@ -72,7 +72,7 @@
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `id` | string | 세션 ID = 문서 ID = **URL 토큰**(UUIDv4). 순차 ID 금지(§10) |
+| `id` | string | 세션 ID = 문서 ID = **URL 토큰** = Storage 폴더명. 형식 `{yyyyMMdd_HHmmss}_{UUIDv4}`(순차 ID 금지·UUID로 열거 방어 유지, §3.3) |
 | `finalImageUrl` | string \| null | 프레임 포함 최종 이미지 URL (§4, Storage `results/{sessionId}/…`). **사진 전송 옵션(SendPhoto) off면 null**(it7 F2) |
 | `timelapseUrl` | string \| null | 타임랩스 영상 URL. 타임랩스 전송 옵션 off·생성 실패·미포함 시 null |
 | `createdAt` | timestamp | 생성 시각 |
@@ -99,7 +99,7 @@ https://{hostingDomain}/?s={token}
 ```
 
 - `{hostingDomain}`: Firebase Hosting 도메인(예: `mcphoto-xxxx.web.app` 또는 커스텀 도메인). **WPF 설정값으로 주입**(`AppSettings`에 hosting base URL 보관 → 배포 환경별 교체).
-- `{token}`: `resultSessions` 문서 ID = **UUIDv4**(추측 불가). 이 토큰이 곧 세션 식별자이자 접근 열쇠.
+- `{token}`: `resultSessions` 문서 ID = **`{yyyyMMdd_HHmmss}_{UUIDv4}`**(UUID로 추측 불가, §3.3). 이 토큰이 곧 세션 식별자이자 접근 열쇠.
 
 > **js-architect 결정 사항**: 경로형(`/d/{token}`)이면 Hosting rewrite로 SPA에 라우팅, 쿼리형(`/?s={token}`)이면 단일 index에서 파싱. **어느 쪽이든 WPF는 §3.5의 조립 규칙으로 downloadPageUrl을 만든다.** js-architect는 택일 후 이 문서에 확정 표기를 남긴다(현재 기본안: **쿼리형 `/?s={token}`** — 단일 정적 페이지로 가장 단순).
 >
@@ -111,9 +111,10 @@ https://{hostingDomain}/?s={token}
 
 ### 3.3 토큰 규칙
 
-- **생성 주체**: WPF. `Guid.NewGuid()`(UUIDv4)로 세션 토큰 생성 → 이 값을 `resultSessions` 문서 ID로 사용.
-- **추측 불가**: 순차/타임스탬프 기반 금지(§10 다운로드 URL 보안). UUIDv4의 122비트 엔트로피로 열거 방어.
+- **생성 주체**: WPF. 세션 ID = `{yyyyMMdd_HHmmss}_{UUIDv4}`(`UploadContract.NewSessionId`, 로컬 시간). 이 값이 곧 `resultSessions` 문서 ID · Storage `results/` 하위 폴더명 · URL 토큰이다. 앞의 날짜_시간은 **Storage에서 세션 폴더를 시각으로 정렬·검색**하기 위함(사용자 요청).
+- **추측 불가(열거 방어)**: **순차 ID는 여전히 금지**. 날짜_시간은 **prefix일 뿐이고 뒤에 완전한 UUIDv4(122비트)가 붙으므로 열거 불가**는 그대로 유지된다(공격자는 UUID를 브루트포스해야 함 — 접두 시각으로 좁혀지지 않음). 트레이드오프: 토큰/URL에 **생성 시각이 노출**된다(포토부스 다운로드 링크 특성상 저민감 — 사용자 수용).
 - **접근 제어**: 토큰을 아는 사람만 문서 get 가능(보안 규칙이 list를 막으므로 열거 불가). 즉 **토큰 = capability URL**.
+- **자동삭제 정합**: 세션 ID가 폴더명·문서 ID·삭제 prefix를 모두 겸하므로, 만료 정리(`PurgeExpired`가 `results/{id}/` 삭제 + 문서 삭제)는 ID 형식 변경과 무관하게 그대로 동작한다.
 
 ### 3.4 만료·삭제 시 웹 동작
 
@@ -149,6 +150,7 @@ downloadPageUrl = {hostingBaseUrl} + "/d/" + {token}       // 경로형(대안)
 results/{sessionId}/final.{jpg|png}       // 최종 합성 이미지 (outputFormat 반영)
 results/{sessionId}/timelapse.mp4         // 타임랩스 (H.264, 무음)
 ```
+- **`{sessionId}` = `{yyyyMMdd_HHmmss}_{UUIDv4}`(§3.3)** → results/ 하위 세션 폴더가 **시각순 정렬·검색**된다(사용자 요청). 파일명 자체는 고정(`final`/`timelapse`).
 - 확장자: 이미지는 `AppSettings.outputFormat`(jpg/png). 영상은 항상 `mp4`.
 - 웹은 파일명을 하드코딩하지 않고 **문서의 `finalImageUrl`/`timelapseUrl`을 사용**한다(파일명 변경 내성).
 

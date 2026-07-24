@@ -18,7 +18,7 @@
 |--------|---------|-----|-------------|---------|------|
 | `users` | 계정 id | `UserDoc` | `User` | 전면 차단 | `AccountService.cs:16`, `UserDoc.cs:7`, `User.cs:7` |
 | `frameTemplates` | 프레임 id | `FrameTemplateDoc` | `FrameTemplate` | 전면 차단 | `FrameRepository.cs:16`, `FrameTemplateDoc.cs:7`, `FrameTemplate.cs:6` |
-| `resultSessions` | UUIDv4 토큰 | `ResultSessionDoc` | `ResultSession` | 단건 get만 | `FirebaseClient.cs:162`, `ResultSessionDoc.cs:9`, `ResultSession.cs:6` |
+| `resultSessions` | `{yyyyMMdd_HHmmss}_{UUIDv4}` 토큰 | `ResultSessionDoc` | `ResultSession` | 단건 get만 | `FirebaseClient.cs:162`, `ResultSessionDoc.cs:9`, `ResultSession.cs:6` |
 
 ---
 
@@ -58,13 +58,13 @@
 - 계정당 최대 10개(커스텀), `SaveAsync`에서 강제(`FrameRepository.cs:48-54`).
 - **하이브리드(it8 A2, 가정 포함)**: 계약상 DB `frameTemplates`에는 공용 기본 프레임(isDefault=true, userId=null)만 신규 저장하고 user 커스텀은 로컬 파일 전용이다(`firebase-contract.md:69`). 따라서 신규 흐름에서 `userId != null` 문서는 생성되지 않을 것으로 계약이 규정하나, `FrameRepository.SaveAsync` 코드 자체는 여전히 userId 경로를 지원한다(하위호환). 로컬 저장 스키마(`.png` + `.slots`)는 이 문서 범위 밖(`LocalFrameStore.cs` 참조).
 
-### 2.3 `resultSessions` (문서 ID = UUIDv4 토큰)
+### 2.3 `resultSessions` (문서 ID = `{yyyyMMdd_HHmmss}_{UUIDv4}` 토큰)
 
-문서 ID = 세션 토큰 = URL 토큰(UUIDv4, 추측 불가). 순차 ID 금지(`ResultSession.cs:8`, `UploadContract.cs:11-12`).
+문서 ID = 세션 토큰 = URL 토큰 = Storage 폴더명. 형식 **`{yyyyMMdd_HHmmss}_{UUIDv4}`**(`UploadContract.NewSessionId`, 로컬 시간 prefix). 날짜_시간 prefix로 Storage `results/` 하위 폴더가 시각순 정렬·검색된다(사용자 요청). **순차 ID는 여전히 금지** — 뒤의 완전한 UUIDv4로 열거 방어(추측 불가) 유지, prefix는 시각 노출(저민감) 트레이드오프.
 
 | 필드(저장 키) | 타입 | 의미 | 근거 |
 |---------------|------|------|------|
-| `id` | string | 세션 ID = 문서 ID = URL 토큰(UUIDv4) | `ResultSessionDoc.cs:11-12` |
+| `id` | string | 세션 ID = 문서 ID = URL 토큰 = 폴더명. `{yyyyMMdd_HHmmss}_{UUIDv4}` | `ResultSessionDoc.cs:11-12`, `UploadContract.NewSessionId` |
 | `finalImageUrl` | string \| null | 최종 이미지 토큰 URL. **사진 전송(SendPhoto) off면 null** | `ResultSessionDoc.cs:14-15`, `ResultSession.cs:15` |
 | `timelapseUrl` | string \| null | 타임랩스 토큰 URL. 옵션 off·생성 실패·미포함 시 null | `ResultSessionDoc.cs:17-18`, `ResultSession.cs:17` |
 | `createdAt` | timestamp | 생성 시각(UTC) | `ResultSessionDoc.cs:20-21`, `UploadService.cs:64` |
@@ -107,7 +107,8 @@
 | 결과물(타임랩스) | `results/{sessionId}/timelapse.mp4` | 항상 mp4(H.264 무음) | **O** | `UploadContract.cs:19-20` |
 | 프레임 이미지 | `frames/{owner}/{frameId}.png` | `owner = userId ?? "default"`, 항상 png | **X**(비대상) | `FrameRepository.cs:59-61` |
 
-- `results/`만 TTL/만료 삭제 대상, `frames/`는 비대상(`FrameRepository.cs:59`, `firebase-contract.md:141-144`).
+- `{sessionId}` = `{yyyyMMdd_HHmmss}_{UUIDv4}`(§2.3) → **results/ 하위 세션 폴더가 시각순 정렬**되어 Storage 콘솔에서 찾기 쉽다(사용자 요청). 파일명(`final`/`timelapse`)은 고정.
+- `results/`만 TTL/만료 삭제 대상, `frames/`는 비대상(`FrameRepository.cs:59`, `firebase-contract.md:141-144`). **자동삭제 정합**: `PurgeExpired`가 `results/{s.Id}/` prefix로 삭제하는데 `s.Id`가 곧 폴더명이라 ID 형식 변경과 무관하게 동작(`UploadService.cs`).
 
 ### 4.2 다운로드 토큰 URL 형식
 

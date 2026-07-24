@@ -30,6 +30,28 @@ public class UploadContractTests
     }
 
     [Fact]
+    public void StampPrefix_Is_Date_Time_To_Seconds()
+        => Assert.Equal("20260724_153012", UploadContract.StampPrefix(new DateTime(2026, 7, 24, 15, 30, 12)));
+
+    [Fact]
+    public void NewSessionId_Prefixes_DateTime_Then_Uuid()
+    {
+        var id = UploadContract.NewSessionId(new DateTime(2026, 7, 24, 15, 30, 12));
+        Assert.StartsWith("20260724_153012_", id);            // results/ 폴더가 시간순 정렬·검색
+        Assert.True(Guid.TryParse(id.Substring("20260724_153012_".Length), out _)); // 뒤는 추측 불가 uuid
+    }
+
+    [Fact]
+    public void SessionId_Is_Folder_And_Deletion_Prefix_Consistent()
+    {
+        // 자동삭제 정합: 세션 ID가 곧 results/{id}/ 업로드 폴더 = PurgeExpired 삭제 prefix.
+        var id = UploadContract.NewSessionId(new DateTime(2026, 7, 24, 15, 30, 12));
+        var deletePrefix = $"results/{id}/";
+        Assert.StartsWith(deletePrefix, UploadContract.FinalImagePath(id, OutputFormat.Jpg));
+        Assert.StartsWith(deletePrefix, UploadContract.TimelapsePath(id));
+    }
+
+    [Fact]
     public void TokenDownloadUrl_Encodes_Slashes()
     {
         var url = UploadContract.TokenDownloadUrl("mcphoto.appspot.com", "results/sid/final.jpg", "tok-123");

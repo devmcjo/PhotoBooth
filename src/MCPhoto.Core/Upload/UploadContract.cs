@@ -8,8 +8,21 @@ namespace MCPhoto.Core.Upload;
 /// </summary>
 public static class UploadContract
 {
-    /// <summary>새 세션 토큰(UUIDv4). 문서 ID이자 접근 열쇠(추측 불가). firebase-contract §3.3.</summary>
+    /// <summary>새 세션 토큰(UUIDv4). 세션 ID의 uuid 부분(추측 불가 접근 열쇠). firebase-contract §3.3.</summary>
     public static string NewSessionToken() => Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// 세션 폴더/문서 ID 앞에 붙일 날짜_시간(초) prefix: `yyyyMMdd_HHmmss`. **로컬 시간** 기준 —
+    /// results/ 하위 세션 폴더를 시각으로 정렬·검색하기 쉽게 한다. (사용자 요청 — 파일명 아님, 폴더=sessionId)
+    /// </summary>
+    public static string StampPrefix(DateTime localTime) => localTime.ToString("yyyyMMdd_HHmmss");
+
+    /// <summary>
+    /// 새 세션 ID = `{yyyyMMdd_HHmmss}_{uuid}`. 이 값이 곧 **results/ 하위 폴더명 · Firestore 문서 ID · 다운로드 토큰**이다.
+    /// 앞의 날짜_시간으로 폴더가 시간순 정렬·검색되고, 뒤의 uuid로 추측 불가 유지.
+    /// 자동삭제(PurgeExpired)는 이 ID를 그대로 `results/{id}/` 폴더 prefix로 재사용하므로 정합(별도 변경 불필요).
+    /// </summary>
+    public static string NewSessionId(DateTime localTime) => $"{StampPrefix(localTime)}_{NewSessionToken()}";
 
     /// <summary>최종 이미지 Storage 경로: results/{sessionId}/final.{ext}. §4.2</summary>
     public static string FinalImagePath(string sessionId, OutputFormat format)

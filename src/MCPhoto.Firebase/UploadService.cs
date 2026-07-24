@@ -38,7 +38,9 @@ public sealed class UploadService : IUploadService
         if (!wantPhoto && !wantTimelapse)
             throw new InvalidOperationException("전송할 미디어가 없습니다(사진·타임랩스 모두 off/부재). QR 연동 규칙 위반.");
 
-        var token = UploadContract.NewSessionToken();
+        // 세션 ID = 날짜_시간(초, 로컬)_uuid. results/ 하위 폴더명이 되어 Storage에서 시각으로 찾기 쉽다(사용자 요청).
+        // 이 ID가 폴더·문서ID·다운로드토큰·자동삭제 prefix를 모두 공유하므로 삭제 루틴 정합(파일명·로컬경로 무변경).
+        var token = UploadContract.NewSessionId(DateTime.Now);
 
         // 1) 최종 이미지 업로드 + 토큰 URL. off면 null.
         // it11 #16: 파일 단위 진행률(IProgress<double>)을 해당 단계(UploadProgress)로 합성해 상위에 보고.

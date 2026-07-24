@@ -73,6 +73,8 @@ public class UploadServiceTests
             Assert.Equal(2, mock.UploadedPaths.Count);
             Assert.Contains(mock.UploadedPaths, p => p.EndsWith("/final.jpg"));
             Assert.Contains(mock.UploadedPaths, p => p.EndsWith("/timelapse.mp4"));
+            // 자동삭제 정합: 업로드 폴더 = results/{session.Id}/ (PurgeExpired가 이 prefix로 삭제)
+            Assert.All(mock.UploadedPaths, p => Assert.StartsWith($"results/{session.Id}/", p));
 
             // ResultSession 문서 1건 생성
             Assert.Single(mock.CreatedSessions);
