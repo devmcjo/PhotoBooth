@@ -1,0 +1,1 @@
+- [Backend proxy functions](backend-proxy-functions.md) — web/functions(Cloud Functions TS) 검증법(tsc/eslint/jest + Emulator 스모크 36케이스)·인가 우회 검증 포인트·시크릿 위생

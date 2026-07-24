@@ -1,0 +1,18 @@
+# 의존성·빌드 산출물
+node_modules/
+lib/
+
+# 시크릿(절대 커밋 금지) — 로컬 개발/Emulator용 .env
+.env
+.env.*
+!.env.example
+
+# 로그
+*.log
+firebase-debug.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+
+# Emulator/런타임 캐시
+.firebase/
