@@ -175,6 +175,8 @@ internal static class ServiceRegistration
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<UserMgmtViewModel>();
         services.AddTransient<AccountViewModel>();
+        // item1a §9.4: 비밀번호 찾기 화면(백엔드 모드 전용, 진입마다 새 인스턴스로 단계 초기화).
+        services.AddTransient<PasswordResetViewModel>();
         // it11 #14: 진단 VM(모달 진입마다 새 인스턴스 — 최신 카메라·상태 반영).
         services.AddTransient<DiagnosticsViewModel>();
     }

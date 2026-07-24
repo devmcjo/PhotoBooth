@@ -32,6 +32,12 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
     /// </summary>
     public bool IsServerOffline => !_firebase.IsInitialized;
 
+    /// <summary>
+    /// 백엔드 모드 여부(item1a §9.4 게이트). "비밀번호 찾기" 링크는 이메일 인프라가 있는
+    /// 백엔드 모드에서만 노출한다(레거시 Firebase 경로엔 재설정 인프라 없음).
+    /// </summary>
+    public bool IsBackendMode => _shell.Settings.Current.UseBackend;
+
     public LoginGuestViewModel(AppShellViewModel shell, IAccountService accounts, IFirebaseClient firebase,
         ILogger<LoginGuestViewModel>? logger = null)
     {
@@ -74,4 +80,8 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
 
     [RelayCommand]
     private async Task Cancel() => await _shell.ReturnFromOverlay();
+
+    /// <summary>비밀번호 찾기 화면으로 진입(백엔드 모드 전용, item1a §9.4).</summary>
+    [RelayCommand]
+    private async Task ForgotPassword() => await _shell.OpenPasswordReset();
 }

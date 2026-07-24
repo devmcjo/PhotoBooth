@@ -26,6 +26,62 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ══════════ 이메일 등록/인증 (비번 변경 모드 하단, 백엔드 전용) item1a §9.3 ══════════ -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <Border.Visibility>
+                        <MultiBinding Converter="{StaticResource AllTrueToVis}">
+                            <Binding Path="IsPasswordChange" />
+                            <Binding Path="IsBackendMode" />
+                        </MultiBinding>
+                    </Border.Visibility>
+                    <StackPanel>
+                        <TextBlock Text="이메일 인증" Style="{StaticResource Text.H2}" Margin="0,0,0,4" />
+                        <TextBlock Text="이메일을 인증하면 비밀번호를 잊어도 재설정할 수 있어요."
+                                   Style="{StaticResource Text.Caption}" Margin="0,0,0,16" TextWrapping="Wrap" />
+
+                        <!-- 현재 상태: 인증 완료 배지(로그인 배너와 동일한 surface+톤 패턴) -->
+                        <Border Background="{StaticResource Brush.Success.Surface}" CornerRadius="{StaticResource Radius.S}"
+                                Padding="12,8" Margin="0,0,0,12" HorizontalAlignment="Left"
+                                Visibility="{Binding IsEmailVerified, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Success}"
+                                       Text="{Binding CurrentEmail, StringFormat='인증됨: {0}'}" />
+                        </Border>
+
+                        <!-- 이메일 등록/변경 입력 -->
+                        <TextBlock Text="이메일" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding EmailInput, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="1" Content="등록" Style="{StaticResource Button.Secondary}"
+                                    Command="{Binding RegisterEmailCommand}" Margin="8,0,0,0" />
+                        </Grid>
+
+                        <!-- 인증 코드 입력(미인증 상태에서 노출) -->
+                        <StackPanel Visibility="{Binding IsEmailVerified, Converter={StaticResource InverseBoolToVis}}">
+                            <TextBlock Text="인증 코드 (6자리)" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding EmailVerifyCode, UpdateSourceTrigger=PropertyChanged}"
+                                         MaxLength="6" />
+                                <Button Grid.Column="1" Content="인증" Style="{StaticResource Button.Primary}"
+                                        Command="{Binding VerifyEmailCommand}" Margin="8,0,0,0" />
+                                <Button Grid.Column="2" Content="코드 재발송" Style="{StaticResource Button.Ghost}"
+                                        Command="{Binding ResendEmailVerificationCommand}" Margin="8,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding EmailMessage}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   Foreground="{Binding EmailMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- ══════════ 계정 생성 (power) ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16"
                         Visibility="{Binding IsAccountCreate, Converter={StaticResource BoolToVis}}">
@@ -35,6 +91,13 @@
                         <TextBox Text="{Binding NewAccountId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
                         <TextBlock Text="새 비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                         <PasswordBox x:Name="NewAccountPwBox" Margin="0,0,0,12" PasswordChanged="OnNewAccountPasswordChanged" />
+
+                        <!-- item1a §9.3: 이메일(백엔드 모드 전용). 생성 시 인증 코드 발송. -->
+                        <StackPanel Visibility="{Binding IsBackendMode, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="이메일 (선택 · 인증 코드 발송)" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding NewAccountEmail, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
+                        </StackPanel>
+
                         <TextBlock Text="역할" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                         <ComboBox ItemsSource="{Binding CreatableRoles}" SelectedItem="{Binding SelectedNewRole}"
                                   Width="180" HorizontalAlignment="Left" Margin="0,0,0,12" />

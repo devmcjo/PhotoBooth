@@ -27,7 +27,7 @@ public class LoginGuestViewModelTests
     {
         public Task<User?> LoginAsync(string id, string password, CancellationToken ct = default)
             => Task.FromResult<User?>(null);
-        public Task<User> CreateAsync(string id, string password, UserRole role, UserRole actingRole, CancellationToken ct = default)
+        public Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default)
@@ -35,6 +35,13 @@ public class LoginGuestViewModelTests
         public Task DeleteAsync(string id, CancellationToken ct = default) => Task.CompletedTask;
         public Task SetRoleAsync(string id, UserRole role, CancellationToken ct = default) => Task.CompletedTask;
         public Task EnsureSeedAccountAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetEmailAsync(string id, string email, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
     }
 
     private static LoginGuestViewModel MakeVm(bool serverInitialized)

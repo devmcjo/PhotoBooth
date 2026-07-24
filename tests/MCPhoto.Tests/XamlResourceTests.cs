@@ -221,6 +221,44 @@ public class XamlResourceTests
     // SettingsView가 참조하는 모든 테마 StaticResource가
     // 해석되는지 headless로 검증(창 미표시). 로컬 키·App 컨버터 키는 제외.
 
+    // ── item1a §9.4/§9.3: 비밀번호 찾기·계정 페이지(이메일 인증 섹션) StaticResource 정적 안전망 ──
+    // 신규/수정 View가 참조하는 모든 테마 StaticResource가 해석되는지 headless로 검증(창 미표시).
+
+    [Theory]
+    [InlineData("PasswordResetView.xaml")]
+    [InlineData("AccountView.xaml")]
+    [InlineData("LoginGuestView.xaml")]
+    public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
+
+        // 자체 정의 리소스(UserControl.Resources)는 제외.
+        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+
+        // App.xaml에 정의된 공용 컨버터 키(테마 딕셔너리 밖)는 검증 대상이 아님.
+        var appKeys = new HashSet<string>
+        {
+            "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
+            "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
+            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "RoleActionVis", "FilePathToImage",
+        };
+
+        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(k => k.Length > 0 && !localKeys.Contains(k) && !appKeys.Contains(k))
+            .Distinct()
+            .ToArray();
+
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var missing = referenced.Where(k => !theme.Contains(k)).ToList();
+            Assert.True(missing.Count == 0,
+                $"{file} 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
+        });
+    }
+
     [Fact]
     public void SettingsView_StaticResource_Keys_Resolve_In_Theme()
     {

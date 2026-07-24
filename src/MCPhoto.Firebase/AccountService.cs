@@ -51,7 +51,7 @@ public sealed class AccountService : IAccountService
         return ToUser(doc);
     }
 
-    public async Task<User> CreateAsync(string id, string password, UserRole role, UserRole actingRole, CancellationToken ct = default)
+    public async Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
     {
         // 권한 게이트를 먼저 검사(호출자 신뢰 금지, it2 §7). 위반이 미초기화보다 우선.
         if (!actingRole.CanCreate(role))
@@ -63,6 +63,8 @@ public sealed class AccountService : IAccountService
         var existing = await docRef.GetSnapshotAsync(ct);
         if (existing.Exists) throw new InvalidOperationException($"이미 존재하는 아이디입니다: {id}");
 
+        // item1a §9.1: email은 레거시 경로에서 무시한다(현행 동작 유지). 이메일 인증 인프라는 백엔드 전용이며,
+        // 계정 생성 UI의 email 필드도 백엔드 모드에서만 노출되므로 레거시로 email이 흘러들지 않는다.
         var now = DateTime.UtcNow;
         var doc = new UserDoc { Id = id, Password = password, Role = role.ToFirestoreValue(), CreatedAt = Timestamp.FromDateTime(now) };
         await docRef.SetAsync(doc, cancellationToken: ct);
@@ -118,6 +120,32 @@ public sealed class AccountService : IAccountService
             _logger?.LogInformation("시드 계정 생성: {Id}", SeedId);
         }
     }
+
+    // ── item1a: 이메일 인증 + 비밀번호 재설정 (HTTP 전용 기능) ──
+    // 레거시 Firebase 경로엔 이메일 인프라(토큰 서브컬렉션·메일 발송)가 없다. UI가 백엔드 모드에서만
+    // 이 기능을 노출하므로 아래는 도달하지 않는다(도달하면 설정 오류 → 명확히 실패시킨다). (item1a §9.1)
+    private const string NotSupportedMsg = "이메일 인증·비밀번호 재설정은 백엔드 모드에서만 지원됩니다.";
+
+    public Task SetEmailAsync(string id, string email, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
+
+    public Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
+
+    public Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
+
+    public Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
+
+    public Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
+
+    public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
+
+    public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default)
+        => throw new NotSupportedException(NotSupportedMsg);
 
     private static User ToUser(UserDoc d) => new()
     {

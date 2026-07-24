@@ -63,7 +63,7 @@ public class AccountTests
         // 게이트는 통과(admin→user)하지만 미초기화라 InvalidOperationException
         var svc = new AccountService(OfflineClient(), new NoopFrameRepo());
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.CreateAsync("newuser", "pw", UserRole.User, actingRole: UserRole.Admin));
+            () => svc.CreateAsync("newuser", "pw", UserRole.User, email: null, actingRole: UserRole.Admin));
     }
 
     // ── it2 §7: 계정 생성 역할 게이트(서비스 강제) ──
@@ -74,7 +74,7 @@ public class AccountTests
         var svc = new AccountService(OfflineClient(), new NoopFrameRepo());
         // manager는 manager를 만들 수 없음 → 미초기화보다 권한 위반이 우선(UnauthorizedAccessException)
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.CreateAsync("m2", "pw", UserRole.Manager, actingRole: UserRole.Manager));
+            () => svc.CreateAsync("m2", "pw", UserRole.Manager, email: null, actingRole: UserRole.Manager));
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class AccountTests
     {
         var svc = new AccountService(OfflineClient(), new NoopFrameRepo());
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.CreateAsync("a2", "pw", UserRole.Admin, actingRole: UserRole.Admin));
+            () => svc.CreateAsync("a2", "pw", UserRole.Admin, email: null, actingRole: UserRole.Admin));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class AccountTests
     {
         var svc = new AccountService(OfflineClient(), new NoopFrameRepo());
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.CreateAsync("x", "pw", UserRole.User, actingRole: UserRole.User));
+            () => svc.CreateAsync("x", "pw", UserRole.User, email: null, actingRole: UserRole.User));
     }
 
     // ── 게이트 판정 순수 로직(CanCreate/CreatableRoles) ──

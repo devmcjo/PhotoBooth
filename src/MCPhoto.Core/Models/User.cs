@@ -14,4 +14,10 @@ public sealed class User
     public UserRole Role { get; set; } = UserRole.User;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>계정 이메일(소문자 정규화). 미수집/레거시 계정은 null. (item1a 설계 §4.1)</summary>
+    public string? Email { get; set; }
+
+    /// <summary>이메일 소유 확인 여부. 생성 시 false, verify 성공 시 true. (item1a 설계 §4.1)</summary>
+    public bool EmailVerified { get; set; }
 }

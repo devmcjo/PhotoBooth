@@ -14,8 +14,9 @@ public interface IAccountService
     /// 계정 생성. actingRole(호출자 역할) 기준으로 권한 게이트를 서비스가 강제한다(it2 §7):
     /// admin→{user,manager}, manager→{user}만, 그 외 거부. admin→admin 거부(최종 1인).
     /// 위반 시 <see cref="UnauthorizedAccessException"/>. 중복 id면 예외.
+    /// <paramref name="email"/>이 주어지면 unverified로 생성하고 서버가 인증 메일을 발송한다(item1a §8.1).
     /// </summary>
-    Task<User> CreateAsync(string id, string password, UserRole role, UserRole actingRole, CancellationToken ct = default);
+    Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default);
 
     /// <summary>비밀번호 변경.</summary>
     Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default);
@@ -31,4 +32,41 @@ public interface IAccountService
 
     /// <summary>시드 계정(devmcjo/1111/admin) 없으면 생성.</summary>
     Task EnsureSeedAccountAsync(CancellationToken ct = default);
+
+    // ── item1a: 이메일 인증 + 비밀번호 재설정(백엔드 전용 기능, HTTP 구현만 지원) ──
+
+    /// <summary>
+    /// 계정 이메일 등록/변경(본인/파워). 서버가 emailVerified=false로 리셋하고 새 email 소유 확인 메일을 발송한다.
+    /// (item1a §8.3) — HTTP 전용. 레거시 Firebase 경로는 <see cref="NotSupportedException"/>.
+    /// </summary>
+    Task SetEmailAsync(string id, string email, CancellationToken ct = default);
+
+    /// <summary>
+    /// 비밀번호 재설정 요청(비로그인). idOrEmail로 계정 조회 → 검증된 이메일로 재설정 코드/링크 발송.
+    /// 열거 방지: 존재/상태 무관 성공(202)으로 반환한다. (item1a §8.4) — HTTP 전용.
+    /// </summary>
+    Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default);
+
+    /// <summary>비밀번호 재설정 확인(링크 경로): 결합 토큰 + 계정 id + 새 비번. (item1a §8.4) — HTTP 전용.</summary>
+    Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default);
+
+    /// <summary>비밀번호 재설정 확인(코드 경로, 키오스크): idOrEmail + 6자리 코드 + 새 비번. (item1a §8.4) — HTTP 전용.</summary>
+    Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default);
+
+    /// <summary>
+    /// 이메일 인증 재발송 요청. idOrEmail로 계정 조회 → 미인증이면 코드/링크 재발송.
+    /// 열거 방지: 존재/상태 무관 성공(202)으로 반환한다. (item1a §8.2) — HTTP 전용.
+    /// </summary>
+    Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default);
+
+    /// <summary>
+    /// 이메일 인증 확인(코드 경로, 키오스크): 계정 id + 6자리 코드. 성공 시 true(emailVerified=true).
+    /// (item1a §8.2) — HTTP 전용.
+    /// </summary>
+    Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default);
+
+    /// <summary>
+    /// 이메일 인증 확인(링크 경로): 계정 id + 결합 토큰. 성공 시 true. (item1a §8.2) — HTTP 전용.
+    /// </summary>
+    Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default);
 }

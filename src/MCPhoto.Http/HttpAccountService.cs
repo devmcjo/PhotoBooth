@@ -57,7 +57,7 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
     }
 
     public async Task<User> CreateAsync(
-        string id, string password, UserRole role, UserRole actingRole, CancellationToken ct = default)
+        string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
     {
         // 현행 계약 보존(AccountService.cs:57): 게이트 위반은 서버 왕복 전에 즉시 거부(동일 예외).
         // 서버도 토큰 role로 재검증하므로 이중 방어(클라 위조 무의미).
@@ -67,9 +67,17 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
 
         try
         {
+            // email은 선택. 빈 문자열은 null로 정규화(서버가 미수집으로 처리, item1a §8.1).
+            var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
             var res = await SendJsonAsync<UserResponse>(
                 HttpMethod.Post, "accounts",
-                new CreateAccountRequest { Id = id, Password = password, Role = role.ToFirestoreValue() },
+                new CreateAccountRequest
+                {
+                    Id = id,
+                    Password = password,
+                    Role = role.ToFirestoreValue(),
+                    Email = normalizedEmail,
+                },
                 bearer: true, ct).ConfigureAwait(false);
 
             return ToUser(res) ?? new User { Id = id, Role = role };
@@ -145,6 +153,131 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
     /// </summary>
     public Task EnsureSeedAccountAsync(CancellationToken ct = default) => Task.CompletedTask;
 
+    // ── item1a: 이메일 인증 + 비밀번호 재설정 (§8.2·§8.3·§8.4) ──
+
+    public async Task SetEmailAsync(string id, string email, CancellationToken ct = default)
+    {
+        try
+        {
+            // Bearer(본인/파워). 204. 서버가 emailVerified=false 리셋 + 인증 메일 발송.
+            await SendNoContentAsync(
+                HttpMethod.Patch, $"accounts/{Uri.EscapeDataString(id)}/email",
+                new SetEmailRequest { Email = email },
+                bearer: true, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default)
+    {
+        try
+        {
+            // API키(비로그인). 서버는 존재/상태 무관 202(열거 방지) — 202는 2xx이므로 그대로 성공 통과.
+            await SendNoContentAsync(
+                HttpMethod.Post, "auth/password-reset/request",
+                new IdOrEmailRequest { IdOrEmail = idOrEmail },
+                bearer: false, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default)
+    {
+        try
+        {
+            // 링크 경로: {token, id, newPassword}. 성공 200 {reset:true}, 실패 400/401.
+            await SendNoContentAsync(
+                HttpMethod.Post, "auth/password-reset/confirm",
+                new PasswordResetConfirmByTokenRequest { Token = token, Id = id, NewPassword = newPassword },
+                bearer: false, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default)
+    {
+        try
+        {
+            // 코드 경로: {idOrEmail, code, newPassword}. 성공 200, 실패 400/401(코드 불일치·만료).
+            await SendNoContentAsync(
+                HttpMethod.Post, "auth/password-reset/confirm",
+                new PasswordResetConfirmByCodeRequest { IdOrEmail = idOrEmail, Code = code, NewPassword = newPassword },
+                bearer: false, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default)
+    {
+        try
+        {
+            // API키. 서버는 존재/상태 무관 202(열거 방지·재발송 겸용).
+            await SendNoContentAsync(
+                HttpMethod.Post, "auth/verify-email/request",
+                new IdOrEmailRequest { IdOrEmail = idOrEmail },
+                bearer: false, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default)
+    {
+        try
+        {
+            // 코드 경로: {id, code}. 성공 200 {verified:true}.
+            var res = await SendJsonAsync<VerifyEmailResponse>(
+                HttpMethod.Post, "auth/verify-email/confirm",
+                new VerifyEmailConfirmByCodeRequest { Id = id, Code = code },
+                bearer: false, ct).ConfigureAwait(false);
+            return res.Verified;
+        }
+        catch (BackendException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
+        {
+            // 코드 불일치·만료는 인증 실패(false)로 다룬다(예외 대신 결과값 — UI가 안내).
+            return false;
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default)
+    {
+        try
+        {
+            // 링크 경로: {token, id}. 성공 200 {verified:true}.
+            var res = await SendJsonAsync<VerifyEmailResponse>(
+                HttpMethod.Post, "auth/verify-email/confirm",
+                new VerifyEmailConfirmByTokenRequest { Token = token, Id = id },
+                bearer: false, ct).ConfigureAwait(false);
+            return res.Verified;
+        }
+        catch (BackendException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
+        {
+            return false;
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
     /// <summary>UserResponse(비번 미포함) → 도메인 User. Password는 채우지 않는다(UI 미표시, 설계 §6.2).</summary>
     private static User? ToUser(UserResponse? dto)
     {
@@ -155,6 +288,8 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
             Password = string.Empty,
             Role = UserRoleExtensions.ParseRole(dto.Role),
             CreatedAt = ParseIso(dto.CreatedAt),
+            Email = dto.Email,
+            EmailVerified = dto.EmailVerified,
         };
     }
 

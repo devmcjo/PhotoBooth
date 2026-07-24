@@ -200,6 +200,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         AppState.Settings => _services.GetRequiredService<SettingsViewModel>(),
         AppState.UserMgmt => _services.GetRequiredService<UserMgmtViewModel>(),
         AppState.Account => CreateAccountViewModel(),
+        AppState.PasswordReset => _services.GetRequiredService<PasswordResetViewModel>(),
         _ => null
     };
 
@@ -335,6 +336,17 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
             IsAccountPopupOpen = !IsAccountPopupOpen;
         else
             await NavigateToOverlayAsync(AppState.Login);
+    }
+
+    /// <summary>
+    /// 비밀번호 찾기 화면 진입(로그인 화면에서만). 복귀 지점을 명시적으로 Login으로 두어
+    /// 취소/완료 시 로그인 화면으로 돌아가게 한다(NavigateToOverlayAsync는 Login에서 진입 시
+    /// 복귀 지점을 저장하지 않으므로 여기서 직접 설정). (item1a §9.4)
+    /// </summary>
+    public async Task OpenPasswordReset()
+    {
+        _returnState = AppState.Login;
+        await NavigateAsync(AppState.PasswordReset);
     }
 
     /// <summary>계정 페이지(오버레이) 진입 + 모드 저장. 복귀는 진입 전 화면으로. (it5 §5 C2)</summary>
