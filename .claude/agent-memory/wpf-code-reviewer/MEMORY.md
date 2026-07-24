@@ -1,1 +1,2 @@
 - [Settings 왕복 4곳 관례](photobooth-settings-roundtrip-convention.md) — AppSettings 신규 필드=필드+Clamp+Clone+INI 4곳 동시반영, 누락 시 조용히 깨짐. 리뷰 시 1건씩 대조
+- [백엔드 프록시 HTTP 계약](photobooth-backend-proxy-contract.md) — MCPhoto.Http↔web/functions 1:1 계약 체크포인트(에러봉투·API키/Bearer·서명URL·토큰 재조립·DI flag 무회귀)
