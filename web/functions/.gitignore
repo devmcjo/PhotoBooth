@@ -6,6 +6,9 @@ lib/
 .env
 .env.*
 !.env.example
+# 에뮬레이터 전용 시크릿 값(defineSecret 오버라이드). 절대 커밋 금지.
+.secret.local
+*.local
 
 # 로그
 *.log
