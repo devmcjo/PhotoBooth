@@ -199,3 +199,24 @@ BackendApiKey=<②의 BackendApiKey>
 | 배포 스모크 | `node functions/scripts/post-deploy-smoke.mjs` (BASE_URL·API_KEY 지정) |
 | 즉시 롤백 | `MCPhoto.ini`의 `UseBackend=false` |
 | 함수 로그 | `firebase functions:log --project mcphoto-955fb` |
+
+---
+
+## 문제 해결 (실제로 겪은 이슈)
+
+배포 함수는 로그인·프레임·업로드 시 **런타임 서비스계정 `712395684881-compute@developer.gserviceaccount.com`** 로 DB(Firestore)·Storage에 접근한다. `firebase deploy`는 이 계정에 **시크릿 접근 권한만 자동 부여**하고, **DB/Storage 접근 역할과 서명(signBlob) 권한은 자동으로 주지 않는다.** 그래서 아래 두 권한을 수동으로 부여해야 한다. 둘 다 **IAM 및 관리자** 콘솔 작업(gcloud 불필요), 부여 후 1~5분 전파.
+
+### 증상 A: 로그인·프레임 조회가 500 (간헐 포함)
+- 함수 로그(`firebase functions:log`)에 **`7 PERMISSION_DENIED: Missing or insufficient permissions`** (Firestore).
+- **원인**: compute 계정에 Firestore 접근 역할 없음.
+- **해결**: Cloud Console → **IAM 및 관리자 → IAM** → compute 계정 찾기(없으면 **액세스 권한 부여**로 이메일 추가) → 역할 **편집자**(Editor) 추가 → 저장. (더 좁게: **Cloud Datastore 사용자** + **저장소 관리자**.)
+- 부여 직후엔 인스턴스 캐시로 **일부 요청만 성공(간헐 500)** 하다가 몇 분 내 전부 성공으로 수렴.
+
+### 증상 B: 프레임 저장·업로드가 500 (조회는 됨)
+- 함수 로그에 **`Permission 'iam.serviceAccounts.signBlob' denied`** (SigningError).
+- **원인**: 서명 URL 발급에 필요한 signBlob 권한 없음. **편집자(Editor) 역할엔 signBlob이 포함되지 않는다** — 별도 부여 필수.
+- **해결(= 위 §A2/③와 동일, 대상 계정 주의)**: Cloud Console → **IAM 및 관리자 → 서비스 계정** → **`712395684881-compute@developer.gserviceaccount.com`** 클릭 *(⚠️ `firebase-adminsdk-…` 계정 아님)* → **권한** 탭 → **액세스 권한 부여** → 새 주 구성원에 **같은 compute 이메일**(자기 자신) → 역할 **서비스 계정 토큰 생성자**(Service Account Token Creator) → 저장.
+- ⚠️ 흔한 실수: `firebase-adminsdk-…` 계정에 부여(대상 틀림) / Editor만 부여하고 Token Creator 누락 / compute 계정 생성 전(첫 배포 전)에 시도.
+
+### 참고: 앱 코드 수정 반영
+설정 진입 비밀번호 게이트 버그 수정은 **WPF 앱 코드**에 반영됐다(커밋 `d1c32e3`). 배포 PC에서 쓰려면 **앱을 다시 빌드해 배포 폴더(예: `...\PhotoBooth\`)에 갱신**해야 적용된다(백엔드 재배포와 무관).
