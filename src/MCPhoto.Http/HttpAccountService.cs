@@ -56,6 +56,27 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
     }
 
+    public async Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default)
+    {
+        try
+        {
+            // /auth/login 재사용(서버 잠금 없음). 세션은 갱신하지 않는다(SignIn 미호출) — 재인증 목적.
+            await SendJsonAsync<LoginResponse>(
+                HttpMethod.Post, "auth/login",
+                new LoginRequest { Id = id, Password = password },
+                bearer: false, ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return false; // 자격 불일치
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex); // 네트워크/서버 오류는 전파(잘못된 통과=fail-open 방지)
+        }
+    }
+
     public async Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
         string? nonce = null, CancellationToken ct = default)
     {

@@ -60,6 +60,23 @@ public class AccountTests
         Assert.Null(await svc.LoginAsync("unknown", "1111"));
     }
 
+    // ── 재인증 게이트: VerifyPasswordAsync(레거시 경로는 LoginAsync 재사용) ──
+
+    [Fact]
+    public async Task VerifyPassword_Correct_Credential_Returns_True()
+    {
+        var svc = new AccountService(OfflineClient(), new NoopFrameRepo());
+        Assert.True(await svc.VerifyPasswordAsync("devmcjo", "1111"));
+    }
+
+    [Fact]
+    public async Task VerifyPassword_Wrong_Credential_Returns_False()
+    {
+        var svc = new AccountService(OfflineClient(), new NoopFrameRepo());
+        Assert.False(await svc.VerifyPasswordAsync("devmcjo", "wrong"));
+        Assert.False(await svc.VerifyPasswordAsync("unknown", "1111"));
+    }
+
     [Fact]
     public async Task Offline_Create_Throws_When_Gate_Passes()
     {

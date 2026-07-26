@@ -51,6 +51,9 @@ public sealed class AccountService : IAccountService
         return ToUser(doc);
     }
 
+    public async Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default)
+        => (await LoginAsync(id, password, ct).ConfigureAwait(false)) is not null;
+
     public async Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
     {
         // 권한 게이트를 먼저 검사(호출자 신뢰 금지, it2 §7). 위반이 미초기화보다 우선.

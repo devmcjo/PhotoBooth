@@ -11,6 +11,13 @@ public interface IAccountService
     Task<User?> LoginAsync(string id, string password, CancellationToken ct = default);
 
     /// <summary>
+    /// 설정 진입 등 재인증 게이트용 비밀번호 검증. id+password가 유효하면 true, 자격 불일치면 false.
+    /// 백엔드 모드는 서버로 검증(응답에 비밀번호가 없어 클라 비교 불가), 레거시는 계정 조회로 검증.
+    /// 네트워크/서버 오류는 예외로 전파(게이트는 "확인 불가"로 처리 — 잘못된 통과(fail-open) 금지).
+    /// </summary>
+    Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default);
+
+    /// <summary>
     /// Google SSO 로그인(item1b §5·§7.6). 브라우저 loopback으로 받은 authorization code(+PKCE verifier·실제
     /// redirectUri·nonce)를 백엔드 POST /auth/google로 전달해 code 교환·id_token 검증·계정 매핑을 거쳐 JWT를 받는다.
     /// 성공 시 세션에 토큰·사용자를 저장하고 <see cref="User"/>를 반환한다.

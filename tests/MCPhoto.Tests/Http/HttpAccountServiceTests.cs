@@ -444,4 +444,78 @@ public class HttpAccountServiceTests
         // nonce 없이 호출 시 null 직렬화(서버가 nonce 검증 생략).
         Assert.Contains("\"nonce\":null", handler.Requests[0].Body!);
     }
+
+    // ── 재인증 게이트: VerifyPasswordAsync(설정 진입 전, 백엔드 모드 버그 수정) ──
+
+    [Fact]
+    public async Task VerifyPassword_Success_200_Returns_True()
+    {
+        var (svc, handler, _) = Make();
+        // /auth/login 재사용(서버 잠금 없음). 200 = 자격 유효.
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"jwt-verify\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        var ok = await svc.VerifyPasswordAsync("devmcjo", "1111");
+
+        Assert.True(ok);
+        var req = handler.Requests[0];
+        Assert.Contains("auth/login", req.Uri!.ToString());
+        Assert.Contains("\"id\":\"devmcjo\"", req.Body!);
+        Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API키 게이트(비로그인 엔드포인트)
+        Assert.Null(req.AuthorizationScheme); // Bearer 아님
+    }
+
+    [Fact]
+    public async Task VerifyPassword_Wrong_401_Returns_False_Not_Throws()
+    {
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.Unauthorized,
+            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"아이디 또는 비밀번호가 올바르지 않습니다.\"}}");
+
+        var ok = await svc.VerifyPasswordAsync("devmcjo", "wrong");
+
+        Assert.False(ok); // 자격 불일치 = false(예외 아님)
+    }
+
+    [Fact]
+    public async Task VerifyPassword_ServerError_500_Throws_FailClosed()
+    {
+        var (svc, handler, _) = Make();
+        // 네트워크/서버 오류는 전파(fail-closed — 게이트가 "확인 불가"로 처리, 오allow 방지).
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.InternalServerError,
+            "{\"error\":{\"code\":\"internal\",\"message\":\"서버 오류\"}}");
+
+        await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.VerifyPasswordAsync("devmcjo", "1111"));
+    }
+
+    [Fact]
+    public async Task VerifyPassword_Does_Not_Touch_Session_Token()
+    {
+        var (svc, handler, session) = Make();
+        // 재인증 목적: 현재 로그인 상태(토큰·사용자)를 보존한다. 검증 성공/실패 어느 쪽도 세션을 갱신하지 않는다.
+        session.SignIn("existing-token", new User { Id = "boss", Role = UserRole.Admin });
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"new-token-should-be-ignored\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        var ok = await svc.VerifyPasswordAsync("devmcjo", "1111");
+
+        Assert.True(ok);
+        Assert.Equal("existing-token", session.Token);    // 토큰 불변(SignIn 미호출)
+        Assert.Equal("boss", session.CurrentUser!.Id);    // 사용자 불변
+    }
+
+    [Fact]
+    public async Task VerifyPassword_Without_Session_Leaves_Session_Empty()
+    {
+        var (svc, handler, session) = Make();
+        // 세션이 비어 있어도 검증이 세션을 채우지 않음(SignIn 미호출 재확인).
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"leak-token\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        await svc.VerifyPasswordAsync("devmcjo", "1111");
+
+        Assert.Null(session.Token);
+        Assert.Null(session.CurrentUser);
+    }
 }

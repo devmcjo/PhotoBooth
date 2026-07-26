@@ -34,6 +34,9 @@ public class LoginGuestViewModelTests
         public Task<User?> LoginAsync(string id, string password, CancellationToken ct = default)
             => Task.FromResult<User?>(null);
 
+        public Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
             string? nonce = null, CancellationToken ct = default)
         {

@@ -322,7 +322,14 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         if (user is not null)
         {
             var prompt = _services.GetService<Services.IPasswordPromptDialogService>();
-            if (prompt is not null && !prompt.Prompt(user.Password ?? string.Empty))
+            var account = _services.GetService<MCPhoto.Core.Accounts.IAccountService>();
+            // fail-closed: 게이트 서비스가 없으면(향후 DI 변경 등) 재인증 없이 진입시키지 않는다.
+            // (현재는 둘 다 무조건 등록되므로 실현되지 않지만, 방어적으로 진입을 막는다.)
+            if (prompt is null || account is null)
+                return;
+            // 서버/서비스로 권위 있게 재인증(응답에 비밀번호가 없어 클라 평문 비교 불가).
+            var uid = user.Id;
+            if (!prompt.Prompt(pw => account.VerifyPasswordAsync(uid, pw)))
                 return;
         }
         await NavigateToOverlayAsync(AppState.Settings);
