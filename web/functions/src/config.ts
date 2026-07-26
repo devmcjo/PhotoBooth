@@ -109,15 +109,18 @@ export function loadConfig(): AppConfig {
     }
   }
 
-  // item1b: Google OAuth. client id·secret이 모두 있어야 활성화(sendgrid와 동일한 "사용 시에만" 원칙).
-  // 둘 다 미설정이면 비활성(/auth/google는 501). 한쪽만 설정된 부분 구성은 오구성으로 조기 실패.
+  // item1b: Google OAuth. 활성화 신호는 **CLIENT_ID(비밀 아님·env)** 다.
+  //  - defineSecret 모델에선 GOOGLE_OAUTH_CLIENT_SECRET이 배포 시 항상 존재해야 하므로
+  //    (SSO 미사용이어도 placeholder 등록 필요), "시크릿만 있고 id 없음"은 **정상 비활성** 상태다.
+  //  - 따라서 대칭 검사(hasId !== hasSecret)는 쓰지 않는다. id를 켰는데 시크릿이 없을 때만 오구성으로 조기 실패.
+  //  - 둘 다(혹은 id) 없으면 비활성(/auth/google는 501).
   const googleOAuthClientId = (process.env.GOOGLE_OAUTH_CLIENT_ID ?? "").trim();
   const googleOAuthClientSecret = (process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "").trim();
   const hasId = googleOAuthClientId.length > 0;
   const hasSecret = googleOAuthClientSecret.length > 0;
-  if (hasId !== hasSecret) {
+  if (hasId && !hasSecret) {
     throw new Error(
-      "GOOGLE_OAUTH_CLIENT_ID/SECRET는 함께 설정해야 합니다 — 한쪽만 설정된 부분 구성입니다."
+      "GOOGLE_OAUTH_CLIENT_ID가 설정됐지만 GOOGLE_OAUTH_CLIENT_SECRET이 없습니다 — SSO 활성화엔 둘 다 필요합니다."
     );
   }
   const googleOAuthEnabled = hasId && hasSecret;
