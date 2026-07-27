@@ -16,7 +16,9 @@ using MCPhoto.Http;
 using MCPhoto.Http.Session;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 
 namespace MCPhoto.App;
 
@@ -48,11 +50,10 @@ internal static class ServiceRegistration
         services.AddSingleton<ILogFolderService, LogFolderService>();
         services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();
 
-        // Step 2: 설정(INI) + 민감값 보호(DPAPI, Windows). ISettingsService에 protector를 명시 주입(팩토리 — DI 생성자 모호성 회피).
-        services.AddSingleton<ISecretProtector, DpapiSecretProtector>();
+        // Step 2: 설정(INI). 백엔드 게이트 키 기본값은 exe 빌드 시 내장(AssemblyMetadata, publish -p) → ini 불요.
         services.AddSingleton<ISettingsService>(sp => new IniSettingsService(
             sp.GetService<ILogger<IniSettingsService>>(),
-            protector: sp.GetRequiredService<ISecretProtector>()));
+            embeddedApiKeyDefault: EmbeddedBackendApiKey()));
 
         // Step 3: 캡처 파이프라인(카메라)
         services.AddSingleton<ICameraService, OpenCvCameraService>();
@@ -193,4 +194,13 @@ internal static class ServiceRegistration
         // it11 #14: 진단 VM(모달 진입마다 새 인스턴스 — 최신 카메라·상태 반영).
         services.AddTransient<DiagnosticsViewModel>();
     }
+
+    /// <summary>
+    /// publish 시 <c>-p:BackendApiKeyDefault</c>로 exe에 내장된 백엔드 게이트 키(AssemblyMetadata "MCPhoto.BackendApiKey").
+    /// 일반 빌드(속성 미지정)에선 속성이 없어 빈 문자열 → ini 오버라이드가 없으면 백엔드 미인증(오프라인 부스로 동작).
+    /// </summary>
+    private static string EmbeddedBackendApiKey() =>
+        Assembly.GetExecutingAssembly()
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "MCPhoto.BackendApiKey")?.Value ?? string.Empty;
 }

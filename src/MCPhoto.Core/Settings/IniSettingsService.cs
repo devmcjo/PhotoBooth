@@ -13,15 +13,17 @@ public sealed class IniSettingsService : ISettingsService
     private readonly ILogger<IniSettingsService>? _logger;
     private string _iniPath; // 폴백 성공 경로로 승격될 수 있음(it3 §3.2)
     private AppSettings? _current;
-    private readonly ISecretProtector _protector; // 백엔드 게이트 키 저장 보호(기본 패스스루)
+    // exe 빌드 시 내장된 백엔드 게이트 키(publish -p:BackendApiKeyDefault). ini에 오버라이드가 없을 때의 기본값.
+    // ini엔 이 값을 다시 쓰지 않는다(평문 유출 방지 — WriteFrom 참조). 없으면 빈 문자열.
+    private readonly string _embeddedApiKeyDefault;
 
     /// <param name="iniPath">테스트/커스텀용 명시 경로. null이면 기본 위치 자동 결정.</param>
-    /// <param name="protector">민감값 보호(기본 <see cref="NullSecretProtector"/>=평문). App은 DPAPI 구현 주입.</param>
-    public IniSettingsService(ILogger<IniSettingsService>? logger = null, string? iniPath = null, ISecretProtector? protector = null)
+    /// <param name="embeddedApiKeyDefault">exe 내장 게이트 키 기본값(App이 AssemblyMetadata에서 읽어 주입). ini 오버라이드가 우선.</param>
+    public IniSettingsService(ILogger<IniSettingsService>? logger = null, string? iniPath = null, string? embeddedApiKeyDefault = null)
     {
         _logger = logger;
         _iniPath = iniPath ?? ResolveDefaultPath();
-        _protector = protector ?? new NullSecretProtector();
+        _embeddedApiKeyDefault = embeddedApiKeyDefault ?? string.Empty;
     }
 
     public string IniPath => _iniPath;
@@ -31,6 +33,8 @@ public sealed class IniSettingsService : ISettingsService
     public AppSettings Load()
     {
         var settings = new AppSettings();
+        // 백엔드 게이트 키 기본값 = exe 내장(publish -p). ini 파일이 없어도 적용되도록 먼저 세팅(ini에 값 있으면 ReadInto가 덮어씀).
+        settings.BackendApiKey = _embeddedApiKeyDefault;
         try
         {
             if (File.Exists(_iniPath))
@@ -157,9 +161,9 @@ public sealed class IniSettingsService : ISettingsService
         s.StorageBucket = ini.GetString(Section, nameof(s.StorageBucket), s.StorageBucket);
         s.UseBackend = ini.GetBool(Section, nameof(s.UseBackend), s.UseBackend);
         s.BackendBaseUrl = ini.GetString(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
-        // 백엔드 게이트 키: 약어 키 'Ct'(DPAPI 암호화)에서 읽어 복호화. 구 평문 키 'BackendApiKey'도 폴백으로 읽어 이관.
-        var storedApiKey = ini.GetString(Section, "Ct", ini.GetString(Section, nameof(s.BackendApiKey), s.BackendApiKey));
-        s.BackendApiKey = _protector.Unprotect(storedApiKey);
+        // 백엔드 게이트 키: ini에 명시 오버라이드가 있으면 그것, 없으면 exe 내장 기본값(publish 시 주입).
+        var iniApiKey = ini.GetString(Section, nameof(s.BackendApiKey), string.Empty);
+        s.BackendApiKey = string.IsNullOrEmpty(iniApiKey) ? _embeddedApiKeyDefault : iniApiKey;
         s.GoogleClientId = ini.GetString(Section, nameof(s.GoogleClientId), s.GoogleClientId);
 
         s.WindowBounds.Left = ini.GetDouble(Section, "WindowLeft", s.WindowBounds.Left);
@@ -196,8 +200,10 @@ public sealed class IniSettingsService : ISettingsService
         ini.Set(Section, nameof(s.StorageBucket), s.StorageBucket);
         ini.SetBool(Section, nameof(s.UseBackend), s.UseBackend);
         ini.Set(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
-        // 약어 키 'Ct'에 DPAPI 암호문으로 저장(구 키명·평문 노출 회피). 구 'BackendApiKey' 키는 더 이상 쓰지 않는다(전체 재작성이라 자동 소멸).
-        ini.Set(Section, "Ct", _protector.Protect(s.BackendApiKey));
+        // 게이트 키는 exe 내장이 기본 → ini엔 쓰지 않는다(내장 키 평문 유출 방지).
+        // 단 내장값과 '다른' 명시 오버라이드(비어있지 않음)만 ini에 보존한다.
+        if (!string.IsNullOrEmpty(s.BackendApiKey) && s.BackendApiKey != _embeddedApiKeyDefault)
+            ini.Set(Section, nameof(s.BackendApiKey), s.BackendApiKey);
         ini.Set(Section, nameof(s.GoogleClientId), s.GoogleClientId);
 
         ini.SetDouble(Section, "WindowLeft", s.WindowBounds.Left);

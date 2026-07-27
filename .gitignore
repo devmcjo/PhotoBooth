@@ -43,6 +43,9 @@ google-services.json
 *.pem
 *.key
 
+# 백엔드 게이트 키(publish 주입용 로컬 파일) — 커밋 금지
+backend-apikey.local
+
 # ffmpeg 바이너리 (라이선스·용량, 인스톨러가 별도 번들)
 tools/ffmpeg/*.exe
 tools/ffmpeg/*.dll

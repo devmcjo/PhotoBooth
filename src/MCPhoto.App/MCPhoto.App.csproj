@@ -17,7 +17,6 @@
     <PackageReference Include="Serilog" Version="4.0.2" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +30,15 @@
   <!-- DI feature flag 분기(RegisterBackendOrFirebase) 단위 테스트를 위해 내부 가시성 부여. -->
   <ItemGroup>
     <InternalsVisibleTo Include="MCPhoto.Tests" />
+  </ItemGroup>
+
+  <!-- 백엔드 게이트 키 exe 내장: publish 시 -p:BackendApiKeyDefault=<키>를 주면 AssemblyMetadata로 바이너리에 박힌다.
+       키 값은 로컬 backend-apikey.local(gitignore)에서 publish.ps1이 읽어 전달 → git·소스엔 없음. 미지정 시 속성 없음(빈 값). -->
+  <ItemGroup Condition="'$(BackendApiKeyDefault)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MCPhoto.BackendApiKey</_Parameter1>
+      <_Parameter2>$(BackendApiKeyDefault)</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
 
   <!-- ffmpeg 번들(타임랩스 녹화·변환에 필수). ffprobe는 코드 미사용이라 제외(용량 절약). architecture §1.2 -->

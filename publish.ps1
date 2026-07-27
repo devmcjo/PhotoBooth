@@ -1,49 +1,34 @@
 <#
-  MCPhoto beta single-EXE build script.
+  MCPhoto single-EXE build script (KEYLESS / backend-only, gate key EMBEDDED in exe).
 
   Usage (from project root):
-      Double-click publish.bat            (recommended, service key INCLUDED)
-      Double-click publish-nokey.bat      (service key EXCLUDED / offline build)
+      Double-click publish.bat
       or:  powershell -ExecutionPolicy Bypass -File .\publish.ps1
-      or:  powershell -ExecutionPolicy Bypass -File .\publish.ps1 -NoServiceKey
-      or:  powershell -ExecutionPolicy Bypass -File .\publish.ps1 -KeyPath C:\path\serviceAccountKey.json
 
-  Parameters:
-      -KeyPath <string>   Explicit service account key path (highest priority source).
-      -NoServiceKey       Skip key lookup/copy (offline build, no server connectivity).
-
-  Service account key (it10 S1):
-      By default the Admin service account key is copied into the publish output so the
-      beta EXE connects to Firebase on a QA PC (login + default frame download).
-      Key source priority (first existing file wins):
-        1. -KeyPath argument
-        2. $env:MCPHOTO_SERVICE_KEY
-        3. %ProgramData%\MCPhoto\serviceAccountKey.json
-        4. repo root serviceAccountKey.json
-      If no key is found, publish still succeeds (offline build) with a warning.
-      WARNING: a key-included folder grants Admin access to Firestore/Storage.
-               Internal beta only - do NOT distribute externally.
+  Backend-only (no serviceAccountKey.json):
+      DB access goes through the backend (Cloud Functions). No Admin service key is bundled.
+      The backend gate key (one of CLIENT_API_KEYS) is EMBEDDED into the exe at publish time
+      via -p:BackendApiKeyDefault (AssemblyMetadata) so a bare exe works with NO ini.
+      Key source priority (first found wins), read locally and never committed:
+        1. $env:MCPHOTO_BACKEND_API_KEY
+        2. repo root 'backend-apikey.local'  (git-ignored)
+      If not found, publish still succeeds but the exe has no embedded key
+      (backend auth will fail until a key is provided; add 'BackendApiKey=<key>' to MCPhoto.ini).
+      NOTE: the embedded key is extractable by decompiling the exe (like any client key).
+            It is a LOW-VALUE, revocable gate key; real security is server-side (JWT + roles +
+            server-only service account). ini 'BackendApiKey=' overrides the embedded default.
 
   Output:
-      publish\MCPhoto\MCPhoto.exe                 (always this single path)
-      publish\MCPhoto\serviceAccountKey.json      (only when key found and not -NoServiceKey)
+      publish\MCPhoto\MCPhoto.exe     (single self-contained exe, gate key embedded)
+      publish\MCPhoto\bldinfo.ini     (version info)
 
   Notes:
     - Self-contained (.NET runtime embedded) -> no .NET install needed on target PC
     - Single file (PublishSingleFile) + bundled ffmpeg (tools\ffmpeg) for timelapse
     - Release, win-x64
-    - Key is git-ignored (.gitignore covers serviceAccountKey.json and publish/).
-    - App loads exe-folder key first, so no app code change is needed.
+    - App defaults: UseBackend=true, BackendBaseUrl + GoogleClientId built in.
     - ASCII only on purpose: avoids CP949/UTF-8 console mojibake on Korean Windows.
-    - Normal build output is unchanged:
-        dotnet build             -> src\MCPhoto.App\bin\Debug\net8.0-windows\
-        dotnet build -c Release  -> src\MCPhoto.App\bin\Release\net8.0-windows\
 #>
-
-param(
-    [string]$KeyPath = '',
-    [switch]$NoServiceKey
-)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -57,13 +42,36 @@ if ($running) {
     return
 }
 
+# ---- Backend gate key (embedded into exe, NOT committed) ----
+$apiKey = ''
+if ($env:MCPHOTO_BACKEND_API_KEY) {
+    $apiKey = $env:MCPHOTO_BACKEND_API_KEY.Trim()
+} else {
+    $keyFile = Join-Path $root 'backend-apikey.local'
+    if (Test-Path -LiteralPath $keyFile -PathType Leaf) {
+        $apiKey = (Get-Content -LiteralPath $keyFile -Raw).Trim()
+    }
+}
+
+$pubArgs = @(
+    $proj, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
+    '-p:PublishSingleFile=true',
+    '-p:IncludeNativeLibrariesForSelfExtract=true',
+    '-p:EnableCompressionInSingleFile=true',
+    '-p:DebugType=none',
+    '-o', $out
+)
+if ($apiKey) {
+    $pubArgs += "-p:BackendApiKeyDefault=$apiKey"
+    Write-Host "Backend gate key: EMBEDDED into exe (source: local, not committed)." -ForegroundColor Green
+} else {
+    Write-Host "Backend gate key: NOT found - exe will have NO embedded key." -ForegroundColor Yellow
+    Write-Host "  Set env MCPHOTO_BACKEND_API_KEY or create '$root\backend-apikey.local'," -ForegroundColor Yellow
+    Write-Host "  or add 'BackendApiKey=<key>' to MCPhoto.ini on the target PC." -ForegroundColor Yellow
+}
+
 Write-Host "Publishing... -> $out" -ForegroundColor Cyan
-dotnet publish $proj -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:EnableCompressionInSingleFile=true `
-  -p:DebugType=none `
-  -o $out
+dotnet publish @pubArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "publish failed (exit $LASTEXITCODE)"
@@ -85,46 +93,3 @@ if (Test-Path -LiteralPath $bldSource -PathType Leaf) {
 Write-Host "`nDone: $out\MCPhoto.exe" -ForegroundColor Green
 Get-ChildItem $out -Recurse -File |
     ForEach-Object { '{0,8:N2} MB  {1}' -f ($_.Length/1MB), $_.FullName.Substring($out.Length+1) }
-
-# ---- Service account key bundling (it10 S1) ----
-$keyDest       = Join-Path $out 'serviceAccountKey.json'
-$keyIncluded   = $false
-$keySource     = ''
-
-if ($NoServiceKey) {
-    Write-Host "`n-NoServiceKey specified: skipping service key copy (offline build)." -ForegroundColor Yellow
-} else {
-    # Build source candidate list in priority order; first existing file wins.
-    $candidates = @()
-    if ($KeyPath)                  { $candidates += $KeyPath }
-    if ($env:MCPHOTO_SERVICE_KEY)  { $candidates += $env:MCPHOTO_SERVICE_KEY }
-    if ($env:ProgramData)          { $candidates += (Join-Path $env:ProgramData 'MCPhoto\serviceAccountKey.json') }
-    $candidates += (Join-Path $root 'serviceAccountKey.json')
-
-    foreach ($cand in $candidates) {
-        if ($cand -and (Test-Path -LiteralPath $cand -PathType Leaf)) {
-            $keySource = (Resolve-Path -LiteralPath $cand).Path
-            break
-        }
-    }
-
-    if ($keySource) {
-        Copy-Item -LiteralPath $keySource -Destination $keyDest -Force
-        $keyIncluded = $true
-        Write-Host "`n============================================================" -ForegroundColor Red
-        Write-Host " WARNING: Admin service key INCLUDED - internal beta only." -ForegroundColor Red
-        Write-Host "          Do NOT distribute this folder externally." -ForegroundColor Red
-        Write-Host "============================================================" -ForegroundColor Red
-    } else {
-        Write-Host "`nService key NOT found - offline build (server features disabled on target PC)." -ForegroundColor Yellow
-        Write-Host "Searched: $($candidates -join '; ')" -ForegroundColor Yellow
-    }
-}
-
-# ---- Summary ----
-Write-Host ""
-if ($keyIncluded) {
-    Write-Host ("Service key: INCLUDED (source: {0})" -f $keySource) -ForegroundColor Green
-} else {
-    Write-Host "Service key: NOT INCLUDED" -ForegroundColor Yellow
-}
