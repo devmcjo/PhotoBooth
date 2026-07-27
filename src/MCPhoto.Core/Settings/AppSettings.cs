@@ -152,8 +152,10 @@ public sealed class AppSettings
     /// Google SSO OAuth 클라이언트 ID(item1b §7.2·§8.2). **비밀 아님**(client secret은 백엔드 전용, 클라에 미보관).
     /// authorize URL 조립에 사용된다. 빈 값이면 SSO opt-out — 로그인 화면에 "Google로 로그인" 버튼을 숨긴다
     /// (잠금 키오스크 배려). 백엔드 모드(UseBackend)에서만 의미가 있다.
+    /// 기본값에 운영 프로젝트(mcphoto-955fb) Desktop 클라이언트 ID를 내장 → 운영자 ini 입력 불요.
+    /// 다른 구글 프로젝트를 쓰려면 ini의 GoogleClientId로 오버라이드(HostingBaseUrl과 동일 패턴). 공개값이라 하드코딩 무해.
     /// </summary>
-    public string GoogleClientId { get; set; } = string.Empty;
+    public string GoogleClientId { get; set; } = "712395684881-l66ogdns5ppcc91ojaap4ju9ta3hc6d3.apps.googleusercontent.com";
 
     /// <summary>
     /// 값 범위·옵션 제약을 강제(로드/저장 시 호출). 잘못된 값은 가장 가까운 허용값으로 보정.

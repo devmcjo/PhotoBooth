@@ -61,10 +61,12 @@ public class BackendSettingsTests
     // ── item1b: GoogleClientId (§7.2) ──
 
     [Fact]
-    public void Default_GoogleClientId_Is_Empty()
+    public void Default_GoogleClientId_Is_Builtin_Operating_Client()
     {
+        // 운영 프로젝트(mcphoto-955fb) Desktop 클라이언트 ID를 기본값으로 내장 → 운영자 ini 입력 불요.
+        // 공개값이라 하드코딩 무해. 다른 프로젝트는 ini의 GoogleClientId로 오버라이드.
         var s = new AppSettings();
-        Assert.Equal(string.Empty, s.GoogleClientId); // 기본 SSO opt-out
+        Assert.Equal("712395684881-l66ogdns5ppcc91ojaap4ju9ta3hc6d3.apps.googleusercontent.com", s.GoogleClientId);
     }
 
     [Fact]
