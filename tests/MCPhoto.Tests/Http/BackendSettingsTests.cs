@@ -6,11 +6,13 @@ namespace MCPhoto.Tests.Http;
 public class BackendSettingsTests
 {
     [Fact]
-    public void Default_UseBackend_Is_Off()
+    public void Default_UseBackend_Is_On_With_Builtin_BaseUrl()
     {
+        // 키 폐기 후 백엔드 전용 운영 → 기본 ON + 운영 BaseUrl 내장(운영자 ini 입력 불요).
+        // BackendApiKey는 소스/기본값에 없음(배포 시 주입).
         var s = new AppSettings();
-        Assert.False(s.UseBackend);
-        Assert.Equal(string.Empty, s.BackendBaseUrl);
+        Assert.True(s.UseBackend);
+        Assert.Equal("https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api", s.BackendBaseUrl);
         Assert.Equal(string.Empty, s.BackendApiKey);
     }
 

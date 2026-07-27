@@ -91,7 +91,12 @@ public class AccountViewModelEmailTests
             s.BackendBaseUrl = "https://backend.test/api";
             s.BackendApiKey = "key";
         }
-        s.Clamp(); // 유효 URL이면 UseBackend 유지, 아니면 off
+        else
+        {
+            // 기본값이 이제 UseBackend=true(+내장 BaseUrl)이므로, 비-백엔드 테스트는 명시적으로 끈다.
+            s.UseBackend = false;
+        }
+        s.Clamp(); // 유효 URL이면 UseBackend 유지, 아니면 off. NormalizeBackend는 켜지는 방향으론 바꾸지 않음.
         return s;
     }
 

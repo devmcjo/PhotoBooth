@@ -129,18 +129,19 @@ public sealed class AppSettings
     /// </summary>
     public string StorageBucket { get; set; } = "mcphoto-955fb.firebasestorage.app";
 
-    // ── 백엔드 프록시(방향 B, 설계 §8.1). 안전 불변식: 기본 OFF = 현행 Firebase 경로 유지(롤백 가능). ──
+    // ── 백엔드 프록시(방향 B, 설계 §8.1). serviceAccountKey.json 폐기 후 **백엔드 전용 운영** → 기본 ON. ──
     /// <summary>
-    /// 백엔드 HTTPS API 경유 여부. 기본 off(현행 Firebase Admin 직결 유지 — 배포 전 앱 계속 동작·롤백 가능).
-    /// on이면 DI가 Http* 구현으로 분기. on인데 <see cref="BackendBaseUrl"/>이 비면 Clamp가 다시 off로 되돌린다.
+    /// 백엔드 HTTPS API 경유 여부. **기본 ON**(운영자 ini 미설정이어도 백엔드로 동작 — 키 제거 후 전용 경로).
+    /// on인데 <see cref="BackendBaseUrl"/>이 비면 Clamp가 off로 되돌린다(명시적 URL 비움 시 안전 폴백).
+    /// 백엔드 미도달(오프라인)은 설정 플립이 아니라 런타임에서 호출 실패→상위 폴백(프레임 로컬/번들 등)으로 처리한다.
     /// </summary>
-    public bool UseBackend { get; set; }
+    public bool UseBackend { get; set; } = true;
 
     /// <summary>
-    /// 백엔드 base URL(엔드포인트 주소, 공개값). 예: https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api.
-    /// 트레일링 슬래시는 제거하지 않는다(HttpClient BaseAddress는 슬래시로 끝나야 상대경로가 안전히 결합됨).
+    /// 백엔드 base URL(엔드포인트 주소, 공개값). 운영 프로젝트 기본값 내장 → 운영자 ini 입력 불요
+    /// (다른 백엔드는 ini의 BackendBaseUrl로 오버라이드). 트레일링 슬래시는 Clamp가 보정(HttpClient BaseAddress 상대결합 안전).
     /// </summary>
-    public string BackendBaseUrl { get; set; } = string.Empty;
+    public string BackendBaseUrl { get; set; } = "https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api";
 
     /// <summary>
     /// 배포별 클라이언트 API 키(반비밀, 게스트 엔드포인트 게이트). X-MCPhoto-Client 헤더로 전송.

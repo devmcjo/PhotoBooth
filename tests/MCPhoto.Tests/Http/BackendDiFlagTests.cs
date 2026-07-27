@@ -35,17 +35,19 @@ public class BackendDiFlagTests
     }
 
     [Fact]
-    public void Default_Off_Resolves_Firebase_Implementations()
+    public void Default_Resolves_Http_Implementations()
     {
-        var settings = new AppSettings(); // 기본 UseBackend=false
+        // 기본 UseBackend=true + 운영 BaseUrl 내장 → 기본이 백엔드(Http*) 경로. (키 폐기 후 전용)
+        // Firebase 폴백은 URL을 명시적으로 비웠을 때만(아래 On_But_Empty_Url 테스트가 커버).
+        var settings = new AppSettings();
         settings.Clamp();
-        Assert.False(settings.UseBackend);
+        Assert.True(settings.UseBackend);
 
         using var sp = Build(settings);
 
-        Assert.IsType<FirebaseClient>(sp.GetRequiredService<IFirebaseClient>());
-        Assert.IsType<FrameRepository>(sp.GetRequiredService<IFrameRepository>());
-        Assert.IsType<AccountService>(sp.GetRequiredService<IAccountService>());
+        Assert.IsType<HttpFirebaseClient>(sp.GetRequiredService<IFirebaseClient>());
+        Assert.IsType<HttpFrameRepository>(sp.GetRequiredService<IFrameRepository>());
+        Assert.IsType<HttpAccountService>(sp.GetRequiredService<IAccountService>());
     }
 
     [Fact]
