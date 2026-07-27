@@ -193,9 +193,10 @@ public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
 }
 
 /// <summary>
-/// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole)], parameter="Manage"|"Promote".
+/// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole)], parameter="Manage"|"Promote"|"Demote".
 /// - Manage(삭제·pw 초기화): 대상이 행위자와 **같거나 낮은 역할**일 때만 노출(manager는 admin 관리 불가).
 /// - Promote(manager 지정): admin이 **user 대상**일 때만 노출(승격 대상은 user).
+/// - Demote(user로 강등): admin이 **manager 대상**일 때만 노출(강등 대상은 manager). (W-2)
 /// 값이 비었거나 형식이 다르면 안전하게 Collapsed. (권한 게이트 — UI 노출; 명령에도 동일 가드 존재)
 /// </summary>
 public sealed class RoleActionVisibilityConverter : IMultiValueConverter
@@ -205,9 +206,12 @@ public sealed class RoleActionVisibilityConverter : IMultiValueConverter
         if (values.Length < 2 || values[0] is not UserRole actor || values[1] is not UserRole target)
             return Visibility.Collapsed;
 
-        bool ok = (parameter as string) == "Promote"
-            ? actor == UserRole.Admin && target == UserRole.User
-            : actor.CanManage(target);
+        bool ok = (parameter as string) switch
+        {
+            "Promote" => actor == UserRole.Admin && target == UserRole.User,
+            "Demote" => actor == UserRole.Admin && target == UserRole.Manager,
+            _ => actor.CanManage(target)   // Manage(기존)
+        };
         return ok ? Visibility.Visible : Visibility.Collapsed;
     }
 

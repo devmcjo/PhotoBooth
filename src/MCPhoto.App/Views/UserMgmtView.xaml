@@ -55,6 +55,17 @@
                                                 </MultiBinding>
                                             </Button.Visibility>
                                         </Button>
+                                        <!-- W-2: manager → user 강등(admin만, manager 행에만 노출). 승격 버튼과 상호배타. -->
+                                        <Button Content="user로 강등" Style="{StaticResource Button.Ghost}"
+                                                Command="{Binding DataContext.DemoteToUserCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.Visibility>
+                                                <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Demote">
+                                                    <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                    <Binding Path="Role" />
+                                                </MultiBinding>
+                                            </Button.Visibility>
+                                        </Button>
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>

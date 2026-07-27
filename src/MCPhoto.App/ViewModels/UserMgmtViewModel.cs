@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace MCPhoto.App.ViewModels;
 
 /// <summary>
-/// 사용자 관리(power 전용). 목록·삭제(cascade)·비밀번호 초기화·역할 지정(admin만 manager 지정). (PRD §F8)
+/// 사용자 관리(power 전용). 목록·삭제(cascade)·비밀번호 초기화·역할 변경(admin만 manager↔user 양방향). (PRD §F8, W-2)
 /// </summary>
 public sealed partial class UserMgmtViewModel : ViewModelBase
 {
@@ -99,11 +99,33 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     private async Task PromoteToManager(User? user)
     {
         if (user is null || !IsAdmin || user.Role != UserRole.User) return;
+        // 자기 자신 역할 변경 방지(대칭·안전). admin이 자기를 승격할 일은 없으나 이중 방어.
+        if (user.Id == _shell.Session.CurrentUser?.Id) { StatusMessage = "자기 계정의 역할은 변경할 수 없습니다."; return; }
         try
         {
             await _accounts.SetRoleAsync(user.Id, UserRole.Manager);
             await ReloadAsync();
             StatusMessage = $"{user.Id}를 manager로 지정했습니다.";
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "역할 변경 실패: {Id}", user.Id);
+            StatusMessage = "역할 변경에 실패했습니다.";
+        }
+    }
+
+    /// <summary>user로 강등(admin만, 대상은 manager). 강등 액션이라 manager 외 대상엔 미적용. (W-2)</summary>
+    [RelayCommand]
+    private async Task DemoteToUser(User? user)
+    {
+        if (user is null || !IsAdmin || user.Role != UserRole.Manager) return;
+        // 자기 자신 역할 변경 방지(승격과 대칭).
+        if (user.Id == _shell.Session.CurrentUser?.Id) { StatusMessage = "자기 계정의 역할은 변경할 수 없습니다."; return; }
+        try
+        {
+            await _accounts.SetRoleAsync(user.Id, UserRole.User);
+            await ReloadAsync();
+            StatusMessage = $"{user.Id}를 user로 강등했습니다.";
         }
         catch (Exception ex)
         {
