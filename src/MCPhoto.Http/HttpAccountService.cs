@@ -116,6 +116,30 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
     }
 
+    public async Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default)
+    {
+        try
+        {
+            // API키 게이트(비로그인 self-signup, Bearer 불가 — LoginAsync와 동일). 응답은 login과 동일한 {token, expiresIn, user}.
+            // role은 서버가 "user"로 강제하므로 클라는 지정하지 않는다(권한 상승 차단, 설계 §7.3).
+            var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+            var res = await SendJsonAsync<LoginResponse>(
+                HttpMethod.Post, "auth/register",
+                new RegisterRequest { Id = id, Password = password, Email = normalizedEmail },
+                bearer: false, ct).ConfigureAwait(false);
+
+            var user = ToUser(res.User) ?? new User { Id = id, Role = UserRole.User };
+            Session.SignIn(res.Token, user); // 가입 즉시 로그인(설계 D-B3).
+            return user;
+        }
+        catch (BackendException ex)
+        {
+            // id 중복(409)·형식 오류(400) 등은 사유를 노출해야 가입 UX가 성립(§7.6 열거 방지 예외).
+            // 로그인 실패(401→null)와 달리 여기선 모든 실패를 도메인 예외로 전파.
+            throw MapToDomainException(ex);
+        }
+    }
+
     public async Task<User> CreateAsync(
         string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
     {
@@ -308,7 +332,9 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
         catch (BackendException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
         {
-            // 코드 불일치·만료는 인증 실패(false)로 다룬다(예외 대신 결과값 — UI가 안내).
+            // 코드 불일치·만료(401/400)는 인증 실패(false)로 다룬다(예외 대신 결과값 — UI가 안내).
+            // 409(Conflict)는 여기서 흡수하지 않는다(설계 §3.4 C4·§6): "이미 다른 계정이 인증한 이메일"은 실패가
+            // 아니라 사유 노출이 필요한 초과 케이스 → 아래로 떨어뜨려 InvalidOperationException("…초과…")로 전파.
             return false;
         }
         catch (BackendException ex)
@@ -330,6 +356,7 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
         catch (BackendException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
         {
+            // 코드 경로와 동일: 401/400은 false, 409(초과)는 흡수하지 않고 전파(설계 §3.4 C4·§6).
             return false;
         }
         catch (BackendException ex)

@@ -16,6 +16,20 @@ internal sealed class LoginResponse
 }
 
 /// <summary>
+/// POST /auth/register 요청(self-signup, 설계 §2.2 B-BE-2): {id, password, email?}. API키(Bearer 불요).
+/// role은 서버가 "user"로 강제(클라 지정 불가 — 권한 상승 차단). 응답은 login과 동일한 <see cref="LoginResponse"/>.
+/// (functions src/routes/auth.ts)
+/// </summary>
+internal sealed class RegisterRequest
+{
+    public string Id { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>계정 이메일(선택). null이면 서버가 미수집으로 처리(미인증 없이 생성).</summary>
+    public string? Email { get; set; }
+}
+
+/// <summary>
 /// POST /auth/google 요청(item1b Google SSO, 설계 §5.1): {code, codeVerifier, redirectUri, nonce?}. API키.
 /// 브라우저 loopback으로 받은 authorization code(+PKCE verifier·실제 redirectUri)를 백엔드가 교환·검증한다.
 /// client secret은 백엔드 전용 — 이 요청에 담지 않는다. 응답은 login과 동일한 <see cref="LoginResponse"/>.

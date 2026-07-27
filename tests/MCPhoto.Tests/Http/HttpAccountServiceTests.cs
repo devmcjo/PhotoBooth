@@ -351,6 +351,89 @@ public class HttpAccountServiceTests
     }
 
     [Fact]
+    public async Task ConfirmEmailVerification_409_Throws_InvalidOperation_Not_False()
+    {
+        var (svc, handler, _) = Make();
+        // 설계 §3.4 C4·§6: "이미 다른 계정이 인증한 이메일"은 인증 실패(false)가 아니라 사유 노출이 필요한 초과 케이스.
+        // 서버 409 → 흡수하지 않고 InvalidOperationException("…초과…")로 전파(UI가 메시지 표시).
+        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.Conflict,
+            "{\"error\":{\"code\":\"conflict\",\"message\":\"해당 이메일로 생성 가능한 계정 수를 초과하였습니다.\"}}");
+
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.ConfirmEmailVerificationAsync("u1", "123456"));
+        Assert.Contains("초과", ex.Message);
+    }
+
+    [Fact]
+    public async Task ConfirmEmailVerificationByToken_409_Throws_InvalidOperation_Not_False()
+    {
+        var (svc, handler, _) = Make();
+        // 링크 경로도 코드 경로와 동일: 409(초과)는 흡수하지 않고 전파.
+        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.Conflict,
+            "{\"error\":{\"code\":\"conflict\",\"message\":\"해당 이메일로 생성 가능한 계정 수를 초과하였습니다.\"}}");
+
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.ConfirmEmailVerificationByTokenAsync("u1", "tok.secret"));
+        Assert.Contains("초과", ex.Message);
+    }
+
+    // ── W-1: self-signup(비로그인 회원가입, §2.3) ──
+
+    [Fact]
+    public async Task Register_Success_Returns_User_And_Signs_In_With_ApiKey_Not_Bearer()
+    {
+        var (svc, handler, session) = Make();
+        // 서버는 role="user" 강제 + 가입 즉시 로그인(JWT 발급). 응답은 login과 동일한 {token, expiresIn, user}.
+        handler.WhenJson(HttpMethod.Post, "auth/register", HttpStatusCode.Created,
+            "{\"token\":\"jwt-reg\",\"expiresIn\":3600,\"user\":{\"id\":\"newbie\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"n@x.com\",\"emailVerified\":false}}");
+
+        var user = await svc.RegisterAsync("newbie", "pw1234", "n@x.com");
+
+        Assert.NotNull(user);
+        Assert.Equal("newbie", user!.Id);
+        Assert.Equal(UserRole.User, user.Role);
+        Assert.Equal("n@x.com", user.Email);
+        Assert.False(user.EmailVerified);
+        Assert.Equal(string.Empty, user.Password); // 비번은 응답에 없음
+        Assert.Equal("jwt-reg", session.Token);     // 가입 즉시 세션 로그인(§D-B3)
+
+        var req = handler.Requests[0];
+        Assert.Contains("auth/register", req.Uri!.ToString());
+        Assert.Contains("\"id\":\"newbie\"", req.Body!);
+        Assert.Contains("\"password\":\"pw1234\"", req.Body!);
+        Assert.Contains("\"email\":\"n@x.com\"", req.Body!);
+        Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API키 게이트
+        Assert.Null(req.AuthorizationScheme);        // 비로그인(Bearer 아님)
+    }
+
+    [Fact]
+    public async Task Register_Without_Email_Sends_Null_Email()
+    {
+        var (svc, handler, session) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/register", HttpStatusCode.Created,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"n2\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        var user = await svc.RegisterAsync("n2", "pw1234", email: "   "); // 공백=미수집
+
+        Assert.NotNull(user);
+        Assert.Contains("\"email\":null", handler.Requests[0].Body!); // 빈/공백 email은 null로 정규화
+    }
+
+    [Fact]
+    public async Task Register_Conflict_409_Maps_To_InvalidOperation()
+    {
+        var (svc, handler, session) = Make();
+        // id 중복은 사유 노출(가입 UX). 로그인(401→null)과 달리 register는 실패를 예외로 전파.
+        handler.WhenJson(HttpMethod.Post, "auth/register", HttpStatusCode.Conflict,
+            "{\"error\":{\"code\":\"conflict\",\"message\":\"이미 존재하는 아이디입니다: dup\"}}");
+
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.RegisterAsync("dup", "pw1234", null));
+        Assert.Contains("이미 존재", ex.Message);
+        Assert.Null(session.Token); // 실패 시 세션 미변경
+    }
+
+    [Fact]
     public async Task Login_Maps_Email_Fields_From_Response()
     {
         var (svc, handler, _) = Make();

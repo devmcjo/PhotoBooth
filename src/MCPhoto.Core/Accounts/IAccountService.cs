@@ -28,6 +28,9 @@ public interface IAccountService
     Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
         string? nonce = null, CancellationToken ct = default);
 
+    /// <summary>비로그인 self-signup(백엔드 전용). id/pw(+선택 email)로 user 계정 생성 후 즉시 로그인(JWT). 성공 시 User, 실패는 예외.</summary>
+    Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default);
+
     /// <summary>
     /// 계정 생성. actingRole(호출자 역할) 기준으로 권한 게이트를 서비스가 강제한다(it2 §7):
     /// admin→{user,manager}, manager→{user}만, 그 외 거부. admin→admin 거부(최종 1인).

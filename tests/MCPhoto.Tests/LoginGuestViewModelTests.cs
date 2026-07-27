@@ -45,6 +45,8 @@ public class LoginGuestViewModelTests
             return Task.FromResult(GoogleResult);
         }
 
+        public Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default)
+            => Task.FromResult<User?>(null);
         public Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default) => Task.CompletedTask;

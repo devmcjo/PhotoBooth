@@ -131,6 +131,10 @@ public sealed class AccountService : IAccountService
         string? nonce = null, CancellationToken ct = default)
         => throw new NotSupportedException("Google 로그인은 백엔드 모드에서만 지원됩니다.");
 
+    // self-signup(비로그인 회원가입)은 백엔드 전용(API키 게이트·JWT 발급). 레거시 Firebase 경로엔 인프라가 없다.
+    public Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default)
+        => throw new NotSupportedException("회원가입은 백엔드 모드에서만 지원됩니다.");
+
     // ── item1a: 이메일 인증 + 비밀번호 재설정 (HTTP 전용 기능) ──
     // 레거시 Firebase 경로엔 이메일 인프라(토큰 서브컬렉션·메일 발송)가 없다. UI가 백엔드 모드에서만
     // 이 기능을 노출하므로 아래는 도달하지 않는다(도달하면 설정 오류 → 명확히 실패시킨다). (item1a §9.1)

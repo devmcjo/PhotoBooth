@@ -39,6 +39,8 @@ public class PasswordResetViewModelTests
             => throw new NotSupportedException();
         public Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri, string? nonce = null, CancellationToken ct = default)
             => throw new NotSupportedException();
+        public Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default)
+            => Task.FromResult<User?>(null);
         public Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
