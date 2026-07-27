@@ -6,3 +6,4 @@
 - [설정 게스트 편집 게이트](settings-guest-edit-gate.md) — 편집 권한 게이트 3지점(Load강제off/Save미기록/XAML IsEnabled)·VM계층만·런타임 불변·Toggle.Gated 툴팁
 - [Firebase 접근 추상화](firebase-access-abstraction.md) — Core 인터페이스 5종으로 격리·구현만 HTTP 교체 시 UI 무변경·만료정리 앱 미호출
 - [소스 파일 인코딩](source-file-encoding.md) — .cs는 UTF-8 no BOM(한글 주석)·수정/신규도 no BOM 유지
+- [백엔드 계정/인증 계약](backend-account-auth-contract.md) — 역할 강등 서버무변경·self-signup은 canCreate 게이트 우회 필요·SSO/이메일 격리 지점·PasswordResetView 2단계 패턴
