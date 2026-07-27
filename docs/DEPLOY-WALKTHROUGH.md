@@ -220,3 +220,37 @@ BackendApiKey=<②의 BackendApiKey>
 
 ### 참고: 앱 코드 수정 반영
 설정 진입 비밀번호 게이트 버그 수정은 **WPF 앱 코드**에 반영됐다(커밋 `d1c32e3`). 배포 PC에서 쓰려면 **앱을 다시 빌드해 배포 폴더(예: `...\PhotoBooth\`)에 갱신**해야 적용된다(백엔드 재배포와 무관).
+
+---
+
+# 앱 빌드·배포 (publish) — 키리스 + 게이트 키 exe 내장
+
+`serviceAccountKey.json` 폐기 방향에 맞춰 publish는 **키 없는 단일 exe**를 만들고, 백엔드 게이트 키는 **exe 바이너리에 내장**한다(ini 불요 · exe 단독 동작). 게이트 키는 **git·소스에 없고**, 로컬 파일에서 빌드 시에만 주입된다.
+
+## 1회 준비: 게이트 키 로컬 파일
+저장소 루트에 **`backend-apikey.local`** 파일을 만들고 `CLIENT_API_KEYS` 값(예: `firebase functions:secrets:access CLIENT_API_KEYS`로 확인) 한 줄을 넣는다. 이 파일은 **gitignore**(커밋 안 됨).
+```
+d7e1914d0699eada95e9e324e015c8685f2204d819c693c1
+```
+(또는 환경변수 `MCPHOTO_BACKEND_API_KEY`로 대체 가능.)
+
+## 빌드
+```
+publish.bat        (더블클릭)  또는  powershell -ExecutionPolicy Bypass -File .\publish.ps1
+```
+- 출력: `publish\MCPhoto\MCPhoto.exe`(게이트 키 내장) + `bldinfo.ini`.
+- `-p:BackendApiKeyDefault=<키>`로 exe에 내장(AssemblyMetadata). 키 파일이 없으면 경고 후 키 없이 빌드(백엔드 인증 불가).
+- **배포**: `publish\MCPhoto\` 폴더를 대상 PC에 복사. `MCPhoto.ini` 없이 exe만 있어도 백엔드 동작한다.
+
+## 앱 기본값(내장) — 운영자 ini 입력 불요
+| 값 | 출처 | 비고 |
+|----|------|------|
+| `UseBackend` | 기본 `true`(내장) | 항상 백엔드. 오프라인은 런타임 폴백(게스트 촬영만) |
+| `BackendBaseUrl` | 기본값 내장 | `https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api` |
+| `GoogleClientId` | 기본값 내장 | SSO 버튼 노출 |
+| **게이트 키** | **exe 내장**(publish 주입) | ini `BackendApiKey=`로 오버라이드 가능(다른 백엔드용) |
+
+## 보안 메모
+- 게이트 키는 exe 내장 = 디컴파일로 추출 가능한 **저위험·폐기 가능** 키(유출 시 `CLIENT_API_KEYS`에서 제거). 진짜 보안은 서버측(JWT + 역할 + 서버 전용 서비스계정).
+- 이전에 검토한 ini DPAPI 암호화는 **키가 ini에 없어져 불필요** → 제거함(커밋 `3e4071b`).
+- 다른 구글 프로젝트/백엔드로 배포하려면: `backend-apikey.local`(키)·`.env.mcphoto-955fb`(GOOGLE_OAUTH_CLIENT_ID)·앱 기본값(GoogleClientId/BackendBaseUrl)만 각자 값으로 교체.
