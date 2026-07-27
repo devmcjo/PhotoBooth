@@ -385,19 +385,9 @@
                         <Border Style="{StaticResource GroupDivider}" />
 
                         <!-- ── 그룹: 고급 ── -->
+                        <!-- W-5: HostingBaseUrl·StorageBucket 편집 UI 제거(ini 전용 유지, VM 라운드트립으로 값 보존).
+                             서버 연결 상태·진단 항목이 이 그룹에 남아 있어 그룹 제목·Divider는 유지. -->
                         <TextBlock Text="고급" Style="{StaticResource GroupTitle}" />
-                        <StackPanel Style="{StaticResource FullRow}">
-                            <TextBlock Text="다운로드 페이지 Base URL" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding HostingBaseUrl}" IsEnabled="{Binding IsLoggedIn}" />
-                        </StackPanel>
-                        <StackPanel Margin="0,0,0,16">
-                            <TextBlock Text="Storage 버킷" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding StorageBucket}" IsEnabled="{Binding IsLoggedIn}" />
-                            <!-- 신규 규약 안내(it5 §2.3 B6). Blaze+버킷 생성 후 이 값을 넣으면 QR 전송 동작. -->
-                            <TextBlock Text="예: mcphoto-955fb.firebasestorage.app"
-                                       Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
-                                       Margin="0,4,0,0" />
-                        </StackPanel>
 
                         <!-- it10 S4-2: 서버 연결 상태(읽기 전용, 표시 전용 — 저장 대상 아님). QA 트러블슈팅용. -->
                         <Grid Style="{StaticResource SettingRow}">
