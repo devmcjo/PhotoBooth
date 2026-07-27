@@ -160,11 +160,13 @@ public class LogFolderServiceTests
     [Fact]
     public void OpenLogFolder_Does_Not_Throw()
     {
-        var svc = new LogFolderService();
+        // 실제 explorer 실행 부작용 없이 검증: 열기 동작을 no-op opener로 주입.
+        var opened = false;
+        var svc = new LogFolderService(opener: _ => opened = true);
 
-        // 폴더 생성 + explorer 실행 시도. 키오스크/CI 환경에서 실패해도 try/catch로 삼켜 예외 없음.
         var ex = Record.Exception(() => svc.OpenLogFolder());
 
         Assert.Null(ex);
+        Assert.True(opened); // 폴더 생성 후 주입된 opener가 호출됨(explorer 미실행)
     }
 }
