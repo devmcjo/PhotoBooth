@@ -78,3 +78,14 @@
  - 개발자 문의와 같은 공간도 만들어주고 싶어. 그런데, 위치가 좀 애매해. 설정에 들어가기도 좀 그렇고...
  - 적당한 위치가 있다면 작성하면 좋겠어. (예를들면 현재 버전을 작성하는 곳을 앱 하단으로 지정했는데, 제거하고, 별도로 설정 안에 "버전 확인"과 같은 버튼을 만들고 모달을 띄울 때, 개발자 문의 라는 공간을 만들어도 될 것 같아.)
  - 내 개발자 이메일은 devmcjo@gmail.com 이니까 이부분도 참고해서 만들어주면 좋을 것 같아.
+
+## 7. 향후 플랫폼 확장 — 웹 · Android (추후 논의)
+
+> 2026-07-27 사용자 확정: **웹·Android 버전도 추후 개발 예정.** 지금은 기록만; 착수 시 재논의.
+
+- 현재 Google SSO OAuth 클라이언트는 **Desktop app 유형 1개**(WPF 키오스크용, client_id `712395684881-l66o...apps.googleusercontent.com`, loopback+PKCE)뿐이다.
+- 웹/Android는 **각각 별도 OAuth 클라이언트 유형**이 필요하다(공유 불가):
+  - **웹**: "웹 애플리케이션" 유형 — 정확한 리디렉션 URI 등록 필요. 브라우저는 client_secret 은닉 불가라 PKCE/서버 교환 설계 필요.
+  - **Android**: "Android" 유형 — 패키지명 + SHA-1 지문 등록.
+- 백엔드(`/auth/google` code 교환·verifyIdToken)는 **audience(client_id) 다중 허용**으로 확장하면 재사용 가능(현재는 단일 `GOOGLE_OAUTH_CLIENT_ID`). 착수 시 config를 client_id 목록으로 일반화 검토.
+- 동의 화면·이메일 인증·계정/역할 백엔드는 플랫폼 공통(재사용). UI/OAuth 리디렉션만 플랫폼별.
