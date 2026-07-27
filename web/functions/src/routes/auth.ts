@@ -11,6 +11,7 @@ import {
   validateAccountId,
   validateAuthCode,
   validateCodeVerifier,
+  validateEmail,
   validateLoopbackRedirectUri,
   validateNonce,
   validatePassword,
@@ -26,6 +27,7 @@ import {
   confirmPasswordResetByToken,
   login,
   loginWithGoogleEmail,
+  registerSelf,
   requestEmailVerification,
   requestPasswordReset,
 } from "../services/accounts";
@@ -72,6 +74,44 @@ export function authRouter(): Router {
         token,
         expiresIn: cfg.jwtExpiresInSeconds,
         user: result.user,
+      });
+    })
+  );
+
+  // POST /auth/register  (API키, Bearer 불요) — self-signup (설계 §2.2 B-BE-2, BE-3).
+  //   body {id, password, email?} → role="user" **서버 강제**(클라 role 지정 불가).
+  //   성공 201 {token, expiresIn, user} — 가입 즉시 로그인(JWT 발급, USER-DECISION D-B3).
+  //   id 중복 → 409(UX상 사유 노출 허용). email verified 충돌 → 409(초과 메시지). 형식 오류 → 400.
+  router.post(
+    "/register",
+    requireApiKey(),
+    asyncHandler(async (req, res) => {
+      const idRes = validateAccountId(req.body?.id);
+      if (!idRes.ok) throw HttpError.invalid(idRes.error);
+      const pwRes = validatePassword(req.body?.password);
+      if (!pwRes.ok) throw HttpError.invalid(pwRes.error);
+
+      // email은 선택. 있으면 형식 검증(소문자 정규화값 사용). null/undefined면 생략.
+      let email: string | null = null;
+      if (req.body?.email !== undefined && req.body?.email !== null && req.body?.email !== "") {
+        const emailRes = validateEmail(req.body.email);
+        if (!emailRes.ok) throw HttpError.invalid(emailRes.error);
+        email = emailRes.value;
+      }
+
+      // role은 body로 받지 않는다(항상 user 강제). registerSelf가 id 중복 409·email 충돌 409 처리.
+      const user = await registerSelf(idRes.value, pwRes.value, email);
+
+      const cfg = loadConfig();
+      const token = issueToken(
+        { id: user.id, role: "user" },
+        cfg.jwtSecret,
+        cfg.jwtExpiresInSeconds
+      );
+      res.status(201).json({
+        token,
+        expiresIn: cfg.jwtExpiresInSeconds,
+        user,
       });
     })
   );
@@ -184,9 +224,13 @@ export function authRouter(): Router {
         if (!idRes.ok) throw HttpError.invalid("계정 식별자가 필요합니다.");
         const result = await confirmEmailVerificationByToken(idRes.value, token);
         if (!result.verified) {
+          // taken(이미 다른 계정이 verified) → 409 + 초과 메시지, 그 외 → 기존 401(§3.4).
+          if (result.reason === "taken") {
+            throw HttpError.conflict("해당 이메일로 생성 가능한 계정 수를 초과하였습니다.");
+          }
           throw HttpError.unauthorized("인증 토큰이 유효하지 않거나 만료되었습니다.");
         }
-        res.status(200).json(result);
+        res.status(200).json({ verified: true });
         return;
       }
 
@@ -198,9 +242,13 @@ export function authRouter(): Router {
 
       const result = await confirmEmailVerificationByCode(idRes.value, codeRes.value);
       if (!result.verified) {
+        // taken → 409 + 초과 메시지, 그 외 → 기존 401(§3.4).
+        if (result.reason === "taken") {
+          throw HttpError.conflict("해당 이메일로 생성 가능한 계정 수를 초과하였습니다.");
+        }
         throw HttpError.unauthorized("인증 코드가 올바르지 않거나 만료되었습니다.");
       }
-      res.status(200).json(result);
+      res.status(200).json({ verified: true });
     })
   );
 

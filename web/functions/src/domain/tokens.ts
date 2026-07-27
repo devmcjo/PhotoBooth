@@ -99,8 +99,8 @@ export function computeExpiresAtMs(nowMs: number, ttlSeconds: number): number {
   return nowMs + ttlSeconds * 1000;
 }
 
-/** verify 토큰 TTL(초): 24시간(§5.4). */
-export const VERIFY_TTL_SECONDS = 24 * 60 * 60;
+/** verify 토큰 TTL(초): 5분(§3.3 규칙 C3 — 브루트포스 창 축소, MAX_CODE_ATTEMPTS와 결합). */
+export const VERIFY_TTL_SECONDS = 5 * 60;
 
 /** reset 토큰 TTL(초): 1시간(§5.4). */
 export const RESET_TTL_SECONDS = 60 * 60;

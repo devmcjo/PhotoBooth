@@ -90,8 +90,8 @@ describe("tokens — 토큰 생성·해시·비교·만료(순수 로직)", () =
     expect(isExpired(exp, exp + 1)).toBe(true);
   });
 
-  test("TTL 상수: verify=24h, reset=1h", () => {
-    expect(VERIFY_TTL_SECONDS).toBe(24 * 60 * 60);
+  test("TTL 상수: verify=5분(§3.3 규칙 C3), reset=1h(유지)", () => {
+    expect(VERIFY_TTL_SECONDS).toBe(5 * 60);
     expect(RESET_TTL_SECONDS).toBe(60 * 60);
   });
 });

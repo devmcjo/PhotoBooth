@@ -4,9 +4,11 @@
  *
  * 근거: src/MCPhoto.Firebase/AccountService.cs, src/MCPhoto.Core/Accounts/IAccountService.cs
  */
+import { randomBytes } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { loadConfig } from "../config";
 import { db } from "../firebase";
+import { deriveAccountId } from "../domain/accountId";
 import { hashPassword, verifyPassword } from "../domain/password";
 import {
   canCreate,
@@ -25,6 +27,12 @@ import { deleteAllFramesByUser } from "./frames";
 import { consumeByCode, consumeByToken, issueToken } from "./tokens";
 
 const COLLECTION = "users";
+
+/**
+ * 이메일 유일성 초과 메시지(설계 §3.4 규칙 C4). 생성/변경 시점(verified 충돌)과
+ * verify 시점(taken) 모두 이 정확한 문구를 사용한다. 변경 금지.
+ */
+const EMAIL_LIMIT_EXCEEDED_MESSAGE = "해당 이메일로 생성 가능한 계정 수를 초과하였습니다.";
 
 /** UserDoc → 응답(비밀번호/해시·토큰 제거, email·emailVerified 포함, §8.5). */
 function toResponse(doc: UserDoc): UserResponse {
@@ -101,14 +109,18 @@ export async function login(id: string, password: string): Promise<LoginResult |
 }
 
 /**
- * 이메일 유일성 검사(설계 §4.5, 유일성 강제). email이 이미 다른 계정에 있으면 409.
+ * 이메일 유일성 완화 검사(설계 §3.4 규칙 C4). 생성/변경 시점에는
+ * **이미 인증 완료(emailVerified===true)한 다른 계정**이 같은 email을 가질 때만 409.
+ * 미인증(emailVerified!==true) 중복은 허용한다(인증 시점에 최종 강제 — markEmailVerified).
  * @param excludeId 자기 자신은 제외(email 변경 시 동일 계정 재검사 방지).
  */
-async function ensureEmailUnique(email: string, excludeId?: string): Promise<void> {
+async function ensureEmailNotVerifiedElsewhere(email: string, excludeId?: string): Promise<void> {
   const snap = await db().collection(COLLECTION).where("email", "==", email).get();
-  const conflict = snap.docs.find((d) => d.id !== excludeId);
+  const conflict = snap.docs.find(
+    (d) => d.id !== excludeId && (d.data() as UserDoc).emailVerified === true
+  );
   if (conflict) {
-    throw HttpError.conflict("이미 사용 중인 이메일입니다.");
+    throw HttpError.conflict(EMAIL_LIMIT_EXCEEDED_MESSAGE);
   }
 }
 
@@ -136,7 +148,7 @@ export async function createAccount(
   }
 
   if (email) {
-    await ensureEmailUnique(email);
+    await ensureEmailNotVerifiedElsewhere(email);
   }
 
   const now = Timestamp.now();
@@ -235,36 +247,164 @@ export async function setRole(
 // item1a: 이메일 인증 + 비밀번호 재설정 (설계 §5·§6·§8)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** id 우선, 없으면 email로 계정 조회. 없으면 null(열거 방지 위해 호출측이 사유 노출 금지). */
+/**
+ * id 우선, 없으면 email로 계정 조회. 없으면 null(열거 방지 위해 호출측이 사유 노출 금지).
+ *
+ * BE-4(§3.4)로 email 유일성이 완화되어 **미인증 중복 email**이 존재할 수 있다. email 경로 조회 시
+ * 그 email을 **소유(verified)한 계정**을 우선 반환한다(없으면 임의의 미인증 계정 1건). 이래야
+ * password-reset/verify-request가 올바른 계정으로 라우팅된다(limit(1)은 순서 미보장이라 사용 금지).
+ */
 async function findByIdOrEmail(idOrEmail: string): Promise<UserDoc | null> {
   const byId = await db().collection(COLLECTION).doc(idOrEmail).get();
   if (byId.exists) return byId.data() as UserDoc;
 
   // email 조회(소문자 정규화된 값으로 저장돼 있으므로 소문자로 비교).
   const email = idOrEmail.trim().toLowerCase();
-  const snap = await db().collection(COLLECTION).where("email", "==", email).limit(1).get();
-  if (!snap.empty) return snap.docs[0].data() as UserDoc;
-  return null;
+  const snap = await db().collection(COLLECTION).where("email", "==", email).get();
+  if (snap.empty) return null;
+  const docs = snap.docs.map((d) => d.data() as UserDoc);
+  // verified 계정 우선(email 소유자). 없으면 첫 미인증 계정.
+  return docs.find((d) => d.emailVerified === true) ?? docs[0];
 }
 
 /**
- * item1b: Google SSO 계정 매핑(설계 §6.2). 검증된 Google email(소문자)을 기존 MCPhoto 계정에 매핑한다.
- * 규칙: email 경로 조회 → 계정 존재 AND doc.email == email(소문자) AND emailVerified === true → LoginResult.
- *   그 외(계정 없음 / 미검증 / email 불일치)는 null → 라우트가 401 일반화(열거 방지, §6.4).
- * **자동 계정 생성 없음**(§6.3). 역할은 매핑된 MCPhoto 계정에서 가져온다(§6.1).
+ * SSO 전용 자동 생성 계정의 비밀번호: 아무도 모르는 랜덤 값의 bcrypt 해시(로그인 불가 sentinel).
+ * id/pw 로그인은 이 해시와 절대 매칭되지 않으므로 SSO 경로로만 진입 가능(USER-DECISION D-B2, §2.2).
+ */
+async function makeSentinelPasswordHash(): Promise<string> {
+  return hashPassword(randomBytes(32).toString("base64url"));
+}
+
+/**
+ * email로만 계정을 조회(자동 생성/승격 분기용). id 조회는 하지 않는다(SSO는 email 신원만 신뢰).
+ * 소문자 정규화된 email 필드로 비교.
+ */
+async function findByEmailField(email: string): Promise<UserDoc | null> {
+  const snap = await db().collection(COLLECTION).where("email", "==", email).limit(1).get();
+  if (snap.empty) return null;
+  return snap.docs[0].data() as UserDoc;
+}
+
+/**
+ * item1b: Google SSO 로그인(설계 §2.2 B-BE-1 / D-B1·D-B2, BE-2 자동 생성 재설계).
+ * 검증된 Google email(소문자)로 로그인한다. Google이 email 소유를 이미 증명했으므로:
+ *   - 계정 없음 → user 역할로 **자동 생성**(emailVerified=true, pw=랜덤 sentinel 해시로 id/pw 로그인 불가).
+ *   - 미검증 기존 계정(emailVerified!==true) → **승격**(emailVerified=true) 후 로그인(role/pw 불변, 권한 상승 없음).
+ *   - 검증된 기존 계정 → 기존대로 로그인(변경 없음).
+ * 동시 첫 로그인 경합: create 원자 시도(문서 부재 시에만) 실패 시 재조회 후 로그인(§2.2 경합 방지).
  *
  * @param email verifyGoogleCodeAndGetEmail이 반환한, 이미 소문자 정규화된 email.
  */
 export async function loginWithGoogleEmail(email: string): Promise<LoginResult | null> {
   const normalized = email.trim().toLowerCase();
-  const doc = await findByIdOrEmail(normalized);
-  // 계정 없음 / email 불일치(방어적 재확인) / 미검증은 모두 null(사유 노출 금지 — 호출측 로그만).
-  if (!doc) return null;
-  if ((doc.email ?? null) !== normalized) return null;
-  if (doc.emailVerified !== true) return null;
+  if (normalized.length === 0) return null;
 
-  const role = parseRole(doc.role);
-  return { id: doc.id, role, user: toResponse(doc) };
+  const existing = await findByEmailField(normalized);
+  if (existing) {
+    return loginExistingGoogleAccount(existing, normalized);
+  }
+
+  // 계정 없음 → 자동 생성(경합 대비 create 원자 시도).
+  const created = await createGoogleAccount(normalized);
+  if (created) {
+    return created;
+  }
+
+  // create 경합(동시 첫 로그인이 방금 계정을 만듦) → 재조회 후 로그인.
+  const retried = await findByEmailField(normalized);
+  if (retried) {
+    return loginExistingGoogleAccount(retried, normalized);
+  }
+  return null;
+}
+
+/** 기존 계정으로 SSO 로그인. 미검증이면 emailVerified=true로 승격 후 로그인(role/pw 불변). */
+async function loginExistingGoogleAccount(
+  doc: UserDoc,
+  normalized: string
+): Promise<LoginResult | null> {
+  // 방어: email 필드가 조회 email과 다르면(정규화 불일치 등) 로그인 거부.
+  if ((doc.email ?? null) !== normalized) return null;
+
+  let effective = doc;
+  if (doc.emailVerified !== true) {
+    // 미검증 기존 계정 승격(Google이 email 소유 증명). role/password는 건드리지 않는다.
+    await db().collection(COLLECTION).doc(doc.id).update({ emailVerified: true });
+    effective = { ...doc, emailVerified: true };
+  }
+  const role = parseRole(effective.role);
+  return { id: effective.id, role, user: toResponse(effective) };
+}
+
+/**
+ * 계정 없음 → user 역할 자동 생성(원자적). create는 문서 부재 시에만 성공.
+ * 경합으로 방금 동일 id가 만들어졌다면 create가 throw → null 반환(호출측이 재조회).
+ * 반환 null이 곧 "생성 실패(경합)"를 의미한다.
+ */
+async function createGoogleAccount(normalized: string): Promise<LoginResult | null> {
+  const id = await deriveAccountId(normalized, async (candidate) => {
+    const snap = await db().collection(COLLECTION).doc(candidate).get();
+    return snap.exists;
+  });
+
+  const now = Timestamp.now();
+  const doc: UserDoc = {
+    id,
+    password: await makeSentinelPasswordHash(),
+    role: "user",
+    createdAt: now,
+    email: normalized,
+    emailVerified: true,
+  };
+
+  try {
+    // create: 이미 존재하면 throw(경합). set과 달리 덮어쓰지 않는다.
+    await db().collection(COLLECTION).doc(id).create(doc);
+  } catch {
+    // 경합(동시 생성) — 호출측이 재조회로 로그인 처리.
+    return null;
+  }
+  return { id: doc.id, role: "user", user: toResponse(doc) };
+}
+
+/**
+ * BE-3: self-signup(비로그인 회원가입). role="user" **서버 강제**(클라 지정 불가 — 권한 상승 차단).
+ * canCreate 게이트 없음(createAccount와 달리 자기 역할 생성 허용). id 중복이면 409.
+ * email이 주어지면 verified 계정 충돌 검사(ensureEmailNotVerifiedElsewhere) 후 unverified 생성 + verify 메일.
+ * 근거: 설계 §2.2 B-BE-2, §5(계약 요약).
+ */
+export async function registerSelf(
+  id: string,
+  password: string,
+  email: string | null
+): Promise<UserResponse> {
+  const ref = db().collection(COLLECTION).doc(id);
+  const existing = await ref.get();
+  if (existing.exists) {
+    throw HttpError.conflict(`이미 존재하는 아이디입니다: ${id}`);
+  }
+
+  if (email) {
+    await ensureEmailNotVerifiedElsewhere(email);
+  }
+
+  const now = Timestamp.now();
+  const doc: UserDoc = {
+    id,
+    password: await hashPassword(password),
+    role: "user", // 서버 강제(body로 지정 불가).
+    createdAt: now,
+    email: email ?? null,
+    emailVerified: false,
+  };
+  await ref.set(doc);
+
+  // email이 있으면 인증 메일 발송(발송 실패는 삼켜지고 가입은 유지, §5.2와 동일).
+  if (email) {
+    await issueAndSendVerification(id, email);
+  }
+
+  return toResponse(doc);
 }
 
 /**
@@ -282,7 +422,7 @@ export async function setEmail(
     throw HttpError.forbidden("해당 계정의 이메일을 변경할 권한이 없습니다.");
   }
 
-  await ensureEmailUnique(email, targetId);
+  await ensureEmailNotVerifiedElsewhere(email, targetId);
 
   await db()
     .collection(COLLECTION)
@@ -305,19 +445,59 @@ export async function requestEmailVerification(idOrEmail: string): Promise<void>
   await issueAndSendVerification(doc.id, doc.email);
 }
 
-/** 이메일 인증 확인 결과. */
-export type VerifyEmailResult = { verified: true } | { verified: false };
+/**
+ * 이메일 인증 확인 결과(설계 §3.4 규칙 C4).
+ *   - verified:true → 인증 성공(마킹 완료).
+ *   - reason "mismatch" → 코드/토큰 무효·만료 또는 email 불일치(라우트가 401).
+ *   - reason "taken" → 이미 다른 계정이 이 email을 verified(라우트가 409 + 초과 메시지).
+ */
+export type VerifyEmailResult =
+  | { verified: true }
+  | { verified: false; reason: "mismatch" | "taken" };
 
-/** verify 성공 시 emailVerified=true로 마킹(토큰이 검증한 email과 현재 email이 일치할 때만). */
-async function markEmailVerified(userId: string, verifiedEmail: string): Promise<boolean> {
-  const ref = db().collection(COLLECTION).doc(userId);
-  const snap = await ref.get();
-  if (!snap.exists) return false;
-  const doc = snap.data() as UserDoc;
-  // 토큰 발급 후 email이 다시 바뀐 경우는 검증 무효(현재 email과 대조).
-  if ((doc.email ?? null) !== verifiedEmail) return false;
-  await ref.update({ emailVerified: true });
-  return true;
+/** markEmailVerified 결과(3-값). */
+export type MarkVerifiedResult =
+  | { ok: true }
+  | { ok: false; reason: "mismatch" | "taken" };
+
+/**
+ * verify 성공 시 emailVerified=true로 마킹(설계 §3.4-2). Firestore 트랜잭션으로
+ * "다른 계정이 이미 이 email을 verified" 검사 + 마킹을 원자화한다(경합 방지, USER-DECISION D-C1).
+ *   - 대상 계정 부재 또는 현재 email이 verifiedEmail과 불일치 → {ok:false, reason:"mismatch"}.
+ *   - 다른 계정이 이미 이 email을 verified → {ok:false, reason:"taken"}(마킹 거부).
+ *   - 그 외 → emailVerified=true 마킹 후 {ok:true}.
+ */
+async function markEmailVerified(
+  userId: string,
+  verifiedEmail: string
+): Promise<MarkVerifiedResult> {
+  const col = db().collection(COLLECTION);
+  const targetRef = col.doc(userId);
+  // 같은 email을 가진 계정들(대상 포함 가능). 트랜잭션에서 read로 재확정.
+  const emailQuery = col.where("email", "==", verifiedEmail);
+
+  return db().runTransaction(async (tx) => {
+    const targetSnap = await tx.get(targetRef);
+    if (!targetSnap.exists) return { ok: false, reason: "mismatch" };
+    const doc = targetSnap.data() as UserDoc;
+    // 토큰 발급 후 email이 다시 바뀐 경우는 검증 무효(현재 email과 대조).
+    if ((doc.email ?? null) !== verifiedEmail) return { ok: false, reason: "mismatch" };
+
+    // 다른 계정이 이미 이 email을 verified 했는지(원자적으로 재확인).
+    const dupSnap = await tx.get(emailQuery);
+    const takenByOther = dupSnap.docs.some(
+      (d) => d.id !== userId && (d.data() as UserDoc).emailVerified === true
+    );
+    if (takenByOther) return { ok: false, reason: "taken" };
+
+    tx.update(targetRef, { emailVerified: true });
+    return { ok: true };
+  });
+}
+
+/** markEmailVerified 결과를 라우트용 VerifyEmailResult로 변환(성공/실패 사유 유지). */
+function toVerifyResult(marked: MarkVerifiedResult): VerifyEmailResult {
+  return marked.ok ? { verified: true } : { verified: false, reason: marked.reason };
 }
 
 /** 이메일 인증 확인(링크 경로) — 결합 토큰. */
@@ -326,9 +506,8 @@ export async function confirmEmailVerificationByToken(
   token: string
 ): Promise<VerifyEmailResult> {
   const res = await consumeByToken(userId, "verify_email", token);
-  if (!res.ok) return { verified: false };
-  const marked = await markEmailVerified(userId, res.email);
-  return { verified: marked };
+  if (!res.ok) return { verified: false, reason: "mismatch" };
+  return toVerifyResult(await markEmailVerified(userId, res.email));
 }
 
 /** 이메일 인증 확인(코드 경로, 키오스크) — id + 6자리 코드. */
@@ -337,9 +516,8 @@ export async function confirmEmailVerificationByCode(
   code: string
 ): Promise<VerifyEmailResult> {
   const res = await consumeByCode(userId, "verify_email", code);
-  if (!res.ok) return { verified: false };
-  const marked = await markEmailVerified(userId, res.email);
-  return { verified: marked };
+  if (!res.ok) return { verified: false, reason: "mismatch" };
+  return toVerifyResult(await markEmailVerified(userId, res.email));
 }
 
 /**

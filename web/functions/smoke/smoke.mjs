@@ -458,13 +458,17 @@ async function main() {
     );
   }
 
-  // --- email 중복(유일성 강제) → 409 ---
+  // --- email 유일성 완화(BE-4/§3.4): 미인증 중복은 허용(이 시점 owner@example.com은 emailuser에서 미인증) ---
   {
     const r = await call("POST", "/accounts", {
       bearer: adminToken,
       body: { id: "dupemail", password: "pw", role: "user", email: "owner@example.com" },
     });
-    check("(item1a/§4.5) 중복 email 생성 → 409", r.status === 409, `status=${r.status}`);
+    check(
+      "(BE-4/§3.4) 미인증 email 중복 생성 → 201 허용",
+      r.status === 201 && r.json?.emailVerified === false,
+      `status=${r.status}`
+    );
   }
   {
     // 잘못된 email 형식 → 400
@@ -534,6 +538,107 @@ async function main() {
       body: { id: "emailuser", code: KNOWN_CODE },
     });
     check("(item1a/1회성) 소비된 코드 재사용 → 401", reuse.status === 401, `status=${reuse.status}`);
+  }
+
+  // --- BE-4/§3.4: 이제 owner@example.com은 emailuser가 verified → 신규 계정 생성 시 verified 충돌 409 ---
+  {
+    const r = await call("POST", "/accounts", {
+      bearer: adminToken,
+      body: { id: "afterverify", password: "pw", role: "user", email: "owner@example.com" },
+    });
+    check(
+      "(BE-4/§3.4) verified 계정과 email 충돌 → 409 초과 메시지",
+      r.status === 409 &&
+        r.json?.error?.message === "해당 이메일로 생성 가능한 계정 수를 초과하였습니다.",
+      `status=${r.status} msg=${r.json?.error?.message}`
+    );
+  }
+
+  // --- BE-4/§3.4: 이미 verified된 email을 다른 미인증 계정(dupemail)이 verify 시도 → 409 taken ---
+  {
+    const KNOWN_TAKEN = "444555";
+    const col = db.collection("users").doc("dupemail").collection("tokens");
+    const toks = await col.where("purpose", "==", "verify_email").get();
+    await Promise.all(toks.docs.map((d) => d.ref.delete()));
+    await col.doc("taken-verify-token").set({
+      id: "taken-verify-token",
+      purpose: "verify_email",
+      secretHash: sha256("dummy"),
+      codeHash: sha256(KNOWN_TAKEN),
+      email: "owner@example.com",
+      createdAt: admin.firestore.Timestamp.now(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 300_000),
+      consumedAt: null,
+      attempts: 0,
+    });
+    const r = await call("POST", "/auth/verify-email/confirm", {
+      apiKey: API_KEY,
+      body: { id: "dupemail", code: KNOWN_TAKEN },
+    });
+    check(
+      "(BE-4/§3.4) 이미 verified된 email을 재-verify 시도 → 409 초과 메시지",
+      r.status === 409 &&
+        r.json?.error?.message === "해당 이메일로 생성 가능한 계정 수를 초과하였습니다.",
+      `status=${r.status} msg=${r.json?.error?.message}`
+    );
+    const u = await db.collection("users").doc("dupemail").get();
+    check("(BE-4/§3.4) taken 거부 후 dupemail은 미인증 유지", u.data()?.emailVerified === false);
+  }
+
+  // --- BE-3: self-signup(/auth/register) API키만으로 role=user 가입 + 즉시 JWT ---
+  {
+    const r = await call("POST", "/auth/register", {
+      apiKey: API_KEY,
+      body: { id: "selfsignup1", password: "selfpw123" },
+    });
+    check(
+      "(BE-3) /auth/register → 201 {token,user} role=user",
+      r.status === 201 &&
+        typeof r.json?.token === "string" &&
+        r.json?.user?.role === "user" &&
+        r.json?.user?.id === "selfsignup1",
+      `status=${r.status} role=${r.json?.user?.role}`
+    );
+  }
+  {
+    // role을 body로 지정해도 서버가 user로 강제(권한 상승 차단).
+    const r = await call("POST", "/auth/register", {
+      apiKey: API_KEY,
+      body: { id: "selfsignup2", password: "selfpw123", role: "admin" },
+    });
+    check(
+      "(BE-3/보안) register에 role=admin 지정해도 user 강제",
+      r.status === 201 && r.json?.user?.role === "user",
+      `role=${r.json?.user?.role}`
+    );
+  }
+  {
+    // id 중복 → 409.
+    const r = await call("POST", "/auth/register", {
+      apiKey: API_KEY,
+      body: { id: "selfsignup1", password: "selfpw123" },
+    });
+    check("(BE-3) register id 중복 → 409", r.status === 409, `status=${r.status}`);
+  }
+  {
+    // Bearer 없이 API키만으로 가입 가능(비로그인 self-signup).
+    const r = await call("POST", "/auth/register", {
+      apiKey: API_KEY,
+      body: { id: "selfsignup3", password: "selfpw123", email: "self3@example.com" },
+    });
+    check(
+      "(BE-3) register email 포함 → 201 unverified",
+      r.status === 201 && r.json?.user?.email === "self3@example.com" &&
+        r.json?.user?.emailVerified === false,
+      `status=${r.status} email=${r.json?.user?.email}`
+    );
+    // 발급된 JWT로 즉시 인증 요청이 되는지(가입 즉시 로그인).
+    const me = await call("GET", "/accounts", { bearer: r.json?.token });
+    check(
+      "(BE-3) register JWT는 user 권한(파워 전용 /accounts는 403)",
+      me.status === 403,
+      `status=${me.status}`
+    );
   }
 
   // --- 토큰 만료 검증(expiresAt 과거) ---
