@@ -37,6 +37,8 @@ public class AccountViewModelEmailTests
         public (string id, string email)? SetEmailCall { get; private set; }
         public string? VerifiedId { get; private set; }
         public bool VerifyResult { get; set; } = true;
+        /// <summary>설정 시 ConfirmEmailVerificationAsync가 이 메시지로 InvalidOperationException(409 taken)을 던진다.</summary>
+        public string? VerifyThrowsMessage { get; set; }
 
         public Task<User?> LoginAsync(string id, string password, CancellationToken ct = default)
             => Task.FromResult<User?>(null);
@@ -73,6 +75,8 @@ public class AccountViewModelEmailTests
         public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default)
         {
             VerifiedId = id;
+            if (VerifyThrowsMessage is not null)
+                throw new InvalidOperationException(VerifyThrowsMessage);
             return Task.FromResult(VerifyResult);
         }
         public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
@@ -227,5 +231,120 @@ public class AccountViewModelEmailTests
 
         Assert.False(vm.IsEmailVerified);
         Assert.True(vm.EmailMessageIsError);
+    }
+
+    // ── W-4 (§3.3): 인증 코드 5분 카운트다운 시작/정지·누수 방지 ──
+
+    [Fact]
+    public async Task RegisterEmail_Success_Starts_Countdown()
+    {
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "old@x.com", EmailVerified = true };
+        var (vm, _, _) = MakeVm(useBackend: true, loginUser: user);
+        await vm.OnEnterAsync();
+        vm.EmailInput = "new@x.com";
+
+        await vm.RegisterEmailCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsVerifyCountdownActive);
+        // 발송 직후 즉시 mm:ss 표시. 형식 검증: 정확히 mm:ss.
+        Assert.Matches(@"^\d{2}:\d{2}$", vm.VerifyCountdownText);
+        // 5분 시작 직후는 05:00 또는 04:59(마이크로초 절삭). 남은 시간이 4:50~5:00 범위인지 확인.
+        var parts = vm.VerifyCountdownText.Split(':');
+        var remaining = TimeSpan.FromMinutes(int.Parse(parts[0])) + TimeSpan.FromSeconds(int.Parse(parts[1]));
+        Assert.InRange(remaining, TimeSpan.FromSeconds(290), TimeSpan.FromSeconds(300));
+    }
+
+    [Fact]
+    public async Task ResendVerification_Success_Starts_Countdown()
+    {
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "u@x.com", EmailVerified = false };
+        var (vm, _, _) = MakeVm(useBackend: true, loginUser: user);
+        await vm.OnEnterAsync();
+
+        await vm.ResendEmailVerificationCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsVerifyCountdownActive);
+        Assert.Matches(@"^\d{2}:\d{2}$", vm.VerifyCountdownText);
+    }
+
+    [Fact]
+    public async Task Countdown_Not_Started_When_NonBackend()
+    {
+        // 비백엔드 모드는 이메일 기능 자체가 막혀 코드가 나가지 않으므로 카운트다운도 시작 안 함.
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "u@x.com", EmailVerified = false };
+        var (vm, _, _) = MakeVm(useBackend: false, loginUser: user);
+        await vm.OnEnterAsync();
+
+        await vm.ResendEmailVerificationCommand.ExecuteAsync(null);
+
+        Assert.False(vm.IsVerifyCountdownActive);
+    }
+
+    [Fact]
+    public async Task OnEnter_Reentry_Stops_Countdown_No_Leak()
+    {
+        // 오버레이 재사용 VM: 재진입 시 기존 카운트다운을 정지·해제해야 한다(G6 누수 방지).
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "u@x.com", EmailVerified = false };
+        var (vm, _, _) = MakeVm(useBackend: true, loginUser: user);
+        await vm.OnEnterAsync();
+        await vm.ResendEmailVerificationCommand.ExecuteAsync(null);
+        Assert.True(vm.IsVerifyCountdownActive); // 진행 중 확인
+
+        await vm.OnEnterAsync(); // 재진입
+
+        Assert.False(vm.IsVerifyCountdownActive);
+        Assert.Equal(string.Empty, vm.VerifyCountdownText);
+    }
+
+    [Fact]
+    public async Task Close_Overlay_Exit_Stops_Countdown_No_Leak()
+    {
+        // 오버레이 이탈(닫기→복귀 시 셸이 OnLeaveAsync 호출)에서 카운트다운 정지·해제.
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "u@x.com", EmailVerified = false };
+        var (vm, _, _) = MakeVm(useBackend: true, loginUser: user);
+        await vm.OnEnterAsync();
+        await vm.ResendEmailVerificationCommand.ExecuteAsync(null);
+        Assert.True(vm.IsVerifyCountdownActive);
+
+        await vm.OnLeaveAsync(); // 셸의 이탈 훅(ReturnFromOverlay 경로)
+
+        Assert.False(vm.IsVerifyCountdownActive);
+        Assert.Equal(string.Empty, vm.VerifyCountdownText);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_Success_Stops_Countdown()
+    {
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "u@x.com", EmailVerified = false };
+        var (vm, accounts, _) = MakeVm(useBackend: true, loginUser: user);
+        accounts.VerifyResult = true;
+        await vm.OnEnterAsync();
+        await vm.ResendEmailVerificationCommand.ExecuteAsync(null);
+        Assert.True(vm.IsVerifyCountdownActive);
+        vm.EmailVerifyCode = "123456";
+
+        await vm.VerifyEmailCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsEmailVerified);
+        Assert.False(vm.IsVerifyCountdownActive); // 인증 완료 시 카운트다운 정지
+    }
+
+    // ── W-4 (§3.4 C4): verify 초과(409, InvalidOperationException) 메시지 표시 ──
+
+    [Fact]
+    public async Task VerifyEmail_Taken_409_Shows_Server_Message()
+    {
+        const string takenMsg = "해당 이메일로 생성 가능한 계정 수를 초과하였습니다.";
+        var user = new User { Id = "u1", Role = UserRole.User, Email = "u@x.com", EmailVerified = false };
+        var (vm, accounts, _) = MakeVm(useBackend: true, loginUser: user);
+        accounts.VerifyThrowsMessage = takenMsg; // 409 taken 전파
+        await vm.OnEnterAsync();
+        vm.EmailVerifyCode = "123456";
+
+        await vm.VerifyEmailCommand.ExecuteAsync(null);
+
+        Assert.False(vm.IsEmailVerified);      // 인증 안 됨
+        Assert.True(vm.EmailMessageIsError);
+        Assert.Equal(takenMsg, vm.EmailMessage); // 서버 메시지 그대로 노출
     }
 }

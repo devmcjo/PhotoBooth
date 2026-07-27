@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.Core.Accounts;
@@ -76,6 +77,20 @@ public sealed partial class AccountViewModel : ViewModelBase
     [ObservableProperty] private string _emailMessage = string.Empty;
     [ObservableProperty] private bool _emailMessageIsError;
 
+    // ── 인증 코드 5분 카운트다운 (C3, §3.3) ──
+    /// <summary>인증 코드 유효 시간 카운트다운(mm:ss). 표시용 — 실제 만료는 서버가 판정.</summary>
+    [ObservableProperty] private string _verifyCountdownText = string.Empty;
+    /// <summary>카운트다운 활성 여부(true일 때만 표시·인증 버튼 활성).</summary>
+    [ObservableProperty] private bool _isVerifyCountdownActive;
+
+    /// <summary>UI 스레드 바인딩 카운트다운 타이머(1초 tick). 진입마다 재구성, 이탈 시 정지(G6 누수 방지).</summary>
+    private DispatcherTimer? _verifyCountdown;
+    /// <summary>카운트다운 종료 시각(로컬 시계 기준, 표시용).</summary>
+    private DateTime _verifyDeadline;
+
+    /// <summary>인증 코드 유효 시간(서버 VERIFY_TTL_SECONDS=300과 정합, §3.3).</summary>
+    private static readonly TimeSpan VerifyCodeLifetime = TimeSpan.FromMinutes(5);
+
     /// <summary>로그인 계정의 현재 이메일(없으면 null). 진입 시 세션에서 로드.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasEmail))]
@@ -109,6 +124,9 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     public override Task OnEnterAsync()
     {
+        // 재사용 오버레이 VM이므로 진입마다 기존 카운트다운을 먼저 정지·해제한다(G6 누수 방지).
+        StopVerifyCountdown();
+
         OnPropertyChanged(nameof(IsLoggedIn));
         OnPropertyChanged(nameof(IsPower));
         OnPropertyChanged(nameof(IsBackendMode));
@@ -129,6 +147,13 @@ public sealed partial class AccountViewModel : ViewModelBase
         EmailVerifyCode = string.Empty;
         SetEmailMessage(string.Empty, isError: false);
 
+        return Task.CompletedTask;
+    }
+
+    /// <summary>오버레이 이탈(닫기/복귀) 시 카운트다운 정지·핸들러 해제(G6 누수 방지).</summary>
+    public override Task OnLeaveAsync()
+    {
+        StopVerifyCountdown();
         return Task.CompletedTask;
     }
 
@@ -255,6 +280,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             IsEmailVerified = false;
             EmailVerifyCode = string.Empty;
             SetEmailMessage("이메일로 인증 코드를 발송했습니다. 코드를 입력해 인증을 완료하세요.", isError: false);
+            StartVerifyCountdown(VerifyCodeLifetime);
         }
         catch (ArgumentException)
         {
@@ -298,12 +324,20 @@ public sealed partial class AccountViewModel : ViewModelBase
                 user.EmailVerified = true;
                 IsEmailVerified = true;
                 EmailVerifyCode = string.Empty;
+                StopVerifyCountdown();
                 SetEmailMessage("이메일 인증이 완료되었습니다.", isError: false);
             }
             else
             {
+                // 서버가 false 반환 = 코드 불일치/만료. 카운트다운은 표시용이므로 서버 판정을 신뢰한다.
                 SetEmailMessage("인증 코드가 올바르지 않거나 만료되었습니다.", isError: true);
             }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // 이메일 1개당 1계정만 인증 초과(409 taken). 서버 메시지 그대로 노출
+            // ("해당 이메일로 생성 가능한 계정 수를 초과하였습니다."). (§3.4 C4)
+            SetEmailMessage(ex.Message, isError: true);
         }
         catch (Exception ex)
         {
@@ -329,6 +363,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             // 서버는 열거 방지로 항상 성공 응답(no-op 포함). 사용자에겐 동일 안내.
             await _accounts.RequestEmailVerificationAsync(user.Id);
             SetEmailMessage("인증 코드를 다시 발송했습니다.", isError: false);
+            StartVerifyCountdown(VerifyCodeLifetime);
         }
         catch (Exception ex)
         {
@@ -357,5 +392,60 @@ public sealed partial class AccountViewModel : ViewModelBase
     {
         EmailMessage = text;
         EmailMessageIsError = isError;
+    }
+
+    // ── 인증 코드 카운트다운 (C3, §3.3) ──
+
+    /// <summary>
+    /// 인증 코드 5분 카운트다운을 시작한다. 매초 mm:ss 갱신, 0 도달 시 정지 + 만료 안내.
+    /// 진입마다 기존 타이머를 정지·해제 후 재구성한다(G6 누수 방지). DispatcherTimer는 UI 스레드 바인딩.
+    /// </summary>
+    private void StartVerifyCountdown(TimeSpan lifetime)
+    {
+        StopVerifyCountdown(); // 재발송 등으로 재시작 시 중복 tick 방지
+
+        _verifyDeadline = DateTime.Now + lifetime;
+        _verifyCountdown = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _verifyCountdown.Tick += OnVerifyCountdownTick;
+
+        IsVerifyCountdownActive = true;
+        UpdateVerifyCountdownText(); // 즉시 5:00 표시(첫 tick까지 1초 공백 방지)
+        _verifyCountdown.Start();
+    }
+
+    /// <summary>카운트다운 정지 + 핸들러 해제 + 표시 초기화(오버레이 이탈/재진입/인증 완료).</summary>
+    private void StopVerifyCountdown()
+    {
+        if (_verifyCountdown is { } timer)
+        {
+            timer.Stop();
+            timer.Tick -= OnVerifyCountdownTick;
+            _verifyCountdown = null;
+        }
+        IsVerifyCountdownActive = false;
+        VerifyCountdownText = string.Empty;
+    }
+
+    /// <summary>매초 tick: 남은 시간 갱신, 0 이하면 정지 + 만료 안내. (이벤트 핸들러이나 async 불필요 → 일반 void)</summary>
+    private void OnVerifyCountdownTick(object? sender, EventArgs e)
+    {
+        if (DateTime.Now >= _verifyDeadline)
+        {
+            StopVerifyCountdown();
+            SetEmailMessage("코드가 만료되었습니다. 재발송하세요.", isError: true);
+            return;
+        }
+        UpdateVerifyCountdownText();
+    }
+
+    /// <summary>남은 시간을 mm:ss로 표시(음수 방지 clamp).</summary>
+    private void UpdateVerifyCountdownText()
+    {
+        var remaining = _verifyDeadline - DateTime.Now;
+        if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+        VerifyCountdownText = $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}";
     }
 }

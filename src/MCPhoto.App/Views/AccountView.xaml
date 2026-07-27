@@ -36,8 +36,16 @@
                     </Border.Visibility>
                     <StackPanel>
                         <TextBlock Text="이메일 인증" Style="{StaticResource Text.H2}" Margin="0,0,0,4" />
-                        <TextBlock Text="이메일을 인증하면 비밀번호를 잊어도 재설정할 수 있어요."
-                                   Style="{StaticResource Text.Caption}" Margin="0,0,0,16" TextWrapping="Wrap" />
+
+                        <!-- C2 안내(공통): 로그인 후 비번 변경은 인증 불요. 인증은 비번 찾기에만 필요. (§3.2) -->
+                        <TextBlock Text="비밀번호 변경은 지금 바로 가능합니다. 이메일 인증은 비밀번호 찾기(재설정)를 쓰려는 경우에만 필요합니다."
+                                   Style="{StaticResource Text.Caption}" Margin="0,0,0,8" TextWrapping="Wrap" />
+
+                        <!-- C1 안내(미인증에만): 미인증이면 비번 찾기 불가, 관리자 강제 변경만 가능. (§3.1) -->
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,0,0,16" TextWrapping="Wrap"
+                                   Foreground="{StaticResource Brush.Warning}"
+                                   Visibility="{Binding IsEmailVerified, Converter={StaticResource InverseBoolToVis}}"
+                                   Text="이메일 인증을 완료해야 비밀번호 찾기(재설정)를 쓸 수 있어요. 미인증 상태에서는 관리자를 통한 비밀번호 강제 변경만 가능합니다." />
 
                         <!-- 현재 상태: 인증 완료 배지(로그인 배너와 동일한 surface+톤 패턴) -->
                         <Border Background="{StaticResource Brush.Success.Surface}" CornerRadius="{StaticResource Radius.S}"
@@ -75,6 +83,12 @@
                                 <Button Grid.Column="2" Content="코드 재발송" Style="{StaticResource Button.Ghost}"
                                         Command="{Binding ResendEmailVerificationCommand}" Margin="8,0,0,0" />
                             </Grid>
+
+                            <!-- 인증 코드 유효 시간 카운트다운(발송 후 5분, 표시용). (§3.3) -->
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,0,0,12"
+                                       Foreground="{StaticResource Brush.Warning}"
+                                       Visibility="{Binding IsVerifyCountdownActive, Converter={StaticResource BoolToVis}}"
+                                       Text="{Binding VerifyCountdownText, StringFormat='남은 시간 {0}'}" />
                         </StackPanel>
 
                         <TextBlock Text="{Binding EmailMessage}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
