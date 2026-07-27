@@ -184,7 +184,9 @@ public sealed class GoogleSignInService : IGoogleSignInService
             context.Response.StatusCode = 200;
             context.Response.ContentType = "text/html; charset=utf-8";
             context.Response.ContentLength64 = buffer.Length;
+            context.Response.KeepAlive = false; // 응답 후 연결 종료 → 브라우저가 완결로 인식(리셋 방지).
             await context.Response.OutputStream.WriteAsync(buffer).ConfigureAwait(false);
+            await context.Response.OutputStream.FlushAsync().ConfigureAwait(false); // 소켓까지 확실히 밀어냄.
         }
         catch
         {
@@ -195,5 +197,9 @@ public sealed class GoogleSignInService : IGoogleSignInService
             try { context.Response.Close(); }
             catch { /* 무시 */ }
         }
+
+        // 리스너(로컬 서버)를 닫기 전에 브라우저가 응답을 완전히 수신하도록 짧게 대기 → "연결 안됨" 방지.
+        try { await Task.Delay(400).ConfigureAwait(false); }
+        catch { /* 무시 */ }
     }
 }
