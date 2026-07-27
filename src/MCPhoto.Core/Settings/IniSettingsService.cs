@@ -13,12 +13,15 @@ public sealed class IniSettingsService : ISettingsService
     private readonly ILogger<IniSettingsService>? _logger;
     private string _iniPath; // 폴백 성공 경로로 승격될 수 있음(it3 §3.2)
     private AppSettings? _current;
+    private readonly ISecretProtector _protector; // 백엔드 게이트 키 저장 보호(기본 패스스루)
 
     /// <param name="iniPath">테스트/커스텀용 명시 경로. null이면 기본 위치 자동 결정.</param>
-    public IniSettingsService(ILogger<IniSettingsService>? logger = null, string? iniPath = null)
+    /// <param name="protector">민감값 보호(기본 <see cref="NullSecretProtector"/>=평문). App은 DPAPI 구현 주입.</param>
+    public IniSettingsService(ILogger<IniSettingsService>? logger = null, string? iniPath = null, ISecretProtector? protector = null)
     {
         _logger = logger;
         _iniPath = iniPath ?? ResolveDefaultPath();
+        _protector = protector ?? new NullSecretProtector();
     }
 
     public string IniPath => _iniPath;
@@ -126,7 +129,7 @@ public sealed class IniSettingsService : ISettingsService
 
     // ── AppSettings ↔ INI 매핑 ──
 
-    private static void ReadInto(IniFile ini, AppSettings s)
+    private void ReadInto(IniFile ini, AppSettings s)
     {
         s.CutCount = ini.GetInt(Section, nameof(s.CutCount), s.CutCount);
         s.CountdownSec = ini.GetInt(Section, nameof(s.CountdownSec), s.CountdownSec);
@@ -154,7 +157,9 @@ public sealed class IniSettingsService : ISettingsService
         s.StorageBucket = ini.GetString(Section, nameof(s.StorageBucket), s.StorageBucket);
         s.UseBackend = ini.GetBool(Section, nameof(s.UseBackend), s.UseBackend);
         s.BackendBaseUrl = ini.GetString(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
-        s.BackendApiKey = ini.GetString(Section, nameof(s.BackendApiKey), s.BackendApiKey);
+        // 백엔드 게이트 키: 약어 키 'Ct'(DPAPI 암호화)에서 읽어 복호화. 구 평문 키 'BackendApiKey'도 폴백으로 읽어 이관.
+        var storedApiKey = ini.GetString(Section, "Ct", ini.GetString(Section, nameof(s.BackendApiKey), s.BackendApiKey));
+        s.BackendApiKey = _protector.Unprotect(storedApiKey);
         s.GoogleClientId = ini.GetString(Section, nameof(s.GoogleClientId), s.GoogleClientId);
 
         s.WindowBounds.Left = ini.GetDouble(Section, "WindowLeft", s.WindowBounds.Left);
@@ -163,7 +168,7 @@ public sealed class IniSettingsService : ISettingsService
         s.WindowBounds.Height = ini.GetDouble(Section, "WindowHeight", s.WindowBounds.Height);
     }
 
-    private static void WriteFrom(AppSettings s, IniFile ini)
+    private void WriteFrom(AppSettings s, IniFile ini)
     {
         ini.SetInt(Section, nameof(s.CutCount), s.CutCount);
         ini.SetInt(Section, nameof(s.CountdownSec), s.CountdownSec);
@@ -191,7 +196,8 @@ public sealed class IniSettingsService : ISettingsService
         ini.Set(Section, nameof(s.StorageBucket), s.StorageBucket);
         ini.SetBool(Section, nameof(s.UseBackend), s.UseBackend);
         ini.Set(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
-        ini.Set(Section, nameof(s.BackendApiKey), s.BackendApiKey);
+        // 약어 키 'Ct'에 DPAPI 암호문으로 저장(구 키명·평문 노출 회피). 구 'BackendApiKey' 키는 더 이상 쓰지 않는다(전체 재작성이라 자동 소멸).
+        ini.Set(Section, "Ct", _protector.Protect(s.BackendApiKey));
         ini.Set(Section, nameof(s.GoogleClientId), s.GoogleClientId);
 
         ini.SetDouble(Section, "WindowLeft", s.WindowBounds.Left);

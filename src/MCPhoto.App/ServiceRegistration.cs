@@ -48,8 +48,11 @@ internal static class ServiceRegistration
         services.AddSingleton<ILogFolderService, LogFolderService>();
         services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();
 
-        // Step 2: 설정(INI)
-        services.AddSingleton<ISettingsService, IniSettingsService>();
+        // Step 2: 설정(INI) + 민감값 보호(DPAPI, Windows). ISettingsService에 protector를 명시 주입(팩토리 — DI 생성자 모호성 회피).
+        services.AddSingleton<ISecretProtector, DpapiSecretProtector>();
+        services.AddSingleton<ISettingsService>(sp => new IniSettingsService(
+            sp.GetService<ILogger<IniSettingsService>>(),
+            protector: sp.GetRequiredService<ISecretProtector>()));
 
         // Step 3: 캡처 파이프라인(카메라)
         services.AddSingleton<ICameraService, OpenCvCameraService>();
