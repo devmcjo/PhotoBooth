@@ -14,7 +14,10 @@ export type ErrorCode =
   | "invalid_argument" // 400 입력 검증 실패
   | "not_found" // 404 미존재
   | "not_implemented" // 501 미구성/미지원 기능(예: Google SSO 미설정, item1b)
-  | "internal"; // 500 서버 오류
+  | "internal" // 500 서버 오류
+  // it13(TempUser QR 한도, 403): 클라가 정확한 사유 문구를 표시하도록 전용 코드 분리(설계 §5.2·§9.3).
+  | "TEMP_USER_TIME_EXCEEDED" // 무료 사용 시간 경과(createdAt+hours)
+  | "TEMP_USER_COUNT_EXCEEDED"; // 무료 사용 횟수 소진(qrUsedCount>=count)
 
 /** 라우트에서 throw해 상태코드·코드·메시지를 일관되게 응답으로 변환. */
 export class HttpError extends Error {
@@ -48,6 +51,24 @@ export class HttpError extends Error {
   }
   static internal(message = "서버 오류가 발생했습니다.") {
     return new HttpError(500, "internal", message);
+  }
+
+  /** it13: TempUser 무료 사용 시간 경과(403). 문구는 설계 §0 표와 정확히 일치(변경 금지). */
+  static tempUserTimeExceeded() {
+    return new HttpError(
+      403,
+      "TEMP_USER_TIME_EXCEEDED",
+      "무료 사용 시간이 지났습니다. 관리자에게 문의해주세요."
+    );
+  }
+
+  /** it13: TempUser 무료 사용 횟수 소진(403). 문구는 설계 §0 표와 정확히 일치(변경 금지). */
+  static tempUserCountExceeded() {
+    return new HttpError(
+      403,
+      "TEMP_USER_COUNT_EXCEEDED",
+      "무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요."
+    );
   }
 }
 

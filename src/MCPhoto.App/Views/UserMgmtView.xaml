@@ -14,16 +14,46 @@
         <TextBlock Grid.Row="0" Text="사용자 관리" Style="{StaticResource Text.H1}" Margin="0,0,0,16" />
 
         <Border Grid.Row="1" Style="{StaticResource Card}" Padding="8">
-            <ListView ItemsSource="{Binding Users}" Background="Transparent" BorderThickness="0"
+            <!-- it13 §9.5: 행 DataContext = UserRowViewModel(계정 + 역할 변경 상태). Id/Role은 User 경로로 접근. -->
+            <ListView ItemsSource="{Binding Rows}" Background="Transparent" BorderThickness="0"
                       Foreground="{StaticResource Brush.Text.Primary}">
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="아이디" Width="220" DisplayMemberBinding="{Binding Id}" />
-                        <GridViewColumn Header="역할" Width="140" DisplayMemberBinding="{Binding Role}" />
-                        <GridViewColumn Header="작업" Width="440">
+                        <GridViewColumn Header="아이디" Width="200" DisplayMemberBinding="{Binding User.Id}" />
+                        <!-- it13 §9.5: 역할 한글 라벨(임시 유저 포함). DisplayMemberBinding은 컨버터 불가 → CellTemplate. -->
+                        <GridViewColumn Header="역할" Width="120">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <!-- 관리 액션은 행위자와 같거나 낮은 역할에만 노출(예: manager는 admin 행에 미노출). manager 지정은 admin이 user 행에만. -->
+                                    <TextBlock Text="{Binding User.Role, Converter={StaticResource RoleLabel}}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <!-- it13 §9.5: 역할 변경 = 콤보(AssignableRoles 필터) + Apply. CanChangeRole일 때만 노출(빈 목록·자기 계정 미노출). -->
+                        <GridViewColumn Header="역할 변경" Width="220">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal"
+                                                Visibility="{Binding CanChangeRole, Converter={StaticResource BoolToVis}}">
+                                        <ComboBox Width="120" VerticalAlignment="Center"
+                                                  ItemsSource="{Binding AssignableRoles}"
+                                                  SelectedItem="{Binding SelectedRole}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Converter={StaticResource RoleLabel}}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Content="변경" Style="{StaticResource Button.Ghost}" Margin="8,0,0,0" MinWidth="0" Padding="16,0"
+                                                Command="{Binding DataContext.ApplyRoleChangeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="작업" Width="260">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <!-- 관리 액션은 행위자와 같거나 낮은 역할에만 노출(예: manager는 admin 행에 미노출). -->
                                     <StackPanel Orientation="Horizontal">
                                         <Button Content="삭제" Style="{StaticResource Button.Danger}" Margin="0,0,6,0"
                                                 Command="{Binding DataContext.DeleteUserCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -31,38 +61,17 @@
                                             <Button.Visibility>
                                                 <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Manage">
                                                     <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                    <Binding Path="Role" />
+                                                    <Binding Path="User.Role" />
                                                 </MultiBinding>
                                             </Button.Visibility>
                                         </Button>
-                                        <Button Content="pw 초기화" Style="{StaticResource Button.Secondary}" Margin="0,0,6,0" MinWidth="0"
+                                        <Button Content="pw 초기화" Style="{StaticResource Button.Secondary}" MinWidth="0"
                                                 Command="{Binding DataContext.ResetUserPasswordCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}">
                                             <Button.Visibility>
                                                 <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Manage">
                                                     <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                    <Binding Path="Role" />
-                                                </MultiBinding>
-                                            </Button.Visibility>
-                                        </Button>
-                                        <Button Content="manager 지정" Style="{StaticResource Button.Ghost}"
-                                                Command="{Binding DataContext.PromoteToManagerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Button.Visibility>
-                                                <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Promote">
-                                                    <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                    <Binding Path="Role" />
-                                                </MultiBinding>
-                                            </Button.Visibility>
-                                        </Button>
-                                        <!-- W-2: manager → user 강등(admin만, manager 행에만 노출). 승격 버튼과 상호배타. -->
-                                        <Button Content="user로 강등" Style="{StaticResource Button.Ghost}"
-                                                Command="{Binding DataContext.DemoteToUserCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Button.Visibility>
-                                                <MultiBinding Converter="{StaticResource RoleActionVis}" ConverterParameter="Demote">
-                                                    <Binding Path="DataContext.ActorRole" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                    <Binding Path="Role" />
+                                                    <Binding Path="User.Role" />
                                                 </MultiBinding>
                                             </Button.Visibility>
                                         </Button>

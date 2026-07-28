@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Upload;
 using MCPhoto.Http.Dto;
@@ -90,12 +91,14 @@ public sealed class HttpFirebaseClient : HttpBackendClient, IFirebaseClient
         PrepareUploadResponse prepared;
         try
         {
-            prepared = await SendJsonAsync<PrepareUploadResponse>(
-                HttpMethod.Post, "uploads/prepare", prepareReq, bearer: false, ct).ConfigureAwait(false);
+            // it13 §5.1: TempUser면 서버가 prepare에서 한도 선검사(초과 시 403 — Storage 서명 URL 원천 차단).
+            //            선택적 Bearer: 로그인 상태면 JWT 부착(신원화), 게스트는 무토큰 익명 통과(§8.6). 서버 optionalBearer와 대칭.
+            prepared = await SendJsonOptionalBearerAsync<PrepareUploadResponse>(
+                HttpMethod.Post, "uploads/prepare", prepareReq, ct).ConfigureAwait(false);
         }
         catch (BackendException ex)
         {
-            throw MapToDomainException(ex);
+            throw MapUploadException(ex);   // it13: TempUser 한도 초과(403 사유 code) → QrLimitExceededException
         }
 
         // 서버 버킷을 신뢰(토큰 URL 재조립 정합). prepare 응답의 첫 upload가 이 파일.
@@ -135,14 +138,27 @@ public sealed class HttpFirebaseClient : HttpBackendClient, IFirebaseClient
 
         try
         {
-            _ = await SendJsonAsync<ResultSessionResponse>(
-                HttpMethod.Post, "uploads/commit", req, bearer: false, ct).ConfigureAwait(false);
+            // it13 §5.1: commit도 TempUser면 서버가 트랜잭션으로 한도 재검사 후 qrUsedCount 증가(초과 시 403).
+            //            선택적 Bearer: prepare와 동일 신원(로그인 시 JWT, 게스트 무토큰).
+            _ = await SendJsonOptionalBearerAsync<ResultSessionResponse>(
+                HttpMethod.Post, "uploads/commit", req, ct).ConfigureAwait(false);
         }
         catch (BackendException ex)
         {
-            throw MapToDomainException(ex);
+            throw MapUploadException(ex);   // it13: TempUser 한도 초과(403 사유 code) → QrLimitExceededException
         }
     }
+
+    /// <summary>
+    /// 업로드 예외 매핑(it13 §5.2). TempUser 한도 초과 403(사유 code)은 <see cref="QrLimitExceededException"/>으로
+    /// 변환해 QR 팝업이 사유별 정확 문구를 표시하게 한다. 그 외는 기존 <see cref="MapToDomainException"/> 계약 유지.
+    /// </summary>
+    private static Exception MapUploadException(BackendException ex) => ex.ServerCode switch
+    {
+        "TEMP_USER_TIME_EXCEEDED" => new QrLimitExceededException(QrGateReason.Time, ex.Message),
+        "TEMP_USER_COUNT_EXCEEDED" => new QrLimitExceededException(QrGateReason.Count, ex.Message),
+        _ => MapToDomainException(ex),
+    };
 
     /// <summary>만료 정리(U5)는 앱 미호출 + 서버 엔드포인트 없음(설계 §2 note). HTTP 경로 미지원.</summary>
     public Task DeleteStoragePrefixAsync(string prefix, CancellationToken ct = default)

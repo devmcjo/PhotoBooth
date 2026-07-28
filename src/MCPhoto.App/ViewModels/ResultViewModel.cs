@@ -144,11 +144,16 @@ public sealed partial class ResultViewModel : ViewModelBase
                 await _localSave.SaveAsync(savePath, session.FinalImagePath, session.TimelapsePath, session.SessionTime);
             }
 
-            // QR 전송: 설정 on AND 로그인 상태에서만. 게스트는 소스단에서 강제 off(ini 불변). (보완#1)
-            if (settings.EnableQrDelivery && _shell.IsLoggedIn)
+            // QR 전송 런타임 게이트: raw 설정 + 로그인 + TempUser 한도상태를 QrEffectivePolicy 단일 지점에서 조합.
+            // ⚠️ ini(EnableQrDelivery)는 읽기만 — 어떤 경우에도 write하지 않는다(게스트·TempUser 초과는 오버라이드만, it13 §7.4).
+            bool qrEffective = QrEffectivePolicy.IsQrEnabled(
+                rawEnableQr: settings.EnableQrDelivery,          // ini raw — 읽기만, 변경 없음
+                isLoggedIn: _shell.IsLoggedIn,
+                isTempUserBlocked: _shell.IsTempUserQrBlocked);  // 셸이 역할+한도 합성(§7.5)
+            if (qrEffective)
                 await _shell.NavigateAsync(AppState.Qr);
             else
-                await _shell.NavigateAsync(AppState.Done);
+                await _shell.NavigateAsync(AppState.Done);       // 게스트·TempUser 초과 → 팝업 없이 완료(우아)
         }
         catch (Exception ex)
         {

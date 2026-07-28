@@ -1,6 +1,7 @@
 using System.IO;
 using MCPhoto.App;
 using MCPhoto.App.ViewModels;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -41,6 +42,20 @@ public class QrPopupUploadTests
         public Task<int> PurgeExpiredAsync(CancellationToken ct = default) => Task.FromResult(0);
     }
 
+    /// <summary>TempUser 한도 초과(서버 403 매핑) 모사 — 지정 사유로 QrLimitExceededException을 던진다. (it13 §9.3)</summary>
+    private sealed class LimitExceededUploadService : IUploadService
+    {
+        private readonly QrGateReason _reason;
+        public LimitExceededUploadService(QrGateReason reason) => _reason = reason;
+
+        public Task<ResultSession> UploadResultAsync(string? finalImagePath, string? timelapsePath,
+            int retentionHours, string hostingBaseUrl, IProgress<UploadProgress>? progress = null,
+            CancellationToken ct = default)
+            => throw new QrLimitExceededException(_reason, "서버 403(테스트 모사)");
+
+        public Task<int> PurgeExpiredAsync(CancellationToken ct = default) => Task.FromResult(0);
+    }
+
     private sealed class StubQrService : IQrService
     {
         // 1×1 PNG(디코드 가능한 최소 바이트) — 실제 렌더는 안 하되 non-null 생성 확인용.
@@ -68,6 +83,41 @@ public class QrPopupUploadTests
         var shell = MakeShell(session, settings);
         var vm = new QrPopupViewModel(shell, new StubUploadService(uploadThrows), new StubQrService());
         return (vm, session);
+    }
+
+    private static QrPopupViewModel MakeLimitExceededVm(QrGateReason reason)
+    {
+        var session = new SessionContext { FinalImagePath = "final.jpg" };
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"qr_{Guid.NewGuid():N}.ini"));
+        settings.Load();
+        settings.Current.EnableQrDelivery = true;
+        settings.Current.SaveLocalCopy = true;
+        var shell = MakeShell(session, settings);
+        return new QrPopupViewModel(shell, new LimitExceededUploadService(reason), new StubQrService());
+    }
+
+    // ── it13 §9.3: TempUser 한도 초과(업로드 시점 403) 우아 처리 — 사유별 §0 정확 문구 ──
+
+    [Fact]
+    public async Task Time_Limit_Exceeded_Shows_Exact_Time_Message()
+    {
+        var vm = MakeLimitExceededVm(QrGateReason.Time);
+        await vm.OnEnterAsync();
+
+        Assert.True(vm.UploadFailed);
+        Assert.False(vm.UploadSucceeded);
+        Assert.Null(vm.QrImage);
+        Assert.Equal("무료 사용 시간이 지났습니다. 관리자에게 문의해주세요.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task Count_Limit_Exceeded_Shows_Exact_Count_Message()
+    {
+        var vm = MakeLimitExceededVm(QrGateReason.Count);
+        await vm.OnEnterAsync();
+
+        Assert.True(vm.UploadFailed);
+        Assert.Equal("무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요.", vm.StatusMessage);
     }
 
     [Fact]

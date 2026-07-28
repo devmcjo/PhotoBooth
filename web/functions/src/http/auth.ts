@@ -66,6 +66,35 @@ export function requireBearer(): RequestHandler {
   };
 }
 
+/**
+ * 선택적 Bearer 검증(업로드 신원화, 설계 §5.1). it13:
+ *   - Authorization 헤더 없음 → principal 미주입, 그대로 통과(게스트 익명 흐름 유지).
+ *   - 유효 Bearer → req.principal 주입(TempUser 한도 강제의 계정 신원).
+ *   - 무효 Bearer(서명 불일치·만료·형식 오류) → 401(위조 토큰 거부).
+ *
+ * requireBearer와 달리 "토큰 없음"은 401이 아니다 — 게스트 촬영 업로드가 그대로 동작해야 하기 때문.
+ */
+export function optionalBearer(): RequestHandler {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const token = extractBearer(headerValue(req.headers.authorization));
+    if (!token) {
+      // 무토큰 = 게스트. principal 없이 통과(한도 미적용).
+      return next();
+    }
+    const cfg = loadConfig();
+    try {
+      req.principal = verifyToken(token, cfg.jwtSecret);
+      next();
+    } catch (err) {
+      if (err instanceof TokenError) {
+        // 토큰이 제시됐으나 무효 = 위조 시도. 익명 폴백 대신 거부(과금 우회 차단).
+        return next(HttpError.unauthorized(err.message));
+      }
+      next(err);
+    }
+  };
+}
+
 /** requireBearer 이후 사용. power(manager/admin)만 통과. */
 export function requirePower(): RequestHandler {
   return (req: Request, _res: Response, next: NextFunction) => {

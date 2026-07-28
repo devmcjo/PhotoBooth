@@ -228,6 +228,7 @@ public class XamlResourceTests
     [InlineData("PasswordResetView.xaml")]
     [InlineData("AccountView.xaml")]
     [InlineData("LoginGuestView.xaml")]
+    [InlineData("UserMgmtView.xaml")]   // it13 §9.5: 역할 변경 콤보+Apply 재작업 StaticResource 회귀 안전망
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
@@ -241,7 +242,7 @@ public class XamlResourceTests
         {
             "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
             "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
-            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "RoleActionVis", "FilePathToImage",
+            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "RoleActionVis", "RoleLabel", "FilePathToImage",
         };
 
         var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")

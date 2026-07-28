@@ -123,6 +123,16 @@ public sealed class CameraStateToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>UserRole → 한글 표시 라벨("임시 유저"/"사용자"/"매니저"/"관리자"). 생성 콤보·사용자 관리 목록. (it13 §9.1)</summary>
+public sealed class RoleLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is UserRole role ? role.ToLabel() : string.Empty;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>SlotAspect → 표시 라벨("4:3"/"3:4"/"1:1"). 종횡비 ComboBox 항목 표시. (it4 §3 B4)</summary>
 public sealed class SlotAspectLabelConverter : IValueConverter
 {
@@ -193,10 +203,8 @@ public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
 }
 
 /// <summary>
-/// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole)], parameter="Manage"|"Promote"|"Demote".
+/// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole)], parameter="Manage".
 /// - Manage(삭제·pw 초기화): 대상이 행위자와 **같거나 낮은 역할**일 때만 노출(manager는 admin 관리 불가).
-/// - Promote(manager 지정): admin이 **user 대상**일 때만 노출(승격 대상은 user).
-/// - Demote(user로 강등): admin이 **manager 대상**일 때만 노출(강등 대상은 manager). (W-2)
 /// 값이 비었거나 형식이 다르면 안전하게 Collapsed. (권한 게이트 — UI 노출; 명령에도 동일 가드 존재)
 /// </summary>
 public sealed class RoleActionVisibilityConverter : IMultiValueConverter
@@ -205,14 +213,8 @@ public sealed class RoleActionVisibilityConverter : IMultiValueConverter
     {
         if (values.Length < 2 || values[0] is not UserRole actor || values[1] is not UserRole target)
             return Visibility.Collapsed;
-
-        bool ok = (parameter as string) switch
-        {
-            "Promote" => actor == UserRole.Admin && target == UserRole.User,
-            "Demote" => actor == UserRole.Admin && target == UserRole.Manager,
-            _ => actor.CanManage(target)   // Manage(기존)
-        };
-        return ok ? Visibility.Visible : Visibility.Collapsed;
+        // 삭제·pw초기화(Manage): 대상이 행위자와 같거나 낮은 역할일 때만 노출.
+        return actor.CanManage(target) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)

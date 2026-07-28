@@ -32,6 +32,7 @@ public sealed partial class AccountViewModel : ViewModelBase
 {
     private readonly AppShellViewModel _shell;
     private readonly IAccountService _accounts;
+    private readonly ITempUserLimitsService _tempUserLimits;
     private readonly ILogger<AccountViewModel>? _logger;
 
     /// <summary>현재 진입 모드. 셸이 진입 전 세팅. UI가 모드별 섹션 표시.</summary>
@@ -59,6 +60,17 @@ public sealed partial class AccountViewModel : ViewModelBase
     public string ConfirmPassword { get; set; } = string.Empty;
     [ObservableProperty] private string _accountMessage = string.Empty;
     [ObservableProperty] private bool _accountMessageIsError;
+
+    // ── it13 §7.7: Admin 전역 TempUser 한도 수정(관리자 도구 섹션, Admin 전용) ──
+    // 초기값은 서버 로드 전 placeholder(진입 시 LoadTempUserLimitsAsync가 덮어씀). 기본값은 단일 소스 참조.
+    /// <summary>전역 시간 한도(h) 입력. 진입 시 서버에서 로드(백엔드 모드).</summary>
+    [ObservableProperty] private int _tempUserQrHours = TempUserLimits.Default.QrHours;
+    /// <summary>전역 횟수 한도 입력.</summary>
+    [ObservableProperty] private int _tempUserQrCount = TempUserLimits.Default.QrCount;
+    [ObservableProperty] private string _tempUserLimitsMessage = string.Empty;
+    [ObservableProperty] private bool _tempUserLimitsMessageIsError;
+    /// <summary>전역 한도 수정 섹션 노출 여부: Admin + 백엔드 모드에서만(레거시엔 강제 인프라 없음).</summary>
+    public bool CanEditTempUserLimits => _shell.Session.CurrentUser?.Role == UserRole.Admin && IsBackendMode;
 
     // ── 계정 생성 (power) ──
     [ObservableProperty] private string _newAccountId = string.Empty;
@@ -115,10 +127,12 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// </summary>
     public bool IsBackendMode => _shell.Settings.Current.UseBackend;
 
-    public AccountViewModel(AppShellViewModel shell, IAccountService accounts, ILogger<AccountViewModel>? logger = null)
+    public AccountViewModel(AppShellViewModel shell, IAccountService accounts,
+        ITempUserLimitsService tempUserLimits, ILogger<AccountViewModel>? logger = null)
     {
         _shell = shell;
         _accounts = accounts;
+        _tempUserLimits = tempUserLimits;
         _logger = logger;
     }
 
@@ -130,6 +144,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsLoggedIn));
         OnPropertyChanged(nameof(IsPower));
         OnPropertyChanged(nameof(IsBackendMode));
+        OnPropertyChanged(nameof(CanEditTempUserLimits));
 
         // 생성 가능 역할 갱신(로그인 역할 기반)
         CreatableRoles.Clear();
@@ -146,8 +161,26 @@ public sealed partial class AccountViewModel : ViewModelBase
         EmailInput = user?.Email ?? string.Empty;
         EmailVerifyCode = string.Empty;
         SetEmailMessage(string.Empty, isError: false);
+        SetTempUserLimitsMessage(string.Empty, isError: false);
 
-        return Task.CompletedTask;
+        // it13 §7.7: 관리자 도구 진입 시 현재 전역 한도 로드(Admin·백엔드 모드에서만).
+        return CanEditTempUserLimits ? LoadTempUserLimitsAsync() : Task.CompletedTask;
+    }
+
+    /// <summary>현재 전역 TempUser 한도 조회(표시용). 실패해도 기본값 표시 유지(치명 아님).</summary>
+    private async Task LoadTempUserLimitsAsync()
+    {
+        try
+        {
+            var limits = await _tempUserLimits.GetLimitsAsync();
+            TempUserQrHours = limits.QrHours;
+            TempUserQrCount = limits.QrCount;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "TempUser 전역 한도 조회 실패");
+            SetTempUserLimitsMessage("현재 한도를 불러오지 못했습니다.", isError: true);
+        }
     }
 
     /// <summary>오버레이 이탈(닫기/복귀) 시 카운트다운 정지·핸들러 해제(G6 누수 방지).</summary>
@@ -249,6 +282,42 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// <summary>앱 종료(관리자).</summary>
     [RelayCommand]
     private void ExitApp() => Application.Current.Shutdown();
+
+    /// <summary>전역 TempUser 한도 저장(Admin). 서버가 requireAdmin·범위 검증으로 이중 방어. (it13 §7.7)</summary>
+    [RelayCommand]
+    private async Task SaveTempUserLimits()
+    {
+        if (!CanEditTempUserLimits)
+        {
+            SetTempUserLimitsMessage("권한이 없습니다.", isError: true);
+            return;
+        }
+        if (TempUserQrHours < 1 || TempUserQrCount < 1)
+        {
+            SetTempUserLimitsMessage("시간·횟수는 1 이상이어야 합니다.", isError: true);
+            return;
+        }
+
+        try
+        {
+            await _tempUserLimits.SetLimitsAsync(new TempUserLimits(TempUserQrHours, TempUserQrCount));
+            SetTempUserLimitsMessage("한도를 저장했습니다.", isError: false);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            SetTempUserLimitsMessage("한도를 변경할 권한이 없습니다.", isError: true);
+        }
+        catch (ArgumentException ex)
+        {
+            // 서버 범위 검증 위반(400) 등.
+            SetTempUserLimitsMessage(ex.Message, isError: true);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "TempUser 한도 저장 실패");
+            SetTempUserLimitsMessage("저장에 실패했습니다.", isError: true);
+        }
+    }
 
     // ── 이메일 등록/인증 (PasswordChange 모드 하단 섹션, 백엔드 전용, item1a §9.3) ──
 
@@ -392,6 +461,12 @@ public sealed partial class AccountViewModel : ViewModelBase
     {
         EmailMessage = text;
         EmailMessageIsError = isError;
+    }
+
+    private void SetTempUserLimitsMessage(string text, bool isError)
+    {
+        TempUserLimitsMessage = text;
+        TempUserLimitsMessageIsError = isError;
     }
 
     // ── 인증 코드 카운트다운 (C3, §3.3) ──

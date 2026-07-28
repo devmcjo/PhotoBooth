@@ -32,9 +32,10 @@ export function validatePassword(value: unknown): ValidationResult<string> {
   return ok(value);
 }
 
-/** 역할: 화이트리스트(user/manager/admin). */
+/** 역할: 화이트리스트(temp_user/user/manager/admin). */
 export function validateRole(value: unknown): ValidationResult<UserRole> {
-  if (!isUserRole(value)) return fail("역할이 올바르지 않습니다(user/manager/admin).");
+  if (!isUserRole(value))
+    return fail("역할이 올바르지 않습니다(temp_user/user/manager/admin).");
   return ok(value);
 }
 
@@ -144,6 +145,24 @@ export function validateRetentionHours(value: unknown): ValidationResult<number>
     return fail("retentionHours는 정수여야 합니다.");
   if (value < 1 || value > 72)
     return fail("retentionHours는 1~72 범위여야 합니다.");
+  return ok(value);
+}
+
+/** it13 전역 한도: qrHours 정수 1~8760(1시간~1년, 설계 §5.4). */
+export function validateQrHours(value: unknown): ValidationResult<number> {
+  if (typeof value !== "number" || !Number.isInteger(value))
+    return fail("qrHours는 정수여야 합니다.");
+  if (value < 1 || value > 8760)
+    return fail("qrHours는 1~8760 범위여야 합니다.");
+  return ok(value);
+}
+
+/** it13 전역 한도: qrCount 정수 1~100000(설계 §5.4). */
+export function validateQrCount(value: unknown): ValidationResult<number> {
+  if (typeof value !== "number" || !Number.isInteger(value))
+    return fail("qrCount는 정수여야 합니다.");
+  if (value < 1 || value > 100000)
+    return fail("qrCount는 1~100000 범위여야 합니다.");
   return ok(value);
 }
 

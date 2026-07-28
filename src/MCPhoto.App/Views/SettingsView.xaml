@@ -43,6 +43,20 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <!-- it13 §7.3: TempUser QR 한도 초과 사유 문구(경고 톤). 초과 시에만 노출(HasQrLimitNotice), Text는 VM QrLimitNotice 바인딩. -->
+        <Style x:Key="QrLimitNote" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="Foreground" Value="{StaticResource Brush.Warning}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="260" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasQrLimitNotice}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid Background="{StaticResource Brush.Bg}">
@@ -241,11 +255,13 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="QR 전송" Style="{StaticResource RowLabel}" />
-                                    <!-- 게스트는 QR/Firebase 비활성(수정 불가). 로그인 시에만 편집. 게스트엔 "로그인 필요" 노티(개정). -->
+                                    <!-- 게스트는 QR/Firebase 비활성(수정 불가). 로그인 시에만 편집. 게스트엔 "로그인 필요" 노티(개정).
+                                         it13 §7.3: TempUser 한도 초과 시에도 disabled(CanEditQr) — 게스트와 별개로 사유 문구(QrLimitNote) 노출. -->
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                                         <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <TextBlock Style="{StaticResource QrLimitNote}" Text="{Binding QrLimitNotice}" />
                                         <ToggleButton Style="{StaticResource Toggle}"
-                                                      IsChecked="{Binding EnableQrDelivery}" IsEnabled="{Binding IsLoggedIn}" />
+                                                      IsChecked="{Binding EnableQrDelivery}" IsEnabled="{Binding CanEditQr}" />
                                     </StackPanel>
                                 </Grid>
                                 <!-- QR 하위 토글(사진/타임랩스): QR on일 때만 노출. 들여쓰기로 하위 계층 표현. (it7 F2) -->

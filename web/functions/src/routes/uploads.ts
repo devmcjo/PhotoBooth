@@ -8,7 +8,7 @@ import { Router } from "express";
 import { isValidSessionId } from "../domain/session";
 import { validateRetentionHours, validateUploadFile } from "../domain/validation";
 import { asyncHandler } from "../http/async";
-import { requireApiKey } from "../http/auth";
+import { optionalBearer, requireApiKey } from "../http/auth";
 import { HttpError } from "../http/errors";
 import { commitUpload, prepareUpload } from "../services/uploads";
 
@@ -16,6 +16,8 @@ export function uploadsRouter(): Router {
   const router = Router();
 
   router.use(requireApiKey());
+  // it13: 로그인 업로드(특히 TempUser)에 계정 신원을 부착한다. 게스트(무토큰)는 익명 통과(설계 §5.1).
+  router.use(optionalBearer());
 
   // POST /uploads/prepare — {sessionId, files:[{kind, ext, contentType}]} → {uploads[], bucket}
   router.post(
@@ -36,7 +38,8 @@ export function uploadsRouter(): Router {
         files.push(r.value);
       }
 
-      const result = await prepareUpload(sessionId, files);
+      // it13: principal(있으면 TempUser 한도 적용). 게스트는 undefined → 무제한(설계 §5.1).
+      const result = await prepareUpload(sessionId, files, req.principal);
       res.status(200).json(result);
     })
   );
@@ -62,13 +65,16 @@ export function uploadsRouter(): Router {
       const timelapseUrl =
         typeof req.body?.timelapseUrl === "string" ? req.body.timelapseUrl : null;
 
-      const session = await commitUpload({
-        sessionId,
-        finalImageUrl,
-        timelapseUrl,
-        retentionHours: retentionRes.value,
-        downloadPageUrl,
-      });
+      const session = await commitUpload(
+        {
+          sessionId,
+          finalImageUrl,
+          timelapseUrl,
+          retentionHours: retentionRes.value,
+          downloadPageUrl,
+        },
+        req.principal // it13: TempUser면 한도 재검사 + 카운트 증가(설계 §5.1).
+      );
       res.status(201).json(session);
     })
   );

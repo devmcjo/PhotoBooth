@@ -171,6 +171,33 @@ internal static class ServiceRegistration
                 s.BackendApiKey,
                 sp.GetService<ILogger<HttpAccountService>>());
         });
+
+        // it13: TempUser QR 사용량·전역 한도. 백엔드 전용 강제(설계 §12) — off면 no-op(Unlimited/기본값).
+        services.AddSingleton<IQrUsageService>(sp =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            if (!s.UseBackend)
+                return new NullQrUsageService();
+
+            return new HttpQrUsageService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IBackendSession>(),
+                s.BackendApiKey,
+                sp.GetService<ILogger<HttpQrUsageService>>());
+        });
+
+        services.AddSingleton<ITempUserLimitsService>(sp =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            if (!s.UseBackend)
+                return new NullTempUserLimitsService();
+
+            return new HttpTempUserLimitsService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IBackendSession>(),
+                s.BackendApiKey,
+                sp.GetService<ILogger<HttpTempUserLimitsService>>());
+        });
     }
 
     /// <summary>상태별 화면 ViewModel 등록(Transient — 진입마다 새 인스턴스).</summary>

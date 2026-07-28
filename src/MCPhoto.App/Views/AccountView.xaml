@@ -113,8 +113,15 @@
                         </StackPanel>
 
                         <TextBlock Text="역할" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                        <!-- it13 §9.4: 역할 콤보에 한글 라벨(임시 유저/사용자/매니저). enum 값은 SelectedItem 유지, 표시만 라벨. -->
                         <ComboBox ItemsSource="{Binding CreatableRoles}" SelectedItem="{Binding SelectedNewRole}"
-                                  Width="180" HorizontalAlignment="Left" Margin="0,0,0,12" />
+                                  Width="180" HorizontalAlignment="Left" Margin="0,0,0,12">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource RoleLabel}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBlock Text="{Binding AdminMessage}" Style="{StaticResource Text.Caption}" Margin="0,0,0,12"
                                    Foreground="{Binding AdminMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
                         <Button Content="계정 생성" Style="{StaticResource Button.Primary}"
@@ -132,6 +139,40 @@
                                     Command="{Binding OpenUserManagementCommand}" Margin="0,0,12,0" />
                             <Button Content="앱 종료" Style="{StaticResource Button.Danger}"
                                     Command="{Binding ExitAppCommand}" />
+                        </StackPanel>
+
+                        <!-- it13 §7.7: 임시 유저 전역 한도(Admin·백엔드 모드 전용). 시간·횟수 수정 후 저장. -->
+                        <StackPanel Visibility="{Binding CanEditTempUserLimits, Converter={StaticResource BoolToVis}}">
+                            <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,16,0,12" />
+                            <TextBlock Text="임시 유저 한도" Style="{StaticResource Text.H2}" Margin="0,0,0,4" />
+                            <TextBlock Text="임시 유저의 QR 전송 한도(전역). 계정 생성 시각부터 적용됩니다."
+                                       Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                       TextWrapping="Wrap" Margin="0,0,0,12" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="사용 시간(h)" Style="{StaticResource Text.Label}"
+                                           VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <TextBox Grid.Column="1" HorizontalAlignment="Left" Width="140"
+                                         Text="{Binding TempUserQrHours}" />
+                            </Grid>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="사용 횟수" Style="{StaticResource Text.Label}"
+                                           VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <TextBox Grid.Column="1" HorizontalAlignment="Left" Width="140"
+                                         Text="{Binding TempUserQrCount}" />
+                            </Grid>
+                            <TextBlock Text="{Binding TempUserLimitsMessage}" Style="{StaticResource Text.Caption}"
+                                       TextWrapping="Wrap" Margin="0,0,0,12"
+                                       Foreground="{Binding TempUserLimitsMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
+                            <Button Content="한도 저장" Style="{StaticResource Button.Primary}"
+                                    Command="{Binding SaveTempUserLimitsCommand}" HorizontalAlignment="Left" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

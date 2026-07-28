@@ -9,6 +9,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { HttpError, sendError } from "./http/errors";
 import { authRouter } from "./routes/auth";
 import { accountsRouter } from "./routes/accounts";
+import { configRouter } from "./routes/config";
 import { framesRouter } from "./routes/frames";
 import { uploadsRouter } from "./routes/uploads";
 import { healthRouter } from "./routes/health";
@@ -23,6 +24,7 @@ export function createApp(): express.Express {
 
   app.use("/auth", authRouter());
   app.use("/accounts", accountsRouter());
+  app.use("/config", configRouter());
   app.use("/frames", framesRouter());
   app.use("/uploads", uploadsRouter());
   app.use("/health", healthRouter());

@@ -2,6 +2,7 @@ using System.IO;
 using MCPhoto.App;
 using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
@@ -78,6 +79,37 @@ public class SettingsViewModelTests
         camera ??= new FakeCameraService(new CameraDevice(0, "Camera 0"));
         return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(),
             new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+    }
+
+    // ── it13 §7.3: TempUser 한도 게이트 테스트 지원 ──
+
+    /// <summary>IQrUsageService만 해석하는 ServiceProvider(셸이 TempUser 로그인 시 조회).</summary>
+    private sealed class QrUsageProvider : IServiceProvider
+    {
+        private readonly IQrUsageService _svc;
+        public QrUsageProvider(IQrUsageService svc) => _svc = svc;
+        public object? GetService(Type serviceType)
+            => serviceType == typeof(IQrUsageService) ? _svc : null;
+    }
+
+    private sealed class FakeQrUsageService : IQrUsageService
+    {
+        private readonly QrUsageStatus? _status;
+        public FakeQrUsageService(QrUsageStatus? status) => _status = status;
+        public Task<QrUsageStatus?> GetStatusAsync(CancellationToken ct = default) => Task.FromResult(_status);
+    }
+
+    /// <summary>TempUser 로그인 + 지정 한도상태 VM. status.Blocked=true면 IsTempUserBlocked 반영.</summary>
+    private static async Task<SettingsViewModel> MakeTempUserVmAsync(QrUsageStatus status, IniSettingsService settings)
+    {
+        var session = new SessionContext();
+        settings.Load();
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings,
+            new QrUsageProvider(new FakeQrUsageService(status)), session);
+        session.Login(new User { Id = "tmp", Password = "pw", Role = UserRole.TempUser });
+        await Task.Delay(20); // fire-and-forget 조회 완료 대기
+        return new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
+            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
     }
 
     [Fact]
@@ -328,6 +360,78 @@ public class SettingsViewModelTests
         var r = new IniSettingsService(iniPath: settings.IniPath).Load();
         Assert.True(r.EnableQrDelivery);          // ini 원값 보존(클로버 방지)
         Assert.Equal("keep-bucket", r.StorageBucket);
+    }
+
+    // ── it13 §7.3: TempUser QR 한도 게이트(게스트 3지점 패턴 확장) ──
+
+    [Fact]
+    public async Task TempUser_Blocked_Time_Forces_Qr_Off_And_Shows_Time_Notice()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.EnableQrDelivery = true; s.SendPhoto = true; s.SendTimelapse = true;  // 운영자가 QR on
+        settings.Save();
+
+        var vm = await MakeTempUserVmAsync(new QrUsageStatus(true, QrGateReason.Time, TimeSpan.Zero, 0), settings);
+        await vm.OnEnterAsync();
+
+        Assert.True(vm.IsTempUserBlocked);
+        Assert.False(vm.CanEditQr);                 // 토글 disabled
+        Assert.False(vm.EnableQrDelivery);          // 표시 전용 off
+        Assert.False(vm.SendPhoto);
+        Assert.False(vm.SendTimelapse);
+        Assert.True(vm.HasQrLimitNotice);
+        Assert.Equal("무료 사용 시간이 지났습니다. 관리자에게 문의해주세요.", vm.QrLimitNotice);
+    }
+
+    [Fact]
+    public async Task TempUser_Blocked_Count_Shows_Count_Notice()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        settings.Load();
+        var vm = await MakeTempUserVmAsync(new QrUsageStatus(true, QrGateReason.Count, TimeSpan.FromHours(1), 0), settings);
+        await vm.OnEnterAsync();
+
+        Assert.True(vm.IsTempUserBlocked);
+        Assert.Equal("무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요.", vm.QrLimitNotice);
+    }
+
+    [Fact]
+    public async Task TempUserBlocked_Save_Preserves_Ini_Qr()
+    {
+        // ★ 최상위 불변식: 초과 TempUser로 저장해도 관리자 원값(QR on) 유지 → 한도 해제 시 원복.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.EnableQrDelivery = true; s.SendPhoto = true; s.SendTimelapse = true;
+        settings.Save();
+
+        var vm = await MakeTempUserVmAsync(new QrUsageStatus(true, QrGateReason.Time, TimeSpan.Zero, 0), settings);
+        await vm.OnEnterAsync();
+        Assert.False(vm.EnableQrDelivery);          // 표시는 off
+        vm.SaveSettingsCommand.Execute(null);
+
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.EnableQrDelivery);            // ini 원값 보존(클로버 방지)
+        Assert.True(r.SendPhoto);
+        Assert.True(r.SendTimelapse);
+    }
+
+    [Fact]
+    public async Task Normal_TempUser_Edits_Qr_Like_User()
+    {
+        // 정상 TempUser(미초과)는 User와 동일 — QR 편집·저장 가능.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var vm = await MakeTempUserVmAsync(new QrUsageStatus(false, QrGateReason.Ok, TimeSpan.FromHours(10), 5), settings);
+        await vm.OnEnterAsync();
+
+        Assert.False(vm.IsTempUserBlocked);
+        Assert.True(vm.CanEditQr);
+        Assert.False(vm.HasQrLimitNotice);
+
+        vm.EnableQrDelivery = true;
+        vm.SaveSettingsCommand.Execute(null);
+        var r = new IniSettingsService(iniPath: settings.IniPath).Load();
+        Assert.True(r.EnableQrDelivery);            // 정상 TempUser 저장 반영
     }
 
     // 로그인 사용자 비밀번호 가드는 설정 '진입 전' 모달(PasswordPromptWindow)로 이동 —

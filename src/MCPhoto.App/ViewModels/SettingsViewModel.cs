@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.Services;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
@@ -67,6 +68,23 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public bool IsLoggedIn => _shell.IsLoggedIn;
     /// <summary>게스트 여부. QR/Firebase는 소스단에서 off 표시·저장 제외(ini 원값 보존).</summary>
     public bool IsGuest => !_shell.IsLoggedIn;
+
+    // ── it13 §7.3: TempUser QR 한도 게이트(게스트 3지점 패턴 확장, 셸에서 파생 — 설정 진입 중 불변) ──
+    /// <summary>로그인 계정이 TempUser인지(역할 판별). 설정 진입 중 불변.</summary>
+    public bool IsTempUser => _shell.CurrentUser?.Role == UserRole.TempUser;
+    /// <summary>TempUser이고 QR 한도 초과인지(셸 합성). true면 QR 3토글 표시 off·disabled + 사유 문구.</summary>
+    public bool IsTempUserBlocked => _shell.IsTempUserQrBlocked;
+    /// <summary>QR 토글 편집 가능 여부. 로그인 + TempUser 미초과일 때만(게스트·초과 TempUser는 disabled).</summary>
+    public bool CanEditQr => IsLoggedIn && !IsTempUserBlocked;
+    /// <summary>TempUser 한도 초과 사유 문구(§0 정확 문구, 시간 우선). 미초과·비TempUser면 빈 문자열.</summary>
+    public string QrLimitNotice => _shell.TempUserQrReason switch
+    {
+        QrGateReason.Time => "무료 사용 시간이 지났습니다. 관리자에게 문의해주세요.",
+        QrGateReason.Count => "무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요.",
+        _ => string.Empty
+    };
+    /// <summary>한도 초과 노티 표시 여부(문구가 있을 때만 — 초과 TempUser 전용).</summary>
+    public bool HasQrLimitNotice => !string.IsNullOrEmpty(QrLimitNotice);
 
     // ── it9 C1: 카메라 장치(ComboBox) ──
     /// <summary>연결된 카메라 목록(설정 진입 시 백그라운드 열거). 빈 목록이면 ComboBox Disable.</summary>
@@ -209,6 +227,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 FilterBrightness = false;
                 FilterBeauty = false;
             }
+
+            // it13 §7.3: TempUser 한도 초과 — QR 3필드만 표시 전용 off(게스트와 별개, 로그인 상태 유지).
+            //            ini 원값은 SaveSettings에서 보존(&& !IsTempUserBlocked 가드). QR 외 필드는 User와 동일(편집 가능).
+            if (IsTempUserBlocked)
+            {
+                EnableQrDelivery = false;
+                SendPhoto = false;
+                SendTimelapse = false;
+            }
         }
         finally { _normalizing = false; }
     }
@@ -264,7 +291,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             s.RetakeEnabled = RetakeEnabled;
             s.RetakeLimit = RetakeLimit;
         }
-        if (!IsGuest)
+        // it13 §7.3: QR 3필드는 로그인 + TempUser 미초과일 때만 기록(초과 시 표시 off를 ini에 반영하지 않아
+        //            관리자 원값 보존 → 한도 해제 시 원복). 게스트 `!IsGuest`와 동형으로 `&& !IsTempUserBlocked` 추가.
+        if (!IsGuest && !IsTempUserBlocked)
         {
             s.EnableQrDelivery = EnableQrDelivery;
             s.SendPhoto = SendPhoto;

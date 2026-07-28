@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using MCPhoto.App;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
@@ -9,8 +10,8 @@ using MCPhoto.Core.Settings;
 namespace MCPhoto.Tests;
 
 /// <summary>
-/// W-2: 역할 양방향 변경 UI(admin: manager↔user). 승격(PromoteToManager)과 대칭인 강등(DemoteToUser)의
-/// 가드·SetRole 호출·no-op 분기를 단위 검증. (설계 §1.3, §8 W-2)
+/// it13 §9.5: 역할 변경 콤보+Apply(§8.7 매트릭스). 행별 지정 가능 역할 필터, Apply의 SetRole 호출·무변경 no-op·
+/// 권한 밖 차단·서버 403 우아 처리(안내+목록 원복)를 단위 검증.
 /// </summary>
 public class UserMgmtViewModelTests
 {
@@ -26,16 +27,24 @@ public class UserMgmtViewModelTests
         public bool SetRoleCalled { get; private set; }
         public string? SetRoleId { get; private set; }
         public UserRole? SetRoleValue { get; private set; }
+        public int ReloadCount { get; private set; }
+        /// <summary>설정 시 SetRoleAsync가 이 예외를 던진다(서버 403 모사 등).</summary>
+        public Exception? SetRoleThrows { get; set; }
 
         public Task SetRoleAsync(string id, UserRole role, CancellationToken ct = default)
         {
             SetRoleCalled = true;
             SetRoleId = id;
             SetRoleValue = role;
+            if (SetRoleThrows is not null) throw SetRoleThrows;
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(Accounts);
+        public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default)
+        {
+            ReloadCount++;
+            return Task.FromResult(Accounts);
+        }
 
         public Task<User?> LoginAsync(string id, string password, CancellationToken ct = default) => Task.FromResult<User?>(null);
         public Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default) => throw new NotSupportedException();
@@ -54,63 +63,131 @@ public class UserMgmtViewModelTests
         public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
     }
 
-    /// <summary>admin 세션으로 진입한 UserMgmtViewModel과 spy를 구성한다.</summary>
-    private static async Task<(UserMgmtViewModel vm, SpyAccountService accounts, SessionContext session)>
-        MakeAdminVmAsync(User? adminSessionUser = null, IReadOnlyList<User>? accountList = null)
+    private static async Task<(UserMgmtViewModel vm, SpyAccountService accounts)> MakeVmAsync(
+        UserRole actorRole, string actorId, IReadOnlyList<User> accountList)
     {
-        var iniPath = Path.Combine(Path.GetTempPath(), $"umvm_{Guid.NewGuid():N}.ini");
-        var settings = new IniSettingsService(iniPath: iniPath);
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"umvm_{Guid.NewGuid():N}.ini"));
         settings.Load();
-
         var session = new SessionContext();
-        session.Login(adminSessionUser ?? new User { Id = "devmcjo", Role = UserRole.Admin });
-
+        session.Login(new User { Id = actorId, Role = actorRole });
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
-        var accounts = new SpyAccountService { Accounts = accountList ?? Array.Empty<User>() };
+        var accounts = new SpyAccountService { Accounts = accountList };
         var vm = new UserMgmtViewModel(shell, accounts);
-        await vm.OnEnterAsync(); // ActorRole=Admin, IsAdmin=true, 목록 로드
-        return (vm, accounts, session);
+        await vm.OnEnterAsync();
+        return (vm, accounts);
+    }
+
+    private static UserRowViewModel Row(UserMgmtViewModel vm, string id) => vm.Rows.First(r => r.User.Id == id);
+
+    // ── 행별 지정 가능 역할(콤보 옵션) 필터 ──
+
+    [Fact]
+    public async Task Admin_Rows_Offer_All_Except_Admin_And_Self()
+    {
+        var list = new[]
+        {
+            new User { Id = "admin", Role = UserRole.Admin },   // 자기 계정
+            new User { Id = "u1", Role = UserRole.User },
+            new User { Id = "m1", Role = UserRole.Manager },
+            new User { Id = "t1", Role = UserRole.TempUser },
+            new User { Id = "otherAdmin", Role = UserRole.Admin },
+        };
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        Assert.False(Row(vm, "admin").CanChangeRole);        // 자기 계정 미노출
+        Assert.False(Row(vm, "otherAdmin").CanChangeRole);   // admin 대상 미노출
+        var all = new[] { UserRole.TempUser, UserRole.User, UserRole.Manager };
+        Assert.Equal(all, Row(vm, "u1").AssignableRoles);
+        Assert.Equal(all, Row(vm, "m1").AssignableRoles);
+        Assert.Equal(all, Row(vm, "t1").AssignableRoles);
     }
 
     [Fact]
-    public async Task Demote_ManagerToUser_CallsSetRole()
+    public async Task Manager_Rows_Only_User_Target_Offers_Demote()
     {
-        var target = new User { Id = "mgr1", Role = UserRole.Manager };
-        var (vm, accounts, _) = await MakeAdminVmAsync();
+        var list = new[]
+        {
+            new User { Id = "u1", Role = UserRole.User },
+            new User { Id = "t1", Role = UserRole.TempUser },
+            new User { Id = "m2", Role = UserRole.Manager },
+        };
+        var (vm, _) = await MakeVmAsync(UserRole.Manager, "mgrSelf", list);
 
-        await vm.DemoteToUserCommand.ExecuteAsync(target);
+        Assert.Equal(new[] { UserRole.User, UserRole.TempUser }, Row(vm, "u1").AssignableRoles); // user→temp_user 강등
+        Assert.False(Row(vm, "t1").CanChangeRole);   // manager는 temp_user 대상 미노출(승격 불가)
+        Assert.False(Row(vm, "m2").CanChangeRole);    // manager는 manager 대상 미노출
+    }
+
+    // ── Apply 동작 ──
+
+    [Fact]
+    public async Task Apply_User_To_TempUser_Calls_SetRole()
+    {
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Admin, "admin", list);
+        var row = Row(vm, "u1");
+        row.SelectedRole = UserRole.TempUser;
+
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
 
         Assert.True(accounts.SetRoleCalled);
-        Assert.Equal("mgr1", accounts.SetRoleId);
-        Assert.Equal(UserRole.User, accounts.SetRoleValue);
+        Assert.Equal("u1", accounts.SetRoleId);
+        Assert.Equal(UserRole.TempUser, accounts.SetRoleValue);
     }
 
     [Fact]
-    public async Task Demote_NonManager_NoOp()
+    public async Task Apply_No_Change_Is_NoOp()
     {
-        // 대상이 manager가 아니면(user) 강등 no-op.
-        var target = new User { Id = "user1", Role = UserRole.User };
-        var (vm, accounts, _) = await MakeAdminVmAsync();
-
-        await vm.DemoteToUserCommand.ExecuteAsync(target);
-
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Admin, "admin", list);
+        var row = Row(vm, "u1");
+        // SelectedRole == 현재 역할(User) → 무변경 no-op.
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
         Assert.False(accounts.SetRoleCalled);
     }
 
     [Fact]
-    public async Task Demote_Self_NoOp()
+    public async Task Apply_Beyond_Matrix_Blocked_Client_Side()
     {
-        // 자기 자신(세션 사용자)의 역할은 변경 금지 — manager 세션이 자기를 강등 시도해도 no-op.
-        var self = new User { Id = "selfmgr", Role = UserRole.Manager };
-        // admin 권한이어야 강등 가드를 통과하므로, 자기 방지 가드만 격리 검증하려면 대상=세션사용자.
-        var (vm, accounts, session) = await MakeAdminVmAsync(
-            adminSessionUser: new User { Id = "selfmgr", Role = UserRole.Admin });
+        // manager가 temp_user를 user로 승격 시도(매트릭스 밖) → 클라 차단, SetRole 미호출.
+        var list = new[] { new User { Id = "t1", Role = UserRole.TempUser } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Manager, "mgrSelf", list);
+        var row = Row(vm, "t1");
+        row.SelectedRole = UserRole.User;   // 승격(manager 불가)
 
-        // 세션 사용자와 같은 Id + Manager 역할(대상). IsAdmin·Role 가드는 통과, 자기 방지 가드에서 차단.
-        var target = new User { Id = "selfmgr", Role = UserRole.Manager };
-        await vm.DemoteToUserCommand.ExecuteAsync(target);
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
 
         Assert.False(accounts.SetRoleCalled);
-        Assert.Equal("자기 계정의 역할은 변경할 수 없습니다.", vm.StatusMessage);
+        Assert.Equal("해당 역할로 변경할 권한이 없습니다.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task Apply_Server_403_Handled_Gracefully_And_Reloads()
+    {
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Admin, "admin", list);
+        accounts.SetRoleThrows = new UnauthorizedAccessException("forbidden");
+        var reloadsBefore = accounts.ReloadCount;
+
+        var row = Row(vm, "u1");
+        row.SelectedRole = UserRole.Manager;
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
+
+        Assert.True(accounts.SetRoleCalled);
+        Assert.Equal("역할을 변경할 권한이 없습니다.", vm.StatusMessage);
+        Assert.True(accounts.ReloadCount > reloadsBefore);   // 목록 원복(재로드)
+    }
+
+    [Fact]
+    public async Task Apply_Self_Row_Blocked()
+    {
+        // 자기 계정은 행 래퍼가 빈 목록이라 UI 미노출이지만, 커맨드 직접 호출 시에도 이중 방어.
+        var list = new[] { new User { Id = "admin", Role = UserRole.Admin } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Admin, "admin", list);
+        var row = Row(vm, "admin");
+        row.SelectedRole = UserRole.Manager;
+
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
+        Assert.False(accounts.SetRoleCalled);
     }
 }

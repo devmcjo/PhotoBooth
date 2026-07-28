@@ -2,6 +2,7 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.Imaging;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Upload;
 using Microsoft.Extensions.Logging;
@@ -96,6 +97,18 @@ public sealed partial class QrPopupViewModel : ViewModelBase
             UploadSucceeded = true;
             UploadFailed = false;
             StatusMessage = string.Empty;
+        }
+        catch (QrLimitExceededException ex)
+        {
+            // it13 §9.3: TempUser 한도 초과로 서버가 업로드를 거부(403). 사유별 정확 문구(§0)를 노출한다.
+            //            결과물은 로컬 보존(QR 분기 이전 저장, 손실 0). 카운트는 서버 commit 성공 시에만 증가(거부=미증가).
+            _logger?.LogInformation("TempUser QR 한도 초과({Reason}) — 로컬 보존, 완료 진행 가능", ex.Reason);
+            UploadSucceeded = false;
+            UploadFailed = true;
+            QrImage = null;
+            StatusMessage = ex.Reason == QrGateReason.Time
+                ? "무료 사용 시간이 지났습니다. 관리자에게 문의해주세요."
+                : "무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요.";
         }
         catch (Exception ex)
         {

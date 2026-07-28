@@ -17,6 +17,7 @@ import {
   changePassword,
   createAccount,
   deleteAccount,
+  getQrUsage,
   listAccounts,
   setEmail,
   setRole,
@@ -72,6 +73,15 @@ export function accountsRouter(): Router {
     })
   );
 
+  // GET /accounts/me/qr-usage  (로그인) — 본인 QR 사용 게이트 상태(it13 §5.3).
+  // 파라미터 라우트(/:id/...)보다 먼저 등록해 "me"가 :id로 잡히지 않게 한다.
+  router.get(
+    "/me/qr-usage",
+    asyncHandler(async (req, res) => {
+      res.status(200).json(await getQrUsage(req.principal!));
+    })
+  );
+
   // PATCH /accounts/{id}/password  (본인/파워) — {newPassword} → 204
   router.patch(
     "/:id/password",
@@ -116,9 +126,11 @@ export function accountsRouter(): Router {
     })
   );
 
-  // PATCH /accounts/{id}/role  (admin) — {role} → 204
+  // PATCH /accounts/{id}/role  (파워: manager+admin) — {role} → 204
+  // it13: 라우트는 requirePower로 열고(user/temp_user 조기 차단), 세부 매트릭스는 setRole이 강제.
   router.patch(
     "/:id/role",
+    requirePower(),
     asyncHandler(async (req, res) => {
       const idRes = validateAccountId(req.params.id);
       if (!idRes.ok) throw HttpError.invalid(idRes.error);

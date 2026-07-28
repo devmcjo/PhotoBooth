@@ -13,14 +13,21 @@ import { hashPassword, verifyPassword } from "../domain/password";
 import {
   canCreate,
   canManage,
+  canSetRole,
   parseRole,
   UserRole,
 } from "../domain/roles";
+import {
+  evaluateQrGate,
+  QrGateReason,
+  TempUserLimits,
+} from "../domain/tempUserLimit";
 import {
   RESET_TTL_SECONDS,
   VERIFY_TTL_SECONDS,
 } from "../domain/tokens";
 import { HttpError } from "../http/errors";
+import { loadTempUserLimits } from "./config";
 import { UserDoc, UserResponse } from "./dto";
 import { getEmailSender } from "./email";
 import { deleteAllFramesByUser } from "./frames";
@@ -221,24 +228,28 @@ export async function deleteAccount(
 }
 
 /**
- * 역할 지정. admin만, 대상은 user만(manager 지정은 admin이 user 대상). admin→admin 금지.
- * 근거: AccountService.SetRoleAsync (AccountService.cs:96-101) + 설계 §5.2(admin이 user 대상만)
+ * 역할 지정(it13 권한 매트릭스, 서버 강제 — 클라 전달 actor 무시, actor는 JWT에서 도출).
+ *   - Admin: target ∈ {temp_user, user, manager}. admin 지정/admin 대상 불가.
+ *   - Manager: 오직 현재=user → 목표=temp_user 강등만. 그 외 403.
+ *   - 승격(랭크 상승)은 admin 전용, user→temp_user 강등은 admin+manager.
+ * 판정은 순수 함수 canSetRole(roles.ts)에 위임. 대상 계정 없으면 getRole이 404.
+ * 근거: AccountService.SetRoleAsync (AccountService.cs:96-101) + 설계 it13 §3.
  */
 export async function setRole(
   targetId: string,
   role: UserRole,
   actor: { id: string; role: UserRole }
 ): Promise<void> {
-  if (actor.role !== "admin") {
-    throw HttpError.forbidden("역할 지정은 admin만 가능합니다.");
-  }
-  if (role === "admin") {
-    throw HttpError.forbidden("admin 역할은 지정할 수 없습니다(최종 1인 규칙).");
-  }
-  const currentRole = await getRole(targetId);
-  // manager 지정은 user 대상만(현행 create 규칙과 정합: admin→user를 manager로 승격).
-  if (currentRole === "admin") {
-    throw HttpError.forbidden("admin 계정의 역할은 변경할 수 없습니다.");
+  const currentRole = await getRole(targetId); // 없으면 404
+  if (!canSetRole(actor.role, currentRole, role)) {
+    // 특수 케이스는 정확한 사유 문구(기존 계약 보존), 그 외는 매트릭스 위반 일반 문구.
+    if (role === "admin") {
+      throw HttpError.forbidden("admin 역할은 지정할 수 없습니다(최종 1인 규칙).");
+    }
+    if (currentRole === "admin") {
+      throw HttpError.forbidden("admin 계정의 역할은 변경할 수 없습니다.");
+    }
+    throw HttpError.forbidden("해당 역할 변경을 수행할 권한이 없습니다.");
   }
   await db().collection(COLLECTION).doc(targetId).update({ role });
 }
@@ -581,4 +592,58 @@ export async function confirmPasswordResetByCode(
   if (!res.ok) return false;
   await applyNewPassword(doc.id, newPassword);
   return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// it13: TempUser QR 사용량 조회 (설계 §5.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** GET /accounts/me/qr-usage 응답. 비TempUser는 blocked:false, reason:"ok"(무제한). */
+export interface QrUsageResponse {
+  role: UserRole;
+  blocked: boolean;
+  reason: QrGateReason;
+  /** 시간 잔여(ms). 비TempUser는 서버 표기상 무제한(아주 큰 값)이 아니라 0을 넘겨도 클라가 role로 무제한 처리. */
+  remainingMs: number;
+  remainingCount: number;
+  limits: TempUserLimits;
+}
+
+/**
+ * 로그인 계정의 QR 사용 게이트 상태(설계 §5.3). principal.id로 users doc 로드 → createdAt·qrUsedCount +
+ * 전역 config로 evaluateQrGate 실행. 비TempUser(user/manager/admin)는 한도 없음 → blocked:false.
+ * now는 서버 UTC(§8.4). 계정 문서 부재면 404.
+ */
+export async function getQrUsage(actor: {
+  id: string;
+  role: UserRole;
+}): Promise<QrUsageResponse> {
+  const limits = await loadTempUserLimits();
+
+  // 비TempUser는 한도 없음 — 계정 문서를 읽지 않고 무제한 응답(클라는 role로 무제한 처리).
+  if (actor.role !== "temp_user") {
+    return {
+      role: actor.role,
+      blocked: false,
+      reason: "ok",
+      remainingMs: 0,
+      remainingCount: 0,
+      limits,
+    };
+  }
+
+  const snap = await db().collection(COLLECTION).doc(actor.id).get();
+  if (!snap.exists) throw HttpError.notFound(`계정을 찾을 수 없습니다: ${actor.id}`);
+  const doc = snap.data() as UserDoc;
+  const createdAtMs = doc.createdAt.toDate().getTime();
+  const usedCount = typeof doc.qrUsedCount === "number" ? doc.qrUsedCount : 0;
+  const gate = evaluateQrGate(Date.now(), createdAtMs, usedCount, limits);
+  return {
+    role: "temp_user",
+    blocked: gate.blocked,
+    reason: gate.reason,
+    remainingMs: gate.remainingMs,
+    remainingCount: gate.remainingCount,
+    limits,
+  };
 }

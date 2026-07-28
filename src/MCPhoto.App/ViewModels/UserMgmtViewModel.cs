@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.Core.Accounts;
@@ -9,7 +10,35 @@ using Microsoft.Extensions.Logging;
 namespace MCPhoto.App.ViewModels;
 
 /// <summary>
-/// 사용자 관리(power 전용). 목록·삭제(cascade)·비밀번호 초기화·역할 변경(admin만 manager↔user 양방향). (PRD §F8, W-2)
+/// 사용자 관리 목록의 한 행. 계정 + 역할 변경 콤보 상태(지정 가능 역할·선택값)를 캡슐화한다(it13 §9.5).
+/// 콤보 옵션은 <see cref="RoleChangePolicy.AssignableRoles"/>(서버 setRole 매트릭스 1:1)로 필터 —
+/// 빈 목록이거나 자기 계정이면 역할 변경 UI 미노출(CanChangeRole=false).
+/// </summary>
+public sealed partial class UserRowViewModel : ObservableObject
+{
+    /// <summary>원본 계정(삭제·pw초기화·표시용).</summary>
+    public User User { get; }
+
+    /// <summary>이 행에서 actor가 지정 가능한 역할 목록(콤보 ItemsSource). 자기 계정이면 빈 목록.</summary>
+    public IReadOnlyList<UserRole> AssignableRoles { get; }
+
+    /// <summary>콤보 선택값(초기=현재 역할). Apply 시 현재와 다르면 SetRole.</summary>
+    [ObservableProperty] private UserRole _selectedRole;
+
+    /// <summary>역할 변경 UI 노출 여부(콤보 옵션이 있고 자기 계정 아님).</summary>
+    public bool CanChangeRole => AssignableRoles.Count > 0;
+
+    public UserRowViewModel(User user, UserRole actorRole, bool isSelf)
+    {
+        User = user;
+        // 자기 계정은 역할 변경 금지(대칭·안전) → 빈 목록으로 UI 미노출.
+        AssignableRoles = isSelf ? Array.Empty<UserRole>() : RoleChangePolicy.AssignableRoles(actorRole, user.Role);
+        _selectedRole = user.Role;
+    }
+}
+
+/// <summary>
+/// 사용자 관리(power 전용). 목록·삭제(cascade)·비밀번호 초기화·역할 변경(콤보+Apply, §8.7 매트릭스). (PRD §F8, it13 §9.5)
 /// </summary>
 public sealed partial class UserMgmtViewModel : ViewModelBase
 {
@@ -19,7 +48,8 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     private readonly IAccountService _accounts;
     private readonly ILogger<UserMgmtViewModel>? _logger;
 
-    public ObservableCollection<User> Users { get; } = new();
+    /// <summary>행 목록(계정 + 역할 변경 상태). it13 §9.5로 User 직접 바인딩 → 행 래퍼로 승격.</summary>
+    public ObservableCollection<UserRowViewModel> Rows { get; } = new();
 
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _isAdmin;
@@ -42,11 +72,12 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
 
     private async Task ReloadAsync()
     {
-        Users.Clear();
+        Rows.Clear();
         try
         {
+            var selfId = _shell.Session.CurrentUser?.Id;
             foreach (var u in await _accounts.GetAllAsync())
-                Users.Add(u);
+                Rows.Add(new UserRowViewModel(u, ActorRole, isSelf: u.Id == selfId));
         }
         catch (Exception ex)
         {
@@ -56,9 +87,10 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task DeleteUser(User? user)
+    private async Task DeleteUser(UserRowViewModel? row)
     {
-        if (user is null) return;
+        if (row is null) return;
+        var user = row.User;
         // 자기 자신·시드 admin 삭제 방지
         if (user.Id == _shell.Session.CurrentUser?.Id) { StatusMessage = "자기 계정은 삭제할 수 없습니다."; return; }
         // 권한 가드: 자기와 같거나 낮은 역할만 관리(예: manager는 admin 삭제 불가). UI 미노출과 이중 방어.
@@ -77,9 +109,10 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task ResetUserPassword(User? user)
+    private async Task ResetUserPassword(UserRowViewModel? row)
     {
-        if (user is null) return;
+        if (row is null) return;
+        var user = row.User;
         // 권한 가드: 자기와 같거나 낮은 역할만(예: manager는 admin 비번 초기화 불가). UI 미노출과 이중 방어.
         if (!ActorRole.CanManage(user.Role)) { StatusMessage = "상위 역할 계정은 관리할 수 없습니다."; return; }
         try
@@ -94,43 +127,45 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         }
     }
 
-    /// <summary>manager 지정(admin만, 대상은 user). 승격 액션이라 user 외 대상엔 미적용.</summary>
+    /// <summary>
+    /// 역할 변경 적용(콤보 선택값). §8.7 매트릭스로 클라 1차 게이트(자기·권한밖·admin 대상 차단),
+    /// 서버가 최종 강제(403이면 우아 처리 — 안내 + 목록 원복). (it13 §9.5)
+    /// </summary>
     [RelayCommand]
-    private async Task PromoteToManager(User? user)
+    private async Task ApplyRoleChange(UserRowViewModel? row)
     {
-        if (user is null || !IsAdmin || user.Role != UserRole.User) return;
-        // 자기 자신 역할 변경 방지(대칭·안전). admin이 자기를 승격할 일은 없으나 이중 방어.
-        if (user.Id == _shell.Session.CurrentUser?.Id) { StatusMessage = "자기 계정의 역할은 변경할 수 없습니다."; return; }
-        try
-        {
-            await _accounts.SetRoleAsync(user.Id, UserRole.Manager);
-            await ReloadAsync();
-            StatusMessage = $"{user.Id}를 manager로 지정했습니다.";
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "역할 변경 실패: {Id}", user.Id);
-            StatusMessage = "역할 변경에 실패했습니다.";
-        }
-    }
+        if (row is null) return;
+        var user = row.User;
+        var target = row.SelectedRole;
 
-    /// <summary>user로 강등(admin만, 대상은 manager). 강등 액션이라 manager 외 대상엔 미적용. (W-2)</summary>
-    [RelayCommand]
-    private async Task DemoteToUser(User? user)
-    {
-        if (user is null || !IsAdmin || user.Role != UserRole.Manager) return;
-        // 자기 자신 역할 변경 방지(승격과 대칭).
+        // 무변경(현재==선택)은 no-op(불필요한 서버 왕복 방지).
+        if (target == user.Role) return;
+        // 자기 계정 역할 변경 방지(이중 방어 — 행 래퍼가 이미 빈 목록으로 UI 미노출).
         if (user.Id == _shell.Session.CurrentUser?.Id) { StatusMessage = "자기 계정의 역할은 변경할 수 없습니다."; return; }
+        // 클라 1차 매트릭스 게이트(서버 setRole과 동일 규칙). 위반이면 서버 왕복 전 차단.
+        if (!RoleChangePolicy.AssignableRoles(ActorRole, user.Role).Contains(target))
+        {
+            StatusMessage = "해당 역할로 변경할 권한이 없습니다.";
+            return;
+        }
         try
         {
-            await _accounts.SetRoleAsync(user.Id, UserRole.User);
+            await _accounts.SetRoleAsync(user.Id, target);
             await ReloadAsync();
-            StatusMessage = $"{user.Id}를 user로 강등했습니다.";
+            StatusMessage = $"{user.Id}의 역할을 '{target.ToLabel()}'(으)로 변경했습니다.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // 서버 403(매트릭스 위반) — 우아 처리: 안내 + 목록 원복(선택값 되돌림).
+            _logger?.LogWarning("역할 변경 거부(서버 403): {Id}", user.Id);
+            StatusMessage = "역할을 변경할 권한이 없습니다.";
+            await ReloadAsync();
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "역할 변경 실패: {Id}", user.Id);
             StatusMessage = "역할 변경에 실패했습니다.";
+            await ReloadAsync(); // 실패 시 목록 원복(선택값이 서버 상태와 어긋나지 않게)
         }
     }
 

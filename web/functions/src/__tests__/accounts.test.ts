@@ -69,6 +69,7 @@ import {
   confirmEmailVerificationByCode,
   confirmPasswordResetByCode,
   createAccount,
+  getQrUsage,
   loginWithGoogleEmail,
   registerSelf,
   setRole,
@@ -130,11 +131,111 @@ describe("BE-1 setRole — 역할 양방향 변경 회귀", () => {
     expect(fake.peek("users", "u2")?.role).toBe("user");
   });
 
-  test("non-admin actor 거부(403)", async () => {
+  test("non-admin actor(user→manager 승격)는 거부(403)", async () => {
     seedUser("u3", { role: "user" });
     const manager = { id: "mgr", role: "manager" as const };
     await expect(setRole("u3", "manager", manager)).rejects.toMatchObject({ status: 403 });
     expect(fake.peek("users", "u3")?.role).toBe("user");
+  });
+});
+
+// ── it13: setRole 권한 매트릭스(TempUser + manager 강등) ──────────────────────
+describe("it13 setRole — 권한 매트릭스(서버 강제)", () => {
+  const admin = { id: "root", role: "admin" as const };
+  const manager = { id: "mgr", role: "manager" as const };
+
+  test("admin이 user→temp_user 강등 성공", async () => {
+    seedUser("u1", { role: "user" });
+    await setRole("u1", "temp_user", admin);
+    expect(fake.peek("users", "u1")?.role).toBe("temp_user");
+  });
+
+  test("admin이 temp_user→user 승격 성공(승격은 admin 전용)", async () => {
+    seedUser("t1", { role: "temp_user" });
+    await setRole("t1", "user", admin);
+    expect(fake.peek("users", "t1")?.role).toBe("user");
+  });
+
+  test("manager가 user→temp_user 강등 성공(유일 허용)", async () => {
+    seedUser("u2", { role: "user" });
+    await setRole("u2", "temp_user", manager);
+    expect(fake.peek("users", "u2")?.role).toBe("temp_user");
+  });
+
+  test("manager가 temp_user→user 승격 거부(403, role 불변)", async () => {
+    seedUser("t2", { role: "temp_user" });
+    await expect(setRole("t2", "user", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "t2")?.role).toBe("temp_user");
+  });
+
+  test("manager가 user→manager 승격 거부(403)", async () => {
+    seedUser("u3", { role: "user" });
+    await expect(setRole("u3", "manager", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "u3")?.role).toBe("user");
+  });
+
+  test("manager가 manager 대상 변경 거부(403)", async () => {
+    seedUser("m2", { role: "manager" });
+    await expect(setRole("m2", "temp_user", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "m2")?.role).toBe("manager");
+  });
+
+  test("manager가 admin 대상 변경 거부(403)", async () => {
+    seedUser("a3", { role: "admin" });
+    await expect(setRole("a3", "temp_user", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "a3")?.role).toBe("admin");
+  });
+
+  test("manager가 temp_user 대상 변경 거부(403, no-op도)", async () => {
+    seedUser("t3", { role: "temp_user" });
+    await expect(setRole("t3", "temp_user", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "t3")?.role).toBe("temp_user");
+  });
+
+  test("존재하지 않는 대상 → 404", async () => {
+    await expect(setRole("ghost", "temp_user", admin)).rejects.toMatchObject({ status: 404 });
+  });
+
+  // O5(사용자 승인): 강등은 role 필드만 변경 — createdAt·qrUsedCount 절대 불변.
+  // 의도: 강등=미결제 회수. createdAt 기준이라 기존 계정은 강등 즉시 시간 초과=QR OFF(회수 취지).
+  test("admin이 user→temp_user 강등 시 createdAt·qrUsedCount 불변(사용량 리셋 없음)", async () => {
+    const created = Timestamp.fromMillis(1_700_000_000_000);
+    fake.seed("users", "d1", {
+      id: "d1",
+      password: "$2b$10$x",
+      role: "user",
+      createdAt: created,
+      qrUsedCount: 7,
+      email: null,
+      emailVerified: false,
+    });
+
+    await setRole("d1", "temp_user", admin);
+
+    const doc = fake.peek("users", "d1")!;
+    expect(doc.role).toBe("temp_user"); // role만 변경
+    expect(doc.qrUsedCount).toBe(7); // 사용량 리셋 없음
+    expect((doc.createdAt as Timestamp).toMillis()).toBe(created.toMillis()); // createdAt 불변(회수 취지)
+  });
+
+  test("manager가 user→temp_user 강등 시에도 createdAt·qrUsedCount 불변", async () => {
+    const created = Timestamp.fromMillis(1_650_000_000_000);
+    fake.seed("users", "d2", {
+      id: "d2",
+      password: "$2b$10$x",
+      role: "user",
+      createdAt: created,
+      qrUsedCount: 12,
+      email: null,
+      emailVerified: false,
+    });
+
+    await setRole("d2", "temp_user", manager);
+
+    const doc = fake.peek("users", "d2")!;
+    expect(doc.role).toBe("temp_user");
+    expect(doc.qrUsedCount).toBe(12);
+    expect((doc.createdAt as Timestamp).toMillis()).toBe(created.toMillis());
   });
 });
 
@@ -254,6 +355,112 @@ describe("BE-3 registerSelf — self-signup", () => {
     const user = await registerSelf("second", "pw1234", "shared@example.com");
     expect(user.email).toBe("shared@example.com");
     expect(fake.all("users").length).toBe(2);
+  });
+});
+
+// ── it13: TempUser 계정 생성 권한(admin/manager 허용, user 거부) ──────────────
+describe("it13 createAccount — temp_user 생성 권한(canCreate 게이트)", () => {
+  test("admin이 temp_user 생성 성공", async () => {
+    const user = await createAccount("t1", "pw1234", "temp_user", null, "admin");
+    expect(user.role).toBe("temp_user");
+    expect(fake.peek("users", "t1")?.role).toBe("temp_user");
+  });
+
+  test("manager가 temp_user 생성 성공", async () => {
+    const user = await createAccount("t2", "pw1234", "temp_user", null, "manager");
+    expect(user.role).toBe("temp_user");
+    expect(fake.peek("users", "t2")?.role).toBe("temp_user");
+  });
+
+  test("user가 temp_user 생성 거부(403)", async () => {
+    await expect(
+      createAccount("t3", "pw1234", "temp_user", null, "user")
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "t3")).toBeUndefined();
+  });
+
+  test("temp_user 신규 계정은 qrUsedCount 미설정(0 해석)", async () => {
+    await createAccount("t4", "pw1234", "temp_user", null, "admin");
+    const doc = fake.peek("users", "t4") as { qrUsedCount?: number };
+    expect(doc.qrUsedCount).toBeUndefined();
+  });
+});
+
+// ── it13: getQrUsage — QR 사용 게이트 상태 조회(§5.3) ─────────────────────────
+describe("it13 getQrUsage — QR 사용 게이트 상태", () => {
+  const HOUR = 3600_000;
+
+  /** createdAt·qrUsedCount 제어 시드. */
+  function seedWithUsage(
+    id: string,
+    role: string,
+    ageHours: number,
+    qrUsedCount?: number
+  ): void {
+    fake.seed("users", id, {
+      id,
+      password: "$2b$10$x",
+      role,
+      createdAt: Timestamp.fromMillis(Date.now() - ageHours * HOUR),
+      qrUsedCount,
+    });
+  }
+
+  test("정상 TempUser: blocked=false, 잔여 시간·횟수 반영", async () => {
+    seedWithUsage("t1", "temp_user", 10, 5); // 10h 경과, 5회 사용
+    const res = await getQrUsage({ id: "t1", role: "temp_user" });
+    expect(res.role).toBe("temp_user");
+    expect(res.blocked).toBe(false);
+    expect(res.reason).toBe("ok");
+    expect(res.remainingCount).toBe(25); // 30-5
+    expect(res.limits).toEqual({ qrHours: 48, qrCount: 30 });
+    // 잔여 시간은 ~38h(약간의 실행 지연 허용).
+    expect(res.remainingMs).toBeGreaterThan(37 * HOUR);
+    expect(res.remainingMs).toBeLessThanOrEqual(38 * HOUR);
+  });
+
+  test("시간 초과 TempUser: blocked, reason=time", async () => {
+    seedWithUsage("t2", "temp_user", 49, 0);
+    const res = await getQrUsage({ id: "t2", role: "temp_user" });
+    expect(res.blocked).toBe(true);
+    expect(res.reason).toBe("time");
+    expect(res.remainingMs).toBe(0);
+  });
+
+  test("횟수 초과 TempUser: blocked, reason=count", async () => {
+    seedWithUsage("t3", "temp_user", 1, 30);
+    const res = await getQrUsage({ id: "t3", role: "temp_user" });
+    expect(res.blocked).toBe(true);
+    expect(res.reason).toBe("count");
+    expect(res.remainingCount).toBe(0);
+  });
+
+  test("비TempUser(user)는 항상 blocked:false(무제한, 계정 문서 불요)", async () => {
+    // users에 시드하지 않아도(계정 문서 없어도) user는 무제한 응답.
+    const res = await getQrUsage({ id: "someone", role: "user" });
+    expect(res.blocked).toBe(false);
+    expect(res.reason).toBe("ok");
+    expect(res.role).toBe("user");
+  });
+
+  test("admin도 무제한", async () => {
+    const res = await getQrUsage({ id: "root", role: "admin" });
+    expect(res.blocked).toBe(false);
+    expect(res.role).toBe("admin");
+  });
+
+  test("커스텀 config 한도 반영", async () => {
+    fake.seed("config", "tempUserLimits", { qrHours: 24, qrCount: 10 });
+    seedWithUsage("t4", "temp_user", 1, 3);
+    const res = await getQrUsage({ id: "t4", role: "temp_user" });
+    expect(res.limits).toEqual({ qrHours: 24, qrCount: 10 });
+    expect(res.remainingCount).toBe(7); // 10-3
+  });
+
+  test("TempUser 계정 문서 부재 → 404", async () => {
+    await expect(getQrUsage({ id: "ghost", role: "temp_user" })).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });
 

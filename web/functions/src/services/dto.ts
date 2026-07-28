@@ -14,12 +14,28 @@ export interface UserDoc {
   id: string;
   /** ⚠️ 신규: bcrypt 해시. 레거시: 평문(로그인 시 마이그레이션). 응답에는 절대 미포함. */
   password: string;
-  role: string; // "user" | "manager" | "admin"
+  role: string; // "temp_user" | "user" | "manager" | "admin"
   createdAt: Timestamp;
   /** item1a: 계정 이메일(소문자 정규화). 미수집/레거시 계정은 null(설계 §4.1). */
   email?: string | null;
   /** item1a: 이메일 소유 확인 여부. 생성 시 false, verify 성공 시 true(설계 §4.1). */
   emailVerified?: boolean;
+  /**
+   * it13: TempUser QR 전송 성공 세션 누적 수. commit 트랜잭션에서만 원자 증가(세션당 1).
+   * 미설정=0(레거시/비TempUser). 시간 한도 기준은 createdAt(신규 필드 불요, 설계 §4.1).
+   */
+  qrUsedCount?: number;
+}
+
+/**
+ * config/tempUserLimits — 전역 TempUser QR 한도(1쌍, Admin만 수정). 문서 부재 시 서버가 기본값 폴백.
+ * 사용량(qrUsedCount)은 계정별(UserDoc), 한도는 전역(설계 §4.3).
+ */
+export interface TempUserLimitsDoc {
+  /** 시간 한도(시간). 기본 48. */
+  qrHours: number;
+  /** 횟수 한도(성공 세션 수). 기본 30. */
+  qrCount: number;
 }
 
 /**

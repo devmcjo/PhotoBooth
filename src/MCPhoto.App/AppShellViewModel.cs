@@ -2,6 +2,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.ViewModels;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Build;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
@@ -68,6 +69,22 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     public bool IsGuest => CurrentUser is null;
     public bool IsPower => CurrentUser?.Role.IsPower() == true;
 
+    // ── it13: TempUser QR 한도 상태(역할+한도 합성). effective QR 계산·설정 게이트 입력(§7.5) ──
+
+    /// <summary>TempUser 로그인 시 1회 조회한 서버 사용량 상태(비TempUser·게스트·미조회는 null).</summary>
+    private QrUsageStatus? _tempUserQrStatus;
+
+    /// <summary>
+    /// TempUser이고 QR 한도 초과인지(역할+한도 합성). 비TempUser(User/Manager/Admin/게스트)는 항상 false.
+    /// effective QR 계산(QrEffectivePolicy) 입력. 서버 미도달로 상태 미조회(null)면 false=fail-open(§7.5·§8.5).
+    /// </summary>
+    public bool IsTempUserQrBlocked =>
+        CurrentUser?.Role == UserRole.TempUser && _tempUserQrStatus?.Blocked == true;
+
+    /// <summary>초과 사유(설정 문구용). TempUser 아니거나 미초과·미조회면 Ok.</summary>
+    public QrGateReason TempUserQrReason =>
+        CurrentUser?.Role == UserRole.TempUser ? (_tempUserQrStatus?.Reason ?? QrGateReason.Ok) : QrGateReason.Ok;
+
     /// <summary>상단 바 좌측 라벨: 비로그인="로그인", 로그인=계정 ID.</summary>
     public string AccountLabel => CurrentUser?.Id ?? "로그인";
 
@@ -121,6 +138,40 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGuest));
         OnPropertyChanged(nameof(IsPower));
         OnPropertyChanged(nameof(AccountLabel));
+
+        // it13: 계정 변경마다 TempUser 사용량 상태를 재평가(§7.5). 로그아웃·비TempUser는 즉시 클리어,
+        //        TempUser 로그인은 서버 상태를 1회 조회(fire-and-forget, 완료 시 파생 프로퍼티 통지).
+        _tempUserQrStatus = null;
+        OnPropertyChanged(nameof(IsTempUserQrBlocked));
+        OnPropertyChanged(nameof(TempUserQrReason));
+        if (CurrentUser?.Role == UserRole.TempUser)
+            _ = LoadTempUserQrStatusAsync();
+    }
+
+    /// <summary>
+    /// TempUser 로그인 시 서버 사용량 상태 1회 조회(§7.5). 실패(null)면 fail-open(허용, 서버가 업로드 거부).
+    /// fire-and-forget으로 호출되므로 예외를 삼키지 않도록 내부에서 방어(async void 아님 — Task 반환).
+    /// </summary>
+    private async Task LoadTempUserQrStatusAsync()
+    {
+        var user = CurrentUser;
+        try
+        {
+            var svc = _services.GetService<IQrUsageService>();
+            if (svc is null) return;   // 미등록(테스트 등) — fail-open 유지
+            var status = await svc.GetStatusAsync().ConfigureAwait(true);   // UI 컨텍스트 복귀(파생 통지 안전)
+
+            // 조회 중 로그아웃·계정 전환됐으면 stale 응답 폐기(경합 방어).
+            if (!ReferenceEquals(user, CurrentUser)) return;
+
+            _tempUserQrStatus = status;
+            OnPropertyChanged(nameof(IsTempUserQrBlocked));
+            OnPropertyChanged(nameof(TempUserQrReason));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "TempUser QR 사용량 조회 실패 — fail-open");
+        }
     }
 
     /// <summary>앱 시작 시 홈 화면 진입.</summary>

@@ -108,7 +108,10 @@ public class AccountViewModelEmailTests
         if (loginUser is not null) session.Login(loginUser);
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var accounts = new RecordingAccountService();
-        var vm = new AccountViewModel(shell, accounts) { Mode = AccountMode.PasswordChange };
+        var vm = new AccountViewModel(shell, accounts, new MCPhoto.Firebase.NullTempUserLimitsService())
+        {
+            Mode = AccountMode.PasswordChange
+        };
         return (vm, accounts, session);
     }
 

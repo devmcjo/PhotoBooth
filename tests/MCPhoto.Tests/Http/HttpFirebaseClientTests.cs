@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Upload;
 using MCPhoto.Firebase;
@@ -186,6 +187,114 @@ public class HttpFirebaseClientTests
         {
             var storagePath = "results/20260101_120000_11111111-2222-3333-4444-555555555555/final.jpg";
             await Assert.ThrowsAsync<InvalidOperationException>(
+                () => client.UploadFileAsync(storagePath, local, "image/jpeg"));
+        }
+        finally { File.Delete(local); }
+    }
+
+    // ── it13 §5.1: 업로드 선택적 Bearer(로그인=JWT 부착, 게스트=무토큰) + 한도 초과 403 매핑 ──
+
+    [Fact]
+    public async Task Guest_Upload_Sends_No_Bearer()
+    {
+        // 세션 미로그인(토큰 없음) → prepare에 Authorization 헤더 없음(익명), 정상 통과.
+        var handler = new FakeHttpMessageHandler();
+        var storagePath = "results/20260101_120000_11111111-2222-3333-4444-555555555555/final.jpg";
+        handler.WhenJson(HttpMethod.Post, "uploads/prepare", HttpStatusCode.OK,
+            PrepareJson("final", storagePath, "tok"));
+        handler.When(HttpMethod.Put, "put-final", _ => FakeHttpMessageHandler.NoContent(HttpStatusCode.OK));
+
+        var client = Make(handler, session: new BackendSession()); // 미로그인
+        var local = TempFile(".jpg");
+        try
+        {
+            await client.UploadFileAsync(storagePath, local, "image/jpeg");
+            var prep = handler.Requests[0];
+            Assert.Null(prep.AuthorizationScheme);                       // Bearer 미부착(게스트)
+            Assert.Equal(ApiKey, prep.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API 키는 유지
+        }
+        finally { File.Delete(local); }
+    }
+
+    [Fact]
+    public async Task LoggedIn_Upload_Attaches_Bearer()
+    {
+        // 로그인(토큰 보유) → prepare·commit에 Bearer <jwt> 부착(선택적 신원화).
+        var handler = new FakeHttpMessageHandler();
+        var storagePath = "results/20260101_120000_11111111-2222-3333-4444-555555555555/final.jpg";
+        handler.WhenJson(HttpMethod.Post, "uploads/prepare", HttpStatusCode.OK,
+            PrepareJson("final", storagePath, "tok"));
+        handler.When(HttpMethod.Put, "put-final", _ => FakeHttpMessageHandler.NoContent(HttpStatusCode.OK));
+
+        var session = new BackendSession();
+        session.SignIn("jwt-abc", new User { Id = "temp1", Role = UserRole.TempUser });
+        var client = Make(handler, session: session);
+        var local = TempFile(".jpg");
+        try
+        {
+            await client.UploadFileAsync(storagePath, local, "image/jpeg");
+            var prep = handler.Requests[0];
+            Assert.Equal("Bearer", prep.AuthorizationScheme);
+            Assert.Equal("jwt-abc", prep.AuthorizationParameter);
+        }
+        finally { File.Delete(local); }
+    }
+
+    [Theory]
+    [InlineData("TEMP_USER_TIME_EXCEEDED", QrGateReason.Time)]
+    [InlineData("TEMP_USER_COUNT_EXCEEDED", QrGateReason.Count)]
+    public async Task Prepare_Limit_Exceeded_403_Maps_To_QrLimitException(string code, QrGateReason expected)
+    {
+        // 서버가 prepare에서 한도 초과 403(사유 code) → QrLimitExceededException(사유 보존).
+        var handler = new FakeHttpMessageHandler();
+        handler.WhenJson(HttpMethod.Post, "uploads/prepare", HttpStatusCode.Forbidden,
+            "{\"error\":{\"code\":\"" + code + "\",\"message\":\"limit\"}}");
+
+        var session = new BackendSession();
+        session.SignIn("jwt", new User { Id = "temp1", Role = UserRole.TempUser });
+        var client = Make(handler, session: session);
+        var local = TempFile(".jpg");
+        try
+        {
+            var storagePath = "results/20260101_120000_11111111-2222-3333-4444-555555555555/final.jpg";
+            var ex = await Assert.ThrowsAsync<QrLimitExceededException>(
+                () => client.UploadFileAsync(storagePath, local, "image/jpeg"));
+            Assert.Equal(expected, ex.Reason);
+        }
+        finally { File.Delete(local); }
+    }
+
+    [Fact]
+    public async Task Commit_Count_Exceeded_403_Maps_To_QrLimitException()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.WhenJson(HttpMethod.Post, "uploads/commit", HttpStatusCode.Forbidden,
+            "{\"error\":{\"code\":\"TEMP_USER_COUNT_EXCEEDED\",\"message\":\"limit\"}}");
+
+        var session = new BackendSession();
+        session.SignIn("jwt", new User { Id = "temp1", Role = UserRole.TempUser });
+        var client = Make(handler, session: session);
+
+        var now = DateTime.UtcNow;
+        var rs = new ResultSession { Id = "s1", CreatedAt = now, ExpiresAt = now.AddHours(24), DownloadPageUrl = "https://p/?s=s1" };
+        var ex = await Assert.ThrowsAsync<QrLimitExceededException>(() => client.CreateResultSessionAsync(rs));
+        Assert.Equal(QrGateReason.Count, ex.Reason);
+    }
+
+    [Fact]
+    public async Task Non_TempUser_403_Other_Code_Maps_To_Unauthorized()
+    {
+        // TempUser 사유 code가 아닌 403(예: forbidden)은 기존 계약(UnauthorizedAccessException) 유지 — 드리프트 없음.
+        var handler = new FakeHttpMessageHandler();
+        handler.WhenJson(HttpMethod.Post, "uploads/prepare", HttpStatusCode.Forbidden,
+            "{\"error\":{\"code\":\"forbidden\",\"message\":\"nope\"}}");
+
+        var client = Make(handler, session: new BackendSession());
+        var local = TempFile(".jpg");
+        try
+        {
+            var storagePath = "results/20260101_120000_11111111-2222-3333-4444-555555555555/final.jpg";
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(
                 () => client.UploadFileAsync(storagePath, local, "image/jpeg"));
         }
         finally { File.Delete(local); }
