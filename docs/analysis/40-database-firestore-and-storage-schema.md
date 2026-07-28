@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | Firestore 컬렉션 스키마 + Cloud Storage 경로 규약 + 보안 규칙 + TTL/만료 계약 |
 | 범위 | `src/MCPhoto.Firebase/Dto/*`, `src/MCPhoto.Core/Models/*`, `UploadContract.cs`, `web/firestore.rules`, `web/storage.rules`, `web/OPS-ttl.md`. 연동 흐름은 [30 · 백엔드 Firebase 연동](./30-backend-firebase-integration.md) |
-| 최종 업데이트 | 2026-07-23 |
+| 최종 업데이트 | 2026-07-29 (it16 — §2.1 `users.role`) |
 | 관련 소스 | `UserDoc.cs`, `FrameTemplateDoc.cs`, `ResultSessionDoc.cs`, `User.cs`, `FrameTemplate.cs`, `ResultSession.cs`, `Slot.cs`, `UserRole.cs`, `UploadContract.cs`, `firestore.rules`, `storage.rules`, `OPS-ttl.md` |
 | 갱신 규칙 | DTO의 `[FirestoreProperty]` 필드명·타입, Storage 경로 조립(`UploadContract`), 보안 규칙(`*.rules`)이 바뀌면 해당 표/근거(`파일:라인`)를 갱신. 연동 절차 변경은 30번 문서와 동시 갱신 |
 
@@ -36,7 +36,7 @@
 | 필드(저장 키) | 타입 | 의미 | 근거 |
 |---------------|------|------|------|
 | `id` | string | 계정 ID(문서 ID와 동일) | `services/dto.ts` `UserDoc` |
-| `role` | string | `"temp_user"` / `"user"` / `"manager"` / `"admin"`. 신규 SSO 계정은 `temp_user` | `domain/roles.ts` |
+| `role` | string | `"temp_user"` / `"user"` / **`"advanced_user"`**(it16) / `"manager"` / `"admin"`. 신규 SSO 계정은 `temp_user` | `domain/roles.ts` |
 | `createdAt` | timestamp | 생성 시각(UTC). TempUser 시간 한도의 기준점 | `services/dto.ts` |
 | `email` | string | Google 계정 이메일(소문자 정규화). SSO 신원의 근거 — 항상 존재 | `services/accounts.ts` `loginWithGoogleEmail` |
 | `authMethod` | string | 인증 제공자. 현재 `"google"` 고정 | `services/accounts.ts` `createGoogleAccount` |
@@ -45,6 +45,15 @@
 
 - **부트스트랩**: HTTP API로는 admin을 지정할 수 없다(`canSetRole`). 최초 admin은 마이그레이션 스크립트
   `web/functions/scripts/migrate-google-only-accounts.mjs`가 만든다.
+- **역할 위계(it16 갱신)**: `temp_user`(0) < `user`(1) < **`advanced_user`(2)** < `manager`(3) < `admin`(4).
+  랭크는 `domain/roles.ts`의 `MANAGE_RANK`(C# `ManageRank`와 1:1)로 명시하며 문자열이 저장 계약이므로 배치값 변경은 무해하다.
+  **스키마 변경은 없다** — `users.role`에 `advanced_user` 값이 추가될 수 있다는 것뿐이며 필드 추가·인덱스 변경·마이그레이션이 **불필요**하다
+  (기존 문서는 전부 기존 4값 중 하나이고 그 의미가 바뀌지 않는다. `user`가 프레임 저작 권한을 잃는 것은 **클라 정책 변경**이며 문서 값 변경이 아니다).
+- **`role` 쓰기 게이트**: `PATCH /accounts/:id/role`은 `requirePower()` + `canSetRole(actor, current, target)` 매트릭스를 통과해야 한다
+  (manager는 하위 3역할 대역 `temp_user`·`user`·`advanced_user` 안에서 자유 지정, manager·admin 지정은 admin 전용, admin 대상·admin 지정은 누구도 불가).
+  `PUT /accounts/:id/pin`(타 계정 PIN 재설정)도 it16부터 **`requirePower()`** 를 요구한다(비power 403).
+  전수 표는 [60 §1.4](./60-auth-accounts-and-roles.md#14-역할-지정변경-매트릭스).
+- **미지원 `role` 값**: `parseRole`/`ParseRole`이 `user`로 폴백한다. it16 이후 `user`는 프레임 쓰기 권한이 없어 **fail-closed 방향**이다.
 - **클라 응답(`UserResponse`)**: `{id, role, createdAt(ISO8601), email, authMethod, hasPin}`.
   `hasPin`은 `pinHash != null` 파생값이며 해시 원문은 어떤 응답에도 실리지 않는다
   (와이어 형식은 `docs/design/wpf-it15-google-only-auth-design.md` §9.1에서 동결).

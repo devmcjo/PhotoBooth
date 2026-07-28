@@ -4,7 +4,7 @@
 |------|-----|
 | 문서 | 알려진 이슈·기술 부채·개선 예정·비범위 |
 | 범위 | 미해결/대기 항목의 단일 집합소. 완료되면 이 문서에서 제거하고 해당 세부 문서로 반영 |
-| 최종 업데이트 | 2026-07-28 |
+| 최종 업데이트 | 2026-07-29 (it16 — 해결 2건 등재 + 이연 7건·비범위 5건 추가) |
 | 갱신 규칙 | 이슈 발견·수정·범위 결정 시 즉시 이 문서 갱신. "상태" 컬럼 유지 |
 
 ---
@@ -15,7 +15,7 @@
 |------|------|------|------|
 | ~~프레임 로컬 삭제 안 됨~~ | 썸네일 `Image`가 png 파일을 잠가 `File.Delete` 실패(예외 삼킴) → png 잔존 | `Views/FrameSelectView.xaml`, `Core/Frames/LocalFrameStore.cs`, `ViewModels/FrameSelectViewModel.cs` | **수정 완료(2026-07-23)**: `FilePathToImageConverter`(OnLoad+IgnoreImageCache)로 파일 잠금 해소 → 삭제 성공. `DeleteLocal`은 png 존재 여부로 정직 반환, `ConfirmDelete`가 실패 시 안내(성공 오인 금지) |
 | ~~설정 진입 권한 게이트~~ | 게스트 QR/Firebase 소스단 off(ini 불변) + 로그인 시 비밀번호 가드 | `SettingsViewModel`, `SettingsView`, `ResultViewModel` | **완료(2026-07-23, 보완#1)** |
-| 문서 동기화 지연 | 셔터음(#7)·권한게이트(보완#1)·설정 레이아웃이 11·12 세부 문서에 아직 미반영 | `docs/analysis/11`, `docs/analysis/12` | **대기**: 다음 기능 작업 시 함께 갱신 |
+| 문서 동기화 지연 | 셔터음(#7)·권한게이트(보완#1)·설정 레이아웃이 11·12 세부 문서에 아직 미반영. **추가(it16 확인)**: [60](./60-auth-accounts-and-roles.md) **§3~§5가 it13~it15 미반영**(id/pw 로그인 흐름·`ChangePasswordAsync`·시드 비밀번호·"SSO 미지원" 서술이 현재 코드와 다르다). §1·§2는 it16 기준 최신 | `docs/analysis/11`, `docs/analysis/12`, `docs/analysis/60` §3~§5 | **대기**: 60번 §3~§5는 Google SSO·PIN·백엔드 프록시 서술로 재작성 필요(다음 인증 관련 작업 시 함께) |
 | 비밀번호 평문 저장 | `users` 문서에 비밀번호 평문(MVP) | `Firebase/AccountService.cs`, `web/firestore.rules` | 개선 예정(해시/솔트, 규칙 강화) |
 | 인스톨러 self-contained 불일치 | `installer/MCPhoto.iss` 주석은 `--self-contained false` 예시, 실제 `publish.ps1`은 `true`(단일 파일) | `installer/MCPhoto.iss`, `publish.ps1` | 확정 필요(배포 방식 통일) |
 | ~~ffprobe 잔존~~ | `tools/ffmpeg/ffprobe.exe` 코드 미사용 | `tools/ffmpeg/` | **정리 완료(2026-07-23)**: 삭제 |
@@ -23,7 +23,16 @@
 | 만료 물리삭제는 인프라 의존 | `PurgeExpiredAsync` 코드 존재하나 앱에서 호출 안 함 → GCS Lifecycle/Firestore TTL 설정에 의존 | `Core/Upload/UploadService.cs` | 의도된 설계([50](./50-infra-gcp-lifecycle-and-ttl.md)). 인프라 미설정 시 미삭제 주의 |
 | 프레임 피커 썸네일 가상화 미적용 | "기존 프레임 불러오기" 모달(과 프레임 선택 화면)이 `WrapPanel` ItemsPanel로 **UI 가상화가 꺼져** 있고 `DecodePixelWidth`도 미적용 → 후보 수가 늘면 모달 오픈이 지연될 수 있다. 현재 상한(공용 소수 + 계정당 최대 10)에서는 수용 | `Views/FrameEditorView.xaml`, `Views/FrameSelectView.xaml`, `Themes/Controls.xaml`(`FrameCard.Content`) | 후속 과제(it15 F2-D5 수용). ⚠️ 개선 시 `FilePathToImageConverter`의 **OnLoad + IgnoreImageCache + Freeze** 3종 규약을 깨지 말 것 — 위 "프레임 로컬 삭제 안 됨" 파일 잠금 수정의 본체다 |
 | ~~업로드 진행률 테스트 flaky~~ | `UploadServiceTests.Upload_Reports_Stage_Progress_In_Order`가 전체 스위트 실행 시 간헐 실패(단독 실행은 항상 통과, 4회 중 1회 관측). 원인은 **제품 코드가 아니라 테스트 단언**: `UploadService.MakeStageProgress`가 쓰는 `System.Progress<T>`는 캡처된 SynchronizationContext(테스트 환경엔 없음 → 스레드풀)로 콜백을 **비동기 게시**하므로, 파일 단위 보고가 동기 호출인 `Finalizing`보다 늦게 도착할 수 있다. `stages[^1] == Finalizing` 단언이 제품이 보장하지 않는 성질을 요구했고, 수집기 `CollectingProgress`도 `List<T>`를 락 없이 여러 스레드에서 변경했다 | `tests/MCPhoto.Tests/UploadServiceTests.cs`, `Core/Upload/UploadService.cs:95-98`(원인 지점, **무수정**) | **기존 잠복 결함 — it15에서 발견·테스트 수정으로 해소(2026-07-28)**: it15가 만든 회귀가 아니다(`UploadService`는 `MCPhoto.Firebase`→`MCPhoto.Core` 이관 시 본문 바이트 동일, 테스트도 `using` 1줄만 변경). 테스트 증가(610→613)로 스레드풀 경합이 늘며 드러났다. 조치 = **테스트만 수정**: 수집기를 `lock` + 스냅샷으로 스레드 안전화, `Finalizing`은 위치 대신 존재만 단언(`Assert.Contains`), 순서 단언은 **동기 보고만**(단계 시작 마커 `Fraction==0.0`) 골라 `[Photo, Timelapse]` + `Finalizing > Timelapse 시작`으로 재작성. ⚠️ 실제 앱에서 `Progress<T>`가 UI SynchronizationContext로 마샬링하는 것은 **의도된 올바른 동작**이므로 제품 코드는 건드리지 않았다. 전체 스위트 8회 연속 무실패 확인 |
-| 프레임 편집 fork 시 옛 이름 파일 잔존 | user가 자기 로컬 프레임 **이름을 바꿔 저장**하면 `SaveLocal`이 새 파일명으로만 쓰기 때문에 옛 `{계정}_{옛이름}.png`/`.slots`가 남는다(it15 이전부터의 기존 동작, 범위 밖으로 유지) | `Core/Frames/LocalFrameStore.cs` | 대기: 이름 변경 시 옛 파일 정리 여부 결정 필요(삭제 vs 유지) |
+| 프레임 편집 fork 시 옛 이름 파일 잔존 | 고급 유저가 자기 로컬 프레임 **이름을 바꿔 저장**하면 `SaveLocal`이 새 파일명으로만 쓰기 때문에 옛 `{계정}_{옛이름}.png`/`.slots`가 남는다(it15 이전부터의 기존 동작, 범위 밖으로 유지) | `Core/Frames/LocalFrameStore.cs` | 대기: 이름 변경 시 옛 파일 정리 여부 결정 필요(삭제 vs 유지) |
+| ~~설정 저장 시 창모드 창이 옛 위치·크기로 점프~~ | 창모드에서 설정을 저장하면 창이 ini에 남아 있던 과거 `WindowBounds`로 점프하고, 최대화 상태로 저장하면 `WindowState=Normal` 강제로 원복됐다. 원인은 `ApplyDisplaySettings`가 ① 시작 복원과 ② 런타임 모드 변경을 겸하면서 **동일 모드 저장에도 기하를 재적용**한 것(`WindowBounds`는 창 닫을 때만 갱신됐다) | `App/MainWindow.xaml.cs`, `App/ViewModels/SettingsViewModel.cs`, `Core/Settings/DisplayApplyPolicy.cs` | **수정 완료(it16, 2026-07-29)**: 순수 정책 `DisplayApplyPolicy` 신설 + `_appliedMode` 도입으로 **모드가 실제로 바뀔 때만** 창에 손댄다(동일 모드 저장은 완전 무동작). 저장 직전 현재 창 기하를 캡처해 `WindowBounds`를 신선하게 유지한다. 전체화면 ↔ 창모드 즉시 전환(it9 후속)은 유지. 상세 [11 §16](./11-exe-app-features.md#16-표시-모드전체화면창모드) |
+| ~~`PUT /accounts/:id/pin` power 게이트 누락~~ | 타 계정 PIN 재설정 라우트가 로그인 + `canManage`(같은 위계 허용)만 요구해 **`temp_user`가 다른 `temp_user`의 PIN을 재설정**할 수 있었다. 형제 라우트(`DELETE /accounts/:id`·`PATCH /accounts/:id/role`)에는 있던 `requirePower()`가 PIN에만 빠져 있었고, it15로 신규 SSO 계정이 전원 `temp_user`가 되며 모집단이 커졌다 | `web/functions/src/routes/accounts.ts`, `App/ViewModels/UserMgmtViewModel.cs` | **수정 완료(it16, 2026-07-29)**: 라우트에 `requirePower()` 추가(비power 403) + 클라 `CanResetPin`·커맨드 가드에 `IsPower()` 항 추가. `canManage` 자체는 **무변경**(`deleteAccount`와 공유 — 좁히면 admin↔admin 삭제가 회귀). 본인 PIN 변경(`PUT /accounts/me/pin`)은 영향 없음 |
+| power가 fork 저장한 공용 로컬 프레임을 다시 편집할 수 없다 | 공용 스코프 저장분은 `UserId=null`로 로드되어 `FrameEditPolicy.CanEdit`의 `UserLocal → IsOwnedLocal` 판정에서 탈락한다. it15부터의 성질이며 it16 범위(역할 재배분)와 무관해 손대지 않았다 | `Core/Frames/FrameEditPolicy.cs`, `Core/Frames/LocalFrameStore.cs` | 대기: `DbDefault`처럼 power 우회를 둘지, 공용 로컬분에 소유자 메타를 남길지 결정 필요 |
+| 공용 로컬 프레임 삭제가 소유자·power로 제한되지 않음 | `FrameEditPolicy.CanDelete`는 **소유자를 보지 않는다** — 프레임 쓰기 권한(고급 유저 이상)이면 다른 power가 fork 저장한 공용 로컬 프레임의 파일을 지울 수 있다(서버 문서는 불변). it15에서도 `user`가 가능했던 **기존 성질**이며, it16은 "고급 유저 = it15 user 권한 전체"를 확정했으므로 좁히지 않았다 | `Core/Frames/FrameEditPolicy.cs` | 대기: 좁히려면 공용 로컬 저장분에 소유자 식별 수단이 먼저 필요(위 항목과 한 덩어리) |
+| `CreatableRoles`/`canCreate` 데드코드 | it15의 계정 생성 폐지로 프로덕션 호출자가 0(테스트만 참조). it16에서 목록만 새 역할 매트릭스와 맞춰 드리프트를 막았다 | `Core/Models/UserRole.cs`, `web/functions/src/domain/roles.ts` | 대기: 제거 시 관련 테스트까지 연쇄 — 계정 생성 재도입 가능성 판단 후 결정 |
+| 서버 잔존 라우트 `PUT /frames/:id` | it15 정책상 앱은 호출하지 않는다(편집 저장은 로컬 전용). 운영/관리 전용으로 남겨 둔 상태 | `web/functions/src/routes/frames.ts` | 대기: 유지(운영 도구) vs 제거 결정 필요 |
+| `MainWindow`의 표시모드·기하 책임이 코드비하인드에 남음 | it16에서 **판정**은 순수 정책(`DisplayApplyPolicy`)으로 뽑았지만 **적용**(`WindowStyle`/`WindowState`/`Left`·`Top`·`Width`·`Height`)은 여전히 `MainWindow` 코드비하인드라 단위 테스트 불가 영역이 남는다 | `App/MainWindow.xaml.cs` | 대기: `IWindowGeometryService` 류 추상화는 별 이터레이션 과제 |
+| 창 이동·리사이즈 시 `WindowBounds` 실시간 반영 없음 | 캡처 시점은 **설정 저장 시**와 **종료 시** 두 곳뿐이다(it16에서 전자를 추가). 그 사이에 강제 종료되면 위치가 유실된다 | `App/MainWindow.xaml.cs` | 대기: `LocationChanged`/`SizeChanged` 구독은 이벤트 해제·디바운스 설계가 필요 |
+| `FrameSelectViewModel.IsLoggedIn` 미사용 잔존 | it16에서 "프레임 만들기" 버튼 바인딩이 `IsLoggedIn` → `CanCreateFrame`으로 옮겨져, 이 프로퍼티는 **할당만 되고 소비처가 없다**(XAML·VM 어디에서도 읽지 않음) | `App/ViewModels/FrameSelectViewModel.cs:77` | 대기(리뷰 제안, 비차단): 제거 여부 결정 — 무해하지만 드리프트 신호 |
 
 ## 2. 다음 착수 예정 (우선순위 큐)
 
@@ -63,6 +72,11 @@
 | 하드웨어 플래시 | 플래시는 화면 하양 오버레이로 구현(하드웨어 제어 없음) |
 | QR 화면 다운로드 링크/코드 텍스트 병기 | 사용자 "해당 경우 없다" 판단으로 미채택 |
 | 계정 저장소를 Realtime Database로 이전 | Firestore 유지(쿼리·TTL·보안규칙·일관성). RTDB 이전은 이점 상실로 비권장 |
+| 역할별 프레임 개수 한도 차등 | it16 비범위 — 한도는 계정당 10개로 역할 무관 유지 |
+| 프레임 소유권 이전·마이그레이션 UI | it16 비범위(E4) — 프레임 권한을 잃은 `user`·`temp_user`의 기존 프레임은 **그대로 두고 읽기 전용**(목록 노출·촬영 사용 유지, 편집·삭제만 불가). 파일 삭제·이관·정리 UI를 만들지 않는다 |
+| 프레임 목록에서 권한 없는 계정의 기존 프레임 숨기기 | it16 비범위(E4가 노출 유지를 확정) — 숨기면 촬영에 쓰던 프레임이 사라져 체감 회귀가 된다 |
+| 고급 유저 승격 요청 워크플로우 | it16 비범위 — 승격은 관리자·매니저가 사용자 관리 화면에서 직접 지정하는 수동 동선뿐([60 §1.4](./60-auth-accounts-and-roles.md#14-역할-지정변경-매트릭스)) |
+| `advanced_user`용 서버측 프레임 권한 축 | it16 비범위 — 고급 유저의 프레임은 **개인 로컬 저장 전용**이라 서버 쓰기 요청이 발생하지 않는다. 프레임 쓰기 라우트는 계속 `requirePower()` 뒤에 두고 `isPower`를 확장하지 않는다(회귀 테스트 `web/functions/src/__tests__/authGates.test.ts`가 고정) |
 
 ## 4. 보관/만료 정합성 메모
 

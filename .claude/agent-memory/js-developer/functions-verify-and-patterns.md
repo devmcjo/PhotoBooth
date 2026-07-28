@@ -13,6 +13,7 @@ metadata:
 - Emulator 스모크: **web/ 디렉토리에서** `firebase emulators:exec --only functions,firestore,storage "node functions/smoke/smoke.mjs"`.
   - 종료코드 0 = 전 케이스 PASS. HTTP 실호출로 엔드포인트 검증 + Admin SDK로 Firestore 직접 시드/조회.
   - 신규 엔드포인트 스모크는 `smoke/smoke.mjs`의 404 체크 직전 블록에 추가하는 관례.
+  - **⚠️ 단 smoke.mjs 자체가 it15 이후 삭제된 라우트를 호출해 현재는 실행 불가** — [[functions-backend-conventions]] 참조.
 
 ## 스모크에서 해시 토큰 검증 전략
 - 토큰은 sha256 해시만 저장돼 Admin으로도 평문(secret/code)을 알 수 없다.

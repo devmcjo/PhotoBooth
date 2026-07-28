@@ -3,86 +3,181 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 60-auth-accounts-and-roles.md |
-| 범위 | MCPhoto의 계정 역할 위계(user/manager/admin + 게스트), 권한 매트릭스, 로그인/로그아웃 흐름, 계정 저장소(Firestore users + 오프라인 시드 폴백)와 CRUD·cascade 삭제 |
-| 최종 업데이트 | 2026-07-23 |
-| 관련 소스 경로 | `src/MCPhoto.Core/Accounts/IAccountService.cs`, `src/MCPhoto.Core/Models/UserRole.cs`, `src/MCPhoto.Core/Models/User.cs`, `src/MCPhoto.Firebase/AccountService.cs`, `src/MCPhoto.Firebase/Dto/UserDoc.cs`, `src/MCPhoto.App/SessionContext.cs`, `src/MCPhoto.App/AppShellViewModel.cs`, `src/MCPhoto.App/MainWindow.xaml`, `src/MCPhoto.App/ViewModels/{LoginGuestViewModel,AccountViewModel,UserMgmtViewModel,FrameSelectViewModel}.cs` |
-| 갱신 규칙 | `UserRole` enum·`IsPower`/`CreatableRoles`/`CanCreate` 규칙, `IAccountService` 시그니처, 시드 계정 상수(`SeedId`/`SeedPassword`), 상단 바 팝오버 항목·가시성 바인딩(`MainWindow.xaml`), 세션 단일 소스(`SessionContext`)의 Login/Logout/Reset 계약이 바뀌면 이 문서를 갱신한다. |
+| 범위 | MCPhoto의 계정 역할 위계(temp_user/user/advanced_user/manager/admin + 게스트), 권한 매트릭스, 로그인/로그아웃 흐름, 계정 저장소(Firestore users + 오프라인 시드 폴백)와 CRUD·cascade 삭제 |
+| 최종 업데이트 | 2026-07-29 (it16 — §1·§2) |
+| 관련 소스 경로 | `src/MCPhoto.Core/Accounts/IAccountService.cs`, `src/MCPhoto.Core/Models/UserRole.cs`, `src/MCPhoto.Core/Models/RoleChangePolicy.cs`, `src/MCPhoto.Core/Models/User.cs`, `src/MCPhoto.Core/Frames/FrameEditPolicy.cs`, `src/MCPhoto.Firebase/AccountService.cs`, `src/MCPhoto.Firebase/Dto/UserDoc.cs`, `src/MCPhoto.App/SessionContext.cs`, `src/MCPhoto.App/AppShellViewModel.cs`, `src/MCPhoto.App/MainWindow.xaml`, `src/MCPhoto.App/ViewModels/{LoginGuestViewModel,AccountViewModel,UserMgmtViewModel,FrameSelectViewModel}.cs`, `web/functions/src/domain/roles.ts` |
+| 갱신 규칙 | `UserRole` enum·`IsPower`/`CanWriteFrames`/`CanManage`/`CreatableRoles`/`CanCreate` 규칙, `RoleChangePolicy.AssignableRoles`(서버 `canSetRole`과 1:1), `IAccountService` 시그니처, 시드 계정 상수, 상단 바 팝오버 항목·가시성 바인딩(`MainWindow.xaml`), 세션 단일 소스(`SessionContext`)의 Login/Logout/Reset 계약이 바뀌면 이 문서를 갱신한다. |
 
 관련 문서: [10 Exe 앱 아키텍처](./10-exe-app-architecture.md) · [30 Firebase 연동](./30-backend-firebase-integration.md) · [40 Firestore/Storage 스키마](./40-database-firestore-and-storage-schema.md) · [70 로깅/이슈 진단](./70-logging-and-troubleshooting.md) · 인덱스 [README](./README.md)
 
-> ⚠️ 보안 주의(사실): 비밀번호는 **MVP 평문 저장·평문 비교**다. `User.Password`는 평문이며(`src/MCPhoto.Core/Models/User.cs:11-12`), 로그인 비교도 평문(`src/MCPhoto.Firebase/AccountService.cs:46`), Firestore 문서에도 평문 저장(`src/MCPhoto.Firebase/Dto/UserDoc.cs:12`). 개인/키오스크 사용 전제이며 "웹 접근 전면 차단"이 방어선이라고 소스 주석이 명시한다(`src/MCPhoto.Core/Models/User.cs:4-5`).
+> ⚠️ 자격증명(it15 갱신, 사실): **비밀번호 개념은 폐지됐다.** 자격증명은 ① Google SSO(신원 — 서버가 id_token 검증) + ② `pinHash`(설정·계정 관리 진입 게이트, bcrypt 4자리 PIN) 두 가지뿐이며 `users` 문서의 `password`·`emailVerified` 필드는 삭제됐다(설계 `docs/design/wpf-it15-google-only-auth-design.md` §5.3). it15 이전의 "평문 비밀번호 저장·비교"는 **이력**이다. "웹 접근 전면 차단"이 여전히 `users` 컬렉션의 방어선이다([40 §5.1](./40-database-firestore-and-storage-schema.md#51-firestore-webfirestorerules)).
+
+> ⚠️ 문서 동기화 상태(사실): **§1·§2는 it16 기준으로 최신**이다. **§3~§5는 it13~it15 변경(Google SSO 로그인·PIN·백엔드 프록시 경유 계정 CRUD)이 아직 반영되지 않은 구서술**이며, id/pw 로그인·`ChangePasswordAsync`·시드 비밀번호 서술은 현재 코드와 다르다. 해당 절을 근거로 삼기 전에 [40 §2.1](./40-database-firestore-and-storage-schema.md#21-users-문서-id--계정-id)과 `docs/design/wpf-it15-google-only-auth-design.md`를 확인한다([90 §1 "문서 동기화 지연"](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채) 등재).
 
 ---
 
 ## 1. 역할 종류와 위계
 
-역할은 `UserRole` enum 3종이며, 여기에 **비로그인 = 게스트**(enum 값 아님, `CurrentUser == null` 상태)가 더해진다.
+역할은 `UserRole` enum **5종**이며, 여기에 **비로그인 = 게스트**(enum 값 아님, `CurrentUser == null` 상태)가 더해진다.
+it13이 최하위 `temp_user`를, **it16이 `advanced_user`(고급 유저)** 를 추가했다.
 
-`UserRole` 정의: `src/MCPhoto.Core/Models/UserRole.cs:4-14`
+위계(관리 판정 기준): **TempUser(0) < User(1) < AdvancedUser(2) < Manager(3) < Admin(4)**
 
-| 역할 | enum 값 | Firestore 저장값 | 소스 설명(주석) | 근거 |
-| --- | --- | --- | --- | --- |
-| 게스트 | (없음) | — | 비로그인 상태. `SessionContext.CurrentUser == null` | `src/MCPhoto.App/SessionContext.cs:13-14`, `src/MCPhoto.App/AppShellViewModel.cs:62` |
-| user | `UserRole.User` | `"user"` | "자기 프레임(최대 10) + AppSettings 관리" | `src/MCPhoto.Core/Models/UserRole.cs:6-7`, `:20` |
-| manager | `UserRole.Manager` | `"manager"` | "user + 사용자 관리 + 공용 기본 프레임 관리" | `src/MCPhoto.Core/Models/UserRole.cs:9-10`, `:21` |
-| admin | `UserRole.Admin` | `"admin"` | "manager + manager 지정(최종 1인)" | `src/MCPhoto.Core/Models/UserRole.cs:12-13`, `:22` |
+`UserRole` 정의: `src/MCPhoto.Core/Models/UserRole.cs:4-24`
 
-문자열 매핑은 `UserRoleExtensions.ToFirestoreValue`(`:19-25`)와 `ParseRole`(`:27-32`)이 담당하며, 알 수 없는 값은 `user`로 안전 폴백한다(`:24`, `:31`).
+| 역할 | enum 값 | Firestore 저장값 | UI 라벨 | 소스 설명(주석) | 근거 |
+| --- | --- | --- | --- | --- | --- |
+| 게스트 | (없음) | — | — | 비로그인 상태. `SessionContext.CurrentUser == null` | `src/MCPhoto.App/SessionContext.cs:13-14`, `src/MCPhoto.App/AppShellViewModel.cs:69` |
+| temp_user | `UserRole.TempUser` | `"temp_user"` | 임시 유저 | "user와 동기능 + QR 전송만 시간·횟수 한도. 위계 최하위" | `src/MCPhoto.Core/Models/UserRole.cs:10-11` |
+| user | `UserRole.User` | `"user"` | 사용자 | "AppSettings 관리. **it16부터 프레임은 사용만**(생성·편집·삭제 불가)" | `src/MCPhoto.Core/Models/UserRole.cs:13-14` |
+| **advanced_user** | `UserRole.AdvancedUser` | `"advanced_user"` | **고급 유저** | "User 권한 + 프레임 생성·편집·삭제(개인 로컬). **power 아님**(계정 관리 권한 없음)" | `src/MCPhoto.Core/Models/UserRole.cs:16-17` |
+| manager | `UserRole.Manager` | `"manager"` | 매니저 | "advanced_user + 사용자 관리 + 공용 기본 프레임 관리" | `src/MCPhoto.Core/Models/UserRole.cs:19-20` |
+| admin | `UserRole.Admin` | `"admin"` | 관리자 | "manager + manager 지정(최종 1인)" | `src/MCPhoto.Core/Models/UserRole.cs:22-23` |
+
+- 문자열 매핑은 `UserRoleExtensions.ToFirestoreValue`(`:29-37`)와 `ParseRole`(`:39-47`)이 담당하며, 알 수 없는 값은 `user`로 안전 폴백한다(`:36`, `:46`). it16 이후 `user`는 프레임 쓰기 권한이 없으므로 이 폴백은 **fail-closed 방향**이다.
+- UI 라벨은 `ToLabel()`(`:67-75`) 한 곳이 담당하며, 사용자 관리 목록·역할 콤보·계정 화면·진단 모달·토스트가 모두 이 값을 쓴다(`RoleLabelConverter`, `src/MCPhoto.App/Converters/CommonConverters.cs`).
+- **enum 배치값(서수)은 위계 순으로 명시**돼 있고, it16에서 `AdvancedUser=2`를 끼워 넣으며 Manager·Admin이 2·3 → **3·4로 이동**했다. 저장·전송은 전부 문자열이고 위계 비교는 `ManageRank` switch이므로 배치값 변경은 무해하다(`UserRole.cs:6-8` 주석, `:99-107`).
+- 서버(TypeScript) 측 동일 계약: `web/functions/src/domain/roles.ts`의 `UserRole` union·`MANAGE_RANK`(0/1/2/3/4)·`isUserRole` 화이트리스트·`parseRole`이 C#과 1:1로 동결돼 있다.
 
 ### 1.1 `IsPower()` — "파워" 계정 개념
 
-`IsPower()`는 **manager 또는 admin**을 뜻하며(`src/MCPhoto.Core/Models/UserRole.cs:35`), 사용자 관리·공용 기본 프레임 관리 권한의 게이트로 코드 전반에서 재사용된다.
+`IsPower()`는 **manager 또는 admin**을 뜻하며(`src/MCPhoto.Core/Models/UserRole.cs:54`), 사용자 관리·공용 기본 프레임(DB) 관리 권한의 게이트로 코드 전반에서 재사용된다.
 
 ```
 public static bool IsPower(this UserRole role) => role is UserRole.Manager or UserRole.Admin;
 ```
 
+> ⚠️ **it16: AdvancedUser는 power가 아니다.** `IsPower()`는 확장되지 않았다 — 고급 유저에게는 계정 관리 권한이 전혀 없다. 프레임 저작 권한은 [1.2](#12-canwriteframes--프레임-저작-권한-축-it16-신규)의 **별개 축**이며 두 판정을 서로 대체하지 않는다. 서버 `isPower()`(manager/admin)도 동일하게 불변이며, 그 뒤에 있는 프레임 쓰기 라우트가 열리지 않도록 회귀 테스트(`web/functions/src/__tests__/authGates.test.ts`)가 고정한다.
+
 `IsPower()` 소비 지점:
-- 상단 바 파워 여부: `AppShellViewModel.IsPower`(`src/MCPhoto.App/AppShellViewModel.cs:63`) → 팝오버의 "계정 생성"·"관리자 도구" 노출 제어(`src/MCPhoto.App/MainWindow.xaml:67`, `:71`).
-- 계정 페이지 파워 판정: `AccountViewModel.IsPower`(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:72`), 계정 생성 커맨드 진입 가드(`:136`).
-- 프레임 화면 파워 판정: `FrameSelectViewModel.IsPower`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:68`) → "서버에서도 제거" 옵션 노출·유효(`:102`).
+- 상단 바 파워 여부: `AppShellViewModel.IsPower` → 팝오버의 "관리자 도구" 노출 제어(`src/MCPhoto.App/MainWindow.xaml:65-69`).
+- 계정 페이지 파워 판정: `AccountViewModel.IsPower`(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:90`), 사용자 관리 진입 가드(`:222`).
+- 프레임 화면 파워 판정: `FrameSelectViewModel.IsPower`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:82`) → "서버에서도 제거" 옵션 노출·유효(`:123`), DB 공용 프레임 편집·삭제 허용(`FrameEditPolicy`).
+- 사용자 관리 액션 게이트: PIN 재설정(`UserMgmtViewModel.cs:52`, `:141`) — it16에서 `IsPower()` 항이 추가됐다([1.4](#14-역할-지정변경-매트릭스)).
 
-### 1.2 계정 생성 위계 게이트
+### 1.2 `CanWriteFrames()` — 프레임 저작 권한 축 (it16 신규)
 
-역할 위계는 "누가 어떤 역할을 만들 수 있나"로 실체화된다. `CreatableRoles()`/`CanCreate()`가 순수 규칙이다(`src/MCPhoto.Core/Models/UserRole.cs:41-50`).
+프레임 **생성·편집·삭제** 권한을 `IsPower()`와 분리된 독립 축으로 도입했다(`src/MCPhoto.Core/Models/UserRole.cs:63-64`).
+
+```
+public static bool CanWriteFrames(this UserRole role)
+    => role is UserRole.AdvancedUser or UserRole.Manager or UserRole.Admin;
+```
+
+| 역할 | `IsPower()` | `CanWriteFrames()` | 의미 |
+| --- | :-: | :-: | --- |
+| 게스트 | — | — | 프레임 사용만(공용 프레임) |
+| temp_user | × | × | 프레임 **사용만**(본인 기존 프레임 포함) |
+| user | × | × | 프레임 **사용만** (it16 변경) |
+| **advanced_user** | **×** | **○** | 프레임 저작(개인 로컬) — 계정 관리 권한 없음 |
+| manager | ○ | ○ | 프레임 저작 + 공용 DB 등록 + 계정 관리 |
+| admin | ○ | ○ | manager + manager 지정 |
+
+- **두 축을 혼용하지 않는다**: `IsPower` = 계정 관리·공용 DB 프레임 관리, `CanWriteFrames` = 프레임 저작. 소스 주석이 이 경계를 명시한다(`UserRole.cs:56-62`).
+- `ManageRank` 부등식으로 구현하지 않고 **명시 열거**를 유지한다 — 관리 위계에 새 역할이 끼어들 때 저작 권한이 조용히 따라 움직이는 것을 막는다.
+- 소비 지점: `FrameEditPolicy.CanEdit`/`CanDelete`(`src/MCPhoto.Core/Frames/FrameEditPolicy.cs`), `FrameSelectViewModel.CanCreateFrame`·`CanDeleteFrames`(`:80-81`), `FrameEditorViewModel.Save` fail-closed 가드. 화면·권한 상세는 [11 §4](./11-exe-app-features.md#4-프레임-생성--편집에디터--삭제).
+- **서버 측 대응 축은 없다**(의도). advanced_user의 프레임은 개인 로컬 저장뿐이라 서버 쓰기 요청이 발생하지 않고, 세 프레임 쓰기 라우트(`POST /frames`, `PUT /frames/:id`, `DELETE /frames/:id`)는 계속 `requirePower()` 뒤에 있어 advanced_user 이하는 **403**이다(설계 `wpf-it16-advanced-user-role-design.md` §5.2).
+
+### 1.3 `CanManage()` — 관리 위계 판정
+
+`CanManage(actingRole, targetRole)`는 **자신과 같거나 낮은 위계**만 관리(삭제·PIN 재설정)할 수 있다는 규칙이며, 서수가 아닌 명시 랭크 `ManageRank`로 판정한다(`src/MCPhoto.Core/Models/UserRole.cs:99-116`). 예) manager는 admin을 관리할 수 없고, admin은 다른 admin도 관리할 수 있다.
+
+> ⚠️ **이 판정만으로는 비power도 통과한다.** 같은 위계를 허용하므로 `temp_user`가 다른 `temp_user`를 "관리 가능"으로 계산한다. 따라서 관리 액션 게이트는 **`IsPower()`와 함께** 써야 한다. it16에서 PIN 재설정 경로(클라 `UserMgmtViewModel`, 서버 `PUT /accounts/:id/pin`)에 이 `IsPower()` 항을 보강했다([1.4](#14-역할-지정변경-매트릭스)). `CanManage`/`canManage` 자체의 의미는 **변경하지 않았다** — 계정 삭제(`deleteAccount`)와 공유되므로 "엄격히 높은 위계"로 좁히면 admin↔admin·manager↔manager 삭제가 회귀한다.
+
+### 1.4 역할 지정·변경 매트릭스
+
+역할 변경 권한은 순수 함수 한 쌍으로 표현되며 **서버가 최종 강제**한다:
+클라 `RoleChangePolicy.AssignableRoles(actor, current)`(콤보 필터, `src/MCPhoto.Core/Models/RoleChangePolicy.cs`) ↔ 서버 `canSetRole(actor, current, target)`(`web/functions/src/domain/roles.ts`)이 1:1 대칭이다.
+
+**규칙(it16)**
+
+```
+1) target == admin            → 거부 (최종 1인 규칙)
+2) current == admin           → 거부 (admin 대상 변경 불가)
+3) actor == admin             → 허용 (target ∈ {temp_user, user, advanced_user, manager})
+4) actor == manager           → current·target 둘 다 하위 3역할 대역
+                                {temp_user, user, advanced_user}일 때만 허용(승격 포함)
+5) 그 외 actor(advanced_user·user·temp_user) → 거부
+```
+
+**전수 표** (행 = actor + 대상의 현재 역할, 열 = 지정할 새 역할. T=temp_user, U=user, **A=advanced_user**, M=manager, D=admin)
+
+| actor | current \ new | T | U | **A** | M | D |
+| --- | --- | :-: | :-: | :-: | :-: | :-: |
+| **admin** | T | ○ | ○ | **○** | ○ | × |
+| **admin** | U | ○ | ○ | **○** | ○ | × |
+| **admin** | **A** | ○ | ○ | **○** | ○ | × |
+| **admin** | M | ○ | ○ | **○** | ○ | × |
+| **admin** | D | × | × | × | × | × |
+| **manager** | T | ○ | ○ | **○** | × | × |
+| **manager** | U | ○ | ○ | **○** | × | × |
+| **manager** | **A** | ○ | ○ | **○** | × | × |
+| **manager** | M | × | × | × | × | × |
+| **manager** | D | × | × | × | × | × |
+| advanced_user / user / temp_user | 전부 | × | × | × | × | × |
+
+**it13 대비 변경점(it16)**
+
+| 조합 | it13 | it16 |
+| --- | --- | --- |
+| manager: T→U, T→A, U→A | 거부(승격=admin 전용) | **허용** — 하위 3역할 대역은 manager가 자유 지정 |
+| manager: A→U, A→T | (역할 없음) | **허용** |
+| manager: U→T | 허용 | 허용(불변) |
+| manager: *→M, manager/admin 대상 | 거부 | 거부(불변 — manager·admin 지정은 admin 전용) |
+| admin: 전부(admin 제외) | 허용 | 허용 + `advanced_user` 추가 |
+| 비power actor | 거부 | 거부(불변) |
+
+- **no-op(current == target)은 허용**된다(멱등 write). 클라이언트는 무변경을 서버로 보내지 않는다(`UserMgmtViewModel`이 `target == user.Role`이면 return).
+- `AssignableRoles` 반환 순서는 **위계 오름차순**(T → U → A → M)으로 고정한다 — 콤보 표시 순서가 곧 위계 순이다.
+- 자기 계정 행은 콤보를 빈 목록으로 강제한다(`UserRowViewModel`, `UserMgmtViewModel.cs:50`).
+- **PIN 재설정 권한(it16 정리)**: `PUT /accounts/:id/pin`에 **`requirePower()`를 추가**했다. 종전에는 로그인 + `canManage`만 통과하면 됐으므로 `temp_user`가 다른 `temp_user`의 PIN을 재설정할 수 있었다(it15로 신규 SSO 계정이 전원 temp_user가 되며 모집단이 커졌다). 형제 라우트인 `DELETE /accounts/:id`·`PATCH /accounts/:id/role`에는 있던 게이트가 PIN에만 빠져 있던 것이다. 판정식(변경 후) = `isPower(actor) && canManage(actor.role, targetRole) && actor.id !== targetId`(자기 자신 대상은 계속 **400** — 본인은 `PUT /accounts/me/pin` 사용). 클라 대칭: `CanResetPin = !isSelf && actorRole.IsPower() && actorRole.CanManage(user.Role)`(`UserMgmtViewModel.cs:52`)와 커맨드 가드(`:141`) → **UI 미노출 · 커맨드 가드 · 서버 403** 3중 방어. 사용자 관리 화면 자체가 power 전용 도달 경로라 실사용 UX 변화는 없다.
+
+### 1.5 계정 생성 위계 게이트 (it15 이후 비활성)
+
+`CreatableRoles()`/`CanCreate()`는 "누가 어떤 역할을 만들 수 있나"를 표현하는 순수 규칙이다(`src/MCPhoto.Core/Models/UserRole.cs:84-93`).
 
 | 호출자(actingRole) | 생성 가능 역할 | 근거 |
 | --- | --- | --- |
-| admin | user, manager | `src/MCPhoto.Core/Models/UserRole.cs:43` |
-| manager | user | `:44` |
-| user / 게스트 | (없음) | `:45` (그 외 → `Array.Empty`) |
+| admin | temp_user, user, **advanced_user**, manager | `src/MCPhoto.Core/Models/UserRole.cs:86` |
+| manager | temp_user, user, **advanced_user** | `:87` |
+| advanced_user / user / temp_user / 게스트 | (없음) | `:88` (그 외 → `Array.Empty`) |
 
-- **admin → admin 생성 불가**("최종 1인" 규칙). 주석과 규칙 모두에서 admin은 자기 역할을 만들지 못한다(`src/MCPhoto.Core/Models/UserRole.cs:38-39`, `:43`).
-- 이 게이트는 UI뿐 아니라 **서비스 계층에서도 강제**된다: `AccountService.CreateAsync`가 `actingRole.CanCreate(role)`을 먼저 검사하고 위반 시 `UnauthorizedAccessException`을 던진다(`src/MCPhoto.Firebase/AccountService.cs:53-55`). 주석: "호출자 신뢰 금지, 위반이 미초기화보다 우선"(`:52`).
+- **admin → admin 생성 불가**("최종 1인" 규칙).
+- ⚠️ **it15에서 계정 생성 경로(UI·HTTP 라우트)가 폐지**되어 이 두 함수의 프로덕션 호출자는 **0이다**(테스트만 참조). 신규 계정은 Google SSO 최초 로그인 시 서버가 `temp_user`로 자동 생성한다. it16에서 **삭제하지 않고 목록만 [1.4](#14-역할-지정변경-매트릭스) 매트릭스와 맞춰 두었다** — 훗날 이 함수가 되살아날 때 모순된 규칙이 조용히 부활하는 것을 막기 위함이다. 제거 여부는 [90 §1](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채)에 이연 등재.
 
 ---
 
 ## 2. 권한 매트릭스(화면·기능별)
 
-`○`=가능, `×`=불가/미노출, `△`=조건부. "게스트"는 비로그인.
+`○`=가능, `×`=불가/미노출, `△`=조건부. "게스트"는 비로그인. **T**=temp_user, **U**=user, **A**=advanced_user(고급 유저), **M**=manager, **D**=admin.
 
-| 기능 / 화면 | 게스트 | user | manager | admin | 근거 |
-| --- | --- | --- | --- | --- | --- |
-| 촬영(프레임 선택→촬영→결과→QR) | ○ | ○ | ○ | ○ | 촬영 흐름은 로그인 요구 없음. 홈→프레임 선택 전이에 계정 조건 없음(`src/MCPhoto.Core/Navigation/SessionStateMachine.cs:14`); "게스트 직행" 설계(it2) |
-| 기본(공용) 프레임 사용 | ○ | ○ | ○ | ○ | `FrameSelectViewModel.OnEnterAsync`가 항상 기본 프레임 로드(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:70-71`) |
-| 커스텀(본인) 프레임 사용 | × | ○ | ○ | ○ | 로그인 사용자만 user 프레임 추가 로드(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:73-75`) |
-| 프레임 생성/편집(편집기 진입) | × | ○ | ○ | ○ | `CreateFrame`은 `IsLoggedIn`일 때만(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:181-185`). 계정당 최대 10개(`src/MCPhoto.Firebase/FrameRepository.cs:17`, `:52-53`) |
-| 프레임 삭제 — 로컬(본인 로컬 저장분) | × | ○ | ○ | ○ | 삭제 UI는 로그인 시만(`CanDeleteFrames = user is not null`, `src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:67`); 번들/fallback은 삭제 불가(`IsDeletable`, `:54-57`) |
-| 프레임 삭제 — 서버(공용·DB) | × | × | ○ | ○ | "서버에서도 제거" 체크는 `IsPower`에서만 노출·유효(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:33`, `:102`; `alsoServer = DeleteAlsoServer && IsPower`) |
-| 계정 생성 | × | × | △(user만) | △(user·manager) | `CreateAccount` 파워 가드(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:136`) + 서비스 역할 게이트(`src/MCPhoto.Firebase/AccountService.cs:53-55`); 생성 가능 역할은 [1.2](#12-계정-생성-위계-게이트) |
-| 비밀번호 변경(본인) | × | ○ | ○ | ○ | `ChangePassword`는 `CurrentUser` 있을 때만(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:102-103`); 팝오버 "비밀번호 변경"은 로그인 시 항상 노출(`src/MCPhoto.App/MainWindow.xaml:61-63`) |
-| 관리자 도구(사용자 관리 페이지 진입) | × | × | ○ | ○ | 팝오버 "관리자 도구"는 `IsPower`에서만 노출(`src/MCPhoto.App/MainWindow.xaml:69-72`); `OpenUserManagement`도 `IsPower` 가드(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:175-177`) |
-| 사용자 목록 조회 | × | × | ○ | ○ | 사용자 관리 진입 자체가 파워 전용(위 항목); `GetAllAsync`는 "power 전용" 주석(`src/MCPhoto.Core/Accounts/IAccountService.cs:23`) |
-| 사용자 삭제(cascade) | × | × | ○ | ○ | `UserMgmtViewModel.DeleteUser`; 자기 계정 삭제 방지 + **자기와 같거나 낮은 역할만**(`ActorRole.CanManage(target)` — manager는 admin 삭제 불가). UI 미노출(`RoleActionVis` "Manage") + 명령 가드 이중 방어 |
-| 사용자 비밀번호 초기화("0000") | × | × | ○ | ○ | `ResetUserPassword`(상수 `ResetPassword="0000"`); **자기와 같거나 낮은 역할만**(`CanManage` — manager는 admin 초기화 불가). UI 미노출 + 명령 가드 |
-| 역할 변경(manager로 승격) | × | × | × | ○ | `PromoteToManager`는 `IsAdmin`이고 **대상이 user일 때만**(승격 액션 — 이미 manager/admin 행엔 미노출). UI 노출=`RoleActionVis` "Promote" |
-| 앱 종료(관리자) | × | × | ○ | ○ | "관리자 도구" 페이지의 `ExitApp`(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:180-181`); 도구 페이지 진입이 파워 전용 |
-| 설정(앱 설정) 페이지 접근 | ○ | ○ | ○ | ○ | 우상단 ⚙ 버튼은 상단 바 표시 상태면 누구나(`src/MCPhoto.App/MainWindow.xaml:45-50`, `OpenSettings` 무가드 `src/MCPhoto.App/AppShellViewModel.cs:283-287`) |
+| 기능 / 화면 | 게스트 | T | U | **A** | M | D | 근거 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 촬영(프레임 선택→촬영→결과→QR) | ○ | ○ | ○ | ○ | ○ | ○ | 촬영 흐름은 로그인 요구 없음. 홈→프레임 선택 전이에 계정 조건 없음(`src/MCPhoto.Core/Navigation/SessionStateMachine.cs`); "게스트 직행" 설계(it2) |
+| 기본(공용) 프레임 사용 | ○ | ○ | ○ | ○ | ○ | ○ | `FrameSelectViewModel.OnEnterAsync`가 항상 기본 프레임 로드 |
+| 커스텀(본인) 프레임 사용 | × | ○ | ○ | ○ | ○ | ○ | 로그인 사용자만 본인 프레임 추가 로드(`GetUserFramesAsync(user.Id)`). **it16 E4**: 프레임 권한을 잃은 T·U의 기존 프레임도 **목록에 그대로 노출되고 촬영에 쓸 수 있다**(편집·삭제만 불가) |
+| 프레임 생성(편집기 진입) | × | × | × | **○** | ○ | ○ | `CanCreateFrame = Role.CanWriteFrames()`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:80`) + `CreateFrame` 커맨드 가드(`:218`) + XAML `Visibility`(`Views/FrameSelectView.xaml:88`). A는 개인 로컬만, M·D는 신규 생성분을 공용 DB에 등록 |
+| 프레임 편집("선택 편집") | × | × | × | **○**(본인 로컬) | ○ | ○ | `FrameEditPolicy.CanEdit(frame, role, userId)` — `CanWriteFrames` 먼저 확인 후 출처 판정(`UserLocal`=본인 것, `DbDefault`=power만, 번들·fallback=불가). 저장 경로에도 fail-closed 가드(`FrameEditorViewModel.Save`) |
+| 프레임 삭제 — 로컬(파일 제거) | × | × | × | **○** | ○ | ○ | `FrameEditPolicy.CanDelete(frame, role)`(it16 신설) — 로컬 저장분 ○, DB 공용은 power만, 번들·fallback·빈 Id ×. `CanDeleteFrames = Role.CanWriteFrames()`(`:81`) + 컨버터 + `RequestDelete` 가드 |
+| 프레임 삭제 — 서버(공용·DB 문서+Storage) | × | × | × | × | ○ | ○ | "서버에서도 제거" 체크는 `IsPower`에서만 노출·유효(`alsoServer = DeleteAlsoServer && IsPower`, `FrameSelectViewModel.cs:123`). 서버 `DELETE /frames/:id`는 `requirePower()` |
+| 계정 관리 페이지(내 정보 · PIN 변경) | × | ○ | ○ | ○ | ○ | ○ | 팝오버 "계정 관리"는 로그인 전원(`src/MCPhoto.App/MainWindow.xaml:62-64`). 진입 시 **PIN 게이트**(`AppShellViewModel.EnsurePinGateAsync` — 미설정이면 최초 설정 강제) |
+| 관리자 도구(사용자 관리 진입) | × | × | × | **×** | ○ | ○ | 팝오버 "관리자 도구"는 `IsPower`에서만 노출(`MainWindow.xaml:65-69`); `OpenUserManagement`도 `IsPower` 가드(`ViewModels/AccountViewModel.cs:222`). **A는 계정 관리 권한 없음** |
+| 사용자 목록 조회 | × | × | × | × | ○ | ○ | 사용자 관리 진입 자체가 파워 전용(위 항목); `GetAllAsync`는 "power 전용" |
+| 사용자 삭제(cascade) | × | × | × | × | ○ | ○ | `UserMgmtViewModel.DeleteUser`(`:108-127`); 자기 계정 삭제 방지 + **자기와 같거나 낮은 위계만**(`ActorRole.CanManage(target)` — manager는 admin 삭제 불가). UI 미노출(`RoleActionVis`) + 명령 가드 + 서버 `requirePower` |
+| 타 계정 PIN 재설정 | × | × | × | **×** | ○ | ○ | **it16 강화**: `IsPower() && CanManage(target)`(`UserMgmtViewModel.cs:52`, `:141`) + 서버 `PUT /accounts/:id/pin`에 `requirePower()` 추가 → 비power **403**. 종전에는 비power가 같은 위계의 남의 PIN을 재설정할 수 있었다([1.4](#14-역할-지정변경-매트릭스)) |
+| 본인 PIN 변경 | × | ○ | ○ | ○ | ○ | ○ | `AccountViewModel.ChangePin` → `PUT /accounts/me/pin`. 자기 자신을 `:id` 경로로 부르면 400 |
+| 역할 지정·변경 | × | × | × | × | △ | △ | 매트릭스는 [1.4](#14-역할-지정변경-매트릭스). **M**은 하위 3역할 대역(T·U·**A**) 안에서 자유 지정(승격 포함), **D**는 admin 제외 전부. 콤보 필터(`RoleChangePolicy.AssignableRoles`) + 커맨드 게이트(`UserMgmtViewModel.cs:173`) + 서버 `canSetRole` 최종 강제 |
+| TempUser QR 한도(시간·횟수) 변경 | × | × | × | × | × | ○ | `CanEditTempUserLimits => Role == UserRole.Admin`(`ViewModels/AccountViewModel.cs:87`) + 서버 `requireAdmin`·범위 검증(it13) |
+| 앱 종료(관리자) | × | × | × | × | ○ | ○ | "관리자 도구" 페이지의 `ExitApp`(`ViewModels/AccountViewModel.cs:227-228`); 도구 페이지 진입이 파워 전용 |
+| 설정(앱 설정) 페이지 접근 | ○ | △ | △ | △ | △ | △ | 우상단 ⚙ 버튼은 상단 바 표시 상태면 누구나(`MainWindow.xaml:44-51`). **게스트는 무가드**, 로그인 사용자는 **PIN 게이트** 통과 필수(`AppShellViewModel.OpenSettings`, `:376-384`) |
+| 설정 항목 편집 | △ | △ | ○ | ○ | ○ | ○ | 게스트는 일부 항목(거울모드·재촬영·필터·QR 전송·Firebase 항목) 편집 불가(it12 R1). **T**는 QR 한도 초과 시 QR 관련 편집만 차단(`CanEditQr = IsLoggedIn && !IsTempUserBlocked`, `ViewModels/SettingsViewModel.cs:78`). **A는 이 축에서 U와 동일** |
 
 주의(사실/가정 구분):
-- **사용자 관리 액션의 역할 위계**(사실): 삭제·비밀번호 초기화는 **행위자와 같거나 낮은 역할**의 계정에만 노출·허용된다(`UserRole.CanManage`, `RoleActionVisibilityConverter`). 예) manager는 admin 계정을 삭제/초기화할 수 없다(상위 역할 관리 금지). manager 지정은 admin이 **user 대상**일 때만. UI 미노출과 VM 명령 가드로 이중 방어(관리자 편의 기능 오남용 방지).
-- **설정 페이지는 현재 권한 게이트가 없다**(사실): `OpenSettings`에 역할 검사가 없으며(`src/MCPhoto.App/AppShellViewModel.cs:283-287`), 상단 바 ⚙ 버튼도 가시성만 상태 기반(`IsTopBarVisible`)이고 역할 조건이 없다(`src/MCPhoto.App/MainWindow.xaml:45-50`). 계정·관리자 기능은 설정에서 분리되어 `Account`/`UserMgmt`로 이동했으므로(it5 C1/C2, `src/MCPhoto.Core/Navigation/AppState.cs:33`), 앱 설정 자체는 키오스크 운영자가 접근하는 열린 화면이라는 것이 코드상 현재 상태다.
-- **역할 변경은 승격(→manager)만 존재**(사실): 강등(manager→user)이나 admin 지정 UI는 없다. `SetRoleAsync`는 임의 역할을 받지만(`src/MCPhoto.Core/Accounts/IAccountService.cs:30`, 구현 `src/MCPhoto.Firebase/AccountService.cs:92-97`), 호출부는 `PromoteToManager`(manager 고정)뿐이다.
+- **사용자 관리 액션의 역할 위계**(사실): 삭제·PIN 재설정은 **행위자와 같거나 낮은 위계**의 계정에만 노출·허용된다(`UserRole.CanManage`, `RoleActionVisibilityConverter`). 예) manager는 admin 계정을 삭제/PIN 재설정할 수 없다. PIN 재설정은 it16부터 **여기에 `IsPower()`가 더해진다**([1.3](#13-canmanage--관리-위계-판정)). UI 미노출과 VM 명령 가드로 이중 방어하고 서버가 최종 강제한다.
+- **프레임 권한은 `IsPower`가 아니라 `CanWriteFrames` 축**(사실, it16): 고급 유저는 프레임을 만들 수 있지만 계정 관리·공용 DB 등록은 못 한다. 두 축을 혼용하면 조용한 권한 오판이 된다([1.2](#12-canwriteframes--프레임-저작-권한-축-it16-신규)).
+- **프레임 권한을 잃은 계정의 기존 프레임은 읽기 전용으로 남는다**(사실, it16 E4): 목록 노출·촬영 사용은 유지하고 편집·삭제 UI만 사라진다. 파일 삭제·소유권 이전·마이그레이션은 **하지 않는다**.
+- **설정 페이지는 역할 게이트가 없다**(사실): `OpenSettings`에 역할 검사는 없고 **로그인 사용자에 대한 PIN 게이트**만 있다(it14·it15). 게스트는 여전히 무가드이며, 계정·관리자 기능은 `Account`/`UserMgmt`로 분리돼 있으므로 앱 설정 자체는 키오스크 운영자가 접근하는 열린 화면이라는 것이 코드상 현재 상태다.
+- **운영 동선(it16)**: 기존 `user` 계정은 이번 변경으로 프레임 생성·편집 권한을 잃는다. 프레임을 만들어야 하는 계정은 **사용자 관리 → 역할 콤보 → "고급 유저" → 변경**으로 승격한다. manager도 이 승격을 할 수 있다([1.4](#14-역할-지정변경-매트릭스)).
 
 ---
 
@@ -212,4 +307,4 @@ UI 안내: `UserMgmtViewModel.DeleteUser`는 성공 시 "`{id}` 삭제됨(소유
 | SSO / 외부 인증 | id/pw 단일 방식만(`IAccountService.LoginAsync`) | (가정) SSO·OAuth 미지원 |
 | 로그인 시도 제한 | 시도 횟수 제한·잠금 없음(`LoginGuestViewModel.Login`) | (가정) 브루트포스 방어 부재 — 단, 키오스크·평문 전제라 우선순위 낮음 |
 | 설정 페이지 권한 게이트 | 역할 검사 없음(`AppShellViewModel.cs:283-287`) | (가정) 운영자 전용 게이트 검토 여지 |
-| 역할 강등/admin 위임 | 승격(→manager)만 UI 존재(`UserMgmtViewModel.cs:92-106`) | `SetRoleAsync`는 임의 역할 지원하나 UI 미노출 |
+| ~~역할 강등/admin 위임~~ | **해결(it13 도입 · it16 완화)**: 사용자 관리 목록의 역할 콤보로 승격·강등을 모두 지정한다([1.4](#14-역할-지정변경-매트릭스)). admin 위임(→admin 지정)은 여전히 불가(**최종 1인** 규칙, 서버·클라 공통 거부) | admin 이관이 필요해지면 마이그레이션 스크립트 경로만 존재(HTTP API 불가) |

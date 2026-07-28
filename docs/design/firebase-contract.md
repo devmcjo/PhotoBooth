@@ -47,7 +47,7 @@
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `id` | string | 계정 ID (문서 ID와 동일). Google email의 local-part에서 파생, 충돌 시 `-2`/`-3` suffix |
-| `role` | string | `"temp_user"` / `"user"` / `"manager"` / `"admin"` |
+| `role` | string | `"temp_user"` / `"user"` / **`"advanced_user"`** / `"manager"` / `"admin"` (it16) |
 | `createdAt` | timestamp | 생성 시각. TempUser 시간 한도의 기준점 |
 | `email` | string | Google 계정 이메일(소문자 정규화). SSO 신원의 근거 — 항상 존재 |
 | `authMethod` | string | 인증 제공자. 현재 `"google"` 고정(추후 `"kakao"`/`"apple"` 확장) |
@@ -57,6 +57,23 @@
 - **부트스트랩**: 신규 SSO 계정은 무조건 `role:"temp_user"`로 생성된다. 최초 admin(`devmcjo`)은
   마이그레이션 스크립트 `web/functions/scripts/migrate-google-only-accounts.mjs`가 만든다(HTTP API로는 admin 지정 불가).
 - **웹 접근**: **전면 차단**(read/write 모두 deny). 웹은 users를 절대 읽지 않는다.
+
+> **it16 갱신**: 역할 `"advanced_user"`(UI 표기 "고급 유저")가 추가됐다. 위계는
+> `temp_user`(0) < `user`(1) < **`advanced_user`(2)** < `manager`(3) < `admin`(4)이며 랭크는 `domain/roles.ts`의
+> `MANAGE_RANK`(C# `ManageRank`와 1:1)로 명시한다. **스키마·인덱스 변경 없음**(허용값 1개 추가, 마이그레이션 불필요).
+>
+> - **`isPower`는 확장되지 않았다** — power는 계속 `manager`·`admin`만이다. `advanced_user`는 프레임을 저작할 수 있으나
+>   그 권한은 **클라 측 별개 축**(C# `CanWriteFrames`)이며 개인 로컬 저장 전용이다. 따라서 프레임 쓰기 라우트
+>   (`POST /frames`, `PUT /frames/:id`, `DELETE /frames/:id`)는 계속 `requirePower()` 뒤에 있고 `advanced_user` 이하는 **403**이다.
+> - **계정 라우트 게이트**: `PATCH /accounts/:id/role` = `requirePower()` + `canSetRole(actor, current, target)`
+>   (manager는 하위 3역할 대역 `temp_user`·`user`·`advanced_user` 안에서 자유 지정, manager·admin 지정은 admin 전용,
+>   admin 대상 변경·admin 지정은 누구도 불가). `DELETE /accounts/:id` = `requirePower()` + `canManage`.
+>   **`PUT /accounts/:id/pin`(타 계정 PIN 재설정)에 `requirePower()`가 추가됐다** — 종전에는 로그인 + `canManage`(같은 위계 허용)만
+>   요구해 비power가 같은 위계의 남의 PIN을 재설정할 수 있었다. 판정식 = `isPower(actor) && canManage(actor.role, targetRole)
+>   && actor.id !== targetId`(자기 자신 대상은 계속 **400** — 본인은 `PUT /accounts/me/pin`). 비power는 **403**.
+>   `canManage` 자체의 의미는 **불변**이다(`deleteAccount`와 공유되므로 좁히면 admin↔admin 삭제가 회귀).
+> - 미지원 `role` 문자열은 `parseRole`이 `user`로 폴백한다(it16 이후 `user`는 프레임 쓰기 권한이 없어 fail-closed 방향).
+> - 상세: 설계 `docs/design/wpf-it16-advanced-user-role-design.md` §3·§5, 역할 전수 표 `docs/analysis/60-auth-accounts-and-roles.md` §1.4.
 
 **클라 응답(`UserResponse`) 와이어 형식** — it15 설계 §9.1에서 동결:
 

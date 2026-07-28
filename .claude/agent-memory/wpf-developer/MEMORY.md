@@ -7,3 +7,6 @@
 - [it14 PIN 게이트 계약](it14-pin-gate-contract.md) — PIN 4자리 확정, E1/E2/E3 HTTP 계약. 게이트 분기 서술은 it15에서 폐기(아래 참조)
 - [it15 클라 인증 계약](it15-client-auth-contract.md) — IAccountService 7메서드, AuthMethod=Google/Unknown, EnsurePinGateAsync 단일 게이트, 테스트 HasPin 함정
 - [임시파일 write→read 경합](test-tempfile-write-read-race.md) — %TEMP% 쓰기 직후 읽기는 공유 위반으로 flaky. TestImageFile 경유 + IClassFixture로 봉쇄
+- [it16 권한 축 3개](it16-permission-axes.md) — IsPower·CanWriteFrames·CanManage 혼용 금지. 관리 게이트는 IsPower+CanManage 2항, CanDelete는 소유자 미판정
+- [it16 창 기하 계약](it16-window-geometry-contract.md) — _appliedMode가 모드변경 판정 유일 기준, 저장 시 캡처는 s.DisplayMode 갱신보다 먼저
+- [dotnet format은 게이트 아님](dotnet-format-baseline-fails.md) — HEAD부터 실패(기존 한 줄 초기화자 관례). 재포맷 금지, WARN으로만 보고
