@@ -443,6 +443,9 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     {
         var user = _shell.Session.CurrentUser;
         if (user is null) { StatusMessage = "로그인이 필요합니다."; return; }
+        // it16 §4.5 3중 방어(fail-closed): 화면 게이트(CanCreateFrame·CanEditSelected)로 편집기에 도달할 수 없는
+        // 역할이지만, 미래에 다른 진입점이 생겨도 **저장이 거부**되도록 정책을 저장 경로에도 둔다.
+        if (!user.Role.CanWriteFrames()) { StatusMessage = "프레임을 만들 권한이 없습니다."; return; }
         if (_imageBytes is null || !SlotLayout.IsValid(Slots, FrameWidth, FrameHeight))
         {
             StatusMessage = "슬롯이 겹치거나 프레임을 벗어났습니다.";

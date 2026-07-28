@@ -9,7 +9,10 @@ using MCPhoto.Core.Settings;
 
 namespace MCPhoto.Tests;
 
-/// <summary>it8 Step 4 (A3): 프레임 삭제 권한·정책 — 게스트 미노출, user 로컬만, 파워 서버 옵션.</summary>
+/// <summary>
+/// it8 Step 4 (A3) → it16 §4: 프레임 생성·삭제·편집 권한 게이트.
+/// 게스트 미노출, user·temp_user는 사용만(E4 — 목록·촬영 유지), advanced_user=본인 로컬, 파워=서버 옵션까지.
+/// </summary>
 public class FrameSelectViewModelTests
 {
     private sealed class StubRepo : IFrameRepository
@@ -37,9 +40,11 @@ public class FrameSelectViewModelTests
     private sealed class StubLocalStore : ILocalFrameStore
     {
         public int DeleteLocalCalls { get; private set; }
+        /// <summary>LoadUser가 돌려줄 개인 로컬 프레임(it16 E4 목록 노출 검증용).</summary>
+        public List<FrameTemplate> UserFrames { get; } = new();
         public FrameTemplate SaveLocal(FrameTemplate frame, byte[] png, string? ownerName) => frame;
         public IReadOnlyList<FrameTemplate> LoadPublic() => new List<FrameTemplate>();
-        public IReadOnlyList<FrameTemplate> LoadUser(string ownerName) => new List<FrameTemplate>();
+        public IReadOnlyList<FrameTemplate> LoadUser(string ownerName) => UserFrames;
         public FrameTemplate CacheFromDb(FrameTemplate frame, byte[] png) => frame;
         public bool DeleteLocal(FrameTemplate frame) { DeleteLocalCalls++; return true; }
         public IReadOnlySet<string> PublicFrameNames() => new HashSet<string>();
@@ -82,10 +87,29 @@ public class FrameSelectViewModelTests
         Assert.False(vm.CanDeleteFrames);
     }
 
-    [Fact]
-    public async Task LoggedIn_Can_Delete()
+    /// <summary>
+    /// it16 §8.2-15·16(E4): 생성·삭제 UI 노출은 **프레임 쓰기 권한**(AdvancedUser 이상)에 걸린다.
+    /// it15까지는 로그인 여부만 봤으므로 user·temp_user 행이 true → false로 반전된 것이 이번 변경의 핵심이다.
+    /// </summary>
+    [Theory]
+    [InlineData(null, false)]                     // 게스트
+    [InlineData(UserRole.TempUser, false)]
+    [InlineData(UserRole.User, false)]
+    [InlineData(UserRole.AdvancedUser, true)]
+    [InlineData(UserRole.Manager, true)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task CanCreate_And_CanDelete_Follow_Frame_Write_Permission(UserRole? role, bool expected)
     {
-        var (vm, _, _) = MakeVm(UserRole.User);
+        var (vm, _, _) = MakeVm(role);
+        await vm.OnEnterAsync();
+        Assert.Equal(expected, vm.CanCreateFrame);
+        Assert.Equal(expected, vm.CanDeleteFrames);
+    }
+
+    [Fact]
+    public async Task AdvancedUser_Can_Delete()
+    {
+        var (vm, _, _) = MakeVm(UserRole.AdvancedUser);
         await vm.OnEnterAsync();
         Assert.True(vm.CanDeleteFrames);
     }
@@ -99,16 +123,17 @@ public class FrameSelectViewModelTests
     }
 
     [Fact]
-    public async Task User_Delete_Local_Only_No_Server()
+    public async Task AdvancedUser_Delete_Local_Only_No_Server()
     {
-        var (vm, repo, local) = MakeVm(UserRole.User);
+        // it16: 이 흐름의 주체가 user → advanced_user로 이동했다(비power라 서버 옵션은 여전히 없다).
+        var (vm, repo, local) = MakeVm(UserRole.AdvancedUser);
         await vm.OnEnterAsync();
         var frame = LocalFrame();
         vm.Frames.Add(frame);
 
         vm.RequestDeleteCommand.Execute(frame);
         Assert.True(vm.IsDeleteConfirmVisible);
-        Assert.False(vm.IsPower); // user는 서버 옵션 없음
+        Assert.False(vm.IsPower); // advanced_user는 서버 옵션 없음
 
         await vm.ConfirmDeleteCommand.ExecuteAsync(null);
 
@@ -234,22 +259,22 @@ public class FrameSelectViewModelTests
     }
 
     [Fact]
-    public async Task User_Can_Edit_Own_Local_But_Not_Db_Default()
+    public async Task AdvancedUser_Can_Edit_Own_Local_But_Not_Db_Default()
     {
-        var (vm, _, _) = MakeVm(UserRole.User);
+        var (vm, _, _) = MakeVm(UserRole.AdvancedUser);
         await vm.OnEnterAsync();
 
         vm.SelectedFrame = OwnedLocalFrame();
         Assert.True(vm.CanEditSelected);       // 본인 로컬 편집 가능
 
         vm.SelectedFrame = DbDefaultFrame();
-        Assert.False(vm.CanEditSelected);      // DB 기본은 user 편집 불가
+        Assert.False(vm.CanEditSelected);      // DB 기본은 비power 편집 불가
     }
 
     [Fact]
-    public async Task User_Cannot_Edit_Other_Users_Local()
+    public async Task AdvancedUser_Cannot_Edit_Other_Users_Local()
     {
-        var (vm, _, _) = MakeVm(UserRole.User); // 세션 계정 = u1
+        var (vm, _, _) = MakeVm(UserRole.AdvancedUser); // 세션 계정 = u1
         await vm.OnEnterAsync();
         vm.SelectedFrame = new FrameTemplate
         {
@@ -257,6 +282,80 @@ public class FrameSelectViewModelTests
             ImageSize = new ImageSize { Width = 100, Height = 100 }
         };
         Assert.False(vm.CanEditSelected);
+    }
+
+    /// <summary>it16 §8.2-17(E4): user·temp_user는 본인 로컬 프레임을 선택해도 "선택 편집" 버튼이 뜨지 않는다.</summary>
+    [Theory]
+    [InlineData(UserRole.User)]
+    [InlineData(UserRole.TempUser)]
+    public async Task NonWriter_CanEditSelected_False_Even_For_Own_Local(UserRole role)
+    {
+        var (vm, _, _) = MakeVm(role);
+        await vm.OnEnterAsync();
+        vm.SelectedFrame = OwnedLocalFrame();
+        Assert.False(vm.CanEditSelected);
+    }
+
+    /// <summary>it16 §8.2-18(E4): 커맨드 직접 호출(키보드·자동화)도 정책 가드로 차단 — 확인 팝업이 열리지 않는다.</summary>
+    [Theory]
+    [InlineData(UserRole.User)]
+    [InlineData(UserRole.TempUser)]
+    public async Task NonWriter_RequestDelete_Command_Blocked(UserRole role)
+    {
+        var (vm, _, local) = MakeVm(role);
+        await vm.OnEnterAsync();
+        var frame = OwnedLocalFrame();
+        vm.Frames.Add(frame);
+
+        vm.RequestDeleteCommand.Execute(frame);
+
+        Assert.False(vm.IsDeleteConfirmVisible);
+        Assert.Null(vm.FrameToDelete);
+        Assert.Equal(0, local.DeleteLocalCalls);
+        Assert.Contains(frame, vm.Frames);      // 목록에서 사라지지 않는다
+    }
+
+    /// <summary>it16 §8.2-19(E4): CreateFrame을 직접 실행해도 편집기로 전이하지 않는다.</summary>
+    [Theory]
+    [InlineData(UserRole.User)]
+    [InlineData(UserRole.TempUser)]
+    public async Task NonWriter_CreateFrame_Command_Does_Not_Navigate(UserRole role)
+    {
+        var session = new SessionContext();
+        session.Login(new User { Id = "u1", Role = role });
+        var repo = new StubRepo();
+        var local = new StubLocalStore();
+        var shell = MakeShell(session);
+        var vm = new FrameSelectViewModel(shell, new FrameCatalogService(repo, local), local, repo);
+        await vm.OnEnterAsync();
+        var before = shell.CurrentState;
+
+        await vm.CreateFrameCommand.ExecuteAsync(null);
+
+        Assert.Equal(before, shell.CurrentState);   // 화면 전이 없음(편집기 미진입)
+    }
+
+    /// <summary>
+    /// it16 §8.2-20(E4): 권한을 잃은 계정의 **기존 로컬 프레임은 목록에 그대로 노출**된다(숨기지 않는다).
+    /// 촬영에 계속 쓸 수 있어야 하므로 목록 로딩 코드는 이번 변경 대상이 아니다.
+    /// </summary>
+    [Theory]
+    [InlineData(UserRole.User)]
+    [InlineData(UserRole.TempUser)]
+    public async Task NonWriter_Existing_Local_Frames_Still_Listed(UserRole role)
+    {
+        var session = new SessionContext();
+        session.Login(new User { Id = "u1", Role = role });
+        var repo = new StubRepo();
+        var local = new StubLocalStore();
+        local.UserFrames.Add(OwnedLocalFrame());
+        var vm = new FrameSelectViewModel(MakeShell(session), new FrameCatalogService(repo, local), local, repo);
+
+        await vm.OnEnterAsync();
+
+        Assert.Contains(vm.Frames, f => f.Id == "local:u1_myframe");
+        Assert.False(vm.CanDeleteFrames);   // 노출은 유지하되 쓰기 UI만 사라진다
+        Assert.False(vm.CanCreateFrame);
     }
 
     [Fact]

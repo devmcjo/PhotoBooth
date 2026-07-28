@@ -26,8 +26,15 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     [ObservableProperty] private bool _isLoggedIn;
     [ObservableProperty] private bool _canEditSelected;  // 선택 프레임 편집 가능(역할·프레임 종류에 따라)
 
+    /// <summary>
+    /// 프레임 만들기 버튼 노출 여부. it16 E4: **프레임 쓰기 권한**(AdvancedUser 이상)이 있는 로그인 계정만.
+    /// user·temp_user는 목록·촬영은 그대로 쓰지만 생성은 불가하다.
+    /// </summary>
+    [ObservableProperty] private bool _canCreateFrame;
+
     // A3 삭제 UI 상태
-    [ObservableProperty] private bool _canDeleteFrames;  // 로그인 여부(게스트 미노출)
+    /// <summary>삭제 ✕ 노출의 1차 입력. it16 E4: 로그인 여부 → **프레임 쓰기 권한**(AdvancedUser 이상)으로 강화.</summary>
+    [ObservableProperty] private bool _canDeleteFrames;
     [ObservableProperty] private bool _isPower;
     [ObservableProperty] private bool _isDeleteConfirmVisible;
     [ObservableProperty] private FrameTemplate? _frameToDelete;
@@ -68,7 +75,10 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         {
             var user = _shell.Session.CurrentUser;
             IsLoggedIn = user is not null;
-            CanDeleteFrames = user is not null;      // 게스트 미노출
+            // it16 E4: 생성·삭제 UI는 프레임 쓰기 권한(AdvancedUser 이상)에 걸린다. 게스트·user·temp_user 미노출.
+            // 목록 로딩(아래)은 건드리지 않는다 — 권한을 잃은 계정의 기존 프레임도 그대로 보이고 촬영에 쓸 수 있다.
+            CanCreateFrame = user?.Role.CanWriteFrames() == true;
+            CanDeleteFrames = user?.Role.CanWriteFrames() == true;
             IsPower = user?.Role.IsPower() == true;
 
             foreach (var f in await _catalog.GetDefaultFramesAsync())
@@ -85,11 +95,18 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
 
     // ── A3: 프레임 삭제(로컬 항상 + 파워 서버 옵션) ──
 
-    /// <summary>카드 X → 확인 팝업 표시.</summary>
+    /// <summary>
+    /// 카드 X → 확인 팝업 표시.
+    /// it16 §4.4: 판정을 순수 함수 <see cref="FrameEditPolicy.CanDelete"/>에 위임한다 —
+    /// 종전에는 커맨드 가드(`CanDeleteFrames`=로그인 여부)가 컨버터보다 느슨해 비power가 DB 공용 프레임의
+    /// 로컬 파일을 지울 수 있었다. `IsDeletable`은 출처 판정(빈 Id 방어)이므로 함께 유지한다.
+    /// </summary>
     [RelayCommand]
     private void RequestDelete(FrameTemplate? frame)
     {
-        if (frame is null || !CanDeleteFrames || !IsDeletable(frame)) return;
+        if (frame is null) return;
+        var user = _shell.Session.CurrentUser;
+        if (!FrameEditPolicy.CanDelete(frame, user?.Role) || !IsDeletable(frame)) return;
         FrameToDelete = frame;
         DeleteAlsoServer = false;          // 기본 off
         IsDeleteConfirmVisible = true;
@@ -194,11 +211,11 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         await _shell.NavigateAsync(AppState.Guide);
     }
 
-    /// <summary>프레임 편집기 진입(신규 생성, 로그인 사용자만).</summary>
+    /// <summary>프레임 편집기 진입(신규 생성, 프레임 쓰기 권한=AdvancedUser 이상만. it16 E4).</summary>
     [RelayCommand]
     private async Task CreateFrame()
     {
-        if (!IsLoggedIn) return;
+        if (!CanCreateFrame) return;
         await _shell.OpenFrameEditor(null);
     }
 
@@ -212,7 +229,8 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
 
     /// <summary>
     /// 이 프레임을 현재 역할로 편집 가능한지. 권한 규칙은 순수 함수 <see cref="FrameEditPolicy.CanEdit"/>에 위임.
-    /// user=본인 로컬 생성분(UserId 검증)만, power=본인 로컬+DB 공용 기본, 번들/fallback·게스트=불가. (item2 §3)
+    /// advanced_user=본인 로컬 생성분(UserId 검증)만, power=본인 로컬+DB 공용 기본,
+    /// user·temp_user(it16 E4)·번들/fallback·게스트=불가. (item2 §3, it16 §4)
     /// </summary>
     private bool CanEdit(FrameTemplate f)
     {

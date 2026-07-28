@@ -3,8 +3,10 @@ using MCPhoto.Core.Models;
 namespace MCPhoto.Core.Frames;
 
 /// <summary>
-/// 프레임 편집 권한 규칙(역할×출처, 순수). (item2 §3)
-/// user=본인 로컬 생성분만, power(manager/admin)=본인 로컬 + DB 공용 기본, 번들/fallback·게스트=불가.
+/// 프레임 편집·삭제 권한 규칙(역할×출처, 순수). (item2 §3, it16 §4)
+/// it16: 프레임 쓰기 권한(생성·편집·삭제)은 AdvancedUser 이상만 갖는다 —
+/// advanced_user=본인 로컬 생성분만, power(manager/admin)=본인 로컬 + DB 공용 기본,
+/// user·temp_user=**사용만**(읽기 전용, E4), 번들/fallback·게스트=불가.
 /// </summary>
 public static class FrameEditPolicy
 {
@@ -14,13 +16,34 @@ public static class FrameEditPolicy
     /// </summary>
     public static bool CanEdit(FrameTemplate frame, UserRole? role, string? userId)
     {
-        if (role is null) return false; // 게스트
+        if (role is null) return false;                       // 게스트
+        if (!role.Value.CanWriteFrames()) return false;       // it16 E4: user·temp_user는 사용만(읽기 전용)
 
         return FrameOrigin.Classify(frame) switch
         {
             FrameOriginKind.UserLocal => FrameOrigin.IsOwnedLocal(frame, userId), // 본인 것만
             FrameOriginKind.DbDefault => role.Value.IsPower(),                    // power만
             _ => false                                                            // 번들·fallback 불가
+        };
+    }
+
+    /// <summary>
+    /// 이 프레임을 현재 역할로 삭제(로컬 파일 제거)할 수 있는지. (it16 E4)
+    /// 게스트·쓰기 권한 없는 역할(user·temp_user) 불가. 로컬 저장분 = 가능, DB 공용 = power만,
+    /// 번들·fallback·빈 Id = 불가.
+    /// ⚠️ 소유자(userId)를 보지 않는다: power가 fork·저장한 **공용** 로컬 프레임은 UserId=null로 로드되므로
+    ///    (LocalFrameStore.cs:112-128) IsOwnedLocal로 판정하면 현행 삭제 능력이 회귀한다.
+    ///    타인 개인 프레임은 LoadUser의 `{계정}_` 접두 필터로 목록에 애초에 오르지 않는다.
+    /// </summary>
+    public static bool CanDelete(FrameTemplate frame, UserRole? role)
+    {
+        if (role is null || !role.Value.CanWriteFrames()) return false;
+
+        return FrameOrigin.Classify(frame) switch
+        {
+            FrameOriginKind.UserLocal => true,                 // 로컬 저장분(개인 `local:` / power 공용 fork)
+            FrameOriginKind.DbDefault => role.Value.IsPower(), // 공용 DB 프레임은 power만
+            _ => false                                         // 번들·fallback·빈 Id
         };
     }
 

@@ -32,7 +32,8 @@
                     <Grid Width="200" Height="280">
                         <!-- 카드 본체(이미지+슬롯 미리보기+이름 바)는 공유 템플릿 재사용 — 피커와 시각 동일. -->
                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource FrameCard.Content}" />
-                        <!-- A3(정정): 삭제 ✕. 로그인 사용자는 본인 로컬 프레임, 파워(manager/admin)는 공용·DB 프레임도. 번들/fallback·게스트 미노출. -->
+                        <!-- A3(정정): 삭제 ✕. 프레임 쓰기 권한(고급 유저 이상)은 본인 로컬 프레임, 파워(manager/admin)는 공용·DB 프레임도.
+                             번들/fallback·게스트·user·temp_user 미노출(it16 E4 — CanDeleteFrames의 의미가 강화되어 자동 반영). -->
                         <Button Content="✕" FontSize="14" Width="28" Height="28"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
                                 Style="{StaticResource Button.Icon}"
@@ -84,10 +85,12 @@
                        Style="{StaticResource Text.Body}" TextWrapping="Wrap" TextAlignment="Center"
                        Foreground="{Binding DeleteNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <!-- 프레임 만들기: 프레임 쓰기 권한(고급 유저 이상)만 노출. user·temp_user·게스트 미노출(it16 E4). -->
                 <Button Content="프레임 만들기" Command="{Binding CreateFrameCommand}"
-                        Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}"
+                        Visibility="{Binding CanCreateFrame, Converter={StaticResource BoolToVis}}"
                         Style="{StaticResource Button.Secondary}" Margin="8,0" />
-                <!-- 선택 프레임 편집(본인 로컬 or 파워). 파워가 만든 공용/DB 프레임은 저장 시 DB도 갱신. -->
+                <!-- 선택 프레임 편집: 프레임 쓰기 권한(고급 유저 이상)만 노출.
+                     편집 결과는 it15부터 항상 로컬 전용이다(서버 미반영) — DB/번들 유래는 fork 저장. -->
                 <Button Content="선택 편집" Command="{Binding EditFrameCommand}"
                         Visibility="{Binding CanEditSelected, Converter={StaticResource BoolToVis}}"
                         Style="{StaticResource Button.Secondary}" Margin="8,0" />

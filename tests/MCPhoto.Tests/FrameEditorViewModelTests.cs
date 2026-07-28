@@ -125,11 +125,15 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.Equal(count, vm.Slots.Count);
     }
 
+    /// <summary>
+    /// it16 §8.2-22: 비power 로컬 전용 저장 흐름의 주체가 user → advanced_user로 이동했다.
+    /// 저장 결과는 it15 User와 **동일**해야 한다(개인 스코프 ownerName={계정}, DB 미호출).
+    /// </summary>
     [Fact]
-    public async Task User_Save_Persists_Locally_With_Six_Slots()
+    public async Task AdvancedUser_Save_Persists_Locally_With_Six_Slots()
     {
-        // it8 A2: user는 로컬 전용 저장(DB 미호출). B9: 6 선택이 clobber 없이 유지.
-        var (vm, repo, local, _) = MakeVm(UserRole.User);
+        // it8 A2: 비power는 로컬 전용 저장(DB 미호출). B9: 6 선택이 clobber 없이 유지.
+        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
         Assert.True(vm.LoadImage(_imagePath));
 
         vm.SlotCount = 6;
@@ -137,10 +141,29 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 
         await vm.SaveCommand.ExecuteAsync(null);
 
-        Assert.Null(repo.Saved);                    // user는 DB 미저장
+        Assert.Null(repo.Saved);                    // 비power는 DB 미저장
         Assert.NotNull(local.SavedFrame);
         Assert.Equal("u1", local.SavedOwner);       // 계정명 prefix
         Assert.Equal(6, local.SavedFrame!.Slots.Count);
+    }
+
+    /// <summary>
+    /// it16 §8.2-21(§4.5 3중 방어): 화면 게이트를 우회해 편집기에 도달해도 user·temp_user의 저장은
+    /// fail-closed 가드에서 거부되고 아무것도 기록되지 않는다.
+    /// </summary>
+    [Theory]
+    [InlineData(UserRole.User)]
+    [InlineData(UserRole.TempUser)]
+    public async Task NonWriter_Save_Is_Refused_Fail_Closed(UserRole role)
+    {
+        var (vm, repo, local, _) = MakeVm(role);
+        Assert.True(vm.LoadImage(_imagePath));
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.Equal("프레임을 만들 권한이 없습니다.", vm.StatusMessage);
     }
 
     [Fact]
@@ -191,10 +214,11 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     }
 
     [Fact]
-    public async Task User_Editing_Own_Local_Overwrites_Same_Name()
+    public async Task AdvancedUser_Editing_Own_Local_Overwrites_Same_Name()
     {
         // C2: 본인 로컬(local: 접두) 편집은 fork 아님 — 이름 그대로 같은 파일 덮어쓰기.
-        var (vm, repo, local, _) = MakeVm(UserRole.User);
+        // it16: 이 능력의 주체가 user → advanced_user로 이동했다(동작은 it15 User와 동일).
+        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
         vm.LoadForEdit(new FrameTemplate
         {
             Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1", IsDefault = false,
@@ -246,6 +270,11 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 
         var (userNew, _, _, _) = MakeVm(UserRole.User);
         Assert.Contains("내 프레임", userNew.SaveScopeNotice);
+
+        // it16 §8.2-23: AdvancedUser는 비power 분기를 타서 it15 User와 **같은 문구**다(스코프 판정 불변).
+        var (advNew, _, _, _) = MakeVm(UserRole.AdvancedUser);
+        Assert.Contains("내 프레임", advNew.SaveScopeNotice);
+        Assert.DoesNotContain("서버에 등록", advNew.SaveScopeNotice);
     }
 
     [Fact]
