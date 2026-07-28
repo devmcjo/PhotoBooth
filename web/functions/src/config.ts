@@ -5,9 +5,6 @@
  * 배포는 Functions secrets(firebase functions:secrets:set)로 주입된다.
  */
 
-/** 이메일 공급자 식별자(설계 §10). "log"=개발용 콘솔 sender(외부 의존 0). */
-export type EmailProvider = "log" | "sendgrid";
-
 export interface AppConfig {
   /** JWT 서명 시크릿(HS256). */
   jwtSecret: string;
@@ -17,14 +14,8 @@ export interface AppConfig {
   clientApiKeys: string[];
   /** Storage 버킷(서명 URL·토큰 URL 조립). */
   storageBucket: string;
-  /** 모바일 다운로드 페이지 base URL. */
+  /** 모바일 다운로드 페이지 base URL(domain/session.ts downloadPageUrl 조립에 사용). */
   hostingBaseUrl: string;
-  /** 이메일 공급자(기본 "log" — 개발/Emulator는 실제 메일 미발송, 설계 §10.2). */
-  emailProvider: EmailProvider;
-  /** 발신 주소(sendgrid 사용 시 필수, 콘솔 등록값). */
-  emailFrom: string;
-  /** SendGrid API 키(Secret Manager 주입, sendgrid 사용 시 필수). 로그에 노출 금지. */
-  sendgridApiKey: string;
   /**
    * item1b: Google OAuth 클라이언트 ID(비밀 아님, env). 미설정이면 /auth/google 비활성(§8.2).
    * 클라(WPF)도 이 값을 알아야 authorize URL을 조립하지만, 서버는 code 교환·id_token audience 검증에 쓴다.
@@ -37,7 +28,7 @@ export interface AppConfig {
   googleOAuthClientSecret: string;
   /**
    * item1b: Google 로그인 활성화 여부(client id·secret이 모두 있을 때만 true).
-   * false면 /auth/google는 501(구성 오류)로 응답한다(§8.2, sendgrid와 동일한 "사용 시에만 강제" 원칙).
+   * false면 /auth/google는 501(구성 오류)로 응답한다(§8.2, "사용 시에만 자격 강제" 원칙).
    */
   googleOAuthEnabled: boolean;
   /**
@@ -45,11 +36,6 @@ export interface AppConfig {
    * 미설정(빈 문자열)이면 hd 제한 없음(email 매핑 화이트리스트로만 통제).
    */
   googleAllowedHd: string;
-}
-
-/** env 문자열 → EmailProvider(미지정/미지원은 "log"로 폴백 = 개발 안전 기본). */
-function parseEmailProvider(value: string | undefined): EmailProvider {
-  return value === "sendgrid" ? "sendgrid" : "log";
 }
 
 /** 쉼표 구분 문자열을 트림된 비어있지 않은 항목 배열로. */
@@ -94,21 +80,6 @@ export function loadConfig(): AppConfig {
     throw new Error("JWT_EXPIRES_IN_SECONDS가 올바르지 않습니다(양의 정수).");
   }
 
-  const emailProvider = parseEmailProvider(process.env.EMAIL_PROVIDER);
-  const emailFrom = process.env.EMAIL_FROM ?? "";
-  const sendgridApiKey = process.env.SENDGRID_API_KEY ?? "";
-  // sendgrid 선택 시에만 자격을 강제(개발 기본 "log"는 외부 의존 0이라 자격 불요).
-  if (emailProvider === "sendgrid") {
-    if (!emailFrom) {
-      throw new Error("EMAIL_FROM 미설정 — sendgrid 사용 시 발신 주소가 필요합니다.");
-    }
-    if (!sendgridApiKey) {
-      throw new Error(
-        "SENDGRID_API_KEY 미설정 — sendgrid 사용 시 API 키가 필요합니다(Functions secrets)."
-      );
-    }
-  }
-
   // item1b: Google OAuth. 활성화 신호는 **CLIENT_ID(비밀 아님·env)** 다.
   //  - defineSecret 모델에선 GOOGLE_OAUTH_CLIENT_SECRET이 배포 시 항상 존재해야 하므로
   //    (SSO 미사용이어도 placeholder 등록 필요), "시크릿만 있고 id 없음"은 **정상 비활성** 상태다.
@@ -132,9 +103,6 @@ export function loadConfig(): AppConfig {
     clientApiKeys,
     storageBucket,
     hostingBaseUrl: process.env.HOSTING_BASE_URL ?? "",
-    emailProvider,
-    emailFrom,
-    sendgridApiKey,
     googleOAuthClientId,
     googleOAuthClientSecret,
     googleOAuthEnabled,

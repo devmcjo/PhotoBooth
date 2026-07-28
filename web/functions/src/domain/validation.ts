@@ -24,14 +24,6 @@ export function validateAccountId(value: unknown): ValidationResult<string> {
   return ok(v);
 }
 
-/** 비밀번호: 1~200자 비어있지 않은 문자열(해싱 전 평문 길이만 방어적으로 제한). */
-export function validatePassword(value: unknown): ValidationResult<string> {
-  if (typeof value !== "string" || value.length === 0)
-    return fail("비밀번호가 비어 있습니다.");
-  if (value.length > 200) return fail("비밀번호가 너무 깁니다(최대 200자).");
-  return ok(value);
-}
-
 /** 역할: 화이트리스트(temp_user/user/manager/admin). */
 export function validateRole(value: unknown): ValidationResult<UserRole> {
   if (!isUserRole(value))
@@ -54,19 +46,9 @@ export function validateEmail(value: unknown): ValidationResult<string> {
   return ok(v);
 }
 
-/** 인증/재설정 코드: 정확히 6자리 숫자(설계 §8.6). */
-const CODE_RE = /^\d{6}$/;
-
-export function validateVerificationCode(value: unknown): ValidationResult<string> {
-  if (typeof value !== "string") return fail("코드는 문자열이어야 합니다.");
-  const v = value.trim();
-  if (!CODE_RE.test(v)) return fail("코드는 6자리 숫자여야 합니다.");
-  return ok(v);
-}
-
 /**
- * it14: 설정 진입 PIN — 정확히 4자리 숫자(사용자 확정). 이메일 코드(6자리)와 별개 의미:
- * 코드=일회성 이메일 인증값, PIN=영속 설정 진입 자격. 형식만 다를 뿐 값은 bcrypt로 해시 저장한다.
+ * it14: 설정 진입 PIN — 정확히 4자리 숫자(사용자 확정, it15 §5.6에서 재확정).
+ * 값은 bcrypt로 해시 저장한다(pinHash).
  */
 const PIN_RE = /^\d{4}$/;
 

@@ -1,8 +1,10 @@
 /**
- * Express 앱 조립 — 12개 엔드포인트를 라우터로 마운트 (설계 §6.2).
+ * Express 앱 조립 — 라우터 6개(/auth /accounts /config /frames /uploads /health) 마운트 (설계 §6.2).
  *
- * 단일 함수(api)에 얹으므로 실제 URL은 `.../api/{path}` (예: .../api/auth/login).
+ * 단일 함수(api)에 얹으므로 실제 URL은 `.../api/{path}` (예: .../api/auth/google).
  * JSON 파서 → 라우터 → 404 → 에러 미들웨어 순. 미처리 rejection은 asyncHandler가 next로 전파.
+ * it15에서 제거된 인증 라우트(login·register·verify-email·password-reset)는 스텁을 남기지 않았다 —
+ * 미매칭 경로는 아래 404 핸들러가 처리한다(설계 §5.4 A4 판정).
  */
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";

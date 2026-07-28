@@ -1,44 +1,28 @@
-import {
-  hashPassword,
-  looksHashed,
-  verifyHash,
-  verifyPassword,
-} from "../domain/password";
+import { hashPassword, verifyHash } from "../domain/password";
 
-describe("password — bcrypt 해시·검증·지연 마이그레이션", () => {
-  test("looksHashed: bcrypt prefix 판정", () => {
-    expect(looksHashed("$2a$10$abcdefghijklmnopqrstuv")).toBe(true);
-    expect(looksHashed("$2b$10$abcdefghijklmnopqrstuv")).toBe(true);
-    expect(looksHashed("1111")).toBe(false);
-    expect(looksHashed("")).toBe(false);
-    expect(looksHashed(null)).toBe(false);
-  });
-
+/**
+ * it15: 비밀번호 개념 폐지 후 이 모듈의 유일한 소비자는 **설정 진입 PIN**(pinHash)이다.
+ * 레거시 평문 지연 마이그레이션(verifyPassword/looksHashed) 케이스는 대상 함수와 함께 제거했다.
+ */
+describe("password — bcrypt 해시·검증(PIN 저장 인프라)", () => {
   test("hash → verifyHash 라운드트립", async () => {
     const hash = await hashPassword("s3cret!");
-    expect(looksHashed(hash)).toBe(true);
+    expect(hash).toMatch(/^\$2[aby]\$\d{2}\$/); // bcrypt 형태
     expect(await verifyHash("s3cret!", hash)).toBe(true);
     expect(await verifyHash("wrong", hash)).toBe(false);
   });
 
-  test("verifyPassword: 해시 저장값이면 마이그레이션 불필요", async () => {
-    const hash = await hashPassword("pw1");
-    const okRes = await verifyPassword("pw1", hash);
-    expect(okRes.matched).toBe(true);
-    expect(okRes.needsMigration).toBe(false);
-
-    const noRes = await verifyPassword("pw2", hash);
-    expect(noRes.matched).toBe(false);
-    expect(noRes.needsMigration).toBe(false);
+  test("같은 평문도 salt가 달라 해시가 매번 다르다(둘 다 검증 통과)", async () => {
+    const a = await hashPassword("0134");
+    const b = await hashPassword("0134");
+    expect(a).not.toBe(b);
+    expect(await verifyHash("0134", a)).toBe(true);
+    expect(await verifyHash("0134", b)).toBe(true);
   });
 
-  test("verifyPassword: 레거시 평문 매칭 시 needsMigration=true", async () => {
-    const matched = await verifyPassword("1111", "1111");
-    expect(matched.matched).toBe(true);
-    expect(matched.needsMigration).toBe(true);
-
-    const mismatched = await verifyPassword("2222", "1111");
-    expect(mismatched.matched).toBe(false);
-    expect(mismatched.needsMigration).toBe(false);
+  test("4자리 PIN 해시·검증(it15 유일 게이트 자격증명)", async () => {
+    const hash = await hashPassword("0000");
+    expect(await verifyHash("0000", hash)).toBe(true);
+    expect(await verifyHash("0001", hash)).toBe(false);
   });
 });

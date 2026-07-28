@@ -6,9 +6,12 @@
 # 하는 일:
 #   1) JWT_SECRET(강한 랜덤) 생성·등록
 #   2) CLIENT_API_KEYS(강한 랜덤) 생성·등록 → WPF MCPhoto.ini 의 BackendApiKey 에 넣을 값을 출력
-#   3) SENDGRID_API_KEY / GOOGLE_OAUTH_CLIENT_SECRET 는 코드에 defineSecret 으로 선언돼 있어
+#   3) GOOGLE_OAUTH_CLIENT_SECRET 는 코드에 defineSecret 으로 선언돼 있어
 #      "배포 시 반드시 존재"해야 하므로, 아직 안 쓰면 placeholder 로 등록(첫 배포 실패 방지).
-#      실제 값은 나중에 §B1/§B2 에서 이 스크립트 재실행 또는 개별 set 으로 교체.
+#      실제 값은 나중에 §B2 에서 이 스크립트 재실행 또는 개별 set 으로 교체.
+#
+# it15: SENDGRID_API_KEY 는 더 이상 등록하지 않는다(이메일 인증·비밀번호 재설정 폐지 →
+#       index.ts 의 defineSecret 선언 제거). 이미 등록돼 있어도 무해하며 콘솔에서 삭제 가능.
 #
 # 재실행하면 새 secret '버전'이 추가된다(회전). 값 확인은:
 #   firebase functions:secrets:access CLIENT_API_KEYS --project mcphoto-955fb
@@ -48,14 +51,6 @@ CLIENT_API_KEY_VALUE="$(rand_hex 24)"
 
 set_secret JWT_SECRET "$JWT_SECRET_VALUE"
 set_secret CLIENT_API_KEYS "$CLIENT_API_KEY_VALUE"
-
-# SendGrid: 환경변수로 실키를 주면 그걸, 아니면 placeholder(첫 배포용).
-if [ -n "${SENDGRID_API_KEY:-}" ]; then
-  set_secret SENDGRID_API_KEY "$SENDGRID_API_KEY"
-else
-  set_secret SENDGRID_API_KEY "placeholder-set-real-key-when-enabling-email"
-  echo "        (placeholder — 이메일 실발송은 §B1에서 실키로 교체)"
-fi
 
 # Google OAuth secret: 환경변수로 실값을 주면 그걸, 아니면 placeholder(첫 배포용).
 if [ -n "${GOOGLE_OAUTH_CLIENT_SECRET:-}" ]; then

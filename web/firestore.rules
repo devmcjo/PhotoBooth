@@ -12,7 +12,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // users: 전면 차단 (평문 pw 보호 — 노출 시 전체 계정 유출)
+    // users: 계정 문서 전면 차단 (PIN 해시·역할·이메일 보호 — 노출 시 전체 계정 유출)
+    // it15: 비밀번호 필드는 폐지됐다. 남은 민감 필드는 pinHash(설정 진입 게이트)와 role(권한)이며,
+    // 계정 조작은 전부 백엔드 API(Bearer + 서버 위계 검증)를 거친다.
     match /users/{uid} {
       allow read, write: if false;
     }

@@ -8,13 +8,11 @@ import {
   validateImageSize,
   validateLoopbackRedirectUri,
   validateNonce,
-  validatePassword,
   validatePin,
   validateRetentionHours,
   validateRole,
   validateSlots,
   validateUploadFile,
-  validateVerificationCode,
 } from "../domain/validation";
 
 describe("validation — 서버 입력 검증(경계 방어)", () => {
@@ -26,13 +24,6 @@ describe("validation — 서버 입력 검증(경계 방어)", () => {
     expect(validateAccountId("한글계정").ok).toBe(false);
     expect(validateAccountId(123).ok).toBe(false);
     expect(validateAccountId("x".repeat(41)).ok).toBe(false);
-  });
-
-  test("validatePassword: 비어있음/과길이", () => {
-    expect(validatePassword("1111").ok).toBe(true);
-    expect(validatePassword("").ok).toBe(false);
-    expect(validatePassword(null).ok).toBe(false);
-    expect(validatePassword("x".repeat(201)).ok).toBe(false);
   });
 
   test("validateRole: 화이트리스트", () => {
@@ -110,19 +101,6 @@ describe("validation — 서버 입력 검증(경계 방어)", () => {
     expect(validateEmail(null).ok).toBe(false);
     expect(validateEmail(123).ok).toBe(false);
     expect(validateEmail(`${"x".repeat(250)}@example.com`).ok).toBe(false); // 254자 초과
-  });
-
-  test("validateVerificationCode: 정확히 6자리 숫자", () => {
-    const r = validateVerificationCode("012345");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe("012345");
-
-    expect(validateVerificationCode("  654321 ").ok).toBe(true); // 트림
-    expect(validateVerificationCode("12345").ok).toBe(false); // 5자리
-    expect(validateVerificationCode("1234567").ok).toBe(false); // 7자리
-    expect(validateVerificationCode("12a456").ok).toBe(false); // 비숫자
-    expect(validateVerificationCode(123456).ok).toBe(false); // 숫자 타입
-    expect(validateVerificationCode(null).ok).toBe(false);
   });
 
   test("validatePin: 정확히 4자리 숫자(it14 설정 진입 PIN)", () => {
