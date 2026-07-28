@@ -43,7 +43,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private AppState _returnState = AppState.Home;
 
     /// <summary>계정 페이지 진입 모드(비번변경/계정생성/관리자). Account VM 생성 직후 주입. (it5 §5 C2)</summary>
-    private ViewModels.AccountMode _pendingAccountMode = ViewModels.AccountMode.PasswordChange;
+    private ViewModels.AccountMode _pendingAccountMode = ViewModels.AccountMode.Account;
 
     /// <summary>프레임 편집기 진입 시 편집할 기존 프레임(null이면 신규 생성). (기능 요청)</summary>
     private MCPhoto.Core.Models.FrameTemplate? _pendingEditFrame;
@@ -251,7 +251,6 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         AppState.Settings => _services.GetRequiredService<SettingsViewModel>(),
         AppState.UserMgmt => _services.GetRequiredService<UserMgmtViewModel>(),
         AppState.Account => CreateAccountViewModel(),
-        AppState.PasswordReset => _services.GetRequiredService<PasswordResetViewModel>(),
         _ => null
     };
 
@@ -363,45 +362,42 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
 
     // ── 상단 바 커맨드 (it2 §3.2) ──
 
-    /// <summary>우상단 설정 버튼 → 설정 페이지(오버레이 진입).</summary>
+    /// <summary>우상단 설정 버튼 → 설정 페이지(오버레이 진입). 로그인 사용자는 PIN 게이트 통과 필수.</summary>
     [RelayCommand]
     private async Task OpenSettings()
     {
         IsAccountPopupOpen = false;
-        // 로그인 사용자는 설정 진입 '전'에 재인증(게스트는 무가드). 취소/불일치면 진입하지 않음. (보완#1, it14 §5.5)
-        var user = _session.CurrentUser;
-        if (user is not null)
-        {
-            var account = _services.GetService<MCPhoto.Core.Accounts.IAccountService>();
-            // fail-closed: 계정 서비스가 없으면(향후 DI 변경 등) 재인증 없이 진입시키지 않는다.
-            if (account is null)
-                return;
-
-            var uid = user.Id;
-            if (user.AuthMethod == MCPhoto.Core.Models.AuthMethod.Sso)
-            {
-                // it14: SSO 계정은 sentinel 비번이라 비번 재확인 불가 → 전용 PIN 게이트.
-                var pin = _services.GetService<Services.IPinPromptDialogService>();
-                if (pin is null) return; // fail-closed
-                bool ok = user.HasPin
-                    ? pin.PromptVerify(p => account.VerifyPinAsync(uid, p))
-                    : pin.PromptSetup(async p =>   // PIN 미설정 = 최초 진입 → 강제 설정(현재 PIN 확인 없음, 데드락 방지).
-                    {
-                        await account.SetOwnPinAsync(uid, null, p);
-                        user.HasPin = true;        // 로컬 세션 반영(재진입 시 확인 경로로 전환).
-                    });
-                if (!ok) return;
-            }
-            else
-            {
-                // 비번(password) 계정: 기존 비밀번호 재확인 게이트(현행 유지).
-                var prompt = _services.GetService<Services.IPasswordPromptDialogService>();
-                if (prompt is null) return; // fail-closed(현행)
-                if (!prompt.Prompt(pw => account.VerifyPasswordAsync(uid, pw)))
-                    return;
-            }
-        }
+        // 게스트는 무가드(현행 유지). 로그인 사용자는 PIN 게이트 — 취소/불일치면 진입하지 않음.
+        if (_session.CurrentUser is { } user && !await EnsurePinGateAsync(user))
+            return;
         await NavigateToOverlayAsync(AppState.Settings);
+    }
+
+    /// <summary>
+    /// PIN 게이트 공통(it15 §6.2). HasPin이면 확인, 아니면 최초 설정 강제(데드락 방지).
+    /// 계정 서비스·다이얼로그 서비스 미등록은 fail-closed(진입 거부) — it14 규약 승계.
+    /// 설정 진입·계정 관리 진입 두 곳이 이 메서드를 공유한다(동일 PIN·동일 다이얼로그).
+    /// </summary>
+    /// <remarks>
+    /// 내부가 동기인데 <see cref="Task{TResult}"/>인 이유: IPinPromptDialogService는 ShowDialog() 기반이라
+    /// 동기 반환이다. 호출부가 await 문맥이므로 시그니처를 Task로 두어 향후 비동기 다이얼로그 전환 시
+    /// 호출부 변경이 없게 한다.
+    /// </remarks>
+    public Task<bool> EnsurePinGateAsync(MCPhoto.Core.Models.User user)
+    {
+        var account = _services.GetService<MCPhoto.Core.Accounts.IAccountService>();
+        var pin = _services.GetService<Services.IPinPromptDialogService>();
+        if (account is null || pin is null) return Task.FromResult(false); // fail-closed
+
+        var uid = user.Id;
+        bool ok = user.HasPin
+            ? pin.PromptVerify(p => account.VerifyPinAsync(uid, p))
+            : pin.PromptSetup(async p =>   // PIN 미설정 = 최초 진입 → 강제 설정(현재 PIN 확인 없음, 데드락 방지).
+              {
+                  await account.SetOwnPinAsync(uid, null, p);
+                  user.HasPin = true;      // 세션 로컬 반영(재진입 시 확인 경로로 전환).
+              });
+        return Task.FromResult(ok);
     }
 
     /// <summary>좌상단 계정 버튼: 비로그인→로그인 페이지, 로그인→계정 팝오버 토글.</summary>
@@ -414,17 +410,6 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
             await NavigateToOverlayAsync(AppState.Login);
     }
 
-    /// <summary>
-    /// 비밀번호 찾기 화면 진입(로그인 화면에서만). 복귀 지점을 명시적으로 Login으로 두어
-    /// 취소/완료 시 로그인 화면으로 돌아가게 한다(NavigateToOverlayAsync는 Login에서 진입 시
-    /// 복귀 지점을 저장하지 않으므로 여기서 직접 설정). (item1a §9.4)
-    /// </summary>
-    public async Task OpenPasswordReset()
-    {
-        _returnState = AppState.Login;
-        await NavigateAsync(AppState.PasswordReset);
-    }
-
     /// <summary>계정 페이지(오버레이) 진입 + 모드 저장. 복귀는 진입 전 화면으로. (it5 §5 C2)</summary>
     private async Task NavigateToAccountAsync(ViewModels.AccountMode mode)
     {
@@ -433,13 +418,9 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         await NavigateToOverlayAsync(AppState.Account);
     }
 
-    /// <summary>계정 팝오버 → 비밀번호 변경 전용 페이지.</summary>
+    /// <summary>계정 팝오버 → 계정 관리 페이지(내 정보 + PIN 변경). (it15 §6.3)</summary>
     [RelayCommand]
-    private Task OpenPasswordChange() => NavigateToAccountAsync(ViewModels.AccountMode.PasswordChange);
-
-    /// <summary>계정 팝오버(power) → 계정 생성 전용 페이지.</summary>
-    [RelayCommand]
-    private Task OpenAccountCreate() => NavigateToAccountAsync(ViewModels.AccountMode.AccountCreate);
+    private Task OpenAccountManage() => NavigateToAccountAsync(ViewModels.AccountMode.Account);
 
     /// <summary>계정 팝오버(power) → 관리자 도구(사용자 관리·앱 종료) 페이지.</summary>
     [RelayCommand]

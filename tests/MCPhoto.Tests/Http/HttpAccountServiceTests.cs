@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -8,10 +9,20 @@ using MCPhoto.Tests.Http;
 
 namespace MCPhoto.Tests.Http;
 
-/// <summary>P3: HttpAccountService 단위 테스트(FakeHttpMessageHandler, 실서버 호출 없음).</summary>
+/// <summary>
+/// P3: HttpAccountService 단위 테스트(FakeHttpMessageHandler, 실서버 호출 없음).
+/// it15 §7.2: 계약이 7메서드(Google 로그인 / 목록·삭제·역할 / PIN 3종)로 축소되어
+/// id/pw 로그인·회원가입·계정 생성·비번 변경·이메일 인증·재설정 케이스가 전부 삭제됐다.
+/// UserResponse 와이어 형식은 §9.1에서 동결(서버 테스트와 같은 픽스처).
+/// </summary>
 public class HttpAccountServiceTests
 {
     private const string ApiKey = "test-client-key";
+
+    /// <summary>§9.1 동결 계약의 UserResponse 예시(서버 googleOnlyAccounts.test.ts와 동일 형식).</summary>
+    private const string FrozenUserJson =
+        "{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2025-11-02T08:31:00.000Z\"," +
+        "\"email\":\"devmcjo@gmail.com\",\"authMethod\":\"google\",\"hasPin\":true}";
 
     private static (HttpAccountService svc, FakeHttpMessageHandler handler, BackendSession session) Make()
     {
@@ -22,48 +33,26 @@ public class HttpAccountServiceTests
         return (svc, handler, session);
     }
 
-    [Fact]
-    public async Task Login_Success_Stores_Token_And_Sends_ApiKey()
+    /// <summary>Bearer가 필요한 호출용: Google 로그인 응답을 등록하고 토큰을 세팅한다.</summary>
+    private static async Task SignInAsync(HttpAccountService svc, FakeHttpMessageHandler handler)
     {
-        var (svc, handler, session) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"jwt-abc\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
-
-        var user = await svc.LoginAsync("devmcjo", "1111");
-
-        Assert.NotNull(user);
-        Assert.Equal("devmcjo", user!.Id);
-        Assert.Equal(UserRole.Admin, user.Role);
-        Assert.Equal(string.Empty, user.Password); // 비번은 응답에 없고 채우지 않음
-        Assert.Equal("jwt-abc", session.Token); // 토큰 보관
-        // 로그인은 API 키 헤더로(공개 엔드포인트).
-        Assert.Equal(ApiKey, handler.Requests[0].HeaderValue(HttpBackendClient.ApiKeyHeader));
-        Assert.Null(handler.Requests[0].AuthorizationScheme); // Bearer 아님
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt-pin\",\"expiresIn\":3600,\"user\":{\"id\":\"me\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+        await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
     }
 
-    [Fact]
-    public async Task Login_Failure_401_Returns_Null()
-    {
-        var (svc, handler, session) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.Unauthorized,
-            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"아이디 또는 비밀번호가 올바르지 않습니다.\"}}");
-
-        var user = await svc.LoginAsync("devmcjo", "wrong");
-
-        Assert.Null(user); // 현행 계약: 실패 = null(예외 아님)
-        Assert.Null(session.Token);
-    }
+    // ── 세션·인가 ──
 
     [Fact]
     public async Task Authenticated_Call_Reuses_Stored_Token_As_Bearer()
     {
-        var (svc, handler, session) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
             "{\"token\":\"jwt-xyz\",\"expiresIn\":3600,\"user\":{\"id\":\"boss\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
         handler.WhenJson(HttpMethod.Get, "accounts", HttpStatusCode.OK,
             "[{\"id\":\"boss\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}]");
 
-        await svc.LoginAsync("boss", "pw");
+        await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
         var all = await svc.GetAllAsync();
 
         Assert.Single(all);
@@ -77,75 +66,10 @@ public class HttpAccountServiceTests
     {
         var (svc, _, _) = Make();
         // 토큰 없음 → Bearer 요청 조립 단계에서 UnauthorizedAccessException.
-        await Assert.ThrowsAsync<System.UnauthorizedAccessException>(() => svc.GetAllAsync());
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetAllAsync());
     }
 
-    [Fact]
-    public async Task Create_Gate_Violation_Throws_Before_Server_Call()
-    {
-        var (svc, handler, _) = Make();
-        // manager가 manager 생성 시도 → 클라 게이트에서 즉시 거부(서버 왕복 없음).
-        await Assert.ThrowsAsync<System.UnauthorizedAccessException>(
-            () => svc.CreateAsync("m2", "pw", UserRole.Manager, email: null, actingRole: UserRole.Manager));
-        Assert.Empty(handler.Requests); // 서버 호출 안 함
-    }
-
-    [Fact]
-    public async Task Create_Conflict_409_Maps_To_InvalidOperation()
-    {
-        var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "boss", Role = UserRole.Admin });
-        handler.WhenJson(HttpMethod.Post, "accounts", HttpStatusCode.Conflict,
-            "{\"error\":{\"code\":\"conflict\",\"message\":\"이미 존재하는 아이디입니다: dup\"}}");
-
-        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => svc.CreateAsync("dup", "pw", UserRole.User, email: null, actingRole: UserRole.Admin));
-        Assert.Contains("이미 존재", ex.Message);
-    }
-
-    [Fact]
-    public async Task Create_Forbidden_403_Maps_To_Unauthorized()
-    {
-        var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "boss", Role = UserRole.Admin });
-        handler.WhenJson(HttpMethod.Post, "accounts", HttpStatusCode.Forbidden,
-            "{\"error\":{\"code\":\"forbidden\",\"message\":\"권한 없음\"}}");
-
-        await Assert.ThrowsAsync<System.UnauthorizedAccessException>(
-            () => svc.CreateAsync("x", "pw", UserRole.User, email: null, actingRole: UserRole.Admin));
-    }
-
-    [Fact]
-    public async Task Create_Sends_Role_As_Firestore_Value_And_Body()
-    {
-        var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "boss", Role = UserRole.Admin });
-        handler.WhenJson(HttpMethod.Post, "accounts", HttpStatusCode.Created,
-            "{\"id\":\"newuser\",\"role\":\"manager\",\"createdAt\":\"2026-01-01T00:00:00Z\"}");
-
-        var user = await svc.CreateAsync("newuser", "pw", UserRole.Manager, email: null, actingRole: UserRole.Admin);
-
-        Assert.Equal(UserRole.Manager, user.Role);
-        var body = handler.Requests[0].Body!;
-        Assert.Contains("\"role\":\"manager\"", body);
-        Assert.Contains("\"id\":\"newuser\"", body);
-        Assert.Contains("\"password\":\"pw\"", body); // 비번은 TLS로 평문 전송(클라 해시 안 함)
-    }
-
-    [Fact]
-    public async Task ChangePassword_Uses_Patch_And_Path()
-    {
-        var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "boss", Role = UserRole.Admin });
-        handler.When(HttpMethod.Patch, "accounts/boss/password", _ => FakeHttpMessageHandler.NoContent());
-
-        await svc.ChangePasswordAsync("boss", "newpw");
-
-        var req = handler.Requests[0];
-        Assert.Equal(HttpMethod.Patch, req.Method);
-        Assert.Contains("accounts/boss/password", req.Uri!.ToString());
-        Assert.Contains("\"newPassword\":\"newpw\"", req.Body!);
-    }
+    // ── 계정 관리(power) ──
 
     [Fact]
     public async Task Delete_Uses_Delete_And_Path()
@@ -176,275 +100,16 @@ public class HttpAccountServiceTests
     }
 
     [Fact]
-    public async Task EnsureSeed_Is_NoOp_Over_Http()
-    {
-        var (svc, handler, _) = Make();
-        await svc.EnsureSeedAccountAsync();
-        Assert.Empty(handler.Requests); // 서버 배포 시 1회 부트스트랩으로 이관(클라 no-op)
-    }
-
-    // ── item1a: 이메일 인증 + 비밀번호 재설정 (§8.2·§8.3·§8.4) ──
-
-    [Fact]
-    public async Task Create_With_Email_Sends_Email_And_Maps_Response()
+    public async Task SetRole_Forbidden_403_Maps_To_Unauthorized()
     {
         var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "boss", Role = UserRole.Admin });
-        handler.WhenJson(HttpMethod.Post, "accounts", HttpStatusCode.Created,
-            "{\"id\":\"newuser\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"u@x.com\",\"emailVerified\":false}");
+        session.SignIn("jwt", new User { Id = "mgr", Role = UserRole.Manager });
+        // it13 매트릭스 위반(승격 불가) → 서버 403 → UnauthorizedAccessException(UI 우아 처리).
+        handler.WhenJson(HttpMethod.Patch, "accounts/t1/role", HttpStatusCode.Forbidden,
+            "{\"error\":{\"code\":\"forbidden\",\"message\":\"권한이 없습니다.\"}}");
 
-        var user = await svc.CreateAsync("newuser", "pw", UserRole.User, "u@x.com", actingRole: UserRole.Admin);
-
-        // 요청 본문에 email 포함(서버 계약 {id,password,role,email}).
-        var body = handler.Requests[0].Body!;
-        Assert.Contains("\"email\":\"u@x.com\"", body);
-        // 응답의 email·emailVerified가 도메인 User로 매핑됨.
-        Assert.Equal("u@x.com", user.Email);
-        Assert.False(user.EmailVerified);
-    }
-
-    [Fact]
-    public async Task Create_Without_Email_Sends_Null_Email()
-    {
-        var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "boss", Role = UserRole.Admin });
-        handler.WhenJson(HttpMethod.Post, "accounts", HttpStatusCode.Created,
-            "{\"id\":\"newuser\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":null,\"emailVerified\":false}");
-
-        var user = await svc.CreateAsync("newuser", "pw", UserRole.User, email: null, actingRole: UserRole.Admin);
-
-        // 빈/미지정 email은 null로 직렬화(서버가 미수집으로 처리).
-        Assert.Contains("\"email\":null", handler.Requests[0].Body!);
-        Assert.Null(user.Email);
-    }
-
-    [Fact]
-    public async Task SetEmail_Uses_Patch_Email_Path_And_Bearer()
-    {
-        var (svc, handler, session) = Make();
-        session.SignIn("jwt", new User { Id = "u1", Role = UserRole.User });
-        handler.When(HttpMethod.Patch, "accounts/u1/email", _ => FakeHttpMessageHandler.NoContent());
-
-        await svc.SetEmailAsync("u1", "new@x.com");
-
-        var req = handler.Requests[0];
-        Assert.Equal(HttpMethod.Patch, req.Method);
-        Assert.Contains("accounts/u1/email", req.Uri!.ToString());
-        Assert.Contains("\"email\":\"new@x.com\"", req.Body!);
-        Assert.Equal("Bearer", req.AuthorizationScheme); // 본인/파워 → Bearer
-    }
-
-    [Fact]
-    public async Task RequestPasswordReset_Posts_IdOrEmail_With_ApiKey_And_Accepts_202()
-    {
-        var (svc, handler, _) = Make();
-        // 서버는 항상 202(열거 방지). 202는 2xx이므로 성공 통과(예외 없음).
-        handler.When(HttpMethod.Post, "auth/password-reset/request",
-            _ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.Accepted, "{\"accepted\":true}"));
-
-        await svc.RequestPasswordResetAsync("someone@x.com");
-
-        var req = handler.Requests[0];
-        Assert.Contains("auth/password-reset/request", req.Uri!.ToString());
-        Assert.Contains("\"idOrEmail\":\"someone@x.com\"", req.Body!);
-        Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader));
-        Assert.Null(req.AuthorizationScheme); // 비로그인(API키만)
-    }
-
-    [Fact]
-    public async Task ConfirmPasswordResetByCode_Posts_Code_Fields()
-    {
-        var (svc, handler, _) = Make();
-        handler.When(HttpMethod.Post, "auth/password-reset/confirm",
-            _ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, "{\"reset\":true}"));
-
-        await svc.ConfirmPasswordResetByCodeAsync("u1", "123456", "newpw");
-
-        var body = handler.Requests[0].Body!;
-        Assert.Contains("\"idOrEmail\":\"u1\"", body);
-        Assert.Contains("\"code\":\"123456\"", body);
-        Assert.Contains("\"newPassword\":\"newpw\"", body);
-    }
-
-    [Fact]
-    public async Task ConfirmPasswordResetByCode_401_Maps_To_InvalidOperation()
-    {
-        var (svc, handler, _) = Make();
-        // 코드 불일치·만료 → 서버 401 → MapToDomainException으로 InvalidOperationException.
-        handler.WhenJson(HttpMethod.Post, "auth/password-reset/confirm", HttpStatusCode.Unauthorized,
-            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"재설정 코드가 올바르지 않거나 만료되었습니다.\"}}");
-
-        await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => svc.ConfirmPasswordResetByCodeAsync("u1", "000000", "newpw"));
-    }
-
-    [Fact]
-    public async Task ConfirmPasswordResetByToken_Posts_Token_And_Id()
-    {
-        var (svc, handler, _) = Make();
-        handler.When(HttpMethod.Post, "auth/password-reset/confirm",
-            _ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, "{\"reset\":true}"));
-
-        await svc.ConfirmPasswordResetAsync("u1", "tok.secret", "newpw");
-
-        var body = handler.Requests[0].Body!;
-        Assert.Contains("\"token\":\"tok.secret\"", body);
-        Assert.Contains("\"id\":\"u1\"", body);
-        Assert.Contains("\"newPassword\":\"newpw\"", body);
-    }
-
-    [Fact]
-    public async Task RequestEmailVerification_Posts_IdOrEmail_Accepts_202()
-    {
-        var (svc, handler, _) = Make();
-        handler.When(HttpMethod.Post, "auth/verify-email/request",
-            _ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.Accepted, "{\"accepted\":true}"));
-
-        await svc.RequestEmailVerificationAsync("u1");
-
-        var req = handler.Requests[0];
-        Assert.Contains("auth/verify-email/request", req.Uri!.ToString());
-        Assert.Contains("\"idOrEmail\":\"u1\"", req.Body!);
-    }
-
-    [Fact]
-    public async Task ConfirmEmailVerification_By_Code_Returns_True_On_Verified()
-    {
-        var (svc, handler, _) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.OK,
-            "{\"verified\":true}");
-
-        var ok = await svc.ConfirmEmailVerificationAsync("u1", "123456");
-
-        Assert.True(ok);
-        var body = handler.Requests[0].Body!;
-        Assert.Contains("\"id\":\"u1\"", body);
-        Assert.Contains("\"code\":\"123456\"", body);
-    }
-
-    [Fact]
-    public async Task ConfirmEmailVerification_401_Returns_False_Not_Throws()
-    {
-        var (svc, handler, _) = Make();
-        // 코드 불일치·만료는 인증 실패(false)로 다룬다(예외 대신 결과값).
-        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.Unauthorized,
-            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"인증 코드가 올바르지 않거나 만료되었습니다.\"}}");
-
-        var ok = await svc.ConfirmEmailVerificationAsync("u1", "000000");
-
-        Assert.False(ok);
-    }
-
-    [Fact]
-    public async Task ConfirmEmailVerification_By_Token_Returns_True_On_Verified()
-    {
-        var (svc, handler, _) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.OK,
-            "{\"verified\":true}");
-
-        var ok = await svc.ConfirmEmailVerificationByTokenAsync("u1", "tok.secret");
-
-        Assert.True(ok);
-        var body = handler.Requests[0].Body!;
-        Assert.Contains("\"token\":\"tok.secret\"", body);
-        Assert.Contains("\"id\":\"u1\"", body);
-    }
-
-    [Fact]
-    public async Task ConfirmEmailVerification_409_Throws_InvalidOperation_Not_False()
-    {
-        var (svc, handler, _) = Make();
-        // 설계 §3.4 C4·§6: "이미 다른 계정이 인증한 이메일"은 인증 실패(false)가 아니라 사유 노출이 필요한 초과 케이스.
-        // 서버 409 → 흡수하지 않고 InvalidOperationException("…초과…")로 전파(UI가 메시지 표시).
-        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.Conflict,
-            "{\"error\":{\"code\":\"conflict\",\"message\":\"해당 이메일로 생성 가능한 계정 수를 초과하였습니다.\"}}");
-
-        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => svc.ConfirmEmailVerificationAsync("u1", "123456"));
-        Assert.Contains("초과", ex.Message);
-    }
-
-    [Fact]
-    public async Task ConfirmEmailVerificationByToken_409_Throws_InvalidOperation_Not_False()
-    {
-        var (svc, handler, _) = Make();
-        // 링크 경로도 코드 경로와 동일: 409(초과)는 흡수하지 않고 전파.
-        handler.WhenJson(HttpMethod.Post, "auth/verify-email/confirm", HttpStatusCode.Conflict,
-            "{\"error\":{\"code\":\"conflict\",\"message\":\"해당 이메일로 생성 가능한 계정 수를 초과하였습니다.\"}}");
-
-        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => svc.ConfirmEmailVerificationByTokenAsync("u1", "tok.secret"));
-        Assert.Contains("초과", ex.Message);
-    }
-
-    // ── W-1: self-signup(비로그인 회원가입, §2.3) ──
-
-    [Fact]
-    public async Task Register_Success_Returns_User_And_Signs_In_With_ApiKey_Not_Bearer()
-    {
-        var (svc, handler, session) = Make();
-        // 서버는 role="user" 강제 + 가입 즉시 로그인(JWT 발급). 응답은 login과 동일한 {token, expiresIn, user}.
-        handler.WhenJson(HttpMethod.Post, "auth/register", HttpStatusCode.Created,
-            "{\"token\":\"jwt-reg\",\"expiresIn\":3600,\"user\":{\"id\":\"newbie\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"n@x.com\",\"emailVerified\":false}}");
-
-        var user = await svc.RegisterAsync("newbie", "pw1234", "n@x.com");
-
-        Assert.NotNull(user);
-        Assert.Equal("newbie", user!.Id);
-        Assert.Equal(UserRole.User, user.Role);
-        Assert.Equal("n@x.com", user.Email);
-        Assert.False(user.EmailVerified);
-        Assert.Equal(string.Empty, user.Password); // 비번은 응답에 없음
-        Assert.Equal("jwt-reg", session.Token);     // 가입 즉시 세션 로그인(§D-B3)
-
-        var req = handler.Requests[0];
-        Assert.Contains("auth/register", req.Uri!.ToString());
-        Assert.Contains("\"id\":\"newbie\"", req.Body!);
-        Assert.Contains("\"password\":\"pw1234\"", req.Body!);
-        Assert.Contains("\"email\":\"n@x.com\"", req.Body!);
-        Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API키 게이트
-        Assert.Null(req.AuthorizationScheme);        // 비로그인(Bearer 아님)
-    }
-
-    [Fact]
-    public async Task Register_Without_Email_Sends_Null_Email()
-    {
-        var (svc, handler, session) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/register", HttpStatusCode.Created,
-            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"n2\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
-
-        var user = await svc.RegisterAsync("n2", "pw1234", email: "   "); // 공백=미수집
-
-        Assert.NotNull(user);
-        Assert.Contains("\"email\":null", handler.Requests[0].Body!); // 빈/공백 email은 null로 정규화
-    }
-
-    [Fact]
-    public async Task Register_Conflict_409_Maps_To_InvalidOperation()
-    {
-        var (svc, handler, session) = Make();
-        // id 중복은 사유 노출(가입 UX). 로그인(401→null)과 달리 register는 실패를 예외로 전파.
-        handler.WhenJson(HttpMethod.Post, "auth/register", HttpStatusCode.Conflict,
-            "{\"error\":{\"code\":\"conflict\",\"message\":\"이미 존재하는 아이디입니다: dup\"}}");
-
-        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => svc.RegisterAsync("dup", "pw1234", null));
-        Assert.Contains("이미 존재", ex.Message);
-        Assert.Null(session.Token); // 실패 시 세션 미변경
-    }
-
-    [Fact]
-    public async Task Login_Maps_Email_Fields_From_Response()
-    {
-        var (svc, handler, _) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"u1\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"u@x.com\",\"emailVerified\":true}}");
-
-        var user = await svc.LoginAsync("u1", "pw");
-
-        Assert.NotNull(user);
-        Assert.Equal("u@x.com", user!.Email);
-        Assert.True(user.EmailVerified); // 로그인 응답의 emailVerified가 세션 User에 반영
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.SetRoleAsync("t1", UserRole.User));
     }
 
     // ── item1b: Google SSO (§5·§7.6) ──
@@ -454,7 +119,7 @@ public class HttpAccountServiceTests
     {
         var (svc, handler, session) = Make();
         handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
-            "{\"token\":\"jwt-g\",\"expiresIn\":3600,\"user\":{\"id\":\"boss\",\"role\":\"manager\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"boss@x.com\",\"emailVerified\":true}}");
+            "{\"token\":\"jwt-g\",\"expiresIn\":3600,\"user\":{\"id\":\"boss\",\"role\":\"manager\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"email\":\"boss@x.com\",\"authMethod\":\"google\"}}");
 
         var user = await svc.LoginWithGoogleAsync("auth-code", "verifier-123", "http://127.0.0.1:5000/", "nonce-1");
 
@@ -462,14 +127,13 @@ public class HttpAccountServiceTests
         Assert.Equal("boss", user!.Id);
         Assert.Equal(UserRole.Manager, user.Role); // 역할은 매핑된 MCPhoto 계정에서(Google 아님)
         Assert.Equal("boss@x.com", user.Email);
-        Assert.True(user.EmailVerified);
-        Assert.Equal(string.Empty, user.Password);  // 비번은 응답에 없음
-        Assert.Equal("jwt-g", session.Token);        // 토큰 세션 저장
+        Assert.Equal(AuthMethod.Google, user.AuthMethod);
+        Assert.Equal("jwt-g", session.Token);      // 토큰 세션 저장
 
         var req = handler.Requests[0];
         Assert.Contains("auth/google", req.Uri!.ToString());
         Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API키 게이트
-        Assert.Null(req.AuthorizationScheme);        // Bearer 아님(로그인 전 상태)
+        Assert.Null(req.AuthorizationScheme);      // Bearer 아님(로그인 전 상태)
     }
 
     [Fact]
@@ -492,13 +156,13 @@ public class HttpAccountServiceTests
     public async Task LoginWithGoogle_Failure_401_Returns_Null()
     {
         var (svc, handler, session) = Make();
-        // Google 검증 실패(도메인·미검증 등) → 서버 401 일반화(§6.4). 계정 매핑은 자동가입(BE-2)이라 매핑 실패는 사실상 없음.
+        // Google 검증 실패(도메인·미검증 등) → 서버 401 일반화(§6.4). 계정 매핑은 자동가입이라 매핑 실패는 사실상 없음.
         handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.Unauthorized,
-            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요.\"}}");
+            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"이 Google 계정으로는 로그인할 수 없습니다.\"}}");
 
         var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
 
-        Assert.Null(user);            // 자격 문제 = null(LoginAsync와 동일 계약)
+        Assert.Null(user);            // 자격 문제 = null
         Assert.Null(session.Token);   // 세션 미변경
     }
 
@@ -528,89 +192,7 @@ public class HttpAccountServiceTests
         Assert.Contains("\"nonce\":null", handler.Requests[0].Body!);
     }
 
-    // ── 재인증 게이트: VerifyPasswordAsync(설정 진입 전, 백엔드 모드 버그 수정) ──
-
-    [Fact]
-    public async Task VerifyPassword_Success_200_Returns_True()
-    {
-        var (svc, handler, _) = Make();
-        // /auth/login 재사용(서버 잠금 없음). 200 = 자격 유효.
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"jwt-verify\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
-
-        var ok = await svc.VerifyPasswordAsync("devmcjo", "1111");
-
-        Assert.True(ok);
-        var req = handler.Requests[0];
-        Assert.Contains("auth/login", req.Uri!.ToString());
-        Assert.Contains("\"id\":\"devmcjo\"", req.Body!);
-        Assert.Equal(ApiKey, req.HeaderValue(HttpBackendClient.ApiKeyHeader)); // API키 게이트(비로그인 엔드포인트)
-        Assert.Null(req.AuthorizationScheme); // Bearer 아님
-    }
-
-    [Fact]
-    public async Task VerifyPassword_Wrong_401_Returns_False_Not_Throws()
-    {
-        var (svc, handler, _) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.Unauthorized,
-            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"아이디 또는 비밀번호가 올바르지 않습니다.\"}}");
-
-        var ok = await svc.VerifyPasswordAsync("devmcjo", "wrong");
-
-        Assert.False(ok); // 자격 불일치 = false(예외 아님)
-    }
-
-    [Fact]
-    public async Task VerifyPassword_ServerError_500_Throws_FailClosed()
-    {
-        var (svc, handler, _) = Make();
-        // 네트워크/서버 오류는 전파(fail-closed — 게이트가 "확인 불가"로 처리, 오allow 방지).
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.InternalServerError,
-            "{\"error\":{\"code\":\"internal\",\"message\":\"서버 오류\"}}");
-
-        await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => svc.VerifyPasswordAsync("devmcjo", "1111"));
-    }
-
-    [Fact]
-    public async Task VerifyPassword_Does_Not_Touch_Session_Token()
-    {
-        var (svc, handler, session) = Make();
-        // 재인증 목적: 현재 로그인 상태(토큰·사용자)를 보존한다. 검증 성공/실패 어느 쪽도 세션을 갱신하지 않는다.
-        session.SignIn("existing-token", new User { Id = "boss", Role = UserRole.Admin });
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"new-token-should-be-ignored\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
-
-        var ok = await svc.VerifyPasswordAsync("devmcjo", "1111");
-
-        Assert.True(ok);
-        Assert.Equal("existing-token", session.Token);    // 토큰 불변(SignIn 미호출)
-        Assert.Equal("boss", session.CurrentUser!.Id);    // 사용자 불변
-    }
-
-    [Fact]
-    public async Task VerifyPassword_Without_Session_Leaves_Session_Empty()
-    {
-        var (svc, handler, session) = Make();
-        // 세션이 비어 있어도 검증이 세션을 채우지 않음(SignIn 미호출 재확인).
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"leak-token\",\"expiresIn\":3600,\"user\":{\"id\":\"devmcjo\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
-
-        await svc.VerifyPasswordAsync("devmcjo", "1111");
-
-        Assert.Null(session.Token);
-        Assert.Null(session.CurrentUser);
-    }
-
-    // ── it14: 설정 진입 PIN 게이트(E1 verify / E2 본인 설정·변경 / E3 타 계정 재설정) ──
-
-    /// <summary>Bearer 필요한 PIN 호출용: 로그인 응답을 등록하고 토큰을 세팅한다.</summary>
-    private static async Task SignInAsync(HttpAccountService svc, FakeHttpMessageHandler handler)
-    {
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"jwt-pin\",\"expiresIn\":3600,\"user\":{\"id\":\"me\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
-        await svc.LoginAsync("me", "pw");
-    }
+    // ── it14: 진입 PIN 게이트(E1 verify / E2 본인 설정·변경 / E3 타 계정 재설정) ──
 
     [Fact]
     public async Task VerifyPin_Success_200_Returns_True_And_Sends_Bearer()
@@ -649,9 +231,9 @@ public class HttpAccountServiceTests
         await SignInAsync(svc, handler);
         // 409(PIN 미설정)는 전파(게이트가 "확인 불가"로 처리 — fail-open 방지). 호출부가 최초 설정 플로우로 유도.
         handler.WhenJson(HttpMethod.Post, "accounts/me/pin/verify", HttpStatusCode.Conflict,
-            "{\"error\":{\"code\":\"conflict\",\"message\":\"설정 진입 PIN이 설정되지 않았습니다.\"}}");
+            "{\"error\":{\"code\":\"conflict\",\"message\":\"진입 PIN이 설정되지 않았습니다.\"}}");
 
-        await Assert.ThrowsAsync<System.InvalidOperationException>(
+        await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.VerifyPinAsync("me", "1234"));
     }
 
@@ -663,7 +245,7 @@ public class HttpAccountServiceTests
         handler.WhenJson(HttpMethod.Post, "accounts/me/pin/verify", HttpStatusCode.InternalServerError,
             "{\"error\":{\"code\":\"internal\",\"message\":\"서버 오류\"}}");
 
-        await Assert.ThrowsAsync<System.InvalidOperationException>(
+        await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.VerifyPinAsync("me", "1234"));
     }
 
@@ -709,7 +291,7 @@ public class HttpAccountServiceTests
         handler.WhenJson(HttpMethod.Put, "accounts/me/pin", HttpStatusCode.Unauthorized,
             "{\"error\":{\"code\":\"unauthorized\",\"message\":\"현재 PIN이 올바르지 않습니다.\"}}");
 
-        await Assert.ThrowsAsync<System.InvalidOperationException>(
+        await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.SetOwnPinAsync("me", currentPin: "0000", newPin: "2222"));
     }
 
@@ -739,52 +321,69 @@ public class HttpAccountServiceTests
         handler.WhenJson(HttpMethod.Put, "accounts/boss/pin", HttpStatusCode.Forbidden,
             "{\"error\":{\"code\":\"forbidden\",\"message\":\"해당 계정의 PIN을 재설정할 권한이 없습니다.\"}}");
 
-        await Assert.ThrowsAsync<System.UnauthorizedAccessException>(
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.ResetPinAsync("boss", "5678"));
     }
 
-    // ── it14: ToUser 매핑(authMethod/hasPin 왕복) ──
+    // ── it15 §9.1·§9.3: ToUser 매핑(동결 와이어 형식) ──
 
     [Fact]
-    public async Task Login_Maps_AuthMethod_Sso_And_HasPin()
+    public async Task Frozen_UserResponse_Maps_All_Fields()
     {
         var (svc, handler, _) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"g\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"authMethod\":\"sso\",\"hasPin\":true}}");
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":" + FrozenUserJson + "}");
 
-        var user = await svc.LoginAsync("g", "x");
+        var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
 
         Assert.NotNull(user);
-        Assert.Equal(AuthMethod.Sso, user!.AuthMethod);
+        Assert.Equal("devmcjo", user!.Id);
+        Assert.Equal(UserRole.Admin, user.Role);
+        Assert.Equal("devmcjo@gmail.com", user.Email);
+        Assert.Equal(AuthMethod.Google, user.AuthMethod);
         Assert.True(user.HasPin);
+        Assert.Equal(new DateTime(2025, 11, 2, 8, 31, 0, DateTimeKind.Utc), user.CreatedAt);
     }
 
     [Fact]
-    public async Task Login_Missing_AuthMethod_Defaults_To_Password()
+    public async Task Unknown_AuthMethod_Maps_To_Unknown_Not_Google()
     {
         var (svc, handler, _) = Make();
-        // 레거시 응답(authMethod/hasPin 필드 없음) → Password 폴백, HasPin=false.
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+        // D2: 서버가 미지원 provider를 보내면 조용히 Google로 오인하지 않고 Unknown으로 드러낸다.
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"k\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"authMethod\":\"kakao\"}}");
+
+        var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
+
+        Assert.NotNull(user);
+        Assert.Equal(AuthMethod.Unknown, user!.AuthMethod);
+    }
+
+    [Fact]
+    public async Task Missing_AuthMethod_Maps_To_Unknown_And_HasPin_False()
+    {
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
             "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"leg\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
 
-        var user = await svc.LoginAsync("leg", "x");
+        var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
 
         Assert.NotNull(user);
-        Assert.Equal(AuthMethod.Password, user!.AuthMethod);
+        Assert.Equal(AuthMethod.Unknown, user!.AuthMethod);
         Assert.False(user.HasPin);
     }
 
     [Fact]
-    public async Task Login_AuthMethod_Password_Maps_Explicitly()
+    public async Task Residual_EmailVerified_Field_Is_Ignored()
     {
         var (svc, handler, _) = Make();
-        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
-            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"p\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"authMethod\":\"password\",\"hasPin\":false}}");
+        // §9.2 배포 순서 독립성: 구 서버가 폐지 필드를 보내도 System.Text.Json 기본 설정이 무시한다.
+        handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"u\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"authMethod\":\"google\",\"emailVerified\":true}}");
 
-        var user = await svc.LoginAsync("p", "x");
+        var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
 
         Assert.NotNull(user);
-        Assert.Equal(AuthMethod.Password, user!.AuthMethod);
-        Assert.False(user.HasPin);
+        Assert.Equal(AuthMethod.Google, user!.AuthMethod);
     }
 }

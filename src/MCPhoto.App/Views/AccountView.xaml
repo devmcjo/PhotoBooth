@@ -10,28 +10,49 @@
 
                 <TextBlock Text="{Binding Title}" Style="{StaticResource ScreenTitle}" />
 
-                <!-- ══════════ 비밀번호 변경 ══════════ -->
+                <!-- ══════════ ① 내 계정 정보 (읽기 전용) it15 §6.3 ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16"
-                        Visibility="{Binding IsPasswordChange, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding IsAccount, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
-                        <TextBlock Text="비밀번호 변경" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
-                        <TextBlock Text="새 비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <PasswordBox x:Name="NewPwBox" Margin="0,0,0,12" PasswordChanged="OnNewPasswordChanged" />
-                        <TextBlock Text="새 비밀번호 확인" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <PasswordBox x:Name="ConfirmPwBox" Margin="0,0,0,12" PasswordChanged="OnConfirmPasswordChanged" />
-                        <TextBlock Text="{Binding AccountMessage}" Style="{StaticResource Text.Caption}" Margin="0,0,0,12"
-                                   Foreground="{Binding AccountMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
-                        <Button Content="비밀번호 변경" Style="{StaticResource Button.Primary}"
-                                Command="{Binding ChangePasswordCommand}" HorizontalAlignment="Left" />
+                        <TextBlock Text="내 계정 정보" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="아이디" Style="{StaticResource Text.Label}" Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AccountId}" Style="{StaticResource Text.Body}" Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="이메일" Style="{StaticResource Text.Label}" Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AccountEmail}" Style="{StaticResource Text.Body}"
+                                       TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="로그인 방식" Style="{StaticResource Text.Label}" Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AuthMethodLabel}" Style="{StaticResource Text.Body}" Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="역할" Style="{StaticResource Text.Label}" Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding RoleLabel}" Style="{StaticResource Text.Body}" Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="가입일" Style="{StaticResource Text.Label}" Margin="0,0,16,0" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding CreatedAtText}" Style="{StaticResource Text.Body}" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 
-                <!-- ══════════ PIN 변경 (비번 변경 모드 하단, SSO+백엔드 계정 전용) it14 §6.1 ══════════ -->
+                <!-- ══════════ ② PIN 변경 (계정 관리 모드) it15 §6.3 ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16"
-                        Visibility="{Binding CanChangePin, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding IsAccount, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
-                        <TextBlock Text="설정 진입 PIN 변경" Style="{StaticResource Text.H2}" Margin="0,0,0,8" />
-                        <TextBlock Text="설정 화면 진입 시 사용하는 4자리 숫자 PIN입니다."
+                        <TextBlock Text="PIN 변경" Style="{StaticResource Text.H2}" Margin="0,0,0,8" />
+                        <TextBlock Text="설정·계정 관리 진입 시 사용하는 4자리 숫자 PIN입니다."
                                    Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
                                    TextWrapping="Wrap" Margin="0,0,0,16" />
 
@@ -55,109 +76,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ══════════ 이메일 등록/인증 (비번 변경 모드 하단, 백엔드 전용) item1a §9.3 ══════════ -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
-                    <Border.Visibility>
-                        <MultiBinding Converter="{StaticResource AllTrueToVis}">
-                            <Binding Path="IsPasswordChange" />
-                            <Binding Path="IsBackendMode" />
-                        </MultiBinding>
-                    </Border.Visibility>
-                    <StackPanel>
-                        <TextBlock Text="이메일 인증" Style="{StaticResource Text.H2}" Margin="0,0,0,4" />
-
-                        <!-- C2 안내(공통): 로그인 후 비번 변경은 인증 불요. 인증은 비번 찾기에만 필요. (§3.2) -->
-                        <TextBlock Text="비밀번호 변경은 지금 바로 가능합니다. 이메일 인증은 비밀번호 찾기(재설정)를 쓰려는 경우에만 필요합니다."
-                                   Style="{StaticResource Text.Caption}" Margin="0,0,0,8" TextWrapping="Wrap" />
-
-                        <!-- C1 안내(미인증에만): 미인증이면 비번 찾기 불가, 관리자 강제 변경만 가능. (§3.1) -->
-                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,0,0,16" TextWrapping="Wrap"
-                                   Foreground="{StaticResource Brush.Warning}"
-                                   Visibility="{Binding IsEmailVerified, Converter={StaticResource InverseBoolToVis}}"
-                                   Text="이메일 인증을 완료해야 비밀번호 찾기(재설정)를 쓸 수 있어요. 미인증 상태에서는 관리자를 통한 비밀번호 강제 변경만 가능합니다." />
-
-                        <!-- 현재 상태: 인증 완료 배지(로그인 배너와 동일한 surface+톤 패턴) -->
-                        <Border Background="{StaticResource Brush.Success.Surface}" CornerRadius="{StaticResource Radius.S}"
-                                Padding="12,8" Margin="0,0,0,12" HorizontalAlignment="Left"
-                                Visibility="{Binding IsEmailVerified, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Success}"
-                                       Text="{Binding CurrentEmail, StringFormat='인증됨: {0}'}" />
-                        </Border>
-
-                        <!-- 이메일 등록/변경 입력 -->
-                        <TextBlock Text="이메일" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <Grid Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" Text="{Binding EmailInput, UpdateSourceTrigger=PropertyChanged}" />
-                            <Button Grid.Column="1" Content="등록" Style="{StaticResource Button.Secondary}"
-                                    Command="{Binding RegisterEmailCommand}" Margin="8,0,0,0" />
-                        </Grid>
-
-                        <!-- 인증 코드 입력(미인증 상태에서 노출) -->
-                        <StackPanel Visibility="{Binding IsEmailVerified, Converter={StaticResource InverseBoolToVis}}">
-                            <TextBlock Text="인증 코드 (6자리)" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Text="{Binding EmailVerifyCode, UpdateSourceTrigger=PropertyChanged}"
-                                         MaxLength="6" />
-                                <Button Grid.Column="1" Content="인증" Style="{StaticResource Button.Primary}"
-                                        Command="{Binding VerifyEmailCommand}" Margin="8,0,0,0" />
-                                <Button Grid.Column="2" Content="코드 재발송" Style="{StaticResource Button.Ghost}"
-                                        Command="{Binding ResendEmailVerificationCommand}" Margin="8,0,0,0" />
-                            </Grid>
-
-                            <!-- 인증 코드 유효 시간 카운트다운(발송 후 5분, 표시용). (§3.3) -->
-                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,0,0,12"
-                                       Foreground="{StaticResource Brush.Warning}"
-                                       Visibility="{Binding IsVerifyCountdownActive, Converter={StaticResource BoolToVis}}"
-                                       Text="{Binding VerifyCountdownText, StringFormat='남은 시간 {0}'}" />
-                        </StackPanel>
-
-                        <TextBlock Text="{Binding EmailMessage}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
-                                   Foreground="{Binding EmailMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
-                    </StackPanel>
-                </Border>
-
-                <!-- ══════════ 계정 생성 (power) ══════════ -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,16"
-                        Visibility="{Binding IsAccountCreate, Converter={StaticResource BoolToVis}}">
-                    <StackPanel>
-                        <TextBlock Text="계정 생성" Style="{StaticResource Text.H2}" Margin="0,0,0,16" />
-                        <TextBlock Text="새 아이디" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <TextBox Text="{Binding NewAccountId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
-                        <TextBlock Text="새 비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <PasswordBox x:Name="NewAccountPwBox" Margin="0,0,0,12" PasswordChanged="OnNewAccountPasswordChanged" />
-
-                        <!-- item1a §9.3: 이메일(백엔드 모드 전용). 생성 시 인증 코드 발송. -->
-                        <StackPanel Visibility="{Binding IsBackendMode, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Text="이메일 (선택 · 인증 코드 발송)" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding NewAccountEmail, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
-                        </StackPanel>
-
-                        <TextBlock Text="역할" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                        <!-- it13 §9.4: 역할 콤보에 한글 라벨(임시 유저/사용자/매니저). enum 값은 SelectedItem 유지, 표시만 라벨. -->
-                        <ComboBox ItemsSource="{Binding CreatableRoles}" SelectedItem="{Binding SelectedNewRole}"
-                                  Width="180" HorizontalAlignment="Left" Margin="0,0,0,12">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Converter={StaticResource RoleLabel}}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock Text="{Binding AdminMessage}" Style="{StaticResource Text.Caption}" Margin="0,0,0,12"
-                                   Foreground="{Binding AdminMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
-                        <Button Content="계정 생성" Style="{StaticResource Button.Primary}"
-                                Command="{Binding CreateAccountCommand}" HorizontalAlignment="Left" />
-                    </StackPanel>
-                </Border>
-
                 <!-- ══════════ 관리자 도구 (power) ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16"
                         Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}}">
@@ -170,7 +88,7 @@
                                     Command="{Binding ExitAppCommand}" />
                         </StackPanel>
 
-                        <!-- it13 §7.7: 임시 유저 전역 한도(Admin·백엔드 모드 전용). 시간·횟수 수정 후 저장. -->
+                        <!-- it13 §7.7: 임시 유저 전역 한도(Admin 전용). 시간·횟수 수정 후 저장. -->
                         <StackPanel Visibility="{Binding CanEditTempUserLimits, Converter={StaticResource BoolToVis}}">
                             <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,16,0,12" />
                             <TextBlock Text="임시 유저 한도" Style="{StaticResource Text.H2}" Margin="0,0,0,4" />
@@ -206,7 +124,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 닫기 -->
+                <!-- ③ 닫기 -->
                 <Button Content="닫기" Style="{StaticResource Button.Ghost}"
                         Command="{Binding CloseCommand}" HorizontalAlignment="Left" Margin="0,0,0,16" />
             </StackPanel>

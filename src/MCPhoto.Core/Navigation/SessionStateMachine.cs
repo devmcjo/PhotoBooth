@@ -12,7 +12,7 @@ public static class SessionStateMachine
     private static readonly Dictionary<AppState, AppState[]> Forward = new()
     {
         [AppState.Home] = new[] { AppState.FrameSelect, AppState.Login, AppState.Settings },
-        [AppState.Login] = new[] { AppState.FrameSelect, AppState.FrameEditor, AppState.Settings, AppState.PasswordReset },
+        [AppState.Login] = new[] { AppState.FrameSelect, AppState.FrameEditor, AppState.Settings },
         [AppState.FrameSelect] = new[] { AppState.Guide, AppState.FrameEditor },
         [AppState.Guide] = new[] { AppState.Capture },
         [AppState.Capture] = new[] { AppState.CutSelect },

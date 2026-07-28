@@ -1,19 +1,31 @@
 using System.IO;
+using MCPhoto.App;
 using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Capture;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
+using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
 
 namespace MCPhoto.Tests;
 
 /// <summary>
 /// it11 #14: 진단·상태 VM 헬스체크 조립 + LogFolderService 경로 산출.
-/// 실제 explorer 실행/Firebase 실호출은 금지 — 페이크/주입 경계로 검증(A3 스모크 포함).
+/// 실제 explorer 실행/서버 실호출은 금지 — 페이크/주입 경계로 검증(A3 스모크 포함).
+/// it15 §6.6: "서비스 계정 키 후보 경로" 항목이 사라지고 "서버 연결(백엔드)" 항목으로 재구성됐다.
 /// </summary>
 public class DiagnosticsViewModelTests
 {
+    private sealed class StubSettingsService : ISettingsService
+    {
+        private readonly AppSettings _settings;
+        public StubSettingsService(AppSettings settings) => _settings = settings;
+        public AppSettings Current => _settings;
+        public AppSettings Load() => _settings;
+        public bool Save() => true;
+    }
+
     /// <summary>테스트용 카메라 서비스 — EnumerateDevices만 의미 있음(나머지 no-op).</summary>
     private sealed class FakeCameraService : ICameraService
     {
@@ -47,14 +59,19 @@ public class DiagnosticsViewModelTests
         ICameraService? camera = null,
         FfmpegRunner? ffmpeg = null,
         IFirebaseClient? firebase = null,
-        ILogFolderService? logFolder = null)
+        ILogFolderService? logFolder = null,
+        AppSettings? settings = null,
+        User? loginUser = null)
     {
         camera ??= new FakeCameraService();
         // 존재하지 않는 경로를 명시 주입 → FfmpegAvailable=false로 결정적(실제 번들 유무와 무관).
         ffmpeg ??= new FfmpegRunner(ffmpegPath: Path.Combine(Path.GetTempPath(), "no-such-ffmpeg.exe"));
         firebase ??= new FakeFirebaseClient { IsInitialized = false };
         logFolder ??= new FakeLogFolderService(Path.Combine(Path.GetTempPath(), "logs"));
-        return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder);
+        settings ??= new AppSettings();
+        var session = new SessionContext();
+        if (loginUser is not null) session.Login(loginUser);
+        return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder, new StubSettingsService(settings), session);
     }
 
     [Fact]
@@ -95,31 +112,67 @@ public class DiagnosticsViewModelTests
     }
 
     [Fact]
-    public void Firebase_Initialized_Reports_Bucket()
+    public void Backend_Configured_Reports_Bucket()
     {
         var vm = MakeVm(firebase: new FakeFirebaseClient { IsInitialized = true, Bucket = "b.appspot.com" });
 
-        Assert.True(vm.FirebaseInitialized);
+        Assert.True(vm.IsBackendConfigured);
         Assert.Equal("b.appspot.com", vm.FirebaseBucket);
     }
 
     [Fact]
-    public void Firebase_Uninitialized_Shows_Placeholder()
+    public void Backend_Unconfigured_Shows_Placeholder()
     {
         var vm = MakeVm(firebase: new FakeFirebaseClient { IsInitialized = false });
 
-        Assert.False(vm.FirebaseInitialized);
-        Assert.Equal("(미초기화)", vm.FirebaseBucket);
+        Assert.False(vm.IsBackendConfigured);
+        Assert.Equal("(미구성)", vm.FirebaseBucket);
     }
 
     [Fact]
-    public void FirebaseKeyCandidates_Are_Populated()
+    public void BackendBaseUrl_Is_Exposed_From_Settings()
+    {
+        var vm = MakeVm(settings: new AppSettings { BackendBaseUrl = "https://x.test/api/" });
+
+        Assert.Equal("https://x.test/api/", vm.BackendBaseUrl);
+    }
+
+    [Fact]
+    public void BackendBaseUrl_Empty_Shows_Placeholder()
+    {
+        var vm = MakeVm(settings: new AppSettings { BackendBaseUrl = string.Empty });
+
+        Assert.Equal("(미설정)", vm.BackendBaseUrl);
+    }
+
+    [Theory]
+    [InlineData("", "미설정")]
+    [InlineData("secret-key", "설정됨")]
+    public void BackendApiKeyState_Never_Leaks_The_Key(string key, string expected)
+    {
+        var vm = MakeVm(settings: new AppSettings { BackendApiKey = key });
+
+        Assert.Equal(expected, vm.BackendApiKeyState);
+        Assert.DoesNotContain("secret-key", vm.BackendApiKeyState);
+    }
+
+    [Fact]
+    public void SignedInAccount_Guest_Shows_Guest()
     {
         var vm = MakeVm();
 
-        // KeyCandidatePaths()는 항상 후보 2경로(실행경로 + ProgramData) 반환.
-        Assert.NotEmpty(vm.FirebaseKeyCandidates);
-        Assert.All(vm.FirebaseKeyCandidates, c => Assert.False(string.IsNullOrWhiteSpace(c.Path)));
+        Assert.Equal("게스트", vm.SignedInAccount);
+    }
+
+    [Fact]
+    public void SignedInAccount_Shows_Id_Method_Role_And_Pin_State()
+    {
+        var vm = MakeVm(loginUser: new User
+        {
+            Id = "devmcjo", Role = UserRole.Admin, AuthMethod = AuthMethod.Google, HasPin = true
+        });
+
+        Assert.Equal("devmcjo · Google SSO · 관리자 · PIN 설정됨", vm.SignedInAccount);
     }
 
     [Fact]

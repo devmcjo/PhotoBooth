@@ -27,9 +27,6 @@ public class FrameSelectViewModelTests
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
-        public bool SupportsUpdateById => true;
-        public Task<FrameTemplate> UpdateAsync(FrameTemplate frame, byte[] imageBytes, bool replaceImage, CancellationToken ct = default)
-            => Task.FromResult(frame);
         public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
         {
             DeleteCalls++; DeletedId = frameId; return Task.FromResult(ExistingServerIds.Remove(frameId));
@@ -63,7 +60,7 @@ public class FrameSelectViewModelTests
     private static (FrameSelectViewModel vm, StubRepo repo, StubLocalStore local) MakeVm(UserRole? role)
     {
         var session = new SessionContext();
-        if (role is { } r) session.Login(new User { Id = "u1", Password = "pw", Role = r });
+        if (role is { } r) session.Login(new User { Id = "u1", Role = r });
         var repo = new StubRepo();
         var local = new StubLocalStore();
         var catalog = new FrameCatalogService(repo, local);

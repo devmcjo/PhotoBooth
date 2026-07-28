@@ -11,7 +11,6 @@ using MCPhoto.Core.LocalSave;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
-using MCPhoto.Firebase;
 using MCPhoto.Http;
 using MCPhoto.Http.Session;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,9 +38,7 @@ internal static class ServiceRegistration
 
         // it9 C1: 카메라 테스트 모달 오픈(다이얼로그 서비스 — VM이 Window 미참조).
         services.AddSingleton<ICameraTestDialogService, CameraTestDialogService>();
-        // 보완#1: 설정 진입 전 비밀번호 확인 모달.
-        services.AddSingleton<IPasswordPromptDialogService, PasswordPromptDialogService>();
-        // it14: 설정 진입 전 PIN 확인/설정 모달(SSO 계정 게이트 — 비번 게이트와 분리, fail-closed).
+        // it14/it15: 설정·계정 관리 진입 전 PIN 확인/설정 모달(유일한 진입 게이트, fail-closed).
         services.AddSingleton<IPinPromptDialogService, PinPromptDialogService>();
 
         // item1b §7.8: Google SSO(시스템 브라우저 + loopback + PKCE). ISettingsService(client_id)·ILogger 주입.
@@ -80,9 +77,8 @@ internal static class ServiceRegistration
         services.AddSingleton<ICompositionService, CompositionService>();
 
         // Step 8: 업로드·QR + 계정·프레임.
-        // 안전 불변식(설계 §8.1): AppSettings.UseBackend가 기본 OFF면 현행 Firebase(Admin) 경로 유지(롤백 가능).
-        // ON이면 백엔드 HTTPS API 경유(MCPhoto.Http)로 분기. 분기는 각 인터페이스 팩토리에서 설정을 읽어 결정한다.
-        RegisterBackendOrFirebase(services);
+        // it15: 레거시 Admin SDK 직결 경로가 폐지되어 백엔드(HTTPS API) 전용 — feature flag 분기 없음.
+        RegisterBackendServices(services);
         services.AddSingleton<IUploadService, UploadService>();
         services.AddSingleton<IQrService, QrService>();
 
@@ -97,17 +93,12 @@ internal static class ServiceRegistration
     }
 
     /// <summary>
-    /// 업로드·프레임·계정 구현을 feature flag(AppSettings.UseBackend)로 분기 등록(설계 §5.5·§8.1).
-    ///
-    /// - OFF(기본): 현행 Firebase(Admin SDK) 경로. FirebaseClient 구상 싱글턴 1개를 IFirebaseClient·FirebaseClient로 공유.
-    /// - ON: 백엔드 HTTPS API 경유. IHttpClientFactory("backend") + IBackendSession(JWT 홀더) + Http* 구현.
-    ///
-    /// 각 인터페이스는 팩토리 람다로 등록하고, 첫 해석 시점에 ISettingsService.Current.UseBackend를 읽어
-    /// 실제 구현을 고른다(설정이 이미 로드된 뒤라 안전). 빈 URL이면 Clamp가 UseBackend를 off로 되돌린다.
+    /// 백엔드 HTTPS API 서비스 등록(it15 §7.1: feature flag 분기 폐지 — 백엔드 전용).
+    /// IHttpClientFactory("backend") + IBackendSession(JWT 홀더) + Http* 구현.
+    /// 팩토리 람다는 첫 해석 시점에 ISettingsService.Current를 읽는다(설정 로드 후라 안전).
     /// </summary>
-    internal static void RegisterBackendOrFirebase(IServiceCollection services)
+    internal static void RegisterBackendServices(IServiceCollection services)
     {
-        // ── 공통(백엔드 ON일 때만 사용되지만 등록은 무해) ──
         // IHttpClientFactory 명명 클라이언트: base URL·타임아웃을 설정에서 주입.
         services.AddHttpClient(HttpBackendClient.HttpClientName, (sp, client) =>
         {
@@ -118,22 +109,9 @@ internal static class ServiceRegistration
         });
         services.AddSingleton<IBackendSession, BackendSession>();
 
-        // ── Firebase(현행) 구상 등록: OFF 경로에서 사용. FirebaseClient 싱글턴 공유. ──
-        services.AddSingleton<FirebaseClient>(sp =>
-        {
-            var bucket = sp.GetRequiredService<ISettingsService>().Current.StorageBucket;
-            return new FirebaseClient(
-                sp.GetService<ILogger<FirebaseClient>>(),
-                bucket: string.IsNullOrWhiteSpace(bucket) ? null : bucket);
-        });
-
-        // ── 인터페이스 분기(팩토리) ──
         services.AddSingleton<IFirebaseClient>(sp =>
         {
             var s = sp.GetRequiredService<ISettingsService>().Current;
-            if (!s.UseBackend)
-                return sp.GetRequiredService<FirebaseClient>();
-
             return new HttpFirebaseClient(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IBackendSession>(),
@@ -146,11 +124,6 @@ internal static class ServiceRegistration
         services.AddSingleton<IFrameRepository>(sp =>
         {
             var s = sp.GetRequiredService<ISettingsService>().Current;
-            if (!s.UseBackend)
-                return new FrameRepository(
-                    sp.GetRequiredService<FirebaseClient>(),
-                    sp.GetService<ILogger<FrameRepository>>());
-
             return new HttpFrameRepository(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IBackendSession>(),
@@ -161,12 +134,6 @@ internal static class ServiceRegistration
         services.AddSingleton<IAccountService>(sp =>
         {
             var s = sp.GetRequiredService<ISettingsService>().Current;
-            if (!s.UseBackend)
-                return new AccountService(
-                    sp.GetRequiredService<FirebaseClient>(),
-                    sp.GetRequiredService<IFrameRepository>(),
-                    sp.GetService<ILogger<AccountService>>());
-
             return new HttpAccountService(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IBackendSession>(),
@@ -174,13 +141,10 @@ internal static class ServiceRegistration
                 sp.GetService<ILogger<HttpAccountService>>());
         });
 
-        // it13: TempUser QR 사용량·전역 한도. 백엔드 전용 강제(설계 §12) — off면 no-op(Unlimited/기본값).
+        // it13: TempUser QR 사용량·전역 한도. 서버가 진실원(계정별 강제).
         services.AddSingleton<IQrUsageService>(sp =>
         {
             var s = sp.GetRequiredService<ISettingsService>().Current;
-            if (!s.UseBackend)
-                return new NullQrUsageService();
-
             return new HttpQrUsageService(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IBackendSession>(),
@@ -191,9 +155,6 @@ internal static class ServiceRegistration
         services.AddSingleton<ITempUserLimitsService>(sp =>
         {
             var s = sp.GetRequiredService<ISettingsService>().Current;
-            if (!s.UseBackend)
-                return new NullTempUserLimitsService();
-
             return new HttpTempUserLimitsService(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IBackendSession>(),
@@ -215,11 +176,12 @@ internal static class ServiceRegistration
         services.AddTransient<QrPopupViewModel>();
         services.AddTransient<DoneViewModel>();
         services.AddTransient<FrameEditorViewModel>();
+        // it15 F2: 편집기의 "기존 프레임 불러오기" 선택 모달 목록 VM.
+        // 편집기와 같은 Transient — 진입마다 새 인스턴스라 재진입 잔존 없음.
+        services.AddTransient<FramePickerViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<UserMgmtViewModel>();
         services.AddTransient<AccountViewModel>();
-        // item1a §9.4: 비밀번호 찾기 화면(백엔드 모드 전용, 진입마다 새 인스턴스로 단계 초기화).
-        services.AddTransient<PasswordResetViewModel>();
         // it11 #14: 진단 VM(모달 진입마다 새 인스턴스 — 최신 카메라·상태 반영).
         services.AddTransient<DiagnosticsViewModel>();
     }

@@ -14,6 +14,7 @@ namespace MCPhoto.Tests;
 /// <summary>
 /// it13 §9.5: 역할 변경 콤보+Apply(§8.7 매트릭스). 행별 지정 가능 역할 필터, Apply의 SetRole 호출·무변경 no-op·
 /// 권한 밖 차단·서버 403 우아 처리(안내+목록 원복)를 단위 검증.
+/// it15 §6.5: "PW 초기화" 폐지 + PIN 설정 여부 열(PinStateLabel) 추가 + 백엔드 게이트(isBackend) 제거.
 /// </summary>
 public class UserMgmtViewModelTests
 {
@@ -48,21 +49,8 @@ public class UserMgmtViewModelTests
             return Task.FromResult(Accounts);
         }
 
-        public Task<User?> LoginAsync(string id, string password, CancellationToken ct = default) => Task.FromResult<User?>(null);
-        public Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri, string? nonce = null, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default) => Task.FromResult<User?>(null);
-        public Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteAsync(string id, CancellationToken ct = default) => Task.CompletedTask;
-        public Task EnsureSeedAccountAsync(CancellationToken ct = default) => Task.CompletedTask;
-        public Task SetEmailAsync(string id, string email, CancellationToken ct = default) => Task.CompletedTask;
-        public Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
-        public Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default) => Task.FromResult(true);
-        public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default) => throw new NotSupportedException();
         public Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default) => Task.CompletedTask;
 
@@ -230,7 +218,6 @@ public class UserMgmtViewModelTests
     {
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"umpin_{Guid.NewGuid():N}.ini"));
         var loaded = settings.Load();
-        loaded.UseBackend = true;
         loaded.BackendBaseUrl = "https://backend.test/api";
         loaded.BackendApiKey = "key";
         loaded.Clamp();
@@ -276,22 +263,20 @@ public class UserMgmtViewModelTests
         Assert.True(Row(vm, "u1").CanResetPin);    // 하위 관리 가능
     }
 
-    [Fact]
-    public async Task CanResetPin_False_In_Legacy_Mode()
-    {
-        // 비백엔드(레거시): PIN 인프라 없음 → 관리 가능해도 미노출.
-        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"umpinleg_{Guid.NewGuid():N}.ini"));
-        var loaded = settings.Load();
-        loaded.UseBackend = false;
-        loaded.Clamp();
-        var session = new SessionContext();
-        session.Login(new User { Id = "admin", Role = UserRole.Admin });
-        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
-        var accounts = new SpyAccountService { Accounts = new[] { new User { Id = "u1", Role = UserRole.User } } };
-        var vm = new UserMgmtViewModel(shell, accounts, logger: null, pinPrompt: new StubPinPromptDialogService());
-        await vm.OnEnterAsync();
+    // ── it15 §6.5 T7: PIN 설정 여부 열 ──
 
-        Assert.False(Row(vm, "u1").CanResetPin);
+    [Fact]
+    public async Task T7_PinStateLabel_Reflects_HasPin()
+    {
+        var list = new[]
+        {
+            new User { Id = "withPin", Role = UserRole.User, HasPin = true },
+            new User { Id = "noPin", Role = UserRole.User, HasPin = false },
+        };
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        Assert.Equal("설정됨", Row(vm, "withPin").PinStateLabel);
+        Assert.Equal("미설정", Row(vm, "noPin").PinStateLabel);
     }
 
     [Fact]

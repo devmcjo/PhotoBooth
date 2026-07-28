@@ -71,20 +71,27 @@ public class FrameEditPolicyTests
         // power라도 남의 로컬 생성분은 편집 불가(UserLocal은 소유 기준).
         => Assert.False(FrameEditPolicy.CanEdit(UserLocal("u1"), UserRole.Admin, "admin1"));
 
-    // ── RequiresDbUpdatePrompt: power && DB 기본일 때만 ──
+    // ── it15 F1-D4: RequiresFork — 카탈로그 유래(DB/번들/fallback)면 원본 보존 + 새 이름 분기 ──
     [Fact]
-    public void RequiresDbUpdatePrompt_True_For_Power_DbDefault()
-        => Assert.True(FrameEditPolicy.RequiresDbUpdatePrompt(DbDefault(), UserRole.Manager));
+    public void RequiresFork_True_For_Db_Default()
+        => Assert.True(FrameEditPolicy.RequiresFork(DbDefault()));
 
     [Fact]
-    public void RequiresDbUpdatePrompt_False_For_User()
-        => Assert.False(FrameEditPolicy.RequiresDbUpdatePrompt(DbDefault(), UserRole.User));
+    public void RequiresFork_True_For_Bundle()
+        => Assert.True(FrameEditPolicy.RequiresFork(Bundle()));
 
     [Fact]
-    public void RequiresDbUpdatePrompt_False_For_Guest()
-        => Assert.False(FrameEditPolicy.RequiresDbUpdatePrompt(DbDefault(), role: null));
+    public void RequiresFork_True_For_Fallback_And_Empty_Id()
+    {
+        Assert.True(FrameEditPolicy.RequiresFork(Fallback()));
+        Assert.True(FrameEditPolicy.RequiresFork(new FrameTemplate { Id = string.Empty }));
+    }
 
     [Fact]
-    public void RequiresDbUpdatePrompt_False_For_Power_Local()
-        => Assert.False(FrameEditPolicy.RequiresDbUpdatePrompt(UserLocal("mgr"), UserRole.Manager));
+    public void RequiresFork_False_For_Local_Regardless_Of_Owner()
+    {
+        // 소유자 무관 — 출처(local:)만 본다(역할 인자 없음).
+        Assert.False(FrameEditPolicy.RequiresFork(UserLocal("u1")));
+        Assert.False(FrameEditPolicy.RequiresFork(UserLocal("someone-else")));
+    }
 }

@@ -10,7 +10,7 @@ namespace MCPhoto.Tests;
 /// </summary>
 public class SessionServiceTests
 {
-    private static User MakeUser(string id = "u1") => new() { Id = id, Password = "pw", Role = UserRole.User };
+    private static User MakeUser(string id = "u1") => new() { Id = id, Role = UserRole.User };
 
     [Fact]
     public void Login_Sets_User_And_Raises_Event()

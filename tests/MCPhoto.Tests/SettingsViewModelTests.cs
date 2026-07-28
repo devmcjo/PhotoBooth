@@ -72,7 +72,7 @@ public class SettingsViewModelTests
     private static SettingsViewModel MakeLoggedInVm(IniSettingsService? settings = null, ICameraService? camera = null)
     {
         var session = new SessionContext();
-        session.Login(new User { Id = "admin", Password = "pw", Role = UserRole.Admin });
+        session.Login(new User { Id = "admin", Role = UserRole.Admin });
         settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         settings.Load();
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
@@ -106,7 +106,7 @@ public class SettingsViewModelTests
         settings.Load();
         var shell = new AppShellViewModel(new IdleWatchdog(), settings,
             new QrUsageProvider(new FakeQrUsageService(status)), session);
-        session.Login(new User { Id = "tmp", Password = "pw", Role = UserRole.TempUser });
+        session.Login(new User { Id = "tmp", Role = UserRole.TempUser });
         await Task.Delay(20); // fire-and-forget 조회 완료 대기
         return new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
             new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
@@ -141,7 +141,7 @@ public class SettingsViewModelTests
         settings.Save();
 
         var session = new SessionContext();
-        session.Login(new User { Id = "u1", Password = "pw", Role = UserRole.User }); // QR 로드값 검증은 로그인 사용자 대상(게스트는 소스단 off)
+        session.Login(new User { Id = "u1", Role = UserRole.User }); // QR 로드값 검증은 로그인 사용자 대상(게스트는 소스단 off)
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
             new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
@@ -449,12 +449,13 @@ public class SettingsViewModelTests
     }
 
     [Fact]
-    public void Server_Offline_Shows_No_Key_Notice()
+    public void Server_Unconfigured_Shows_Missing_Backend_Url_Notice()
     {
+        // it15: 레거시 직결 경로 폐기 → 미구성 사유는 "서비스 계정 키 부재"가 아니라 "백엔드 주소 미설정".
         var vm = MakeVm(firebase: new FakeFirebaseClient { IsInitialized = false });
 
         Assert.False(vm.IsServerConnected);
-        Assert.Equal("미연결 — 서비스 계정 키 없음(로그 참조)", vm.ServerStatusText);
+        Assert.Equal("미구성 — 백엔드 주소가 설정되지 않았습니다(로그 참조)", vm.ServerStatusText);
     }
 
     // ── it11 #14: 진단·상태 모달 진입(로그인 게이트) ──
@@ -479,7 +480,7 @@ public class SettingsViewModelTests
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         settings.Load();
         var session = new SessionContext();
-        session.Login(new User { Id = "admin", Password = "pw", Role = UserRole.Admin });
+        session.Login(new User { Id = "admin", Role = UserRole.Admin });
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
             new FakeCameraTestDialog(), diag, new FakeFirebaseClient { IsInitialized = false });

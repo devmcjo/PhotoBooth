@@ -22,14 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\MCPhoto.Core\MCPhoto.Core.csproj" />
     <ProjectReference Include="..\MCPhoto.Capture\MCPhoto.Capture.csproj" />
-    <ProjectReference Include="..\MCPhoto.Firebase\MCPhoto.Firebase.csproj" />
-    <!-- 백엔드 프록시 HTTP 계층(방향 B). DI feature flag(AppSettings.UseBackend)로 분기, 기본 OFF. -->
+    <!-- 백엔드 프록시 HTTP 계층(방향 B). it15부터 레거시 직결 경로가 폐지되어 유일한 서버 경로다. -->
     <ProjectReference Include="..\MCPhoto.Http\MCPhoto.Http.csproj" />
-  </ItemGroup>
-
-  <!-- DI feature flag 분기(RegisterBackendOrFirebase) 단위 테스트를 위해 내부 가시성 부여. -->
-  <ItemGroup>
-    <InternalsVisibleTo Include="MCPhoto.Tests" />
   </ItemGroup>
 
   <!-- 백엔드 게이트 키 exe 내장: publish 시 -p:BackendApiKeyDefault=<키>를 주면 AssemblyMetadata로 바이너리에 박힌다.

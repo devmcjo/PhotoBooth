@@ -25,9 +25,10 @@ public static class FrameEditPolicy
     }
 
     /// <summary>
-    /// 저장 시 "로컬만 / DB도 업데이트" 확인 팝업을 띄워야 하는 대상인지(power && DB 공용 기본 프레임).
-    /// (user 로컬·신규 생성은 팝업 없이 기존 저장 경로.)
+    /// 이 프레임을 편집·복사해 저장할 때 원본을 보존하고 새 이름으로 분기(fork)해야 하는지.
+    /// DbDefault·Bundle·Fallback(=카탈로그 유래) = true, UserLocal = false. (it15 F1-D4)
+    /// 역할과 무관한 규칙이므로 role 인자를 받지 않는다.
     /// </summary>
-    public static bool RequiresDbUpdatePrompt(FrameTemplate frame, UserRole? role)
-        => role?.IsPower() == true && FrameOrigin.IsDbDefault(frame);
+    public static bool RequiresFork(FrameTemplate frame)
+        => FrameOrigin.Classify(frame) != FrameOriginKind.UserLocal;
 }

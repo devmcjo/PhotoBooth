@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Upload;
-using MCPhoto.Firebase;
 using MCPhoto.Http;
 using MCPhoto.Http.Session;
 using MCPhoto.Tests.Http;

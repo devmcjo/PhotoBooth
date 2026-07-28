@@ -16,19 +16,9 @@ public interface IFrameRepository
     /// <summary>프레임 저장(신규 생성, 이미지 업로드 포함). 계정당 10개 초과 시 예외.</summary>
     Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default);
 
-    /// <summary>
-    /// 이 저장소가 "같은 frameId 업데이트(덮어쓰기)"를 지원하는지. (item2 §5)
-    /// 레거시(Admin, SetAsync)=true, HTTP(PUT /frames/{id})=true. 미지원 저장소는 false로 두고 호출측이 차단.
-    /// </summary>
-    bool SupportsUpdateById { get; }
-
-    /// <summary>
-    /// 기존 공용 기본 프레임 업데이트(같은 <paramref name="frame"/>.Id 덮어쓰기). power 전용.
-    /// name·slots·imageSize를 갱신하고 id·userId(null)·isDefault(true)·createdAt은 보존한다.
-    /// <paramref name="replaceImage"/>=true면 이미지 바이트도 교체(같은 Storage 키 덮어쓰기), false면 메타만 갱신.
-    /// <see cref="SupportsUpdateById"/>=false인 저장소에서 호출하면 <see cref="NotSupportedException"/>. (item2 §4·§5)
-    /// </summary>
-    Task<FrameTemplate> UpdateAsync(FrameTemplate frame, byte[] imageBytes, bool replaceImage, CancellationToken ct = default);
+    // it15 F1-D2: "기존 프레임 업데이트(PUT /frames/{id})" 계약은 클라이언트에서 폐지했다.
+    // 프레임 편집은 해당 PC에서만 적용되며(로컬 전용), DB/번들 유래 편집은 fork 저장으로 처리한다
+    // (docs/design/wpf-it15-frame-ux-design.md §3.2). 서버 라우트는 운영/관리 전용으로 유지된다.
 
     /// <summary>프레임 삭제(Firestore 문서 + Storage 이미지). 반환=문서가 실제로 존재해 삭제됐는지(없으면 false).</summary>
     Task<bool> DeleteAsync(string frameId, CancellationToken ct = default);

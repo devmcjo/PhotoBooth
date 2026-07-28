@@ -1,42 +1,48 @@
 namespace MCPhoto.Core.Models;
 
 /// <summary>
-/// 계정 인증 방식(it14 설정 진입 게이트 분기). Sso=자동생성(sentinel 비번, PIN 게이트),
-/// Password=일반(비번 게이트). 서버 authMethod와 1:1(미설정/미지원값은 Password 폴백). (설계 §5.1)
+/// 계정 인증 방식(it15 D2). DB 저장값은 소문자 provider 문자열("google"), UI 표기는 "Google SSO".
+/// 추후 Kakao/Apple 추가 시 enum 값 + 매핑 1줄씩만 늘린다. (it15 설계 §5.2)
 /// </summary>
 public enum AuthMethod
 {
-    /// <summary>일반 계정(id/pw). 설정 진입 시 비밀번호 재확인 게이트.</summary>
-    Password,
+    /// <summary>Google SSO. 현재 유일한 인증 수단. 서버 authMethod="google".</summary>
+    Google,
 
-    /// <summary>SSO 자동생성 계정(sentinel 비번 — 아무도 모름). 설정 진입 시 전용 PIN 게이트.</summary>
-    Sso
+    /// <summary>서버가 미지원/미설정 값을 보낸 경우의 폴백. UI는 "알 수 없음"으로 표기.</summary>
+    Unknown
 }
 
-/// <summary>
-/// 계정. ⚠️ MVP는 비밀번호 평문 저장(개인 사용 전제). 웹 접근 전면 차단이 방어선.
-/// (PRD §6, firebase-contract §2.1)
-/// </summary>
+/// <summary>계정. 자격증명(비밀번호)은 보관하지 않는다 — 신원은 Google, 게이트는 PIN. (it15 설계 §5.2)</summary>
 public sealed class User
 {
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>⚠️ MVP 평문. 배포 시 해싱 필요(후순위).</summary>
-    public string Password { get; set; } = string.Empty;
-
-    public UserRole Role { get; set; } = UserRole.User;
+    public UserRole Role { get; set; } = UserRole.TempUser;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    /// <summary>계정 이메일(소문자 정규화). 미수집/레거시 계정은 null. (item1a 설계 §4.1)</summary>
+    /// <summary>Google 계정 이메일(소문자 정규화). SSO 신원의 근거이므로 항상 존재한다.</summary>
     public string? Email { get; set; }
 
-    /// <summary>이메일 소유 확인 여부. 생성 시 false, verify 성공 시 true. (item1a 설계 §4.1)</summary>
-    public bool EmailVerified { get; set; }
+    /// <summary>인증 방식(D2). 서버 authMethod 파생, 기본 Google.</summary>
+    public AuthMethod AuthMethod { get; set; } = AuthMethod.Google;
 
-    /// <summary>it14: 인증 방식. Sso=설정 진입 PIN 게이트, Password=비번 게이트. 서버 파생, 기본 Password. (설계 §5.1)</summary>
-    public AuthMethod AuthMethod { get; set; } = AuthMethod.Password;
-
-    /// <summary>it14: 설정 진입 PIN 설정 여부(서버 pinHash!=null 파생). SSO+false=최초 설정 유도. (설계 §5.1)</summary>
+    /// <summary>진입 PIN 설정 여부(서버 pinHash!=null 파생). false면 최초 설정 강제.</summary>
     public bool HasPin { get; set; }
+}
+
+/// <summary>인증 방식 파싱·표기 단일 소스(it15 D2).</summary>
+public static class AuthMethodExtensions
+{
+    /// <summary>서버 저장 문자열 → enum. 미지원값은 Unknown(조용한 오인 방지).</summary>
+    public static AuthMethod ParseAuthMethod(string? value) =>
+        value == "google" ? AuthMethod.Google : AuthMethod.Unknown;
+
+    /// <summary>UI·진단 표기 라벨(D2: DB "google" ↔ 화면 "Google SSO").</summary>
+    public static string ToLabel(this AuthMethod m) => m switch
+    {
+        AuthMethod.Google => "Google SSO",
+        _ => "알 수 없음"
+    };
 }

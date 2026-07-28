@@ -2,7 +2,6 @@ using System.IO;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
-using MCPhoto.Firebase;
 
 namespace MCPhoto.Tests;
 

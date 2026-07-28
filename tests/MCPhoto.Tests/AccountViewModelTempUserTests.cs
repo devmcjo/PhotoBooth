@@ -8,8 +8,9 @@ using MCPhoto.Core.Settings;
 namespace MCPhoto.Tests;
 
 /// <summary>
-/// it13 §7.6·§7.7·§9.4: 계정 페이지 TempUser 지원 — 생성 콤보에 TempUser 자동 등장,
-/// Admin 전역 한도 로드/저장(Admin·백엔드 전용). 순수 라벨 매핑은 RoleManagementTests.ToLabel_Korean.
+/// it13 §7.7: 계정 페이지의 Admin 전역 TempUser 한도 로드/저장.
+/// it15: 계정 생성 UI가 폐지되어 생성 콤보 케이스는 삭제되고, 백엔드 전용화로 "레거시 모드" 케이스도 사라졌다.
+/// 순수 라벨 매핑은 RoleManagementTests.ToLabel_Korean.
 /// </summary>
 public class AccountViewModelTempUserTests
 {
@@ -27,31 +28,13 @@ public class AccountViewModelTempUserTests
         public object? GetService(Type serviceType) => null;
     }
 
-    /// <summary>최소 계정 서비스(생성 호출만 기록).</summary>
+    /// <summary>최소 계정 서비스(it15 축소 계약 7메서드 — 이 테스트는 호출하지 않는다).</summary>
     private sealed class StubAccountService : IAccountService
     {
-        public (string id, UserRole role, UserRole acting)? Created { get; private set; }
-        public Task<User?> LoginAsync(string id, string password, CancellationToken ct = default) => Task.FromResult<User?>(null);
-        public Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default) => Task.FromResult(true);
         public Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri, string? nonce = null, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default) => Task.FromResult<User?>(null);
-        public Task<User> CreateAsync(string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
-        {
-            Created = (id, role, actingRole);
-            return Task.FromResult(new User { Id = id, Role = role });
-        }
-        public Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
         public Task DeleteAsync(string id, CancellationToken ct = default) => Task.CompletedTask;
         public Task SetRoleAsync(string id, UserRole role, CancellationToken ct = default) => Task.CompletedTask;
-        public Task EnsureSeedAccountAsync(CancellationToken ct = default) => Task.CompletedTask;
-        public Task SetEmailAsync(string id, string email, CancellationToken ct = default) => Task.CompletedTask;
-        public Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default) => Task.CompletedTask;
-        public Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default) => Task.FromResult(true);
-        public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default) => Task.FromResult(true);
         public Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default) => Task.CompletedTask;
         public Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default) => Task.CompletedTask;
@@ -75,59 +58,25 @@ public class AccountViewModelTempUserTests
         }
     }
 
-    private static AppSettings BackendOn()
+    private static AppSettings Backend()
     {
-        var s = new AppSettings { UseBackend = true, BackendBaseUrl = "https://backend.test/api", BackendApiKey = "key" };
+        var s = new AppSettings { BackendBaseUrl = "https://backend.test/api", BackendApiKey = "key" };
         s.Clamp();
         return s;
     }
 
     private static (AccountViewModel vm, StubAccountService accounts, RecordingLimitsService limits) MakeVm(
-        UserRole? loginRole, AccountMode mode, RecordingLimitsService? limits = null, bool backend = true)
+        UserRole? loginRole, AccountMode mode, RecordingLimitsService? limits = null)
     {
-        var settings = new StubSettingsService(backend ? BackendOn() : new AppSettings { UseBackend = false });
+        var settings = new StubSettingsService(Backend());
         var session = new SessionContext();
-        if (loginRole is { } r) session.Login(new User { Id = "actor", Role = r });
+        // HasPin=true: 이 테스트의 관심사는 전역 한도이므로 진입 PIN 게이트(it15 §6.3)를 우회한다.
+        if (loginRole is { } r) session.Login(new User { Id = "actor", Role = r, HasPin = true });
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var accounts = new StubAccountService();
         limits ??= new RecordingLimitsService(new TempUserLimits(48, 30));
         var vm = new AccountViewModel(shell, accounts, limits) { Mode = mode };
         return (vm, accounts, limits);
-    }
-
-    // ── §9.4: 생성 콤보에 TempUser 등장 ──
-
-    [Fact]
-    public async Task Admin_Create_Combo_Includes_TempUser_First()
-    {
-        var (vm, _, _) = MakeVm(UserRole.Admin, AccountMode.AccountCreate);
-        await vm.OnEnterAsync();
-
-        Assert.Equal(new[] { UserRole.TempUser, UserRole.User, UserRole.Manager }, vm.CreatableRoles);
-        Assert.Equal(UserRole.TempUser, vm.SelectedNewRole);   // 첫 항목이 기본 선택
-    }
-
-    [Fact]
-    public async Task Manager_Create_Combo_Includes_TempUser()
-    {
-        var (vm, _, _) = MakeVm(UserRole.Manager, AccountMode.AccountCreate);
-        await vm.OnEnterAsync();
-        Assert.Equal(new[] { UserRole.TempUser, UserRole.User }, vm.CreatableRoles);
-    }
-
-    [Fact]
-    public async Task Create_TempUser_Passes_Role_To_Service()
-    {
-        var (vm, accounts, _) = MakeVm(UserRole.Admin, AccountMode.AccountCreate);
-        await vm.OnEnterAsync();
-        vm.NewAccountId = "temp1";
-        vm.NewAccountPassword = "pw";
-        vm.SelectedNewRole = UserRole.TempUser;
-        await vm.CreateAccountCommand.ExecuteAsync(null);
-
-        Assert.NotNull(accounts.Created);
-        Assert.Equal(UserRole.TempUser, accounts.Created!.Value.role);
-        Assert.Equal(UserRole.Admin, accounts.Created!.Value.acting);
     }
 
     // ── §7.7: Admin 전역 한도 로드/저장 ──
@@ -180,15 +129,6 @@ public class AccountViewModelTempUserTests
     {
         // Manager(power지만 Admin 아님) → 한도 섹션 미노출.
         var (vm, _, _) = MakeVm(UserRole.Manager, AccountMode.Admin);
-        await vm.OnEnterAsync();
-        Assert.False(vm.CanEditTempUserLimits);
-    }
-
-    [Fact]
-    public async Task Legacy_Mode_Cannot_Edit_Limits()
-    {
-        // 백엔드 off(레거시) → Admin이라도 한도 섹션 미노출(강제 인프라 없음).
-        var (vm, _, _) = MakeVm(UserRole.Admin, AccountMode.Admin, backend: false);
         await vm.OnEnterAsync();
         Assert.False(vm.CanEditTempUserLimits);
     }

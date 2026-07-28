@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 namespace MCPhoto.App.Services;
 
 /// <summary>
-/// 설정 진입 PIN 게이트 모달을 띄우는 서비스(SSO 계정 전용, it14 §5.4). VM이 Window를 직접 참조하지 않도록 추상화.
-/// 기존 <see cref="IPasswordPromptDialogService"/>(비번 게이트)와 분리 — PIN은 입력 형식(4자리 숫자)·
-/// "설정 vs 확인" 2모드가 달라 응집도를 위해 별도 서비스로 둔다. fail-closed 패턴은 동일 계승.
+/// 설정·계정 관리 진입 PIN 게이트 모달을 띄우는 서비스(it14 §5.4). VM이 Window를 직접 참조하지 않도록 추상화.
+/// it15: 비밀번호 게이트가 폐지되어 이것이 유일한 진입 게이트 다이얼로그다.
+/// 입력 형식(4자리 숫자)과 "설정 vs 확인" 2모드를 갖고, 확인 불가 시 게이트를 열지 않는다(fail-closed).
 /// </summary>
 public interface IPinPromptDialogService
 {

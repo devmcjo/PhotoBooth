@@ -70,8 +70,8 @@ public partial class App : Application
         }
         catch (Exception ex) { Log.Warning(ex, "브랜딩 리소스 주입 실패(기본값 유지)"); }
 
-        // 시드 계정 보장(Firebase 초기화 시). 오프라인이면 로그인 시 인메모리 시드 처리.
-        _ = EnsureSeedAsync();
+        // it15: 시드 계정 보장 삭제 — ID/PW 계정이 폐지되어 시드 개념 자체가 소멸.
+        // 최초 admin은 마이그레이션 스크립트가 부트스트랩한다(설계 §5.5 P1).
 
         // it10 S3-1: 앱 실행 직후 기본 프레임 백그라운드 prefetch(부수효과인 로컬 캐시가 목적).
         // fire-and-forget + 예외 무시(FrameSelect 진입 시 재시도됨) — 시작 화면 표시 지연 없음.
@@ -79,20 +79,6 @@ public partial class App : Application
 
         var shell = _host.Services.GetRequiredService<MainWindow>();
         shell.Show();
-    }
-
-    private async Task EnsureSeedAsync()
-    {
-        try
-        {
-            var accounts = _host!.Services.GetService<MCPhoto.Core.Accounts.IAccountService>();
-            if (accounts is not null)
-                await accounts.EnsureSeedAccountAsync();
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "시드 계정 보장 실패(오프라인 가능)");
-        }
     }
 
     /// <summary>

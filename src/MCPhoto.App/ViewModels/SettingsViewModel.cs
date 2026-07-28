@@ -124,12 +124,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     }
 
     // ── it10 S4-2: 서버 연결 상태(읽기 전용, 표시 전용) ──
-    /// <summary>Firebase 초기화(서버 연결) 여부. 색상 트리거·상태 문구 판단용. 설정 진입 중 불변(키는 시작 시 결정).</summary>
+    /// <summary>
+    /// 백엔드 구성(서버 연결) 여부. 색상 트리거·상태 문구 판단용. 설정 진입 중 불변(base URL은 시작 시 결정).
+    /// it15: 레거시 직결 경로 폐기로 "구성됨"은 백엔드 base URL이 설정됐다는 뜻이며 도달 성공을 보장하지 않는다.
+    /// </summary>
     public bool IsServerConnected => _firebase.IsInitialized;
-    /// <summary>서버 연결 상태 안내 문구. 연결 시 버킷 표기, 미연결 시 키 부재 안내(로그 참조).</summary>
+
+    /// <summary>서버 연결 상태 안내 문구. 구성 시 버킷 표기, 미구성 시 백엔드 주소 부재 안내.</summary>
     public string ServerStatusText => _firebase.IsInitialized
         ? $"연결됨 — {_firebase.Bucket}"
-        : "미연결 — 서비스 계정 키 없음(로그 참조)";
+        : "미구성 — 백엔드 주소가 설정되지 않았습니다(로그 참조)";
 
     public override async Task OnEnterAsync()
     {

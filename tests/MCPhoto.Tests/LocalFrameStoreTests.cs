@@ -148,4 +148,47 @@ public class LocalFrameStoreTests : IDisposable
         Assert.True(_store.DeleteLocal(saved));
         Assert.Empty(_store.LoadUser("alice"));
     }
+
+    // ── it15 F1-D4: fork 저장(사본 신규 파일) 시 원본 보존 + 재다운로드 방지 전제 ──
+
+    [Fact]
+    public void Fork_Save_Keeps_Original_File_Intact()
+    {
+        // E1: 사본을 공용 스코프로 저장해도 원본 png는 바이트 단위로 불변이고 둘 다 목록에 남는다.
+        _store.SaveLocal(MakeFrame("공용프레임"), Png, ownerName: null);
+        var originalPng = Path.Combine(_root, "공용프레임.png");
+        var beforeBytes = File.ReadAllBytes(originalPng);
+
+        _store.SaveLocal(MakeFrame("공용프레임 사본"), new byte[] { 9, 9, 9, 9, 9 }, ownerName: null);
+
+        Assert.Equal(beforeBytes, File.ReadAllBytes(originalPng)); // 원본 불변
+        Assert.True(File.Exists(Path.Combine(_root, "공용프레임 사본.png")));
+        Assert.Equal(2, _store.LoadPublic().Count);
+    }
+
+    [Fact]
+    public void Empty_Id_Public_Save_Writes_No_DbId()
+    {
+        // E2(§3.3 핵심 전제): Id=""로 공용 저장 → .slots에 #dbid 줄이 없고 로드 시 local: 식별자가 된다
+        // (= 서버 문서와 연결이 끊겨 편집이 이 PC에만 적용된다).
+        _store.SaveLocal(MakeFrame("사본프레임", id: string.Empty), Png, ownerName: null);
+
+        var slotsText = File.ReadAllText(Path.Combine(_root, "사본프레임.slots"));
+        Assert.DoesNotContain("#dbid", slotsText);
+
+        var loaded = Assert.Single(_store.LoadPublic());
+        Assert.Equal("local:사본프레임", loaded.Id);
+    }
+
+    [Fact]
+    public void PublicFrameNames_Still_Contains_Original_After_Fork()
+    {
+        // E3: 원본 이름이 dedup 집합에 남아 있어야 FrameCatalogService가 DB를 재다운로드하지 않는다.
+        _store.CacheFromDb(MakeFrame("서버프레임", id: "doc-42"), Png); // DB 캐시(원본)
+        _store.SaveLocal(MakeFrame("서버프레임 사본", id: string.Empty), Png, ownerName: null);
+
+        var names = _store.PublicFrameNames();
+        Assert.Contains("서버프레임", names);       // 원본 이름 유지 → 재다운로드 없음
+        Assert.Contains("서버프레임 사본", names);
+    }
 }

@@ -342,4 +342,29 @@ public class SettingsTests : IDisposable
         Assert.Equal(6, s.CountdownSec);   // 누락 → 기본
         Assert.True(s.MirrorMode);         // 누락 → 기본
     }
+
+    /// <summary>
+    /// it15 §4.3 T6(가정 A3): 폐지된 UseBackend 키가 남아 있는 기존 배포본 ini를 Load→Save해도
+    /// 예외 없이 나머지 값이 보존되고, 저장 시 그 키가 사라진다(IniFile은 모르는 키를 읽지 않는다).
+    /// </summary>
+    [Fact]
+    public void Legacy_UseBackend_Key_Is_Ignored_And_Dropped_On_Save()
+    {
+        File.WriteAllText(_tempPath,
+            "[MCPhoto]\nUseBackend=True\nCutCount=10\nCountdownSec=8\nBackendBaseUrl=https://x.test/api\n");
+        var svc = new IniSettingsService(iniPath: _tempPath);
+
+        var s = svc.Load();
+
+        // 레거시 키는 무시되고 나머지 값은 정상 로드된다(예외 없음).
+        Assert.Equal(10, s.CutCount);
+        Assert.Equal(8, s.CountdownSec);
+        Assert.Equal("https://x.test/api/", s.BackendBaseUrl);   // Clamp의 슬래시 보정 유지
+
+        Assert.True(svc.Save());
+
+        var written = File.ReadAllText(_tempPath);
+        Assert.DoesNotContain("UseBackend", written);            // 저장 시 자동 제거
+        Assert.Contains("CutCount=10", written);
+    }
 }

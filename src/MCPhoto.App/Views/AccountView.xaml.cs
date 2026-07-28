@@ -9,26 +9,8 @@ public partial class AccountView : UserControl
 {
     public AccountView() => InitializeComponent();
 
-    // PasswordBox는 보안상 바인딩 불가 → 코드비하인드에서 VM으로 전달(기존 패턴)
-    private void OnNewPasswordChanged(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if (DataContext is AccountViewModel vm && sender is PasswordBox pb)
-            vm.NewPassword = pb.Password;
-    }
-
-    private void OnConfirmPasswordChanged(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if (DataContext is AccountViewModel vm && sender is PasswordBox pb)
-            vm.ConfirmPassword = pb.Password;
-    }
-
-    private void OnNewAccountPasswordChanged(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if (DataContext is AccountViewModel vm && sender is PasswordBox pb)
-            vm.NewAccountPassword = pb.Password;
-    }
-
-    // ── it14: PIN 변경 PasswordBox → VM 전달(비번과 동일 패턴) + 숫자만 입력 제한 ──
+    // ── PIN 변경: PasswordBox는 보안상 바인딩 불가 → 코드비하인드에서 VM으로 전달 + 숫자만 입력 제한 ──
+    // it15: 비밀번호·계정 생성 섹션 폐지로 PIN 3개 핸들러만 남는다.
     private void OnCurrentPinChanged(object sender, System.Windows.RoutedEventArgs e)
     {
         if (DataContext is AccountViewModel vm && sender is PasswordBox pb)

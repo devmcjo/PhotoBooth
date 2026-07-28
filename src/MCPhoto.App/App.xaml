@@ -74,9 +74,6 @@
         <DataTemplate DataType="{x:Type vm:AccountViewModel}">
             <views:AccountView />
         </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:PasswordResetViewModel}">
-            <views:PasswordResetView />
-        </DataTemplate>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

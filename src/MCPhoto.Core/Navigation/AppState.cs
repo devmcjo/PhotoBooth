@@ -39,9 +39,6 @@ public enum AppState
     /// <summary>프레임 편집기.</summary>
     FrameEditor,
 
-    /// <summary>계정 전용 페이지(비번 변경·계정 생성·앱 종료 등, 진입 모드로 분기). (it5 §5 C2)</summary>
-    Account,
-
-    /// <summary>비밀번호 찾기(비로그인 재설정). 로그인 화면에서 진입, 백엔드 모드 전용. (item1a §9.4)</summary>
-    PasswordReset
+    /// <summary>계정 전용 페이지(계정 관리·관리자 도구, 진입 모드로 분기). (it5 §5 C2, it15 §6.3)</summary>
+    Account
 }

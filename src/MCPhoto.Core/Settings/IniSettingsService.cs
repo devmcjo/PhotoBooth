@@ -159,7 +159,6 @@ public sealed class IniSettingsService : ISettingsService
         s.PhotoPrinterEnabled = ini.GetBool(Section, nameof(s.PhotoPrinterEnabled), s.PhotoPrinterEnabled);
         s.HostingBaseUrl = ini.GetString(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         s.StorageBucket = ini.GetString(Section, nameof(s.StorageBucket), s.StorageBucket);
-        s.UseBackend = ini.GetBool(Section, nameof(s.UseBackend), s.UseBackend);
         s.BackendBaseUrl = ini.GetString(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
         // 백엔드 게이트 키: ini에 명시 오버라이드가 있으면 그것, 없으면 exe 내장 기본값(publish 시 주입).
         var iniApiKey = ini.GetString(Section, nameof(s.BackendApiKey), string.Empty);
@@ -198,7 +197,6 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetBool(Section, nameof(s.PhotoPrinterEnabled), s.PhotoPrinterEnabled);
         ini.Set(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         ini.Set(Section, nameof(s.StorageBucket), s.StorageBucket);
-        ini.SetBool(Section, nameof(s.UseBackend), s.UseBackend);
         ini.Set(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
         // 게이트 키는 exe 내장이 기본 → ini엔 쓰지 않는다(내장 키 평문 유출 방지).
         // 단 내장값과 '다른' 명시 오버라이드(비어있지 않음)만 ini에 보존한다.

@@ -204,7 +204,7 @@ public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
 
 /// <summary>
 /// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole)], parameter="Manage".
-/// - Manage(삭제·pw 초기화): 대상이 행위자와 **같거나 낮은 역할**일 때만 노출(manager는 admin 관리 불가).
+/// - Manage(삭제 등 관리 액션): 대상이 행위자와 **같거나 낮은 역할**일 때만 노출(manager는 admin 관리 불가).
 /// 값이 비었거나 형식이 다르면 안전하게 Collapsed. (권한 게이트 — UI 노출; 명령에도 동일 가드 존재)
 /// </summary>
 public sealed class RoleActionVisibilityConverter : IMultiValueConverter

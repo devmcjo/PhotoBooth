@@ -1,7 +1,6 @@
 using System.IO;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Upload;
-using MCPhoto.Firebase;
 
 namespace MCPhoto.Tests;
 
@@ -122,14 +121,43 @@ public class UploadServiceTests
         finally { File.Delete(final); }
     }
 
-    /// <summary>진행 보고를 순서대로 수집하는 동기 IProgress(테스트용).</summary>
+    /// <summary>
+    /// 진행 보고 수집기(테스트용). <b>스레드 안전이 필수다.</b>
+    /// <see cref="UploadService"/>의 stage 경계 보고는 동기 호출이지만, 파일 단위 보고는
+    /// <c>MakeStageProgress</c>가 만드는 <see cref="Progress{T}"/>가 캡처된 SynchronizationContext
+    /// (테스트 환경엔 없음 → <b>스레드풀</b>)로 <b>비동기 게시</b>한다.
+    /// 따라서 서로 다른 스레드가 동시에 Report를 호출할 수 있어, 락 없는 <see cref="List{T}"/> 변경은
+    /// 자료구조를 손상시킨다(항목 유실·IndexOutOfRange).
+    /// </summary>
     private sealed class CollectingProgress : IProgress<UploadProgress>
     {
-        public List<UploadProgress> Reports { get; } = new();
-        // UploadService의 stage 경계 보고는 동기 호출 → await 완료 시점에 전부 수집됨.
-        public void Report(UploadProgress value) => Reports.Add(value);
+        private readonly List<UploadProgress> _reports = new();
+
+        /// <summary>수집분 스냅샷(복사본). 늦게 도착하는 비동기 보고와 열거가 겹쳐도 안전하다.</summary>
+        public List<UploadProgress> Snapshot()
+        {
+            lock (_reports) return new List<UploadProgress>(_reports);
+        }
+
+        public void Report(UploadProgress value)
+        {
+            lock (_reports) _reports.Add(value);
+        }
     }
 
+    /// <summary>
+    /// 진행 보고에서 <b>제품이 실제로 보장하는</b> 성질만 검증한다.
+    ///
+    /// ⚠️ "Finalizing이 항상 마지막"은 보장되지 않는다 — <c>MakeStageProgress</c>의
+    /// <see cref="Progress{T}"/>가 파일 단위 보고를 스레드풀로 비동기 게시하므로, 그 보고가 늦게 도착해
+    /// 동기 호출인 Finalizing 뒤에 끼어들 수 있다. 실제 앱에서 Progress&lt;T&gt;가 UI SynchronizationContext로
+    /// 마샬링하는 것은 <b>의도된 올바른 동작</b>이므로 제품 코드를 바꾸지 않고 단언을 계약에 맞춘다.
+    /// (전체 스위트 실행 시 스레드풀 경합으로 드러난 기존 잠복 결함 — it15에서 발견·테스트 수정으로 해소.)
+    ///
+    /// 결정적으로 보장되는 것은 <b>동기 보고끼리의 상대 순서</b>다(같은 스레드에서 프로그램 순서대로 실행 —
+    /// mock이 완료된 Task를 돌려줘 await가 동기 계속되므로 스레드 전환도 없다).
+    /// 그래서 순서 단언은 동기 보고만 골라서 한다.
+    /// </summary>
     [Fact]
     public async Task Upload_Reports_Stage_Progress_In_Order()
     {
@@ -143,16 +171,24 @@ public class UploadServiceTests
         {
             await svc.UploadResultAsync(final, timelapse, 24, "https://mcphoto.web.app", progress);
 
-            // 동기 stage 경계 보고: Photo 0→1, Timelapse 0→1, Finalizing 1(순서 보존).
-            var stages = progress.Reports.Select(r => r.Stage).ToList();
+            var reports = progress.Snapshot();
+            var stages = reports.Select(r => r.Stage).ToList();
+
+            // 세 단계가 모두 보고된다. Finalizing은 "존재"만 단언한다(위치는 위 주석대로 비결정적).
             Assert.Contains(UploadStage.Photo, stages);
             Assert.Contains(UploadStage.Timelapse, stages);
-            Assert.Equal(UploadStage.Finalizing, stages[^1]); // 마무리는 항상 마지막
+            Assert.Contains(UploadStage.Finalizing, stages);
 
-            // 사진 단계 시작(0.0)이 타임랩스 단계 시작(0.0)보다 먼저(단계 순서 유지).
-            int firstPhoto = stages.IndexOf(UploadStage.Photo);
-            int firstTimelapse = stages.IndexOf(UploadStage.Timelapse);
-            Assert.True(firstPhoto < firstTimelapse);
+            // 단계 시작 마커(Fraction=0.0)는 전부 동기 보고다 — mock의 파일 보고는 0.5/1.0만 쓰므로 섞이지 않는다.
+            // 이 부분열의 순서는 결정적이다: 사진 단계가 타임랩스 단계보다 먼저 시작한다.
+            var stageStarts = reports.Where(r => r.Fraction == 0.0).Select(r => r.Stage).ToList();
+            Assert.Equal(new[] { UploadStage.Photo, UploadStage.Timelapse }, stageStarts);
+
+            // Finalizing도 동기 보고라 타임랩스 단계 시작보다는 반드시 뒤에 온다(동기끼리는 순서 보존).
+            int timelapseStart = reports.FindIndex(r => r.Stage == UploadStage.Timelapse && r.Fraction == 0.0);
+            int finalizing = reports.FindIndex(r => r.Stage == UploadStage.Finalizing);
+            Assert.True(finalizing > timelapseStart,
+                $"동기 보고 순서가 깨졌다: timelapseStart={timelapseStart}, finalizing={finalizing}");
         }
         finally { File.Delete(final); File.Delete(timelapse); }
     }

@@ -26,32 +26,75 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 
     // 편집 모드 상태(기존 프레임 편집 시 LoadForEdit가 set). 신규 생성이면 _isEditing=false.
     // FrameEditorViewModel은 Transient 등록(ServiceRegistration.cs) → 진입마다 새 인스턴스라 재진입 잔존 없음.
+    // it15 F1: DB 업데이트 경로 제거로 편집 대상 원본 참조·서버 문서 id가 불필요해졌다
+    // (fork/덮어쓰기 판정은 아래 _sessionSource가 전담).
     private bool _isEditing;
-    private string? _editingFrameId;
     private bool _suppressArrange; // LoadForEdit 중 SlotCount 설정이 기존 슬롯을 자동 배치로 덮어쓰지 않도록.
 
-    // ── item2 §4.3: 원본 스냅샷(diff 기준). LoadForEdit 진입 시 세팅, 신규 생성에서는 비움. ──
-    private byte[]? _originalImageBytes;
-    private readonly List<Slot> _originalSlots = new();
-    private string _originalName = string.Empty;
-    private FrameTemplate? _editingFrame; // 편집 대상 원본 참조(Id·IsDefault·UserId 보존)
+    /// <summary>편집 세션의 진입 경로 = 저장 방식(fork vs 덮어쓰기)의 유일한 판정 축. (it15 §3.3)</summary>
+    private enum FrameSessionSource
+    {
+        /// <summary>빈 편집기에서 시작한 신규 생성(power면 DB 등록 경로).</summary>
+        New,
+
+        /// <summary>본인 로컬 프레임 편집 → 같은 이름 덮어쓰기.</summary>
+        EditOwnLocal,
+
+        /// <summary>DB/번들/fallback 유래(편집 또는 F2 불러오기) → 원본 보존 + 새 이름 분기.</summary>
+        ForkFromCatalog
+    }
+
+    private FrameSessionSource _sessionSource = FrameSessionSource.New;
+    private string _sourceName = string.Empty; // fork 원본 이름(원본 덮어쓰기 가드용)
 
     [ObservableProperty] private ImageSource? _frameImage;
     [ObservableProperty] private int _frameWidth;
     [ObservableProperty] private int _frameHeight;
     [ObservableProperty] private int _slotCount = 4;
+    [NotifyPropertyChangedFor(nameof(SaveScopeNotice))]
     [ObservableProperty] private string _frameName = "새 프레임";
     [ObservableProperty] private string _editorTitle = "새 프레임 만들기";
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _canSave;
 
-    // ── item2 §4.4: 기본 프레임 DB 업데이트 확인 팝업(power가 DB 공용 기본 프레임 편집·저장 시) ──
-    /// <summary>"로컬만 / DB도 업데이트 / 취소" 확인 팝업 오버레이 표시.</summary>
-    [ObservableProperty] private bool _isDbUpdatePromptVisible;
-    /// <summary>DB 업데이트 결과 안내(성공/변경없음/실패).</summary>
-    [ObservableProperty] private string _dbUpdateNotice = string.Empty;
-    /// <summary>안내가 오류인지(색상 구분용).</summary>
-    [ObservableProperty] private bool _dbUpdateNoticeIsError;
+    /// <summary>
+    /// 신규 생성 흐름인지(= <see cref="LoadForEdit"/>로 진입하지 않았는지).
+    /// 두 곳의 게이트: F2 "기존 프레임 불러오기" 버튼 노출(it15 F2-D6)과
+    /// F1 "해당 PC에서만" 정책 배너 노출(it15 F1-D1 정정 — 기존 프레임 수정 시에만 배너를 띄운다).
+    /// 편집 세션 도중에는 바뀌지 않는다(<see cref="ApplyPickedFrame"/>도 _isEditing을 건드리지 않는다).
+    /// </summary>
+    public bool IsCreateMode => !_isEditing;
+
+    /// <summary>
+    /// 이번 저장의 실제 결과 안내(저장 버튼 위 캡션). 상단 배너가 정책(로컬 전용)을 말하고
+    /// 이 캡션이 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임)를 말한다. (it15 §3.1(b))
+    /// 공용 스코프에서 이름에 '_'가 있으면 비차단 경고를 덧붙인다(§3.4) — 저장 직후 안내는
+    /// 화면 전환으로 사라지므로 저장 전에 보이는 이 캡션이 유일한 노출 지점이다.
+    /// </summary>
+    public string SaveScopeNotice
+    {
+        get
+        {
+            bool isPower = _shell.Session.CurrentUser?.Role.IsPower() == true;
+            var scope = isPower
+                ? _sessionSource switch
+                {
+                    // power 신규 생성은 it15 이후에도 공용 기본 프레임 DB 등록 경로다(배너만으론 부정확).
+                    FrameSessionSource.New => $"저장 시 '{FrameName}'이(가) 공용 기본 프레임으로 서버에 등록됩니다.",
+                    FrameSessionSource.ForkFromCatalog => $"원본은 그대로 두고 '{FrameName}'(으)로 이 PC의 공용 목록에 저장됩니다.",
+                    _ => $"'{FrameName}'을(를) 이 PC에 덮어씁니다."
+                }
+                : _sessionSource == FrameSessionSource.EditOwnLocal
+                    ? $"'{FrameName}'을(를) 이 PC에 덮어씁니다."
+                    : $"'{FrameName}'을(를) 내 프레임으로 이 PC에 저장합니다.";
+
+            // 공용 파일명 규약상 '_'는 user 접두 구분자다(§1.5) → 이름에 '_'가 있으면 저장은 되지만
+            // LoadPublic에서 탈락해 목록에 보이지 않는다. 저장 전에 알린다(비차단).
+            return isPower && FrameName.Contains('_')
+                ? $"{scope} ⚠ 이름에 '_'가 있어 공용 목록에서 보이지 않을 수 있습니다."
+                : scope;
+        }
+    }
 
     /// <summary>슬롯 종횡비(편집기 전역, MVP). 변경 시 재배치. (it4 §3)</summary>
     [ObservableProperty] private SlotAspect _slotAspect = SlotAspect.Ratio3x4;
@@ -76,11 +119,28 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     /// <summary>편집 중 슬롯(드래그 대상).</summary>
     public ObservableCollection<Slot> Slots { get; } = new();
 
-    public FrameEditorViewModel(AppShellViewModel shell, IFrameRepository repository, ILocalFrameStore localStore, ILogger<FrameEditorViewModel>? logger = null)
+    // ── it15 F2: "기존 프레임 불러오기" 선택 모달(편집기 내부 오버레이 — 새 Window 아님) ──
+
+    /// <summary>선택 모달의 목록 VM. 확인/취소 커맨드는 이 VM이 갖는다(피커는 이벤트 0개).</summary>
+    public FramePickerViewModel Picker { get; }
+
+    /// <summary>선택 모달 오버레이 표시 여부.</summary>
+    [ObservableProperty] private bool _isFramePickerVisible;
+
+    /// <summary>목록 로딩 취소용. 재오픈 시 교체(이전 것 Dispose)하고 취소·이탈 시 Cancel.</summary>
+    private CancellationTokenSource? _pickerCts;
+
+    public FrameEditorViewModel(
+        AppShellViewModel shell,
+        IFrameRepository repository,
+        ILocalFrameStore localStore,
+        FramePickerViewModel picker,
+        ILogger<FrameEditorViewModel>? logger = null)
     {
         _shell = shell;
         _repository = repository;
         _localStore = localStore;
+        Picker = picker;
         _logger = logger;
     }
 
@@ -132,23 +192,31 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 기존 프레임을 편집기로 불러온다(파워=공용/DB 프레임, user=본인 로컬). 이미지·슬롯·이름을 그대로 로드.
-    /// 저장 시 신규 생성이 아니라 해당 프레임을 갱신(파워+실 DB id면 DB도 update). (기능 요청)
+    /// 기존 프레임을 편집기로 불러온다(파워=공용/DB 프레임, user=본인 로컬). 이미지·슬롯을 그대로 로드.
+    /// it15 F1: 저장은 항상 로컬 전용이며, DB/번들 유래(<see cref="FrameEditPolicy.RequiresFork"/>)면
+    /// 원본을 보존하고 "{원본이름} 사본"으로 분기 저장한다(이름 제안값만 계산 — 사용자가 수정 가능).
     /// </summary>
     public void LoadForEdit(FrameTemplate frame)
     {
         _isEditing = true;
-        _editingFrameId = frame.Id;
-        _editingFrame = frame; // 원본 참조(Id·IsDefault·UserId 보존, diff·업데이트 대상)
         EditorTitle = "프레임 편집";
-        FrameName = frame.Name;
 
-        // 원본 스냅샷(diff 기준) — 이름·슬롯은 즉시 확정, 이미지는 아래 파일 로드 후.
-        _originalName = frame.Name;
-        _originalSlots.Clear();
-        foreach (var s in frame.Slots)
-            _originalSlots.Add(new Slot { Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height });
-        _originalImageBytes = null; // 이미지 로드 성공 시 세팅(실패 시 null → diff에서 변경으로 보수 판정)
+        if (FrameEditPolicy.RequiresFork(frame))
+        {
+            // 카탈로그 유래(DB·번들·fallback): 원본 파일 불변 + 새 이름으로 분기 저장.
+            _sessionSource = FrameSessionSource.ForkFromCatalog;
+            _sourceName = frame.Name;
+            FrameName = FrameNaming.NextCopyName(frame.Name, ExistingNamesForCurrentScope());
+        }
+        else
+        {
+            // 본인 로컬 프레임: 현행대로 같은 이름 덮어쓰기.
+            _sessionSource = FrameSessionSource.EditOwnLocal;
+            _sourceName = string.Empty;
+            FrameName = frame.Name;
+        }
+        OnPropertyChanged(nameof(IsCreateMode));
+        OnPropertyChanged(nameof(SaveScopeNotice));
 
         if (string.IsNullOrEmpty(frame.ImageUrl) || !File.Exists(frame.ImageUrl))
         {
@@ -158,7 +226,6 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         try
         {
             _imageBytes = File.ReadAllBytes(frame.ImageUrl); // 로컬 저장분은 이미 PNG(가공본)
-            _originalImageBytes = (byte[])_imageBytes.Clone(); // diff 기준 원본 스냅샷
             FrameImage = StillImageConverter.FromPngBytes(_imageBytes);
             if (frame.ImageSize.Width > 0) FrameWidth = frame.ImageSize.Width;
             if (frame.ImageSize.Height > 0) FrameHeight = frame.ImageSize.Height;
@@ -255,16 +322,122 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     private void UpdateCanSave()
         => CanSave = _imageBytes is not null && SlotLayout.IsValid(Slots, FrameWidth, FrameHeight);
 
-    /// <summary>편집 중이고 실 DB 문서 id(local/bundle/fallback 접두 없음)면 그 id 반환(→DB 갱신), 아니면 null(→신규 생성).</summary>
-    private string? EditingServerId()
+    // ── it15 F2: 기존 프레임 불러오기(선택 모달 → 이미지·슬롯 메모리 복사) ──
+
+    /// <summary>[기존 프레임 불러오기] 버튼: 오버레이를 열고 후보 목록을 비동기 로드.</summary>
+    [RelayCommand]
+    private async Task OpenFramePicker()
     {
-        if (!_isEditing || string.IsNullOrEmpty(_editingFrameId)) return null;
-        if (_editingFrameId.StartsWith("local:", StringComparison.Ordinal)
-            || _editingFrameId.StartsWith("bundle:", StringComparison.Ordinal)
-            || _editingFrameId.StartsWith("fallback", StringComparison.Ordinal)) return null;
-        return _editingFrameId;
+        _pickerCts?.Cancel();
+        _pickerCts?.Dispose();
+        _pickerCts = new CancellationTokenSource();
+
+        IsFramePickerVisible = true;
+        await Picker.LoadAsync(_shell.Session.CurrentUser?.Id, _pickerCts.Token);
     }
 
+    /// <summary>[불러오기]: 선택 프레임의 이미지·슬롯을 새 편집 세션으로 복사. 실패해도 모달만 닫고 편집 상태 보존.</summary>
+    [RelayCommand]
+    private void ConfirmPickFrame()
+    {
+        var src = Picker.SelectedFrame;
+        IsFramePickerVisible = false;
+        if (src is null) return; // 선택 없이 확인 → 편집기 무변경(모달만 닫힘)
+
+        ApplyPickedFrame(src); // 실패 시 StatusMessage로 안내
+        Picker.Reset();
+    }
+
+    /// <summary>[취소]: 모달만 닫는다. 편집기 상태·디스크 모두 무변경(임시 파일이 없어 정리할 것도 없다).</summary>
+    [RelayCommand]
+    private void CancelPickFrame()
+    {
+        _pickerCts?.Cancel();
+        IsFramePickerVisible = false;
+        Picker.Reset();
+    }
+
+    /// <summary>
+    /// 선택한 프레임의 이미지·슬롯을 현재 편집 세션으로 복사한다(디스크에 아무것도 쓰지 않는다).
+    /// 원본 불변: 이미지는 <see cref="LoadImage"/>가 읽기만 하고, 슬롯은 새 <see cref="Slot"/> 인스턴스로 값 복사한다.
+    /// 세션 정체성은 항상 "새 프레임"(fork) — 저장 시 원본을 덮어쓰지 않는다. (it15 §4.6)
+    /// </summary>
+    /// <returns>복사 성공 여부(실패 사유는 <see cref="StatusMessage"/>).</returns>
+    public bool ApplyPickedFrame(FrameTemplate src)
+    {
+        if (string.IsNullOrEmpty(src.ImageUrl) || !File.Exists(src.ImageUrl))
+        {
+            StatusMessage = "선택한 프레임의 이미지를 찾을 수 없습니다.";
+            return false;
+        }
+
+        // 번들 프레임은 .jpg일 수 있다 → 반드시 LoadImage 경유(OpenCV 디코드 → PNG 재인코딩).
+        // 부작용: _imageBytes/FrameWidth·Height 세팅(장변 4000 초과 시 축소) + ArrangeSlots()로 자동 배치.
+        if (!LoadImage(src.ImageUrl)) return false;
+
+        // 원본 슬롯을 축소 배율로 보정해 복사(자동 배치 결과를 덮어씀).
+        double scale = src.ImageSize.Width > 0 ? (double)FrameWidth / src.ImageSize.Width : 0;
+        if (src.Slots.Count > 0 && scale > 0)
+        {
+            _suppressArrange = true;
+            SlotCount = Math.Clamp(src.Slots.Count, SlotCountOptions[0], SlotCountOptions[^1]);
+            _suppressArrange = false;
+
+            _baseSlots.Clear();
+            foreach (var s in src.Slots)
+            {
+                _baseSlots.Add(SlotLayout.ClampToFrame(
+                    new Slot
+                    {
+                        Index = s.Index,
+                        X = (int)Math.Round(s.X * scale),
+                        Y = (int)Math.Round(s.Y * scale),
+                        Width = (int)Math.Round(s.Width * scale),
+                        Height = (int)Math.Round(s.Height * scale)
+                    }, FrameWidth, FrameHeight));
+            }
+            SlotScalePercent = 100;
+            ApplyScale();
+        }
+        // src.ImageSize가 0(메타 없음)이면 LoadImage의 자동 배치 결과를 그대로 사용.
+
+        // 세션 정체성 — 항상 "새 프레임"(_isEditing 불변 → IsCreateMode·EditorTitle 유지).
+        _sessionSource = FrameSessionSource.ForkFromCatalog;
+        _sourceName = src.Name;
+
+        FrameName = FrameNaming.NextCopyName(src.Name, ExistingNamesForCurrentScope());
+        OnPropertyChanged(nameof(SaveScopeNotice));
+
+        StatusMessage = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// 현재 저장 스코프의 기존 프레임 이름들(사본 이름 충돌 검사용).
+    /// power=공용 목록, user=본인 개인 목록. 조회 실패는 비차단(충돌 검사만 생략).
+    /// </summary>
+    private IEnumerable<string> ExistingNamesForCurrentScope()
+    {
+        var user = _shell.Session.CurrentUser;
+        if (user is null) return Array.Empty<string>();
+        try
+        {
+            return user.Role.IsPower()
+                ? _localStore.PublicFrameNames()
+                : _localStore.LoadUser(user.Id).Select(f => f.Name).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "기존 프레임 이름 조회 실패 — 사본 이름 충돌 검사를 생략");
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// 저장. it15 F1: 서버 업데이트 경로가 없다(확인 팝업 없이 한 번에 끝난다).
+    /// 스코프 = power 공용 / user 개인(현행 유지), 방식 = fork(새 이름) / 덮어쓰기.
+    /// power 신규 생성만 DB에 등록되고(공용 기본 프레임 배포의 유일한 경로) 나머지는 로컬 전용이다. (§3.6)
+    /// </summary>
     [RelayCommand]
     private async Task Save()
     {
@@ -276,27 +449,28 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             return;
         }
 
-        // item2 §4.1: power가 DB 공용 기본 프레임을 편집·저장하면 "로컬만/DB도 업데이트" 확인 팝업을 띄우고 보류.
-        if (_editingFrame is { } editing && FrameEditPolicy.RequiresDbUpdatePrompt(editing, user.Role))
+        bool isPower = user.Role.IsPower();
+        bool isFork = _sessionSource == FrameSessionSource.ForkFromCatalog;
+        bool isNew = _sessionSource == FrameSessionSource.New;
+
+        // 원본 덮어쓰기 가드: 공용 스코프(power)에서는 사본이 원본 파일과 같은 이름이 될 수 있으므로 차단.
+        // user 스코프는 파일명이 `{계정}_{이름}`이라 공용 원본과 물리적으로 겹치지 않는다(가드 불필요).
+        if (isFork && isPower && string.Equals(FrameName, _sourceName, StringComparison.Ordinal))
         {
-            DbUpdateNotice = string.Empty;
-            DbUpdateNoticeIsError = false;
-            IsDbUpdatePromptVisible = true;
-            return; // 저장 보류 — 팝업 버튼(SaveLocalOnly/SaveToDb/Cancel)이 이어받음
+            StatusMessage = "원본과 같은 이름은 사용할 수 없습니다. 이름을 변경해 주세요.";
+            return;
         }
 
         try
         {
             StatusMessage = "저장 중...";
-            bool isPower = user.Role.IsPower();
 
-            if (isPower)
+            if (isPower && isNew)
             {
-                // 파워: 공용 기본 프레임 → DB(isDefault=true, userId=null) + 로컬 캐시. (it8 §3 A2)
-                // 이 경로는 신규 생성(EditingServerId=null)만 도달한다. DB 기본 편집은 위에서 팝업으로 분기됨.
+                // 파워 신규 생성: 공용 기본 프레임 DB 등록(isDefault=true, userId=null) + 로컬 캐시(#dbid 기록).
                 var frame = new FrameTemplate
                 {
-                    Id = EditingServerId() ?? string.Empty, // 빈 값이면 SaveAsync가 새 GUID 부여(신규)
+                    Id = string.Empty, // SaveAsync가 새 GUID 부여
                     UserId = null,
                     IsDefault = true,
                     Name = FrameName,
@@ -304,11 +478,26 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     Slots = Slots.ToList()
                 };
                 var saved = await _repository.SaveAsync(frame, _imageBytes);
-                _localStore.SaveLocal(saved, _imageBytes, ownerName: null); // frameId 기반 캐시(갱신)
+                _localStore.SaveLocal(saved, _imageBytes, ownerName: null);
+            }
+            else if (isPower)
+            {
+                // 파워 fork / 파워 자기 로컬 편집: 로컬 공용만. Id=""로 두면 #dbid를 기록하지 않아
+                // 서버 문서와 연결이 끊긴다(= 편집은 이 PC에만 적용). (§3.3)
+                var frame = new FrameTemplate
+                {
+                    Id = string.Empty,
+                    UserId = null,
+                    IsDefault = true,
+                    Name = FrameName,
+                    ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
+                    Slots = Slots.ToList()
+                };
+                _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
             }
             else
             {
-                // user: 로컬 전용(DB 미저장). {계정}_{이름}.png. 편집이면 같은 이름 파일을 덮어씀. (it8 §3 A2)
+                // user 전 케이스(신규·fork·자기 로컬 편집): 개인 로컬 `{계정}_{이름}.png`. DB 미호출.
                 var frame = new FrameTemplate
                 {
                     UserId = user.Id,
@@ -320,11 +509,20 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                 _localStore.SaveLocal(frame, _imageBytes, ownerName: user.Id);
             }
 
-            await _shell.NavigateAsync(AppState.FrameSelect);
+            // '_' 이름 경고는 저장 전에 SaveScopeNotice가 이미 안내한다 — 저장 직후 StatusMessage는
+            // 곧바로 화면이 전환되어 읽을 수 없으므로 여기서 띄우지 않는다(§3.4).
+            StatusMessage = string.Empty;
+
+            await GoToFrameSelectAsync();
         }
         catch (InvalidOperationException ex)
         {
             // 10개 초과 등
+            StatusMessage = ex.Message;
+        }
+        catch (IOException ex)
+        {
+            // 이름에 파일시스템 금지문자(LocalFrameStore.EnsureFileNameSafe) — 이유를 그대로 알린다.
             StatusMessage = ex.Message;
         }
         catch (Exception ex)
@@ -334,112 +532,12 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         }
     }
 
-    // ── item2 §4.4: 기본 프레임 저장 팝업 버튼 ──
-
-    /// <summary>[로컬에만 적용]: DB 미호출, 로컬 공용 캐시만 갱신(#dbid 보존). (item2 §4.4)</summary>
-    [RelayCommand]
-    private async Task SaveLocalOnly()
-    {
-        if (_editingFrame is null || _imageBytes is null) { IsDbUpdatePromptVisible = false; return; }
-        try
-        {
-            var frame = BuildDbFrame(); // 같은 Id(#dbid 보존), userId=null, isDefault=true
-            _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "프레임 로컬 저장 실패");
-            IsDbUpdatePromptVisible = false;
-            StatusMessage = "저장에 실패했습니다."; // 편집 화면 유지(이동 없음)
-            return;
-        }
-        IsDbUpdatePromptVisible = false;
-        await GoToFrameSelectAsync(); // 저장 성공 후 화면 전환(전환 실패는 저장 결과에 영향 없음)
-    }
-
-    /// <summary>
-    /// [DB에도 업데이트]: diff로 변경 판정 → 변경 있으면 같은 frameId 업데이트(레포)+로컬 캐시,
-    /// 변경 없으면 DB 미호출(로컬만). 실패 시 화면 유지. (item2 §4.4)
-    /// </summary>
-    [RelayCommand]
-    private async Task SaveToDb()
-    {
-        if (_editingFrame is null || _imageBytes is null) { IsDbUpdatePromptVisible = false; return; }
-
-        var change = FrameDiff.Compare(
-            _originalImageBytes, _imageBytes,
-            _originalSlots, Slots.ToList(),
-            _originalName, FrameName);
-
-        // 저장(로컬/DB)과 결과 안내를 먼저 확정한다. 화면 전환 실패가 저장 결과 안내를 뒤엎지 않도록 분리.
-        try
-        {
-            var frame = BuildDbFrame();
-
-            if (!change.HasAnyChange)
-            {
-                // 변경 없음: DB 미호출(no-op), 로컬 캐시만 갱신.
-                _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
-                DbUpdateNoticeIsError = false;
-                DbUpdateNotice = "변경 사항이 없어 DB 업데이트를 건너뛰었습니다.";
-            }
-            else if (!_repository.SupportsUpdateById)
-            {
-                // 이론상 도달하지 않음(레거시·HTTP 모두 지원). 방어적: 로컬만 적용 + 경고.
-                _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
-                DbUpdateNoticeIsError = true;
-                DbUpdateNotice = "현재 서버 모드에서는 기본 프레임 DB 업데이트를 지원하지 않습니다(로컬만 적용됨).";
-            }
-            else
-            {
-                // 변경 있음 + 지원 모드: 같은 frameId 업데이트(이미지 변경 시에만 replaceImage=true).
-                var saved = await _repository.UpdateAsync(frame, _imageBytes, replaceImage: change.ImageChanged);
-                _localStore.SaveLocal(saved, _imageBytes, ownerName: null); // saved.Id=원본 GUID → #dbid 보존
-                DbUpdateNoticeIsError = false;
-            }
-        }
-        catch (InvalidOperationException ex)
-        {
-            // 업데이트 대상 미발견·10개 초과 등. 화면 유지 + 안내.
-            IsDbUpdatePromptVisible = false;
-            DbUpdateNoticeIsError = true;
-            StatusMessage = ex.Message;
-            return;
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "프레임 DB 업데이트 실패");
-            IsDbUpdatePromptVisible = false;
-            DbUpdateNoticeIsError = true;
-            StatusMessage = "DB 업데이트에 실패했습니다.";
-            return;
-        }
-
-        IsDbUpdatePromptVisible = false;
-        await GoToFrameSelectAsync();
-    }
-
     /// <summary>저장 성공 후 프레임 선택 화면으로 전환. 전환 자체 실패는 저장 결과에 영향 없음(안내만 로그).</summary>
     private async Task GoToFrameSelectAsync()
     {
         try { await _shell.NavigateAsync(AppState.FrameSelect); }
         catch (Exception ex) { _logger?.LogError(ex, "프레임 선택 화면 전환 실패(저장은 완료)"); }
     }
-
-    /// <summary>[취소]: 팝업만 닫고 편집 유지(저장·이동 없음). (item2 §4.4)</summary>
-    [RelayCommand]
-    private void CancelDbUpdatePrompt() => IsDbUpdatePromptVisible = false;
-
-    /// <summary>DB 공용 기본 프레임 저장용 템플릿(같은 Id로 #dbid 보존, userId=null, isDefault=true).</summary>
-    private FrameTemplate BuildDbFrame() => new()
-    {
-        Id = _editingFrame!.Id,
-        UserId = null,
-        IsDefault = true,
-        Name = FrameName,
-        ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
-        Slots = Slots.ToList()
-    };
 
     [RelayCommand]
     private async Task Cancel() => await _shell.NavigateAsync(AppState.FrameSelect);

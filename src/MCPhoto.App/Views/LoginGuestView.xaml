@@ -3,132 +3,42 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280"
-             Loaded="OnLoaded">
+             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
     <Grid Background="{StaticResource Brush.Bg}">
         <Border Style="{StaticResource Card}" MaxWidth="440" Width="440"
                 VerticalAlignment="Center" HorizontalAlignment="Center">
             <StackPanel>
-                <!-- it10 S2-1: 서버 미연결(키 없음) 상태 배너. 오프라인 관리자 계정으로만 로그인 가능함을 명시. -->
-                <Border Background="{StaticResource Brush.Warning.Surface}" CornerRadius="{StaticResource Radius.M}"
-                        Padding="16,12" Margin="0,0,0,20"
-                        Visibility="{Binding IsServerOffline, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="서버 미연결 상태입니다. 오프라인 관리자 계정으로만 로그인할 수 있습니다."
-                               Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Warning}"
-                               TextWrapping="Wrap" />
-                </Border>
+                <TextBlock Text="로그인" Style="{StaticResource Text.H1}"
+                           HorizontalAlignment="Center" Margin="0,0,0,12" />
 
-                <!-- ══════════ 탭 헤더: 로그인 | 회원가입 (Segment 재사용, Mode 바인딩) ══════════ -->
-                <!-- IsChecked는 파생 상태에 OneWay(라디오처럼). 클릭은 SwitchMode 커맨드가 Mode를 바꾸고
-                     IsSignIn/IsSignUp 통지로 체크가 정정된다. -->
-                <Border Background="{StaticResource Brush.Surface.Alt}" CornerRadius="{StaticResource Radius.M}"
-                        Padding="4" Margin="0,0,0,24">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <ToggleButton Grid.Column="0" Content="로그인" Style="{StaticResource Segment}"
-                                      HorizontalAlignment="Stretch"
-                                      IsChecked="{Binding IsSignIn, Mode=OneWay}"
-                                      Command="{Binding SwitchModeCommand}" CommandParameter="SignIn" />
-                        <ToggleButton Grid.Column="1" Content="회원가입" Style="{StaticResource Segment}"
-                                      HorizontalAlignment="Stretch"
-                                      IsChecked="{Binding IsSignUp, Mode=OneWay}"
-                                      Command="{Binding SwitchModeCommand}" CommandParameter="SignUp" />
-                    </Grid>
-                </Border>
+                <!-- 게스트 안내: 로그인은 커스텀 프레임용이며 촬영 자체는 로그인 불요(it15 §6.1). -->
+                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,24"
+                           Text="촬영은 로그인 없이도 가능합니다.&#10;로그인하면 나만의 프레임을 쓸 수 있어요." />
 
-                <!-- ══════════ Google 영역 (D-B4: IsGoogleSignInAvailable=true일 때만 전체 노출) ══════════ -->
-                <!-- 미구성 시 버튼·구분선 완전 숨김(구분선까지 이 StackPanel에 함께 담아 통째로 게이트). -->
+                <!-- Google 단독 CTA. GoogleClientId 미설정(SSO opt-out) 시 통째로 숨긴다. -->
                 <StackPanel Visibility="{Binding IsGoogleSignInAvailable, Converter={StaticResource BoolToVis}}">
-                    <Button Content="Google로 계속하기" Style="{StaticResource Button.Primary}"
+                    <Button Content="Google로 로그인" Style="{StaticResource Button.Primary}"
                             Command="{Binding LoginWithGoogleCommand}"
                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
-                            HorizontalAlignment="Stretch" Margin="0,0,0,16" />
-
-                    <!-- "또는" 구분선: 좌우 Divider + 가운데 텍스트(로컬 Grid, 신규 StaticResource 없음). -->
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Height="1" Background="{StaticResource Brush.Divider}"
-                                VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="또는" Style="{StaticResource Text.Caption}"
-                                   Margin="12,0" VerticalAlignment="Center" />
-                        <Border Grid.Column="2" Height="1" Background="{StaticResource Brush.Divider}"
-                                VerticalAlignment="Center" />
-                    </Grid>
-                </StackPanel>
-
-                <!-- ══════════ SignIn 섹션 (IsSignIn) ══════════ -->
-                <StackPanel Visibility="{Binding IsSignIn, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="아이디" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                    <TextBox x:Name="IdTextBox" Text="{Binding LoginId, UpdateSourceTrigger=PropertyChanged}"
-                             Margin="0,0,0,16" />
-
-                    <TextBlock Text="비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                    <PasswordBox x:Name="PasswordInput" Margin="0,0,0,8"
-                                 PasswordChanged="OnPasswordChanged" KeyDown="OnPasswordKeyDown" />
-
-                    <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource Brush.Danger}"
-                               Style="{StaticResource Text.Caption}" Margin="0,0,0,16" TextWrapping="Wrap"
-                               Visibility="{Binding IsSignIn, Converter={StaticResource BoolToVis}}" />
-
-                    <Button Content="로그인" Style="{StaticResource Button.Primary}" IsDefault="{Binding IsSignIn}"
-                            Command="{Binding LoginCommand}"
-                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
                             HorizontalAlignment="Stretch" Margin="0,0,0,12" />
 
-                    <!-- item1a §9.4: 비밀번호 찾기(백엔드 모드 전용). 레거시 경로엔 재설정 인프라 없음. -->
-                    <Button Content="비밀번호를 잊으셨나요?" Style="{StaticResource Button.Ghost}"
-                            Command="{Binding ForgotPasswordCommand}" HorizontalAlignment="Center" Margin="0,0,0,4"
-                            Visibility="{Binding IsBackendMode, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="로그인 중..." Style="{StaticResource Text.Caption}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8"
+                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
 
-                <!-- ══════════ SignUp 섹션 (IsSignUp) ══════════ -->
-                <StackPanel Visibility="{Binding IsSignUp, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="아이디" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                    <TextBox x:Name="SignUpIdTextBox" Text="{Binding SignUpId, UpdateSourceTrigger=PropertyChanged}"
-                             Margin="0,0,0,4" />
-                    <TextBlock Text="3~40자의 영문·숫자·. _ - 조합" Style="{StaticResource Text.Caption}"
-                               Margin="0,0,0,16" TextWrapping="Wrap" />
+                <!-- 미구성 안내. [닫기]는 아래에 항상 노출되므로 게스트 촬영 복귀는 보장된다. -->
+                <TextBlock Text="로그인이 구성되지 않았습니다. 관리자에게 문의하세요."
+                           Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12"
+                           Visibility="{Binding IsGoogleSignInAvailable, Converter={StaticResource InverseBoolToVis}}" />
 
-                    <TextBlock Text="이메일 (선택)" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                    <TextBox Text="{Binding SignUpEmail, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
-                    <TextBlock Text="이메일을 인증하지 않으면 비밀번호 찾기를 사용할 수 없고, 관리자의 강제 변경만 가능합니다."
-                               Style="{StaticResource Text.Caption}" Margin="0,0,0,16" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource Brush.Danger}"
+                           Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12" />
 
-                    <TextBlock Text="비밀번호" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                    <PasswordBox x:Name="SignUpPwBox" Margin="0,0,0,12" PasswordChanged="OnSignUpPasswordChanged" />
-
-                    <TextBlock Text="비밀번호 확인" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-                    <PasswordBox x:Name="SignUpPwConfirmBox" Margin="0,0,0,8"
-                                 PasswordChanged="OnSignUpPasswordConfirmChanged" />
-
-                    <!-- 인라인 규칙 안내(항상) + 불일치 경고(두 비번이 불일치일 때만). -->
-                    <TextBlock Text="{Binding PasswordRuleText}" Style="{StaticResource Text.Caption}"
-                               Margin="0,0,0,4" TextWrapping="Wrap" />
-                    <TextBlock Text="비밀번호가 일치하지 않습니다." Foreground="{StaticResource Brush.Danger}"
-                               Style="{StaticResource Text.Caption}" Margin="0,0,0,12" TextWrapping="Wrap"
-                               Visibility="{Binding PasswordsMatch, Converter={StaticResource InverseBoolToVis}}" />
-
-                    <!-- 오류(빨강) / 성공 노티(초록). -->
-                    <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource Brush.Danger}"
-                               Style="{StaticResource Text.Caption}" Margin="0,0,0,4" TextWrapping="Wrap"
-                               Visibility="{Binding IsSignUp, Converter={StaticResource BoolToVis}}" />
-                    <TextBlock Text="{Binding SignUpNotice}" Foreground="{StaticResource Brush.Success}"
-                               Style="{StaticResource Text.Caption}" Margin="0,0,0,12" TextWrapping="Wrap" />
-
-                    <Button Content="회원가입" Style="{StaticResource Button.Primary}" IsDefault="{Binding IsSignUp}"
-                            Command="{Binding SignUpCommand}"
-                            IsEnabled="{Binding CanSubmitSignUp}"
-                            HorizontalAlignment="Stretch" Margin="0,0,0,12" />
-                </StackPanel>
-
-                <Button Content="취소" Style="{StaticResource Button.Ghost}"
+                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
                         Command="{Binding CancelCommand}" HorizontalAlignment="Center" />
             </StackPanel>
         </Border>

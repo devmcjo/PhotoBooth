@@ -3,12 +3,14 @@ using MCPhoto.Core.Models;
 namespace MCPhoto.Core.Upload;
 
 /// <summary>
-/// Firebase 접근 추상화(Firestore + Storage). MVP는 Admin SDK 구현, 배포 시 규칙 준수 경로로 교체.
-/// (architecture §6.4 — 전환 비용 최소화)
+/// 백엔드 저장소 접근 추상화(Firestore + Storage 게이트웨이). it15부터 유일한 구현은 HTTP 경유
+/// <c>HttpFirebaseClient</c>다(레거시 Admin SDK 직결 경로 폐기).
+/// ⚠️ 이름이 실체(백엔드 게이트웨이)와 어긋나지만 이번 범위에서 리네임하지 않는다(설계 §4.2 — 백로그).
+/// (architecture §6.4)
 /// </summary>
 public interface IFirebaseClient
 {
-    /// <summary>초기화 성공 여부(서비스 계정 키 로드됨).</summary>
+    /// <summary>구성 완료 여부(백엔드 base URL 설정됨). 서버 도달 성공을 뜻하지는 않는다.</summary>
     bool IsInitialized { get; }
 
     /// <summary>Storage 버킷 이름(토큰 URL 조립용).</summary>

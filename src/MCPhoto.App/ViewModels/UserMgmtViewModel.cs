@@ -17,7 +17,7 @@ namespace MCPhoto.App.ViewModels;
 /// </summary>
 public sealed partial class UserRowViewModel : ObservableObject
 {
-    /// <summary>원본 계정(삭제·pw초기화·표시용).</summary>
+    /// <summary>원본 계정(삭제·PIN 재설정·표시용).</summary>
     public User User { get; }
 
     /// <summary>이 행에서 actor가 지정 가능한 역할 목록(콤보 ItemsSource). 자기 계정이면 빈 목록.</summary>
@@ -30,28 +30,33 @@ public sealed partial class UserRowViewModel : ObservableObject
     public bool CanChangeRole => AssignableRoles.Count > 0;
 
     /// <summary>
-    /// it14: PIN 재설정 UI 노출 여부: 백엔드 모드 + 자기 계정 아님 + actor가 대상을 관리 가능(CanManage).
-    /// 자기 PIN은 AccountView에서 변경(서버도 자기 자신 E3는 400). 레거시(비백엔드)엔 PIN 인프라 없음.
+    /// it14: PIN 재설정 UI 노출 여부: 자기 계정 아님 + actor가 대상을 관리 가능(CanManage).
+    /// 자기 PIN은 계정 관리 화면에서 변경(서버도 자기 자신 E3는 400).
+    /// it15: 백엔드 전용이 되어 isBackend 조건 삭제.
     /// </summary>
     public bool CanResetPin { get; }
 
-    public UserRowViewModel(User user, UserRole actorRole, bool isSelf, bool isBackend = false)
+    /// <summary>
+    /// it15 §6.5: PIN 설정 여부 표시("설정됨"/"미설정"). PIN이 유일한 진입 자격증명이 되어 관리자 가시성이 필요하다.
+    /// </summary>
+    public string PinStateLabel => User.HasPin ? "설정됨" : "미설정";
+
+    public UserRowViewModel(User user, UserRole actorRole, bool isSelf)
     {
         User = user;
         // 자기 계정은 역할 변경 금지(대칭·안전) → 빈 목록으로 UI 미노출.
         AssignableRoles = isSelf ? Array.Empty<UserRole>() : RoleChangePolicy.AssignableRoles(actorRole, user.Role);
         _selectedRole = user.Role;
-        CanResetPin = isBackend && !isSelf && actorRole.CanManage(user.Role);
+        CanResetPin = !isSelf && actorRole.CanManage(user.Role);
     }
 }
 
 /// <summary>
-/// 사용자 관리(power 전용). 목록·삭제(cascade)·비밀번호 초기화·역할 변경(콤보+Apply, §8.7 매트릭스). (PRD §F8, it13 §9.5)
+/// 사용자 관리(power 전용). 목록·삭제(cascade)·PIN 재설정·역할 변경(콤보+Apply, §8.7 매트릭스).
+/// it15: "PW 초기화"는 비밀번호 개념 폐지로 삭제. (PRD §F8, it13 §9.5, it15 §6.5)
 /// </summary>
 public sealed partial class UserMgmtViewModel : ViewModelBase
 {
-    private const string ResetPassword = "0000";
-
     private readonly AppShellViewModel _shell;
     private readonly IAccountService _accounts;
     private readonly IPinPromptDialogService? _pinPrompt;
@@ -64,9 +69,6 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     [ObservableProperty] private bool _isAdmin;
     /// <summary>행위자(로그인 계정) 역할. 관리 액션 노출·가드 기준(자기와 같거나 낮은 역할만 관리).</summary>
     [ObservableProperty] private UserRole _actorRole = UserRole.User;
-
-    // it14: PIN 재설정 UI는 백엔드 모드에서만 노출(레거시엔 SSO·PIN 인프라 없음). 프레임 XAML 노출 게이트.
-    public bool IsBackendMode => _shell.Settings.Current.UseBackend;
 
     public UserMgmtViewModel(AppShellViewModel shell, IAccountService accounts,
         ILogger<UserMgmtViewModel>? logger = null, IPinPromptDialogService? pinPrompt = null)
@@ -90,9 +92,8 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         try
         {
             var selfId = _shell.Session.CurrentUser?.Id;
-            var isBackend = IsBackendMode;
             foreach (var u in await _accounts.GetAllAsync())
-                Rows.Add(new UserRowViewModel(u, ActorRole, isSelf: u.Id == selfId, isBackend: isBackend));
+                Rows.Add(new UserRowViewModel(u, ActorRole, isSelf: u.Id == selfId));
         }
         catch (Exception ex)
         {
@@ -120,25 +121,6 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         {
             _logger?.LogError(ex, "사용자 삭제 실패: {Id}", user.Id);
             StatusMessage = "삭제에 실패했습니다.";
-        }
-    }
-
-    [RelayCommand]
-    private async Task ResetUserPassword(UserRowViewModel? row)
-    {
-        if (row is null) return;
-        var user = row.User;
-        // 권한 가드: 자기와 같거나 낮은 역할만(예: manager는 admin 비번 초기화 불가). UI 미노출과 이중 방어.
-        if (!ActorRole.CanManage(user.Role)) { StatusMessage = "상위 역할 계정은 관리할 수 없습니다."; return; }
-        try
-        {
-            await _accounts.ChangePasswordAsync(user.Id, ResetPassword);
-            StatusMessage = $"{user.Id} 비밀번호를 '{ResetPassword}'로 초기화했습니다.";
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "pw 초기화 실패: {Id}", user.Id);
-            StatusMessage = "초기화에 실패했습니다.";
         }
     }
 

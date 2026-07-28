@@ -15,11 +15,11 @@ using MCPhoto.Http.Session;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// <see cref="IAccountService"/>의 HTTP 구현(설계 §5.2). 백엔드 /auth·/accounts 엔드포인트 호출.
+/// <see cref="IAccountService"/>의 HTTP 구현(설계 §5.2, it15 §7.2). 백엔드 /auth·/accounts 엔드포인트 호출.
 ///
-/// - 로그인: /auth/login(API키) → JWT 수신·<see cref="IBackendSession"/> 저장. 실패(401) 시 null(현행 계약).
-/// - CRUD/역할: Bearer. actingRole은 서버가 토큰에서 도출(클라 전달 무시). 비번은 TLS로 평문 전송(서버가 해시).
-/// - 온라인 전용(오프라인 시드 없음 — 레거시 Firebase 경로가 롤백용으로 공존, 설계 §9.1).
+/// - 인증: /auth/google(API키) → JWT 수신·<see cref="IBackendSession"/> 저장. 검증 실패(401) 시 null.
+/// - 조회/역할/PIN: Bearer. actingRole은 서버가 토큰에서 도출(클라 전달 무시).
+/// - 온라인 전용 — it15에서 레거시 Firebase 직결 경로가 폐지되어 유일한 구현이다.
 /// </summary>
 public sealed class HttpAccountService : HttpBackendClient, IAccountService
 {
@@ -32,57 +32,12 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
     {
     }
 
-    public async Task<User?> LoginAsync(string id, string password, CancellationToken ct = default)
-    {
-        try
-        {
-            var res = await SendJsonAsync<LoginResponse>(
-                HttpMethod.Post, "auth/login",
-                new LoginRequest { Id = id, Password = password },
-                bearer: false, ct).ConfigureAwait(false);
-
-            var user = ToUser(res.User) ?? new User { Id = id, Role = UserRole.User };
-            Session.SignIn(res.Token, user);
-            return user;
-        }
-        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            // 로그인 실패 = null(현행 계약, AccountService.cs:44,50). 자격 오류를 예외로 올리지 않는다.
-            return null;
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default)
-    {
-        try
-        {
-            // /auth/login 재사용(서버 잠금 없음). 세션은 갱신하지 않는다(SignIn 미호출) — 재인증 목적.
-            await SendJsonAsync<LoginResponse>(
-                HttpMethod.Post, "auth/login",
-                new LoginRequest { Id = id, Password = password },
-                bearer: false, ct).ConfigureAwait(false);
-            return true;
-        }
-        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            return false; // 자격 불일치
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex); // 네트워크/서버 오류는 전파(잘못된 통과=fail-open 방지)
-        }
-    }
-
     public async Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
         string? nonce = null, CancellationToken ct = default)
     {
         try
         {
-            // API키 게이트(로그인 전 상태, Bearer 불가 — LoginAsync와 동일). 응답은 login과 동일한 {token, expiresIn, user}.
+            // API키 게이트(로그인 전 상태, Bearer 불가). 응답은 {token, expiresIn, user}.
             var res = await SendJsonAsync<LoginResponse>(
                 HttpMethod.Post, "auth/google",
                 new GoogleLoginRequest
@@ -94,15 +49,15 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
                 },
                 bearer: false, ct).ConfigureAwait(false);
 
-            var user = ToUser(res.User) ?? new User { Id = string.Empty, Role = UserRole.User };
+            // 응답에 user가 없는 비정상 경로의 폴백은 최소 권한(TempUser)으로 둔다 — it15 §5.2.
+            var user = ToUser(res.User) ?? new User { Id = string.Empty, Role = UserRole.TempUser };
             Session.SignIn(res.Token, user);
             return user;
         }
         catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
         {
-            // 계정 매핑은 자동 생성/승격(BE-2)이라 정상 검증된 email은 거의 401이 아니다.
+            // 계정 매핑은 자동 생성(temp_user)/매핑이라 정상 검증된 email은 거의 401이 아니다.
             // 401은 Google 검증 실패(도메인·미검증 등)를 서버가 일반화한 것(열거 방지, §6.4) → null.
-            // LoginAsync 401 처리와 동일 계약: 자격 문제는 예외가 아니라 null로 신호한다.
             return null;
         }
         catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.NotImplemented)
@@ -110,77 +65,6 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
             // 501 = 서버에 Google SSO 미구성(§5.1). 자격 문제(401→null)·네트워크 오류와 구분되는 전용 예외로 신호한다.
             throw new GoogleSsoNotConfiguredException(
                 string.IsNullOrWhiteSpace(ex.Message) ? "Google 로그인이 구성되지 않았습니다." : ex.Message);
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task<User?> RegisterAsync(string id, string password, string? email, CancellationToken ct = default)
-    {
-        try
-        {
-            // API키 게이트(비로그인 self-signup, Bearer 불가 — LoginAsync와 동일). 응답은 login과 동일한 {token, expiresIn, user}.
-            // role은 서버가 "user"로 강제하므로 클라는 지정하지 않는다(권한 상승 차단, 설계 §7.3).
-            var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
-            var res = await SendJsonAsync<LoginResponse>(
-                HttpMethod.Post, "auth/register",
-                new RegisterRequest { Id = id, Password = password, Email = normalizedEmail },
-                bearer: false, ct).ConfigureAwait(false);
-
-            var user = ToUser(res.User) ?? new User { Id = id, Role = UserRole.User };
-            Session.SignIn(res.Token, user); // 가입 즉시 로그인(설계 D-B3).
-            return user;
-        }
-        catch (BackendException ex)
-        {
-            // id 중복(409)·형식 오류(400) 등은 사유를 노출해야 가입 UX가 성립(§7.6 열거 방지 예외).
-            // 로그인 실패(401→null)와 달리 여기선 모든 실패를 도메인 예외로 전파.
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task<User> CreateAsync(
-        string id, string password, UserRole role, string? email, UserRole actingRole, CancellationToken ct = default)
-    {
-        // 현행 계약 보존(AccountService.cs:57): 게이트 위반은 서버 왕복 전에 즉시 거부(동일 예외).
-        // 서버도 토큰 role로 재검증하므로 이중 방어(클라 위조 무의미).
-        if (!actingRole.CanCreate(role))
-            throw new UnauthorizedAccessException(
-                $"{actingRole} 권한으로 {role} 계정을 생성할 수 없습니다.");
-
-        try
-        {
-            // email은 선택. 빈 문자열은 null로 정규화(서버가 미수집으로 처리, item1a §8.1).
-            var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
-            var res = await SendJsonAsync<UserResponse>(
-                HttpMethod.Post, "accounts",
-                new CreateAccountRequest
-                {
-                    Id = id,
-                    Password = password,
-                    Role = role.ToFirestoreValue(),
-                    Email = normalizedEmail,
-                },
-                bearer: true, ct).ConfigureAwait(false);
-
-            return ToUser(res) ?? new User { Id = id, Role = role };
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task ChangePasswordAsync(string id, string newPassword, CancellationToken ct = default)
-    {
-        try
-        {
-            await SendNoContentAsync(
-                HttpMethod.Patch, $"accounts/{Uri.EscapeDataString(id)}/password",
-                new ChangePasswordRequest { NewPassword = newPassword },
-                bearer: true, ct).ConfigureAwait(false);
         }
         catch (BackendException ex)
         {
@@ -233,140 +117,7 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
     }
 
-    /// <summary>
-    /// 시드 계정 보장은 서버 배포 시 1회 부트스트랩으로 이관(설계 §7.3). HTTP 경로에서는 no-op.
-    /// </summary>
-    public Task EnsureSeedAccountAsync(CancellationToken ct = default) => Task.CompletedTask;
-
-    // ── item1a: 이메일 인증 + 비밀번호 재설정 (§8.2·§8.3·§8.4) ──
-
-    public async Task SetEmailAsync(string id, string email, CancellationToken ct = default)
-    {
-        try
-        {
-            // Bearer(본인/파워). 204. 서버가 emailVerified=false 리셋 + 인증 메일 발송.
-            await SendNoContentAsync(
-                HttpMethod.Patch, $"accounts/{Uri.EscapeDataString(id)}/email",
-                new SetEmailRequest { Email = email },
-                bearer: true, ct).ConfigureAwait(false);
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task RequestPasswordResetAsync(string idOrEmail, CancellationToken ct = default)
-    {
-        try
-        {
-            // API키(비로그인). 서버는 존재/상태 무관 202(열거 방지) — 202는 2xx이므로 그대로 성공 통과.
-            await SendNoContentAsync(
-                HttpMethod.Post, "auth/password-reset/request",
-                new IdOrEmailRequest { IdOrEmail = idOrEmail },
-                bearer: false, ct).ConfigureAwait(false);
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task ConfirmPasswordResetAsync(string id, string token, string newPassword, CancellationToken ct = default)
-    {
-        try
-        {
-            // 링크 경로: {token, id, newPassword}. 성공 200 {reset:true}, 실패 400/401.
-            await SendNoContentAsync(
-                HttpMethod.Post, "auth/password-reset/confirm",
-                new PasswordResetConfirmByTokenRequest { Token = token, Id = id, NewPassword = newPassword },
-                bearer: false, ct).ConfigureAwait(false);
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task ConfirmPasswordResetByCodeAsync(string idOrEmail, string code, string newPassword, CancellationToken ct = default)
-    {
-        try
-        {
-            // 코드 경로: {idOrEmail, code, newPassword}. 성공 200, 실패 400/401(코드 불일치·만료).
-            await SendNoContentAsync(
-                HttpMethod.Post, "auth/password-reset/confirm",
-                new PasswordResetConfirmByCodeRequest { IdOrEmail = idOrEmail, Code = code, NewPassword = newPassword },
-                bearer: false, ct).ConfigureAwait(false);
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default)
-    {
-        try
-        {
-            // API키. 서버는 존재/상태 무관 202(열거 방지·재발송 겸용).
-            await SendNoContentAsync(
-                HttpMethod.Post, "auth/verify-email/request",
-                new IdOrEmailRequest { IdOrEmail = idOrEmail },
-                bearer: false, ct).ConfigureAwait(false);
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default)
-    {
-        try
-        {
-            // 코드 경로: {id, code}. 성공 200 {verified:true}.
-            var res = await SendJsonAsync<VerifyEmailResponse>(
-                HttpMethod.Post, "auth/verify-email/confirm",
-                new VerifyEmailConfirmByCodeRequest { Id = id, Code = code },
-                bearer: false, ct).ConfigureAwait(false);
-            return res.Verified;
-        }
-        catch (BackendException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
-        {
-            // 코드 불일치·만료(401/400)는 인증 실패(false)로 다룬다(예외 대신 결과값 — UI가 안내).
-            // 409(Conflict)는 여기서 흡수하지 않는다(설계 §3.4 C4·§6): "이미 다른 계정이 인증한 이메일"은 실패가
-            // 아니라 사유 노출이 필요한 초과 케이스 → 아래로 떨어뜨려 InvalidOperationException("…초과…")로 전파.
-            return false;
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    public async Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default)
-    {
-        try
-        {
-            // 링크 경로: {token, id}. 성공 200 {verified:true}.
-            var res = await SendJsonAsync<VerifyEmailResponse>(
-                HttpMethod.Post, "auth/verify-email/confirm",
-                new VerifyEmailConfirmByTokenRequest { Token = token, Id = id },
-                bearer: false, ct).ConfigureAwait(false);
-            return res.Verified;
-        }
-        catch (BackendException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
-        {
-            // 코드 경로와 동일: 401/400은 false, 409(초과)는 흡수하지 않고 전파(설계 §3.4 C4·§6).
-            return false;
-        }
-        catch (BackendException ex)
-        {
-            throw MapToDomainException(ex);
-        }
-    }
-
-    // ── it14: 설정 진입 PIN 게이트 (§4.3 E1/E2/E3) ──
+    // ── it14: 설정·계정 관리 진입 PIN 게이트 (§4.3 E1/E2/E3) ──
 
     public async Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default)
     {
@@ -381,7 +132,7 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
         catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
         {
-            return false; // PIN 불일치(자격 불일치 = false, VerifyPasswordAsync와 동형)
+            return false; // PIN 불일치(자격 불일치 = false)
         }
         catch (BackendException ex)
         {
@@ -427,26 +178,20 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
     }
 
-    /// <summary>UserResponse(비번 미포함) → 도메인 User. Password는 채우지 않는다(UI 미표시, 설계 §6.2).</summary>
+    /// <summary>UserResponse → 도메인 User. 자격증명(비밀번호)은 계약에 존재하지 않는다(it15 §5.2·§9.1).</summary>
     private static User? ToUser(UserResponse? dto)
     {
         if (dto is null) return null;
         return new User
         {
             Id = dto.Id,
-            Password = string.Empty,
             Role = UserRoleExtensions.ParseRole(dto.Role),
             CreatedAt = ParseIso(dto.CreatedAt),
             Email = dto.Email,
-            EmailVerified = dto.EmailVerified,
-            AuthMethod = ParseAuthMethod(dto.AuthMethod),
+            AuthMethod = AuthMethodExtensions.ParseAuthMethod(dto.AuthMethod),
             HasPin = dto.HasPin,
         };
     }
-
-    /// <summary>서버 authMethod 문자열 → 도메인 enum. "sso"만 Sso, 그 외(미설정·미지원값 포함)는 Password 폴백(설계 §5.3).</summary>
-    private static AuthMethod ParseAuthMethod(string? value) =>
-        value == "sso" ? AuthMethod.Sso : AuthMethod.Password;
 
     private static DateTime ParseIso(string? iso)
     {

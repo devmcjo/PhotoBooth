@@ -221,14 +221,16 @@ public class XamlResourceTests
     // SettingsView가 참조하는 모든 테마 StaticResource가
     // 해석되는지 headless로 검증(창 미표시). 로컬 키·App 컨버터 키는 제외.
 
-    // ── item1a §9.4/§9.3: 비밀번호 찾기·계정 페이지(이메일 인증 섹션) StaticResource 정적 안전망 ──
+    // ── 계정·로그인·사용자 관리 화면 StaticResource 정적 안전망 ──
     // 신규/수정 View가 참조하는 모든 테마 StaticResource가 해석되는지 headless로 검증(창 미표시).
+    // it15: PasswordResetView 폐지로 엔트리 삭제(§3.1).
 
     [Theory]
-    [InlineData("PasswordResetView.xaml")]
     [InlineData("AccountView.xaml")]
     [InlineData("LoginGuestView.xaml")]
-    [InlineData("UserMgmtView.xaml")]   // it13 §9.5: 역할 변경 콤보+Apply 재작업 StaticResource 회귀 안전망
+    [InlineData("UserMgmtView.xaml")]      // it13 §9.5: 역할 변경 콤보+Apply 재작업 StaticResource 회귀 안전망
+    [InlineData("FrameEditorView.xaml")]   // it15 F1/F2: 안내 배너 + 저장 캡션 + 피커 오버레이(공유 카드 리소스)
+    [InlineData("FrameSelectView.xaml")]   // it15 F2-D3: 카드 시각을 공유 리소스로 교체
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
@@ -260,8 +262,47 @@ public class XamlResourceTests
         });
     }
 
+    /// <summary>
+    /// it15 F1-D1(정정): "해당 PC에서만 적용됩니다" 배너는 **기존 프레임 수정 시에만** 노출해야 한다.
+    /// 신규 생성(특히 power=서버 등록)에서 배너가 보이면 문구가 거짓이 되고 같은 화면의
+    /// SaveScopeNotice("서버에 등록됩니다")와 모순되므로, Visibility 게이트가 사라지는 회귀를 정적으로 막는다.
+    /// (VM 단위 테스트로는 XAML 바인딩 소실을 잡을 수 없어 소스 텍스트를 직접 검사한다.)
+    /// </summary>
+    [Fact]
+    public void FrameEditor_LocalOnly_Banner_Is_Gated_By_IsCreateMode()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "FrameEditorView.xaml"));
+
+        // 배너 Border = Brush.Warning.Surface 배경 엘리먼트. 그 엘리먼트 안에 Visibility 게이트가 있어야 한다.
+        var banner = Regex.Match(text, @"<Border\b[^>]*Brush\.Warning\.Surface[^>]*>", RegexOptions.Singleline);
+        Assert.True(banner.Success, "FrameEditorView.xaml 에서 정책 배너(Brush.Warning.Surface Border)를 찾지 못함");
+
+        Assert.Contains("IsCreateMode", banner.Value);
+        Assert.Contains("InverseBoolToVis", banner.Value);  // IsCreateMode=true(신규) → Collapsed
+
+        // 배너가 숨어도 콘텐츠가 상단 바(오프셋 88)에 파고들지 않도록 행 MinHeight가 남아 있어야 한다.
+        Assert.Matches(@"<RowDefinition\s+Height=""Auto""\s+MinHeight=""88""\s*/>", text);
+    }
+
+    /// <summary>
+    /// it15 F2-D3: 프레임 카드 공유 리소스가 테마(Controls.xaml)에 있고 기대 타입으로 해석된다.
+    /// FrameSelectView와 편집기 피커가 같은 시각을 쓰기 위한 전제 — 키가 사라지면 두 화면이 함께 깨진다.
+    /// </summary>
+    [Fact]
+    public void FrameCard_Shared_Resources_Exist_In_Theme()
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            Assert.IsType<System.Windows.Style>(theme["FrameCard.ItemContainer"]);
+            Assert.IsType<System.Windows.DataTemplate>(theme["FrameCard.Content"]);
+            // 카드 본체가 쓰는 컨버터는 Controls.xaml 자체 정의(형제 딕셔너리 교차 참조 회피).
+            Assert.NotNull(theme["FrameCard.FilePathToImage"]);
+        });
+    }
+
     // ── it14: PinPromptWindow(설정 진입 PIN 게이트 모달) StaticResource 정적 안전망 ──
-    // PasswordPromptWindow와 동일하게 창 인스턴스화를 피하고 소스에서 참조 키를 추출해 테마 조회로만 검증.
+    // 창 인스턴스화를 피하고 소스에서 참조 키를 추출해 테마 조회로만 검증(Application 싱글턴 충돌 회피).
 
     [Fact]
     public void PinPromptWindow_StaticResource_Keys_Resolve_In_Theme()

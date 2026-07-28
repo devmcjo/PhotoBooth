@@ -5,7 +5,7 @@ using MCPhoto.App.Views;
 
 namespace MCPhoto.App.Services;
 
-/// <summary>설정 진입 PIN 게이트 모달(PinPromptWindow) 표시(it14 §5.4). PasswordPromptDialogService 패턴 계승.</summary>
+/// <summary>설정·계정 관리 진입 PIN 게이트 모달(PinPromptWindow) 표시(it14 §5.4, it15 §6.2).</summary>
 public sealed class PinPromptDialogService : IPinPromptDialogService
 {
     public bool PromptVerify(Func<string, Task<bool>> verifyAsync)

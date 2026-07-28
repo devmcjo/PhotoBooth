@@ -129,14 +129,7 @@ public sealed class AppSettings
     /// </summary>
     public string StorageBucket { get; set; } = "mcphoto-955fb.firebasestorage.app";
 
-    // ── 백엔드 프록시(방향 B, 설계 §8.1). serviceAccountKey.json 폐기 후 **백엔드 전용 운영** → 기본 ON. ──
-    /// <summary>
-    /// 백엔드 HTTPS API 경유 여부. **기본 ON**(운영자 ini 미설정이어도 백엔드로 동작 — 키 제거 후 전용 경로).
-    /// on인데 <see cref="BackendBaseUrl"/>이 비면 Clamp가 off로 되돌린다(명시적 URL 비움 시 안전 폴백).
-    /// 백엔드 미도달(오프라인)은 설정 플립이 아니라 런타임에서 호출 실패→상위 폴백(프레임 로컬/번들 등)으로 처리한다.
-    /// </summary>
-    public bool UseBackend { get; set; } = true;
-
+    // ── 백엔드 프록시(방향 B, 설계 §8.1). it15: 레거시 직결 경로 폐지 → 백엔드 전용(플래그 없음). ──
     /// <summary>
     /// 백엔드 base URL(엔드포인트 주소, 공개값). 운영 프로젝트 기본값 내장 → 운영자 ini 입력 불요
     /// (다른 백엔드는 ini의 BackendBaseUrl로 오버라이드). 트레일링 슬래시는 Clamp가 보정(HttpClient BaseAddress 상대결합 안전).
@@ -152,7 +145,7 @@ public sealed class AppSettings
     /// <summary>
     /// Google SSO OAuth 클라이언트 ID(item1b §7.2·§8.2). **비밀 아님**(client secret은 백엔드 전용, 클라에 미보관).
     /// authorize URL 조립에 사용된다. 빈 값이면 SSO opt-out — 로그인 화면에 "Google로 로그인" 버튼을 숨긴다
-    /// (잠금 키오스크 배려). 백엔드 모드(UseBackend)에서만 의미가 있다.
+    /// (잠금 키오스크 배려).
     /// 기본값에 운영 프로젝트(mcphoto-955fb) Desktop 클라이언트 ID를 내장 → 운영자 ini 입력 불요.
     /// 다른 구글 프로젝트를 쓰려면 ini의 GoogleClientId로 오버라이드(HostingBaseUrl과 동일 패턴). 공개값이라 하드코딩 무해.
     /// </summary>
@@ -187,9 +180,9 @@ public sealed class AppSettings
     }
 
     /// <summary>
-    /// 백엔드 설정 정규화(안전 불변식, 설계 §8.1): base URL이 비어 있으면 UseBackend를 강제 off한다
-    /// (잘못된 on 설정으로 HTTP 경로가 빈 URL에 붙는 것을 방지 — 현행 Firebase 경로로 안전 폴백).
-    /// HttpClient.BaseAddress가 상대경로를 안전히 결합하도록 base URL이 슬래시로 끝나게 보정한다.
+    /// 백엔드 설정 정규화(it15 §4.3): 값 트림 + base URL이 슬래시로 끝나게 보정
+    /// (HttpClient.BaseAddress가 상대경로를 안전히 결합하도록). base URL이 비면 보정할 것이 없어 그대로 둔다
+    /// — 미구성 상태는 런타임 호출 실패로 드러나며(HttpFirebaseClient.configured=false), 다른 설정을 되돌리지 않는다.
     /// </summary>
     public void NormalizeBackend()
     {
@@ -199,10 +192,7 @@ public sealed class AppSettings
         GoogleClientId = (GoogleClientId ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(BackendBaseUrl))
-        {
-            UseBackend = false;
             return;
-        }
 
         if (!BackendBaseUrl.EndsWith('/'))
             BackendBaseUrl += "/";
@@ -267,7 +257,6 @@ public sealed class AppSettings
         PhotoPrinterEnabled = PhotoPrinterEnabled,
         HostingBaseUrl = HostingBaseUrl,
         StorageBucket = StorageBucket,
-        UseBackend = UseBackend,
         BackendBaseUrl = BackendBaseUrl,
         BackendApiKey = BackendApiKey,
         GoogleClientId = GoogleClientId

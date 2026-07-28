@@ -36,7 +36,7 @@ public sealed class GoogleSignInService : IGoogleSignInService
         var clientId = _settings.Current.GoogleClientId;
         if (string.IsNullOrWhiteSpace(clientId))
         {
-            // 게이트(UseBackend×GoogleClientId)로 버튼이 숨겨지므로 정상 경로에선 도달하지 않으나 방어적 처리.
+            // GoogleClientId 게이트로 버튼이 숨겨지므로 정상 경로에선 도달하지 않으나 방어적 처리.
             _logger?.LogWarning("Google 로그인 취소: GoogleClientId 미설정(SSO opt-out)");
             return null;
         }

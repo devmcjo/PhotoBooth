@@ -124,25 +124,25 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ══════════ Firebase ══════════ -->
+                <!-- ══════════ 서버 연결(백엔드) it15 §6.6 ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                     <StackPanel>
-                        <TextBlock Text="Firebase(서버 연결)" Style="{StaticResource Text.Title}" Margin="0,0,0,8" />
+                        <TextBlock Text="서버 연결(백엔드)" Style="{StaticResource Text.Title}" Margin="0,0,0,8" />
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" MinWidth="110" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="상태" Style="{StaticResource Text.Body}"
+                            <TextBlock Grid.Column="0" Text="백엔드 구성" Style="{StaticResource Text.Body}"
                                        Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource HealthValue}">
-                                        <Setter Property="Text" Value="미초기화" />
+                                        <Setter Property="Text" Value="미구성" />
                                         <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding FirebaseInitialized}" Value="True">
-                                                <Setter Property="Text" Value="초기화됨" />
+                                            <DataTrigger Binding="{Binding IsBackendConfigured}" Value="True">
+                                                <Setter Property="Text" Value="구성됨" />
                                                 <Setter Property="Foreground" Value="{StaticResource Brush.Success}" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -150,40 +150,46 @@
                                 </TextBlock.Style>
                             </TextBlock>
                         </Grid>
-                        <Grid Margin="0,0,0,8">
+                        <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" MinWidth="110" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="버킷" Style="{StaticResource Text.Body}"
+                            <TextBlock Grid.Column="0" Text="백엔드 주소" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding BackendBaseUrl, Mode=OneWay}" IsReadOnly="True"
+                                     BorderThickness="0" Background="Transparent" TextWrapping="Wrap"
+                                     Foreground="{StaticResource Brush.Text.Muted}" Padding="0" />
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="백엔드 키 내장" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <!-- ⚠️ 키 값 자체는 절대 표시하지 않는다 — "설정됨/미설정" 부울 표기만. -->
+                            <TextBlock Grid.Column="1" Style="{StaticResource HealthValue}" Text="{Binding BackendApiKeyState}" />
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="스토리지 버킷" Style="{StaticResource Text.Body}"
                                        Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Style="{StaticResource HealthValue}" Text="{Binding FirebaseBucket}" />
                         </Grid>
-                        <TextBlock Text="서비스 계정 키 탐색 경로" Style="{StaticResource Text.Body}"
-                                   Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,0,4" />
-                        <ItemsControl ItemsSource="{Binding FirebaseKeyCandidates}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0">
-                                        <Run Text="{Binding Path, Mode=OneWay}" Foreground="{StaticResource Brush.Text.Muted}" />
-                                        <Run>
-                                            <Run.Style>
-                                                <Style TargetType="Run">
-                                                    <Setter Property="Text" Value="[없음]" />
-                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Exists}" Value="True">
-                                                            <Setter Property="Text" Value="[있음]" />
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Success}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Run.Style>
-                                        </Run>
-                                    </TextBlock>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="로그인 계정" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Style="{StaticResource HealthValue}" Text="{Binding SignedInAccount}"
+                                       TextWrapping="Wrap" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 

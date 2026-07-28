@@ -1,14 +1,14 @@
 using System.IO;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
-using MCPhoto.Core.Upload;
 using Microsoft.Extensions.Logging;
 
-namespace MCPhoto.Firebase;
+namespace MCPhoto.Core.Upload;
 
 /// <summary>
-/// Firebase 업로드 오케스트레이션. results/ 업로드 → 토큰 URL → ResultSession 생성 → downloadPageUrl.
+/// 업로드 오케스트레이션. results/ 업로드 → 토큰 URL → ResultSession 생성 → downloadPageUrl.
 /// (architecture §6, firebase-contract §4). 만료 정리 1차 담당(§6.5).
+/// it15 D-A: 레거시 Admin SDK 직결 어셈블리 폐지에 따라 Core로 이관(본문 무변경 — IFirebaseClient에만 의존).
 /// </summary>
 public sealed class UploadService : IUploadService
 {
