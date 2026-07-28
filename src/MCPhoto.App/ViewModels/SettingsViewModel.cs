@@ -282,6 +282,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void SaveSettings()
     {
+        // it16 §7: 저장 직전 현재 창 기하를 반영 → ini에 실제 위치가 남고, 저장 후 재적용이 점프를 만들지 않는다.
+        // ⚠️ 반드시 s.DisplayMode를 갱신하기 **전에** 호출한다(창은 아직 이전 모드로 떠 있다).
+        //    순서가 뒤바뀌면 창모드→전체화면 저장 시 직전 창 위치를 잃는다(§8.3 테스트 31이 이 순서를 고정한다).
+        _shell.RequestCaptureWindowBounds();
+
         var s = _settings.Current;
         s.CutCount = CutCount;
         s.CountdownSec = CountdownSec;

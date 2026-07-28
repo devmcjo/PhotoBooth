@@ -490,4 +490,118 @@ public class SettingsViewModelTests
 
         Assert.Equal(1, diag.ShowCount);
     }
+
+    // ── it16 §7.5·§8.3: 저장 직전 창 기하 캡처(셸 이벤트 발화 횟수·순서 계약) ──
+
+    /// <summary>Save()가 항상 실패하는 설정 서비스(쓰기 불가 경로 모사 — 폴백 체인이 있어 실경로로는 재현 불가).</summary>
+    private sealed class FailingSaveSettingsService : ISettingsService
+    {
+        private readonly AppSettings _current = new();
+        public AppSettings Current => _current;
+        public AppSettings Load() => _current;
+        public bool Save() => false;
+    }
+
+    /// <summary>셸까지 함께 돌려주는 저장 테스트용 VM(이벤트 발화 관측).</summary>
+    private static (SettingsViewModel vm, AppShellViewModel shell) MakeSaveVm(ISettingsService settings)
+    {
+        var session = new SessionContext();
+        session.Login(new User { Id = "admin", Role = UserRole.Admin });
+        settings.Load();
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
+        var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
+            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+        return (vm, shell);
+    }
+
+    /// <summary>it16 §8.3-30: 저장 성공 시 캡처 요청과 표시모드 적용 요청이 **각각 1회** 발화한다.</summary>
+    [Fact]
+    public async Task SaveSettings_Fires_Capture_And_Apply_Once_Each()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var (vm, shell) = MakeSaveVm(settings);
+        await vm.OnEnterAsync();
+
+        int captures = 0, applies = 0;
+        void OnCapture() => captures++;
+        void OnApply() => applies++;
+        shell.WindowBoundsCaptureRequested += OnCapture;
+        shell.DisplayModeApplyRequested += OnApply;
+        try
+        {
+            vm.SaveSettingsCommand.Execute(null);
+        }
+        finally
+        {
+            shell.WindowBoundsCaptureRequested -= OnCapture;
+            shell.DisplayModeApplyRequested -= OnApply;
+        }
+
+        Assert.Equal(1, captures);
+        Assert.Equal(1, applies);
+    }
+
+    /// <summary>
+    /// it16 §8.3-31 **순서 계약**: 캡처는 VM 필드를 `AppSettings`에 복사하기 **전에** 일어난다.
+    /// 캡처 핸들러 안에서 관측한 `Current.DisplayMode`가 저장 전 값이어야 한다 —
+    /// 순서가 뒤바뀌면 창모드→전체화면 저장 시 창은 아직 창모드인데 설정은 전체화면이라 직전 위치를 잃는다.
+    /// </summary>
+    [Fact]
+    public async Task SaveSettings_Captures_Bounds_Before_Copying_DisplayMode()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        settings.Load().DisplayMode = DisplayMode.Windowed;
+        settings.Save();
+
+        var (vm, shell) = MakeSaveVm(settings);
+        await vm.OnEnterAsync();
+        Assert.Equal(DisplayMode.Windowed, vm.DisplayMode);
+
+        vm.DisplayMode = DisplayMode.Fullscreen;   // 반대 값으로 바꿔 두고 저장
+
+        DisplayMode? observed = null;
+        void OnCapture() => observed = settings.Current.DisplayMode;
+        shell.WindowBoundsCaptureRequested += OnCapture;
+        try
+        {
+            vm.SaveSettingsCommand.Execute(null);
+        }
+        finally
+        {
+            shell.WindowBoundsCaptureRequested -= OnCapture;
+        }
+
+        Assert.Equal(DisplayMode.Windowed, observed);                    // 캡처 시점 = 저장 전 값
+        Assert.Equal(DisplayMode.Fullscreen, settings.Current.DisplayMode); // 저장 후에는 새 값
+    }
+
+    /// <summary>
+    /// it16 §8.3-32: 저장 실패 시 표시모드 적용 요청은 발화하지 않는다(현행 동작 유지).
+    /// 캡처는 이미 수행됐지만 메모리상 WindowBounds만 최신화되므로 무해하다(§7.5).
+    /// </summary>
+    [Fact]
+    public async Task SaveSettings_Failure_Does_Not_Request_Apply_But_Still_Captures()
+    {
+        var (vm, shell) = MakeSaveVm(new FailingSaveSettingsService());
+        await vm.OnEnterAsync();
+
+        int captures = 0, applies = 0;
+        void OnCapture() => captures++;
+        void OnApply() => applies++;
+        shell.WindowBoundsCaptureRequested += OnCapture;
+        shell.DisplayModeApplyRequested += OnApply;
+        try
+        {
+            vm.SaveSettingsCommand.Execute(null);
+        }
+        finally
+        {
+            shell.WindowBoundsCaptureRequested -= OnCapture;
+            shell.DisplayModeApplyRequested -= OnApply;
+        }
+
+        Assert.Equal(1, captures);
+        Assert.Equal(0, applies);
+        Assert.True(vm.SavedNoticeIsError);   // 실패 토스트(성공 오인 금지)
+    }
 }

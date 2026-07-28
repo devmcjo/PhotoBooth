@@ -110,6 +110,16 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>설정 저장 후 표시 모드(전체화면/창모드)를 즉시 적용하도록 셸 창에 통지.</summary>
     public void RequestApplyDisplayMode() => DisplayModeApplyRequested?.Invoke();
 
+    /// <summary>
+    /// 설정 저장 직전, 현재 창 기하를 <c>AppSettings.WindowBounds</c>에 반영하도록 셸 창에 요청. (it16 §7.5)
+    /// WindowBounds는 종전에 창을 닫을 때만 갱신됐다 — 저장 시점에도 신선하게 만들어 전체화면→창모드 복귀가
+    /// "사용자가 마지막에 두었던 자리"가 되게 한다. MainWindow가 구독해 CaptureWindowBounds를 실행한다.
+    /// </summary>
+    public event Action? WindowBoundsCaptureRequested;
+
+    /// <summary>현재 창 기하를 설정 객체에 반영하도록 셸 창에 통지(저장 직전 호출).</summary>
+    public void RequestCaptureWindowBounds() => WindowBoundsCaptureRequested?.Invoke();
+
     public AppShellViewModel(
         IIdleWatchdog idle,
         ISettingsService settings,
