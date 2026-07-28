@@ -208,7 +208,7 @@ public class LoginGuestViewModelTests
         await vm.LoginWithGoogleCommand.ExecuteAsync(null);
 
         Assert.True(accounts.GoogleCalled);
-        Assert.Equal("이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요.", vm.ErrorMessage);
+        Assert.Equal("이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요.", vm.ErrorMessage);
     }
 
     [Fact]

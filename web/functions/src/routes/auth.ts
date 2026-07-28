@@ -116,10 +116,10 @@ export function authRouter(): Router {
     })
   );
 
-  // POST /auth/google  (API키) — item1b Google SSO (설계 §5).
+  // POST /auth/google  (API키) — item1b Google SSO (설계 §5, 매핑은 BE-2 재설계로 자동 생성/승격).
   //   body {code, codeVerifier, redirectUri, nonce?}
-  //   → code 교환 + id_token 검증 → email 매핑(등록·검증된 계정만) → login과 동일 {token, expiresIn, user}.
-  //   비활성(미구성) → 501. 형식 오류 → 400. 매핑 실패/미검증/Google 오류 → 401 일반화(열거 방지, §6.4).
+  //   → code 교환 + id_token 검증 → 검증된 email로 계정 자동 생성/승격/로그인 → login과 동일 {token, expiresIn, user}.
+  //   비활성(미구성) → 501. 형식 오류 → 400. Google 검증 실패(도메인·미검증 등) → 401 일반화(열거 방지, §6.4).
   router.post(
     "/google",
     requireApiKey(),
@@ -167,18 +167,19 @@ export function authRouter(): Router {
         if (err instanceof GoogleAuthError) {
           console.warn("Google 로그인 검증 실패:", err.message);
           throw HttpError.unauthorized(
-            "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요."
+            "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
           );
         }
         throw err;
       }
 
-      // 계정 매핑(등록·검증된 계정만). 실패는 일반화 401(사유는 로그만).
+      // 계정 매핑: 검증된 email로 자동 생성/승격/로그인(BE-2, services/accounts.ts).
+      // null은 미검증 email 등 방어값 또는 드문 동시 생성 경합 실패만 — 일반화 401(사유는 로그만).
       const result = await loginWithGoogleEmail(email);
       if (!result) {
-        console.warn("Google 로그인: 매핑되는 등록·검증 계정 없음.");
+        console.warn("Google 로그인: 계정 자동 생성/매핑 실패(경합 또는 방어값).");
         throw HttpError.unauthorized(
-          "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요."
+          "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
         );
       }
 

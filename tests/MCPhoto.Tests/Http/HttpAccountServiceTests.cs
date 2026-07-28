@@ -492,9 +492,9 @@ public class HttpAccountServiceTests
     public async Task LoginWithGoogle_Failure_401_Returns_Null()
     {
         var (svc, handler, session) = Make();
-        // 매핑 실패/미검증/Google 검증 실패 → 서버 401 일반화(§6.4).
+        // Google 검증 실패(도메인·미검증 등) → 서버 401 일반화(§6.4). 계정 매핑은 자동가입(BE-2)이라 매핑 실패는 사실상 없음.
         handler.WhenJson(HttpMethod.Post, "auth/google", HttpStatusCode.Unauthorized,
-            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요.\"}}");
+            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요.\"}}");
 
         var user = await svc.LoginWithGoogleAsync("code", "verifier", "http://127.0.0.1:5000/", "nonce");
 

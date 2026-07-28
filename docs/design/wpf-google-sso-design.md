@@ -175,7 +175,7 @@ Google은 데스크톱 앱에 대해 **"OAuth 2.0 for Mobile & Desktop Apps"**(I
 | 인증 | **API 키**(`requireApiKey()`) — 로그인 전 상태, Bearer 불가. `routes/auth.ts:41`(login)과 동일 게이트 |
 | 요청 | `{ code: string, codeVerifier: string, redirectUri: string, nonce?: string }` |
 | 성공 | 200 `{ token, expiresIn, user }` — **login과 동일 형식**(`routes/auth.ts:62-66`) |
-| 실패(매핑 없음/미검증) | **401** `{error:{code, message}}` — 일반화된 메시지("Google 계정으로 로그인할 수 없습니다."), 사유 비노출(§6.4) |
+| 실패(Google 검증 실패 — 도메인·미검증 등) | **401** `{error:{code, message}}` — 일반화된 메시지("이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."), 사유 비노출(§6.4). 계정 매핑은 자동가입(BE-2)이라 "매핑 없음"으로는 실패하지 않음 |
 | 실패(입력 형식) | 400(code/verifier/redirectUri 형식 오류) |
 | 실패(Google 오류) | 502/503 계열 또는 401 — 상세는 로그만(§8.6) |
 
@@ -227,6 +227,8 @@ validateLoopbackRedirectUri(value): ValidationResult<string>
 
 ## 6. 계정 매핑 정책 (상세)
 
+> ⚠️ **[SUPERSEDED — BE-2 재설계, 커밋 `c0b9360`]** 아래 §6.2–6.6의 "검증된 계정만 매핑 / 자동 계정 생성 금지 / 매핑 실패 시 null" 모델은 **더 이상 유효하지 않습니다.** 실제 동작(및 현재 의도)은 **자동 생성/승격**입니다: 검증된 Google email에 대해 (a) 계정 없음 → `user`로 자동 생성(`emailVerified=true`, 로그인 불가 sentinel 비번), (b) 미검증 기존 계정 → 승격(role/pw 불변), (c) 검증된 기존 계정 → 그대로 로그인. 구현·계약은 `web/functions/src/services/accounts.ts`의 `loginWithGoogleEmail`와 `docs/design/wpf-auth-ux-and-account-rules-design.md`(BE-1~4)를 기준으로 하세요. 아래 §6.2–6.6은 초기 item1b 설계 히스토리로만 남깁니다.
+
 ### 6.1 원칙 — Google는 "누구인지"만, 역할은 MCPhoto가 정한다
 
 - Google `id_token`은 **email 소유 증명**일 뿐 역할(user/manager/admin)을 담지 않는다. 역할은 **매핑된 MCPhoto 계정**(`users/{id}.role`)에서 온다(`services/accounts.ts:99`). Google 계정이 어떤 MCPhoto 계정에도 매핑되지 않으면 **로그인 불가**(§6.3).
@@ -254,7 +256,7 @@ validateLoopbackRedirectUri(value): ValidationResult<string>
 
 ### 6.4 매칭 실패 안내 — 열거 방지(item1a 철학 계승) `[CONFIRM]`
 
-- 서버 401 응답 메시지는 **일반화**: "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요." — email이 계정으로 등록됐는지/검증됐는지 **구분 노출 금지**(item1a §12 열거 방지 계승).
+- 서버 401 응답 메시지는 **일반화**: "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요." — email이 계정으로 등록됐는지/검증됐는지 **구분 노출 금지**(item1a §12 열거 방지 계승).
 - 상세 사유(계정 없음 / 미검증 / hd 불일치)는 **서버 로그에만**(email·토큰은 로그에 남기지 않음 — §8.6).
 - 클라 UI도 동일 일반 메시지 표시(§7.7).
 
@@ -346,8 +348,8 @@ public sealed class GoogleAuthCodeResult
 ```csharp
 /// <summary>
 /// Google SSO 로그인. 브라우저에서 받은 authorization code(+PKCE verifier·redirectUri)를
-/// 백엔드로 전달해 code 교환·id_token 검증·계정 매핑을 거쳐 JWT를 받는다.
-/// 매핑 실패(등록 안 됨/미검증)는 null(현행 LoginAsync 계약과 정합). — HTTP 전용.
+/// 백엔드로 전달해 code 교환·id_token 검증 후 검증된 email로 계정 자동 생성/승격/로그인하고 JWT를 받는다(BE-2).
+/// Google 검증 실패(도메인·미검증 등)는 null(현행 LoginAsync 계약과 정합). — HTTP 전용.
 /// </summary>
 Task<User?> LoginWithGoogleAsync(string code, string codeVerifier, string redirectUri,
     string? nonce = null, CancellationToken ct = default);
@@ -404,9 +406,9 @@ private async Task LoginWithGoogle()
         }
         var user = await _accounts.LoginWithGoogleAsync(
             codeResult.Code, codeResult.CodeVerifier, codeResult.RedirectUri, codeResult.Nonce);
-        if (user is null)                 // 매핑 실패(§6.4 일반화)
+        if (user is null)                 // Google 검증 실패(도메인·미검증 등) 서버 401 일반화(§6.4)
         {
-            ErrorMessage = "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요.";
+            ErrorMessage = "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요.";
             return;
         }
         _shell.Session.Login(user);       // 기존 로그인 성공 경로(LoginGuestViewModel.cs:69)

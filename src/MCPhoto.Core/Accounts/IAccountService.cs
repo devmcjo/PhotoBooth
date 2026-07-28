@@ -18,10 +18,11 @@ public interface IAccountService
     Task<bool> VerifyPasswordAsync(string id, string password, CancellationToken ct = default);
 
     /// <summary>
-    /// Google SSO 로그인(item1b §5·§7.6). 브라우저 loopback으로 받은 authorization code(+PKCE verifier·실제
-    /// redirectUri·nonce)를 백엔드 POST /auth/google로 전달해 code 교환·id_token 검증·계정 매핑을 거쳐 JWT를 받는다.
+    /// Google SSO 로그인(item1b §5·§7.6, 계정 매핑은 BE-2 재설계로 자동 생성/승격). 브라우저 loopback으로 받은
+    /// authorization code(+PKCE verifier·실제 redirectUri·nonce)를 백엔드 POST /auth/google로 전달해 code 교환·
+    /// id_token 검증 후, 검증된 email로 계정을 자동 생성/승격/로그인하고 JWT를 받는다.
     /// 성공 시 세션에 토큰·사용자를 저장하고 <see cref="User"/>를 반환한다.
-    /// 매핑 실패(등록 안 됨/미검증/Google 오류)는 서버 401 → <c>null</c>(현행 <see cref="LoginAsync"/> 계약과 정합).
+    /// Google 검증 실패(도메인·미검증 등)는 서버 401 → <c>null</c>(현행 <see cref="LoginAsync"/> 계약과 정합).
     /// 서버가 SSO 미구성(501)이면 <see cref="GoogleSsoNotConfiguredException"/>(자격 문제·네트워크 오류와 구분).
     /// — HTTP 전용. 레거시 Firebase 경로는 <see cref="NotSupportedException"/>(SSO 버튼이 백엔드 모드에서만 노출됨).
     /// </summary>

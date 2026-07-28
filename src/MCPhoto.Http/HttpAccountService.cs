@@ -100,7 +100,8 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
         catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
         {
-            // 매핑 실패(등록 안 됨/미검증/Google 검증 실패)는 서버가 401로 일반화(열거 방지, §6.4) → null.
+            // 계정 매핑은 자동 생성/승격(BE-2)이라 정상 검증된 email은 거의 401이 아니다.
+            // 401은 Google 검증 실패(도메인·미검증 등)를 서버가 일반화한 것(열거 방지, §6.4) → null.
             // LoginAsync 401 처리와 동일 계약: 자격 문제는 예외가 아니라 null로 신호한다.
             return null;
         }

@@ -241,8 +241,9 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
                 codeResult.Code, codeResult.CodeVerifier, codeResult.RedirectUri, codeResult.Nonce);
             if (user is null)
             {
-                // 매핑 실패(등록 안 됨/미검증/Google 검증 실패) — 서버 401 일반화(열거 방지, §6.4).
-                ErrorMessage = "이 Google 계정으로 로그인할 수 없습니다. 관리자에게 등록을 요청하세요.";
+                // 계정은 자동 생성/승격(BE-2)이라 정상 검증 email은 거의 여기 오지 않는다.
+                // Google 검증 실패(도메인·미검증 등)를 서버가 401로 일반화한 경우 — 열거 방지(§6.4).
+                ErrorMessage = "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요.";
                 return;
             }
 
