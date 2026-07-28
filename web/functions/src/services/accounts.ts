@@ -9,7 +9,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { loadConfig } from "../config";
 import { db } from "../firebase";
 import { deriveAccountId } from "../domain/accountId";
-import { hashPassword, verifyPassword } from "../domain/password";
+import { hashPassword, verifyHash, verifyPassword } from "../domain/password";
 import {
   canCreate,
   canManage,
@@ -49,6 +49,9 @@ function toResponse(doc: UserDoc): UserResponse {
     createdAt: doc.createdAt.toDate().toISOString(),
     email: doc.email ?? null,
     emailVerified: doc.emailVerified === true,
+    // it14: authMethod 미설정(레거시) 문서는 "password" 폴백. pinHash 원문은 미노출, hasPin 파생만.
+    authMethod: doc.authMethod === "sso" ? "sso" : "password",
+    hasPin: typeof doc.pinHash === "string",
   };
 }
 
@@ -166,6 +169,7 @@ export async function createAccount(
     createdAt: now,
     email: email ?? null,
     emailVerified: false,
+    authMethod: "password", // it14: 파워가 생성한 일반 계정은 비번 인증(설정 진입 비번 게이트).
   };
   await ref.set(doc);
 
@@ -208,6 +212,83 @@ export async function changePassword(
     .collection(COLLECTION)
     .doc(targetId)
     .update({ password: await hashPassword(newPassword) });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// it14: 설정 진입 PIN — 검증(게이트)/본인 설정·변경/타 계정 재설정 (설계 §4.4)
+// PIN 해시·검증은 password.ts(bcrypt) 재사용. 권한은 canManage(roles.ts) 재사용.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * PIN 게이트 검증 결과(3-값). 라우트가 상태코드로 매핑:
+ *   - ok:true → 200(게이트 통과).
+ *   - reason "mismatch" → 401(PIN 불일치).
+ *   - reason "unset" → 409(PIN 미설정 — 클라가 최초 설정 플로우로 유도).
+ */
+export type VerifyPinResult =
+  | { ok: true }
+  | { ok: false; reason: "mismatch" | "unset" };
+
+/**
+ * 설정 진입 PIN 검증(본인, E1). principal.id의 pinHash와 대조.
+ *   - pinHash 미설정 → {ok:false, reason:"unset"}(클라가 설정 필요 신호로 해석).
+ *   - 일치 → {ok:true}, 불일치 → {ok:false, reason:"mismatch"}.
+ * 서버 무잠금(현행 비번 게이트 수준). 계정 문서 부재도 unset로 처리(SSO 최초 설정 유도와 동형).
+ */
+export async function verifyPin(actorId: string, pin: string): Promise<VerifyPinResult> {
+  const snap = await db().collection(COLLECTION).doc(actorId).get();
+  if (!snap.exists) return { ok: false, reason: "unset" };
+  const doc = snap.data() as UserDoc;
+  if (typeof doc.pinHash !== "string") return { ok: false, reason: "unset" };
+  const matched = await verifyHash(pin, doc.pinHash);
+  return matched ? { ok: true } : { ok: false, reason: "mismatch" };
+}
+
+/**
+ * 본인 PIN 설정/변경(E2). 이미 PIN이 있으면 currentPin 확인 필수(불일치 401),
+ * 미설정이면 최초 설정(currentPin 불요). 새 PIN은 라우트에서 validatePin 통과값.
+ *   - 계정 문서 부재 → 404.
+ *   - 기존 PIN 있음 + currentPin null/불일치 → HttpError 401.
+ * 근거: 설계 §4.4 setOwnPin.
+ */
+export async function setOwnPin(
+  actorId: string,
+  currentPin: string | null,
+  newPin: string
+): Promise<void> {
+  const ref = db().collection(COLLECTION).doc(actorId);
+  const snap = await ref.get();
+  if (!snap.exists) throw HttpError.notFound(`계정을 찾을 수 없습니다: ${actorId}`);
+  const doc = snap.data() as UserDoc;
+
+  if (typeof doc.pinHash === "string") {
+    // 기존 PIN 보유 → 현재 PIN 확인 필수(본인 재인증).
+    if (currentPin === null || !(await verifyHash(currentPin, doc.pinHash))) {
+      throw HttpError.unauthorized("현재 PIN이 올바르지 않습니다.");
+    }
+  }
+  await ref.update({ pinHash: await hashPassword(newPin) });
+}
+
+/**
+ * 타 계정 PIN 재설정(E3, 권한 기반). 대상 현재 PIN 불요.
+ *   - 대상 계정 없음 → 404.
+ *   - canManage(actor.role, targetRole) 위반 → 403.
+ * 자기 자신 대상 차단은 라우트에서(E2 사용 유도, 400). 근거: 설계 §4.4 resetOtherPin.
+ */
+export async function resetOtherPin(
+  targetId: string,
+  newPin: string,
+  actor: { id: string; role: UserRole }
+): Promise<void> {
+  const targetRole = await getRole(targetId); // 없으면 404
+  if (!canManage(actor.role, targetRole)) {
+    throw HttpError.forbidden("해당 계정의 PIN을 재설정할 권한이 없습니다.");
+  }
+  await db()
+    .collection(COLLECTION)
+    .doc(targetId)
+    .update({ pinHash: await hashPassword(newPin) });
 }
 
 /**
@@ -366,6 +447,7 @@ async function createGoogleAccount(normalized: string): Promise<LoginResult | nu
     createdAt: now,
     email: normalized,
     emailVerified: true,
+    authMethod: "sso", // it14: SSO 자동생성(sentinel 비번)만 "sso" — 설정 진입 PIN 게이트 대상.
   };
 
   try {
@@ -407,6 +489,7 @@ export async function registerSelf(
     createdAt: now,
     email: email ?? null,
     emailVerified: false,
+    authMethod: "password", // it14: self-signup은 비번 인증(설정 진입 비번 게이트).
   };
   await ref.set(doc);
 

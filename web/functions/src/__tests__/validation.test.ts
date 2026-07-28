@@ -9,6 +9,7 @@ import {
   validateLoopbackRedirectUri,
   validateNonce,
   validatePassword,
+  validatePin,
   validateRetentionHours,
   validateRole,
   validateSlots,
@@ -122,6 +123,20 @@ describe("validation — 서버 입력 검증(경계 방어)", () => {
     expect(validateVerificationCode("12a456").ok).toBe(false); // 비숫자
     expect(validateVerificationCode(123456).ok).toBe(false); // 숫자 타입
     expect(validateVerificationCode(null).ok).toBe(false);
+  });
+
+  test("validatePin: 정확히 4자리 숫자(it14 설정 진입 PIN)", () => {
+    const r = validatePin("0134");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe("0134");
+
+    expect(validatePin("  4321 ").ok).toBe(true); // 트림
+    expect(validatePin("123").ok).toBe(false); // 3자리
+    expect(validatePin("12345").ok).toBe(false); // 5자리
+    expect(validatePin("12a4").ok).toBe(false); // 비숫자
+    expect(validatePin("").ok).toBe(false);
+    expect(validatePin(1234).ok).toBe(false); // 숫자 타입(문자열 아님)
+    expect(validatePin(null).ok).toBe(false);
   });
 
   // ── item1b: Google SSO 입력 검증 ──

@@ -601,4 +601,190 @@ public class HttpAccountServiceTests
         Assert.Null(session.Token);
         Assert.Null(session.CurrentUser);
     }
+
+    // ── it14: 설정 진입 PIN 게이트(E1 verify / E2 본인 설정·변경 / E3 타 계정 재설정) ──
+
+    /// <summary>Bearer 필요한 PIN 호출용: 로그인 응답을 등록하고 토큰을 세팅한다.</summary>
+    private static async Task SignInAsync(HttpAccountService svc, FakeHttpMessageHandler handler)
+    {
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"jwt-pin\",\"expiresIn\":3600,\"user\":{\"id\":\"me\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+        await svc.LoginAsync("me", "pw");
+    }
+
+    [Fact]
+    public async Task VerifyPin_Success_200_Returns_True_And_Sends_Bearer()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        // E1: POST /accounts/me/pin/verify {pin}. 200 {ok:true} = 일치.
+        handler.WhenJson(HttpMethod.Post, "accounts/me/pin/verify", HttpStatusCode.OK, "{\"ok\":true}");
+
+        var ok = await svc.VerifyPinAsync("me", "1234");
+
+        Assert.True(ok);
+        var req = handler.Requests[1];
+        Assert.Contains("accounts/me/pin/verify", req.Uri!.ToString());
+        Assert.Contains("\"pin\":\"1234\"", req.Body!);
+        Assert.Equal("Bearer", req.AuthorizationScheme); // 로그인 상태(본인 principal.id로만 접근)
+    }
+
+    [Fact]
+    public async Task VerifyPin_Wrong_401_Returns_False_Not_Throws()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        handler.WhenJson(HttpMethod.Post, "accounts/me/pin/verify", HttpStatusCode.Unauthorized,
+            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"PIN이 일치하지 않습니다.\"}}");
+
+        var ok = await svc.VerifyPinAsync("me", "0000");
+
+        Assert.False(ok); // PIN 불일치 = false(예외 아님)
+    }
+
+    [Fact]
+    public async Task VerifyPin_Unset_409_Throws_FailClosed()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        // 409(PIN 미설정)는 전파(게이트가 "확인 불가"로 처리 — fail-open 방지). 호출부가 최초 설정 플로우로 유도.
+        handler.WhenJson(HttpMethod.Post, "accounts/me/pin/verify", HttpStatusCode.Conflict,
+            "{\"error\":{\"code\":\"conflict\",\"message\":\"설정 진입 PIN이 설정되지 않았습니다.\"}}");
+
+        await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.VerifyPinAsync("me", "1234"));
+    }
+
+    [Fact]
+    public async Task VerifyPin_ServerError_500_Throws_FailClosed()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        handler.WhenJson(HttpMethod.Post, "accounts/me/pin/verify", HttpStatusCode.InternalServerError,
+            "{\"error\":{\"code\":\"internal\",\"message\":\"서버 오류\"}}");
+
+        await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.VerifyPinAsync("me", "1234"));
+    }
+
+    [Fact]
+    public async Task SetOwnPin_Initial_Sends_Put_With_Null_CurrentPin()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        // E2: PUT /accounts/me/pin {newPin, currentPin:null}. 최초 설정 → 204.
+        handler.When(HttpMethod.Put, "accounts/me/pin", _ => FakeHttpMessageHandler.NoContent());
+
+        await svc.SetOwnPinAsync("me", currentPin: null, newPin: "1234");
+
+        var req = handler.Requests[1];
+        Assert.Equal(HttpMethod.Put, req.Method);
+        Assert.Contains("accounts/me/pin", req.Uri!.ToString());
+        Assert.Contains("\"newPin\":\"1234\"", req.Body!);
+        // currentPin은 null로 직렬화(서버가 null을 최초 설정으로 처리). BackendJson은 null을 생략하지 않는다.
+        Assert.Contains("\"currentPin\":null", req.Body!);
+        Assert.Equal("Bearer", req.AuthorizationScheme);
+    }
+
+    [Fact]
+    public async Task SetOwnPin_Change_Sends_CurrentPin()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        handler.When(HttpMethod.Put, "accounts/me/pin", _ => FakeHttpMessageHandler.NoContent());
+
+        await svc.SetOwnPinAsync("me", currentPin: "1111", newPin: "2222");
+
+        var req = handler.Requests[1];
+        Assert.Contains("\"currentPin\":\"1111\"", req.Body!);
+        Assert.Contains("\"newPin\":\"2222\"", req.Body!);
+    }
+
+    [Fact]
+    public async Task SetOwnPin_WrongCurrent_401_Throws()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        // 현재 PIN 불일치(401)는 예외로 전파(호출부가 안내). MapToDomainException으로 InvalidOperationException.
+        handler.WhenJson(HttpMethod.Put, "accounts/me/pin", HttpStatusCode.Unauthorized,
+            "{\"error\":{\"code\":\"unauthorized\",\"message\":\"현재 PIN이 올바르지 않습니다.\"}}");
+
+        await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => svc.SetOwnPinAsync("me", currentPin: "0000", newPin: "2222"));
+    }
+
+    [Fact]
+    public async Task ResetPin_Sends_Put_To_Target_Id()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        // E3: PUT /accounts/{id}/pin {newPin}. 대상 현재 PIN 불요 → 204.
+        handler.When(HttpMethod.Put, "accounts/u1/pin", _ => FakeHttpMessageHandler.NoContent());
+
+        await svc.ResetPinAsync("u1", "5678");
+
+        var req = handler.Requests[1];
+        Assert.Equal(HttpMethod.Put, req.Method);
+        Assert.Contains("accounts/u1/pin", req.Uri!.ToString());
+        Assert.Contains("\"newPin\":\"5678\"", req.Body!);
+        Assert.Equal("Bearer", req.AuthorizationScheme);
+    }
+
+    [Fact]
+    public async Task ResetPin_Forbidden_403_Throws_Unauthorized()
+    {
+        var (svc, handler, _) = Make();
+        await SignInAsync(svc, handler);
+        // canManage 위반(403) → UnauthorizedAccessException(UI 우아 처리).
+        handler.WhenJson(HttpMethod.Put, "accounts/boss/pin", HttpStatusCode.Forbidden,
+            "{\"error\":{\"code\":\"forbidden\",\"message\":\"해당 계정의 PIN을 재설정할 권한이 없습니다.\"}}");
+
+        await Assert.ThrowsAsync<System.UnauthorizedAccessException>(
+            () => svc.ResetPinAsync("boss", "5678"));
+    }
+
+    // ── it14: ToUser 매핑(authMethod/hasPin 왕복) ──
+
+    [Fact]
+    public async Task Login_Maps_AuthMethod_Sso_And_HasPin()
+    {
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"g\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"authMethod\":\"sso\",\"hasPin\":true}}");
+
+        var user = await svc.LoginAsync("g", "x");
+
+        Assert.NotNull(user);
+        Assert.Equal(AuthMethod.Sso, user!.AuthMethod);
+        Assert.True(user.HasPin);
+    }
+
+    [Fact]
+    public async Task Login_Missing_AuthMethod_Defaults_To_Password()
+    {
+        var (svc, handler, _) = Make();
+        // 레거시 응답(authMethod/hasPin 필드 없음) → Password 폴백, HasPin=false.
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"leg\",\"role\":\"user\",\"createdAt\":\"2026-01-01T00:00:00Z\"}}");
+
+        var user = await svc.LoginAsync("leg", "x");
+
+        Assert.NotNull(user);
+        Assert.Equal(AuthMethod.Password, user!.AuthMethod);
+        Assert.False(user.HasPin);
+    }
+
+    [Fact]
+    public async Task Login_AuthMethod_Password_Maps_Explicitly()
+    {
+        var (svc, handler, _) = Make();
+        handler.WhenJson(HttpMethod.Post, "auth/login", HttpStatusCode.OK,
+            "{\"token\":\"jwt\",\"expiresIn\":3600,\"user\":{\"id\":\"p\",\"role\":\"admin\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"authMethod\":\"password\",\"hasPin\":false}}");
+
+        var user = await svc.LoginAsync("p", "x");
+
+        Assert.NotNull(user);
+        Assert.Equal(AuthMethod.Password, user!.AuthMethod);
+        Assert.False(user.HasPin);
+    }
 }

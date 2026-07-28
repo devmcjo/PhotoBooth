@@ -50,7 +50,7 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn Header="작업" Width="260">
+                        <GridViewColumn Header="작업" Width="380">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <!-- 관리 액션은 행위자와 같거나 낮은 역할에만 노출(예: manager는 admin 행에 미노출). -->
@@ -65,7 +65,7 @@
                                                 </MultiBinding>
                                             </Button.Visibility>
                                         </Button>
-                                        <Button Content="pw 초기화" Style="{StaticResource Button.Secondary}" MinWidth="0"
+                                        <Button Content="pw 초기화" Style="{StaticResource Button.Secondary}" MinWidth="0" Margin="0,0,6,0"
                                                 Command="{Binding DataContext.ResetUserPasswordCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}">
                                             <Button.Visibility>
@@ -75,6 +75,11 @@
                                                 </MultiBinding>
                                             </Button.Visibility>
                                         </Button>
+                                        <!-- it14: PIN 재설정(백엔드 + CanManage + 타 계정에서만 노출). 소형 PIN 다이얼로그로 새 PIN 입력. -->
+                                        <Button Content="PIN 재설정" Style="{StaticResource Button.Secondary}" MinWidth="0"
+                                                Visibility="{Binding CanResetPin, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.ResetUserPinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>

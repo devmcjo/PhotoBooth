@@ -1,6 +1,8 @@
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using MCPhoto.App;
+using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
@@ -61,6 +63,20 @@ public class UserMgmtViewModelTests
         public Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
         public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default) => Task.CompletedTask;
+
+        public string? ResetPinId { get; private set; }
+        public string? ResetPinValue { get; private set; }
+        /// <summary>설정 시 ResetPinAsync가 이 예외를 던진다(서버 403 모사 등).</summary>
+        public Exception? ResetPinThrows { get; set; }
+        public Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default)
+        {
+            ResetPinId = targetId;
+            ResetPinValue = newPin;
+            if (ResetPinThrows is not null) throw ResetPinThrows;
+            return Task.CompletedTask;
+        }
     }
 
     private static async Task<(UserMgmtViewModel vm, SpyAccountService accounts)> MakeVmAsync(
@@ -189,5 +205,135 @@ public class UserMgmtViewModelTests
 
         await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
         Assert.False(accounts.SetRoleCalled);
+    }
+
+    // ── it14 §6.2: 타 계정 PIN 재설정 ──
+
+    /// <summary>PIN 설정 다이얼로그를 스텁: setAsync를 즉시 실행하고 지정한 결과를 반환.</summary>
+    private sealed class StubPinPromptDialogService : IPinPromptDialogService
+    {
+        public bool SetupResult { get; set; } = true;
+        public bool SetupCalled { get; private set; }
+        public bool PromptVerify(Func<string, Task<bool>> verifyAsync) => throw new NotSupportedException();
+        public bool PromptSetup(Func<string, Task> setAsync)
+        {
+            SetupCalled = true;
+            // 관리자가 새 PIN "9999"를 입력한 것으로 모사(다이얼로그가 setAsync 호출).
+            setAsync("9999").GetAwaiter().GetResult();
+            return SetupResult;
+        }
+    }
+
+    /// <summary>백엔드 ON + PIN 다이얼로그 주입 VM(PIN 재설정 검증용).</summary>
+    private static async Task<(UserMgmtViewModel vm, SpyAccountService accounts, StubPinPromptDialogService pin)> MakePinVmAsync(
+        UserRole actorRole, string actorId, IReadOnlyList<User> accountList, bool setupResult = true)
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"umpin_{Guid.NewGuid():N}.ini"));
+        var loaded = settings.Load();
+        loaded.UseBackend = true;
+        loaded.BackendBaseUrl = "https://backend.test/api";
+        loaded.BackendApiKey = "key";
+        loaded.Clamp();
+        var session = new SessionContext();
+        session.Login(new User { Id = actorId, Role = actorRole });
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
+        var accounts = new SpyAccountService { Accounts = accountList };
+        var pin = new StubPinPromptDialogService { SetupResult = setupResult };
+        var vm = new UserMgmtViewModel(shell, accounts, logger: null, pinPrompt: pin);
+        await vm.OnEnterAsync();
+        return (vm, accounts, pin);
+    }
+
+    [Fact]
+    public async Task CanResetPin_Excludes_Self_But_Allows_Manageable()
+    {
+        var list = new[]
+        {
+            new User { Id = "admin", Role = UserRole.Admin },   // 자기 계정 → 미노출
+            new User { Id = "u1", Role = UserRole.User },
+            new User { Id = "otherAdmin", Role = UserRole.Admin }, // 타 admin: CanManage(admin,admin)=true → 노출
+        };
+        var (vm, _, _) = await MakePinVmAsync(UserRole.Admin, "admin", list);
+
+        Assert.False(Row(vm, "admin").CanResetPin);        // 자기 계정(본인 PIN은 AccountView에서 변경)
+        Assert.True(Row(vm, "otherAdmin").CanResetPin);    // 타 admin은 관리 가능(위계 동일 → canManage true)
+        Assert.True(Row(vm, "u1").CanResetPin);            // 관리 가능한 하위
+    }
+
+    [Fact]
+    public async Task CanResetPin_False_For_Higher_Role_Target()
+    {
+        // manager는 admin을 관리 불가(CanManage(manager,admin)=false) → PIN 재설정 UI 미노출.
+        var list = new[]
+        {
+            new User { Id = "mgr", Role = UserRole.Manager },   // 자기 계정
+            new User { Id = "a1", Role = UserRole.Admin },      // 상위 → 미노출
+            new User { Id = "u1", Role = UserRole.User },
+        };
+        var (vm, _, _) = await MakePinVmAsync(UserRole.Manager, "mgr", list);
+
+        Assert.False(Row(vm, "a1").CanResetPin);   // 상위 역할
+        Assert.True(Row(vm, "u1").CanResetPin);    // 하위 관리 가능
+    }
+
+    [Fact]
+    public async Task CanResetPin_False_In_Legacy_Mode()
+    {
+        // 비백엔드(레거시): PIN 인프라 없음 → 관리 가능해도 미노출.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"umpinleg_{Guid.NewGuid():N}.ini"));
+        var loaded = settings.Load();
+        loaded.UseBackend = false;
+        loaded.Clamp();
+        var session = new SessionContext();
+        session.Login(new User { Id = "admin", Role = UserRole.Admin });
+        var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
+        var accounts = new SpyAccountService { Accounts = new[] { new User { Id = "u1", Role = UserRole.User } } };
+        var vm = new UserMgmtViewModel(shell, accounts, logger: null, pinPrompt: new StubPinPromptDialogService());
+        await vm.OnEnterAsync();
+
+        Assert.False(Row(vm, "u1").CanResetPin);
+    }
+
+    [Fact]
+    public async Task ResetUserPin_Success_Calls_ResetPin_And_Sets_Message()
+    {
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts, pin) = await MakePinVmAsync(UserRole.Admin, "admin", list);
+        var row = Row(vm, "u1");
+
+        vm.ResetUserPinCommand.Execute(row);
+
+        Assert.True(pin.SetupCalled);
+        Assert.Equal("u1", accounts.ResetPinId);
+        Assert.Equal("9999", accounts.ResetPinValue);
+        Assert.Contains("PIN", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ResetUserPin_Dialog_Cancelled_No_Message()
+    {
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts, _) = await MakePinVmAsync(UserRole.Admin, "admin", list, setupResult: false);
+        var row = Row(vm, "u1");
+
+        vm.ResetUserPinCommand.Execute(row);
+
+        // 다이얼로그가 setAsync를 실행하지만 취소(false) → 상태 메시지 없음(성공 표기 안 함).
+        Assert.Equal(string.Empty, vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ResetUserPin_Blocked_When_Target_Higher_Role()
+    {
+        // manager가 admin PIN 재설정 시도 → CanManage 위반으로 차단(다이얼로그 미표시).
+        var list = new[] { new User { Id = "admin", Role = UserRole.Admin } };
+        var (vm, accounts, pin) = await MakePinVmAsync(UserRole.Manager, "mgr", list);
+        var row = Row(vm, "admin");
+
+        vm.ResetUserPinCommand.Execute(row);
+
+        Assert.False(pin.SetupCalled);
+        Assert.Null(accounts.ResetPinId);
+        Assert.Equal("상위 역할 계정은 관리할 수 없습니다.", vm.StatusMessage);
     }
 }

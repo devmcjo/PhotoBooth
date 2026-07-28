@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MCPhoto.App.Services;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
@@ -28,12 +29,19 @@ public sealed partial class UserRowViewModel : ObservableObject
     /// <summary>역할 변경 UI 노출 여부(콤보 옵션이 있고 자기 계정 아님).</summary>
     public bool CanChangeRole => AssignableRoles.Count > 0;
 
-    public UserRowViewModel(User user, UserRole actorRole, bool isSelf)
+    /// <summary>
+    /// it14: PIN 재설정 UI 노출 여부: 백엔드 모드 + 자기 계정 아님 + actor가 대상을 관리 가능(CanManage).
+    /// 자기 PIN은 AccountView에서 변경(서버도 자기 자신 E3는 400). 레거시(비백엔드)엔 PIN 인프라 없음.
+    /// </summary>
+    public bool CanResetPin { get; }
+
+    public UserRowViewModel(User user, UserRole actorRole, bool isSelf, bool isBackend = false)
     {
         User = user;
         // 자기 계정은 역할 변경 금지(대칭·안전) → 빈 목록으로 UI 미노출.
         AssignableRoles = isSelf ? Array.Empty<UserRole>() : RoleChangePolicy.AssignableRoles(actorRole, user.Role);
         _selectedRole = user.Role;
+        CanResetPin = isBackend && !isSelf && actorRole.CanManage(user.Role);
     }
 }
 
@@ -46,6 +54,7 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
 
     private readonly AppShellViewModel _shell;
     private readonly IAccountService _accounts;
+    private readonly IPinPromptDialogService? _pinPrompt;
     private readonly ILogger<UserMgmtViewModel>? _logger;
 
     /// <summary>행 목록(계정 + 역할 변경 상태). it13 §9.5로 User 직접 바인딩 → 행 래퍼로 승격.</summary>
@@ -56,10 +65,15 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     /// <summary>행위자(로그인 계정) 역할. 관리 액션 노출·가드 기준(자기와 같거나 낮은 역할만 관리).</summary>
     [ObservableProperty] private UserRole _actorRole = UserRole.User;
 
-    public UserMgmtViewModel(AppShellViewModel shell, IAccountService accounts, ILogger<UserMgmtViewModel>? logger = null)
+    // it14: PIN 재설정 UI는 백엔드 모드에서만 노출(레거시엔 SSO·PIN 인프라 없음). 프레임 XAML 노출 게이트.
+    public bool IsBackendMode => _shell.Settings.Current.UseBackend;
+
+    public UserMgmtViewModel(AppShellViewModel shell, IAccountService accounts,
+        ILogger<UserMgmtViewModel>? logger = null, IPinPromptDialogService? pinPrompt = null)
     {
         _shell = shell;
         _accounts = accounts;
+        _pinPrompt = pinPrompt;
         _logger = logger;
     }
 
@@ -76,8 +90,9 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         try
         {
             var selfId = _shell.Session.CurrentUser?.Id;
+            var isBackend = IsBackendMode;
             foreach (var u in await _accounts.GetAllAsync())
-                Rows.Add(new UserRowViewModel(u, ActorRole, isSelf: u.Id == selfId));
+                Rows.Add(new UserRowViewModel(u, ActorRole, isSelf: u.Id == selfId, isBackend: isBackend));
         }
         catch (Exception ex)
         {
@@ -125,6 +140,29 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
             _logger?.LogError(ex, "pw 초기화 실패: {Id}", user.Id);
             StatusMessage = "초기화에 실패했습니다.";
         }
+    }
+
+    /// <summary>
+    /// 타 계정 PIN 재설정(it14 §6.2, 권한 기반). 소형 PIN 다이얼로그로 새 4자리 PIN을 입력(2회 확인) → ResetPinAsync.
+    /// CanManage 클라 1차 가드(UI 미노출과 이중 방어) + 서버 canManage 최종 강제(403 우아 처리, 비번 초기화와 동형).
+    /// 고정값(비번 "0000") 대신 입력값 사용 — PIN 자격성 유지(설계 O4).
+    /// </summary>
+    [RelayCommand]
+    private void ResetUserPin(UserRowViewModel? row)
+    {
+        if (row is null) return;
+        var user = row.User;
+        // 권한 가드: 자기와 같거나 낮은 역할만(예: manager는 admin PIN 재설정 불가). UI 미노출과 이중 방어.
+        if (!ActorRole.CanManage(user.Role)) { StatusMessage = "상위 역할 계정은 관리할 수 없습니다."; return; }
+        // fail-closed: PIN 다이얼로그 서비스가 없으면(레거시/DI 미구성) 재설정하지 않는다.
+        if (_pinPrompt is null) { StatusMessage = "PIN 재설정을 사용할 수 없습니다."; return; }
+
+        // 소형 다이얼로그: 관리자가 대상의 새 PIN을 2회 입력. setAsync가 ResetPinAsync(대상, newPin) 호출.
+        // 다이얼로그 내부 예외(403 등)는 fail-closed로 창 유지·인라인 오류. 성공(true) 시에만 상태 메시지.
+        var targetId = user.Id;
+        bool done = _pinPrompt.PromptSetup(newPin => _accounts.ResetPinAsync(targetId, newPin));
+        if (done)
+            StatusMessage = $"{targetId}의 PIN을 재설정했습니다.";
     }
 
     /// <summary>

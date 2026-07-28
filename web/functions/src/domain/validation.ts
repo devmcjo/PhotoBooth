@@ -64,6 +64,19 @@ export function validateVerificationCode(value: unknown): ValidationResult<strin
   return ok(v);
 }
 
+/**
+ * it14: 설정 진입 PIN — 정확히 4자리 숫자(사용자 확정). 이메일 코드(6자리)와 별개 의미:
+ * 코드=일회성 이메일 인증값, PIN=영속 설정 진입 자격. 형식만 다를 뿐 값은 bcrypt로 해시 저장한다.
+ */
+const PIN_RE = /^\d{4}$/;
+
+export function validatePin(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") return fail("PIN은 문자열이어야 합니다.");
+  const v = value.trim();
+  if (!PIN_RE.test(v)) return fail("PIN은 4자리 숫자여야 합니다.");
+  return ok(v);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // item1b: Google SSO 입력 검증(순수) — /auth/google 요청 필드 경계 방어(설계 §5.2)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -60,6 +61,21 @@ public sealed partial class AccountViewModel : ViewModelBase
     public string ConfirmPassword { get; set; } = string.Empty;
     [ObservableProperty] private string _accountMessage = string.Empty;
     [ObservableProperty] private bool _accountMessageIsError;
+
+    // ── it14: 본인 PIN 변경 (PasswordChange 모드 하단, SSO+백엔드 계정 전용) ──
+    // PIN 입력도 PasswordBox 마스킹 → code-behind 전달(비번과 동일 패턴).
+    public string CurrentPin { get; set; } = string.Empty;
+    public string NewPin { get; set; } = string.Empty;
+    public string ConfirmPin { get; set; } = string.Empty;
+    [ObservableProperty] private string _pinMessage = string.Empty;
+    [ObservableProperty] private bool _pinMessageIsError;
+
+    /// <summary>PIN 변경 섹션 노출 여부: SSO 계정 + 백엔드 모드(비번 계정은 PIN 없음 → 미노출).</summary>
+    public bool CanChangePin =>
+        IsBackendMode && _shell.Session.CurrentUser?.AuthMethod == AuthMethod.Sso;
+
+    /// <summary>이미 PIN이 설정돼 있는지(true면 현재 PIN 입력란 노출, false면 최초 설정).</summary>
+    public bool HasPin => _shell.Session.CurrentUser?.HasPin == true;
 
     // ── it13 §7.7: Admin 전역 TempUser 한도 수정(관리자 도구 섹션, Admin 전용) ──
     // 초기값은 서버 로드 전 placeholder(진입 시 LoadTempUserLimitsAsync가 덮어씀). 기본값은 단일 소스 참조.
@@ -145,6 +161,10 @@ public sealed partial class AccountViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsPower));
         OnPropertyChanged(nameof(IsBackendMode));
         OnPropertyChanged(nameof(CanEditTempUserLimits));
+        // it14: PIN 변경 섹션 노출·모드는 현재 로그인 계정(SSO 여부·HasPin)에 의존 → 진입 시 갱신.
+        OnPropertyChanged(nameof(CanChangePin));
+        OnPropertyChanged(nameof(HasPin));
+        SetPinMessage(string.Empty, isError: false);
 
         // 생성 가능 역할 갱신(로그인 역할 기반)
         CreatableRoles.Clear();
@@ -222,6 +242,77 @@ public sealed partial class AccountViewModel : ViewModelBase
             SetAccountMessage("변경에 실패했습니다.", isError: true);
         }
     }
+
+    // ── it14: 본인 PIN 설정/변경 (SSO 계정 전용, PasswordChange 모드 하단) ──
+
+    /// <summary>
+    /// 본인 설정 진입 PIN 설정/변경. HasPin=true면 현재 PIN 확인 후 새 PIN(2회 일치), HasPin=false면 최초 설정.
+    /// 형식(4자리 숫자)·일치는 클라 1차 검증, 서버가 최종 강제(현재 PIN 불일치는 예외 → 안내). (it14 §6.1)
+    /// </summary>
+    [RelayCommand]
+    private async Task ChangePin()
+    {
+        var user = _shell.Session.CurrentUser;
+        if (user is null) return;
+        if (!CanChangePin)
+        {
+            SetPinMessage("PIN은 SSO 계정에서만 사용할 수 있습니다.", isError: true);
+            return;
+        }
+
+        var newPin = NewPin.Trim();
+        if (!IsValidPin(newPin))
+        {
+            SetPinMessage("새 PIN은 4자리 숫자여야 합니다.", isError: true);
+            return;
+        }
+        if (newPin != ConfirmPin.Trim())
+        {
+            SetPinMessage("새 PIN이 일치하지 않습니다.", isError: true);
+            return;
+        }
+        // 기존 PIN이 있으면 현재 PIN 확인 필수(최초 설정이면 생략). null이면 서버가 최초 설정으로 처리.
+        var currentPin = HasPin ? CurrentPin.Trim() : null;
+        if (HasPin && !IsValidPin(currentPin!))
+        {
+            SetPinMessage("현재 PIN은 4자리 숫자여야 합니다.", isError: true);
+            return;
+        }
+
+        try
+        {
+            await _accounts.SetOwnPinAsync(user.Id, currentPin, newPin);
+            user.HasPin = true;                 // 로컬 세션 반영(최초 설정→변경 경로로 전환).
+            CurrentPin = NewPin = ConfirmPin = string.Empty;
+            OnPropertyChanged(nameof(HasPin));  // 현재 PIN 입력란 노출 갱신(최초 설정 후 변경 모드로).
+            SetPinMessage("PIN이 설정되었습니다.", isError: false);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // 서버 401(현재 PIN 불일치)은 UI 계약상 401→호출부 처리이나, HTTP 구현은 401을 예외로 올리지 않고
+            // MapToDomainException 경로를 타지 않는 케이스가 있어 방어적으로 처리(현재 PIN 오류 안내).
+            SetPinMessage("현재 PIN이 올바르지 않습니다.", isError: true);
+        }
+        catch (ArgumentException)
+        {
+            SetPinMessage("PIN 형식이 올바르지 않습니다.", isError: true);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // 서버 401(현재 PIN 불일치)·404 등이 InvalidOperationException으로 매핑됨(BackendException 매핑).
+            _logger?.LogWarning(ex, "PIN 설정/변경 실패(서버 거부)");
+            SetPinMessage("현재 PIN이 올바르지 않거나 변경할 수 없습니다.", isError: true);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "PIN 설정/변경 실패");
+            SetPinMessage("변경에 실패했습니다.", isError: true);
+        }
+    }
+
+    /// <summary>PIN 형식(4자리 숫자) 검증. 서버 validatePin과 동형(클라 1차 게이트).</summary>
+    private static bool IsValidPin(string value) =>
+        value.Length == 4 && value.All(char.IsDigit);
 
     // ── 계정 생성 (it2 §4.4·§7, 역할 게이트) ──
 
@@ -461,6 +552,12 @@ public sealed partial class AccountViewModel : ViewModelBase
     {
         EmailMessage = text;
         EmailMessageIsError = isError;
+    }
+
+    private void SetPinMessage(string text, bool isError)
+    {
+        PinMessage = text;
+        PinMessageIsError = isError;
     }
 
     private void SetTempUserLimitsMessage(string text, bool isError)

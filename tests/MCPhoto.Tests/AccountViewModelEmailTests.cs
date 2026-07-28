@@ -80,6 +80,9 @@ public class AccountViewModelEmailTests
             return Task.FromResult(VerifyResult);
         }
         public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default) => Task.FromResult(true);
+        public Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private static AppSettings BackendSettings(bool useBackend)

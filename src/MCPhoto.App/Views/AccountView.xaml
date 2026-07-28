@@ -26,6 +26,35 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ══════════ PIN 변경 (비번 변경 모드 하단, SSO+백엔드 계정 전용) it14 §6.1 ══════════ -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16"
+                        Visibility="{Binding CanChangePin, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <TextBlock Text="설정 진입 PIN 변경" Style="{StaticResource Text.H2}" Margin="0,0,0,8" />
+                        <TextBlock Text="설정 화면 진입 시 사용하는 4자리 숫자 PIN입니다."
+                                   Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                   TextWrapping="Wrap" Margin="0,0,0,16" />
+
+                        <!-- 현재 PIN(이미 설정된 경우에만 노출). HasPin=false(최초 설정)면 숨김. -->
+                        <StackPanel Visibility="{Binding HasPin, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="현재 PIN" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                            <PasswordBox x:Name="CurrentPinBox" MaxLength="4" Margin="0,0,0,12"
+                                         PasswordChanged="OnCurrentPinChanged" PreviewTextInput="OnPinPreviewTextInput" />
+                        </StackPanel>
+
+                        <TextBlock Text="새 PIN (4자리 숫자)" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                        <PasswordBox x:Name="NewPinBox" MaxLength="4" Margin="0,0,0,12"
+                                     PasswordChanged="OnNewPinChanged" PreviewTextInput="OnPinPreviewTextInput" />
+                        <TextBlock Text="새 PIN 확인" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                        <PasswordBox x:Name="ConfirmPinBox" MaxLength="4" Margin="0,0,0,12"
+                                     PasswordChanged="OnConfirmPinChanged" PreviewTextInput="OnPinPreviewTextInput" />
+                        <TextBlock Text="{Binding PinMessage}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,12"
+                                   Foreground="{Binding PinMessageIsError, Converter={StaticResource BoolToNoticeBrush}}" />
+                        <Button Content="PIN 변경" Style="{StaticResource Button.Primary}"
+                                Command="{Binding ChangePinCommand}" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+
                 <!-- ══════════ 이메일 등록/인증 (비번 변경 모드 하단, 백엔드 전용) item1a §9.3 ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                     <Border.Visibility>

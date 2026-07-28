@@ -25,6 +25,16 @@ export interface UserDoc {
    * 미설정=0(레거시/비TempUser). 시간 한도 기준은 createdAt(신규 필드 불요, 설계 §4.1).
    */
   qrUsedCount?: number;
+  /**
+   * it14: 인증 방식. "sso"=자동생성(sentinel 비번, 설정 진입 PIN 게이트),
+   * "password"=일반. 미설정=password 폴백. 신규 생성 시점에만 세팅(설계 §3.2·§4.1).
+   */
+  authMethod?: "sso" | "password";
+  /**
+   * it14: 설정 진입 PIN의 bcrypt 해시(password.ts 인프라 재사용). 미설정 null.
+   * 응답에는 절대 미포함(hasPin 파생값으로만 노출, 설계 §4.1).
+   */
+  pinHash?: string | null;
 }
 
 /**
@@ -95,6 +105,10 @@ export interface UserResponse {
   email: string | null;
   /** item1a: 이메일 소유 확인 여부. */
   emailVerified: boolean;
+  /** it14: 인증 방식("sso"|"password"). 미설정 문서는 "password" 폴백(설계 §3.2). */
+  authMethod: string;
+  /** it14: 설정 진입 PIN 설정 여부(pinHash != null 파생). pinHash 원문은 절대 미노출(설계 §4.1). */
+  hasPin: boolean;
 }
 
 /** 클라 응답용 Frame. */

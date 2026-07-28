@@ -366,6 +366,67 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
         }
     }
 
+    // ── it14: 설정 진입 PIN 게이트 (§4.3 E1/E2/E3) ──
+
+    public async Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default)
+    {
+        try
+        {
+            // E1: POST /accounts/me/pin/verify {pin}. Bearer(본인 principal.id로만 접근). 200 {ok:true}=일치.
+            var res = await SendJsonAsync<VerifyPinResponse>(
+                HttpMethod.Post, "accounts/me/pin/verify",
+                new VerifyPinRequest { Pin = pin },
+                bearer: true, ct).ConfigureAwait(false);
+            return res.Ok;
+        }
+        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return false; // PIN 불일치(자격 불일치 = false, VerifyPasswordAsync와 동형)
+        }
+        catch (BackendException ex)
+        {
+            // 409(PIN 미설정)·네트워크/서버 오류는 전파(게이트가 "확인 불가"로 처리 — fail-open 방지, 설계 §5.2).
+            // 409는 MapToDomainException이 InvalidOperationException으로 매핑(호출부가 최초 설정 플로우로 유도 가능).
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default)
+    {
+        try
+        {
+            // E2: PUT /accounts/me/pin {newPin, currentPin?}. Bearer(본인). 204. 기존 PIN 있으면 currentPin 확인,
+            // null(최초 설정)이면 서버가 currentPin 검사 생략. currentPin이 null이어도 서버가 null을 최초 설정으로 처리.
+            var normalizedCurrent = string.IsNullOrEmpty(currentPin) ? null : currentPin;
+            await SendNoContentAsync(
+                HttpMethod.Put, "accounts/me/pin",
+                new SetPinRequest { NewPin = newPin, CurrentPin = normalizedCurrent },
+                bearer: true, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            // 현재 PIN 불일치(401)·형식 오류(400)·계정 없음(404) 등 모두 예외로 전파(호출부가 안내).
+            throw MapToDomainException(ex);
+        }
+    }
+
+    public async Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default)
+    {
+        try
+        {
+            // E3: PUT /accounts/{id}/pin {newPin}. Bearer(canManage 권한). 대상 현재 PIN 불요. 204.
+            await SendNoContentAsync(
+                HttpMethod.Put, $"accounts/{Uri.EscapeDataString(targetId)}/pin",
+                new ResetPinRequest { NewPin = newPin },
+                bearer: true, ct).ConfigureAwait(false);
+        }
+        catch (BackendException ex)
+        {
+            // 403(canManage 위반)은 MapToDomainException이 UnauthorizedAccessException으로 매핑(UI 우아 처리).
+            throw MapToDomainException(ex);
+        }
+    }
+
     /// <summary>UserResponse(비번 미포함) → 도메인 User. Password는 채우지 않는다(UI 미표시, 설계 §6.2).</summary>
     private static User? ToUser(UserResponse? dto)
     {
@@ -378,8 +439,14 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
             CreatedAt = ParseIso(dto.CreatedAt),
             Email = dto.Email,
             EmailVerified = dto.EmailVerified,
+            AuthMethod = ParseAuthMethod(dto.AuthMethod),
+            HasPin = dto.HasPin,
         };
     }
+
+    /// <summary>서버 authMethod 문자열 → 도메인 enum. "sso"만 Sso, 그 외(미설정·미지원값 포함)는 Password 폴백(설계 §5.3).</summary>
+    private static AuthMethod ParseAuthMethod(string? value) =>
+        value == "sso" ? AuthMethod.Sso : AuthMethod.Password;
 
     private static DateTime ParseIso(string? iso)
     {

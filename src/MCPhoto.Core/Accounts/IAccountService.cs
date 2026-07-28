@@ -91,4 +91,27 @@ public interface IAccountService
     /// 이메일 인증 확인(링크 경로): 계정 id + 결합 토큰. 성공 시 true. (item1a §8.2) — HTTP 전용.
     /// </summary>
     Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default);
+
+    // ── it14: 설정 진입 PIN 게이트(SSO 계정 전용, HTTP 구현만 지원) ──
+
+    /// <summary>
+    /// 설정 진입 게이트: 본인 PIN 대조(SSO 계정, E1). 일치 true, 불일치 false.
+    /// PIN 미설정(409)·네트워크/서버 오류는 예외로 전파(게이트는 "확인 불가"로 처리 — fail-open 금지).
+    /// — HTTP 전용. 레거시 Firebase 경로는 <see cref="NotSupportedException"/>. (it14 설계 §5.2)
+    /// </summary>
+    Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default);
+
+    /// <summary>
+    /// 본인 PIN 설정/변경(E2). 기존 PIN 있으면 <paramref name="currentPin"/> 확인 필수(불일치는 예외),
+    /// null이면 최초 설정(현재 PIN 불요). 성공 시 정상 반환, 실패는 예외.
+    /// — HTTP 전용. 레거시 Firebase 경로는 <see cref="NotSupportedException"/>. (it14 설계 §5.2)
+    /// </summary>
+    Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default);
+
+    /// <summary>
+    /// 타 계정 PIN 재설정(E3, 권한 기반, 대상 현재 PIN 불요). 위계 위반(서버 403)은 <see cref="UnauthorizedAccessException"/>.
+    /// 성공 시 정상 반환, 그 외 오류는 예외.
+    /// — HTTP 전용. 레거시 Firebase 경로는 <see cref="NotSupportedException"/>. (it14 설계 §5.2)
+    /// </summary>
+    Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default);
 }

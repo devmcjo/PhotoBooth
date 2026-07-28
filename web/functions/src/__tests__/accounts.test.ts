@@ -72,8 +72,12 @@ import {
   getQrUsage,
   loginWithGoogleEmail,
   registerSelf,
+  resetOtherPin,
+  setOwnPin,
   setRole,
+  verifyPin,
 } from "../services/accounts";
+import { hashPassword } from "../domain/password";
 
 /** 계정 문서를 fake에 심는 헬퍼. */
 function seedUser(
@@ -535,5 +539,179 @@ describe("BE-4 이메일 유일성 완화 + verify 시점", () => {
     // consumeByCode가 verified 소유자(owneracct)의 id로 호출됐는지.
     expect(consumeCalls).toContain("owneracct");
     expect(consumeCalls).not.toContain("dupacct");
+  });
+});
+
+// ── it14: authMethod 세팅(생성 경로) + toResponse 파생(authMethod/hasPin) ───────
+describe("it14 authMethod/hasPin — 생성 경로 세팅 + 응답 파생", () => {
+  test("createAccount → authMethod:'password' 저장, 응답 hasPin=false", async () => {
+    const user = await createAccount("p1", "pw1234", "user", null, "admin");
+    expect(user.authMethod).toBe("password");
+    expect(user.hasPin).toBe(false);
+    expect(fake.peek("users", "p1")?.authMethod).toBe("password");
+  });
+
+  test("registerSelf → authMethod:'password' 저장", async () => {
+    const user = await registerSelf("p2", "pw1234", null);
+    expect(user.authMethod).toBe("password");
+    expect(fake.peek("users", "p2")?.authMethod).toBe("password");
+  });
+
+  test("loginWithGoogleEmail 자동생성 → authMethod:'sso' 저장, 응답 반영", async () => {
+    const res = await loginWithGoogleEmail("ssoacct@example.com");
+    expect(res?.user.authMethod).toBe("sso");
+    expect(res?.user.hasPin).toBe(false);
+    expect(fake.peek("users", res!.id)?.authMethod).toBe("sso");
+  });
+
+  test("loginExistingGoogleAccount(비번 계정에 SSO email 겹침) → authMethod 미변경(password 유지)", async () => {
+    // 기존 비번 계정(authMethod:'password')에 같은 email로 SSO 로그인 → authMethod 불변(설계 EC6/O6).
+    fake.seed("users", "pwacct", {
+      id: "pwacct",
+      password: "$2b$10$originalhashvaluexxxxx",
+      role: "user",
+      createdAt: Timestamp.now(),
+      email: "shared@example.com",
+      emailVerified: true,
+      authMethod: "password",
+    });
+    const res = await loginWithGoogleEmail("shared@example.com");
+    expect(res?.id).toBe("pwacct");
+    expect(res?.user.authMethod).toBe("password"); // 비번 계정으로 남음(비번 게이트 유지)
+    expect(fake.peek("users", "pwacct")?.authMethod).toBe("password");
+  });
+
+  test("authMethod 미설정(레거시) 문서 → 응답 'password' 폴백, hasPin=false", async () => {
+    // seedUser는 authMethod/pinHash를 세팅하지 않는다(레거시 문서 모사). 로그인 응답 경로로 파생 확인.
+    seedUser("legacy", { email: "legacy@example.com", emailVerified: true });
+    const res = await loginWithGoogleEmail("legacy@example.com");
+    expect(res?.user.authMethod).toBe("password");
+    expect(res?.user.hasPin).toBe(false);
+  });
+
+  test("pinHash 설정된 문서 → 응답 hasPin=true(원문 미노출)", async () => {
+    const hash = await hashPassword("0134");
+    fake.seed("users", "haspin", {
+      id: "haspin",
+      password: "$2b$10$x",
+      role: "user",
+      createdAt: Timestamp.now(),
+      email: "haspin@example.com",
+      emailVerified: true,
+      authMethod: "sso",
+      pinHash: hash,
+    });
+    // 로그인 응답(toResponse 경유)에 hasPin=true가 실리고, pinHash 원문은 실리지 않는지.
+    const res = await loginWithGoogleEmail("haspin@example.com");
+    expect(res?.user.hasPin).toBe(true);
+    expect((res!.user as unknown as Record<string, unknown>).pinHash).toBeUndefined();
+  });
+});
+
+// ── it14: verifyPin(E1) — 게이트 검증(일치/불일치/미설정) ─────────────────────
+describe("it14 verifyPin — 설정 진입 게이트 검증", () => {
+  /** pinHash가 설정된 SSO 계정을 심는다. */
+  async function seedWithPin(id: string, pin: string): Promise<void> {
+    fake.seed("users", id, {
+      id,
+      password: "$2b$10$x",
+      role: "user",
+      createdAt: Timestamp.now(),
+      email: null,
+      emailVerified: false,
+      authMethod: "sso",
+      pinHash: await hashPassword(pin),
+    });
+  }
+
+  test("PIN 일치 → {ok:true}", async () => {
+    await seedWithPin("v1", "0134");
+    await expect(verifyPin("v1", "0134")).resolves.toEqual({ ok: true });
+  });
+
+  test("PIN 불일치 → {ok:false, reason:'mismatch'}", async () => {
+    await seedWithPin("v2", "0134");
+    await expect(verifyPin("v2", "9999")).resolves.toEqual({ ok: false, reason: "mismatch" });
+  });
+
+  test("PIN 미설정(pinHash 없음) → {ok:false, reason:'unset'}", async () => {
+    seedUser("v3");
+    await expect(verifyPin("v3", "0134")).resolves.toEqual({ ok: false, reason: "unset" });
+  });
+
+  test("계정 문서 부재 → {ok:false, reason:'unset'}", async () => {
+    await expect(verifyPin("ghost", "0134")).resolves.toEqual({ ok: false, reason: "unset" });
+  });
+});
+
+// ── it14: setOwnPin(E2) — 본인 설정/변경(최초/현재 PIN 확인) ──────────────────
+describe("it14 setOwnPin — 본인 PIN 설정/변경", () => {
+  test("최초 설정(pinHash 없음, currentPin null) → pinHash 저장", async () => {
+    seedUser("s1");
+    await setOwnPin("s1", null, "0134");
+    const hash = fake.peek("users", "s1")?.pinHash as string;
+    expect(hash).toMatch(/^\$2[aby]\$\d{2}\$/); // bcrypt 해시
+    // 새 PIN으로 검증 통과.
+    await expect(verifyPin("s1", "0134")).resolves.toEqual({ ok: true });
+  });
+
+  test("기존 PIN 있음 + currentPin 일치 → 변경 성공", async () => {
+    seedUser("s2");
+    await setOwnPin("s2", null, "0134"); // 최초 설정
+    await setOwnPin("s2", "0134", "5678"); // 변경
+    await expect(verifyPin("s2", "5678")).resolves.toEqual({ ok: true });
+    await expect(verifyPin("s2", "0134")).resolves.toEqual({ ok: false, reason: "mismatch" });
+  });
+
+  test("기존 PIN 있음 + currentPin 불일치 → 401(변경 안 됨)", async () => {
+    seedUser("s3");
+    await setOwnPin("s3", null, "0134");
+    await expect(setOwnPin("s3", "9999", "5678")).rejects.toMatchObject({ status: 401 });
+    // PIN 불변.
+    await expect(verifyPin("s3", "0134")).resolves.toEqual({ ok: true });
+  });
+
+  test("기존 PIN 있음 + currentPin null → 401(현재 PIN 확인 필수)", async () => {
+    seedUser("s4");
+    await setOwnPin("s4", null, "0134");
+    await expect(setOwnPin("s4", null, "5678")).rejects.toMatchObject({ status: 401 });
+  });
+
+  test("계정 문서 부재 → 404", async () => {
+    await expect(setOwnPin("ghost", null, "0134")).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+// ── it14: resetOtherPin(E3) — 타 계정 재설정(권한 기반) ───────────────────────
+describe("it14 resetOtherPin — 타 계정 PIN 재설정(canManage)", () => {
+  const admin = { id: "root", role: "admin" as const };
+  const manager = { id: "mgr", role: "manager" as const };
+
+  test("admin이 user PIN 재설정 성공(대상 현재 PIN 불요)", async () => {
+    seedUser("u1", { role: "user" });
+    await resetOtherPin("u1", "0134", admin);
+    await expect(verifyPin("u1", "0134")).resolves.toEqual({ ok: true });
+  });
+
+  test("manager가 user PIN 재설정 성공", async () => {
+    seedUser("u2", { role: "user" });
+    await resetOtherPin("u2", "5678", manager);
+    await expect(verifyPin("u2", "5678")).resolves.toEqual({ ok: true });
+  });
+
+  test("manager가 admin PIN 재설정 거부(403, canManage 위반)", async () => {
+    seedUser("a1", { role: "admin" });
+    await expect(resetOtherPin("a1", "0134", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "a1")?.pinHash).toBeUndefined(); // 미변경
+  });
+
+  test("manager가 manager PIN 재설정 성공(같은 위계 관리 가능)", async () => {
+    seedUser("m2", { role: "manager" });
+    await resetOtherPin("m2", "0134", manager);
+    await expect(verifyPin("m2", "0134")).resolves.toEqual({ ok: true });
+  });
+
+  test("대상 계정 부재 → 404", async () => {
+    await expect(resetOtherPin("ghost", "0134", admin)).rejects.toMatchObject({ status: 404 });
   });
 });

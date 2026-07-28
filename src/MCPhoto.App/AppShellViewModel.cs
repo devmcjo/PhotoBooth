@@ -368,20 +368,38 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private async Task OpenSettings()
     {
         IsAccountPopupOpen = false;
-        // 로그인 사용자는 설정 진입 '전'에 비밀번호 확인(게스트는 무가드). 취소/불일치면 진입하지 않음. (보완#1)
+        // 로그인 사용자는 설정 진입 '전'에 재인증(게스트는 무가드). 취소/불일치면 진입하지 않음. (보완#1, it14 §5.5)
         var user = _session.CurrentUser;
         if (user is not null)
         {
-            var prompt = _services.GetService<Services.IPasswordPromptDialogService>();
             var account = _services.GetService<MCPhoto.Core.Accounts.IAccountService>();
-            // fail-closed: 게이트 서비스가 없으면(향후 DI 변경 등) 재인증 없이 진입시키지 않는다.
-            // (현재는 둘 다 무조건 등록되므로 실현되지 않지만, 방어적으로 진입을 막는다.)
-            if (prompt is null || account is null)
+            // fail-closed: 계정 서비스가 없으면(향후 DI 변경 등) 재인증 없이 진입시키지 않는다.
+            if (account is null)
                 return;
-            // 서버/서비스로 권위 있게 재인증(응답에 비밀번호가 없어 클라 평문 비교 불가).
+
             var uid = user.Id;
-            if (!prompt.Prompt(pw => account.VerifyPasswordAsync(uid, pw)))
-                return;
+            if (user.AuthMethod == MCPhoto.Core.Models.AuthMethod.Sso)
+            {
+                // it14: SSO 계정은 sentinel 비번이라 비번 재확인 불가 → 전용 PIN 게이트.
+                var pin = _services.GetService<Services.IPinPromptDialogService>();
+                if (pin is null) return; // fail-closed
+                bool ok = user.HasPin
+                    ? pin.PromptVerify(p => account.VerifyPinAsync(uid, p))
+                    : pin.PromptSetup(async p =>   // PIN 미설정 = 최초 진입 → 강제 설정(현재 PIN 확인 없음, 데드락 방지).
+                    {
+                        await account.SetOwnPinAsync(uid, null, p);
+                        user.HasPin = true;        // 로컬 세션 반영(재진입 시 확인 경로로 전환).
+                    });
+                if (!ok) return;
+            }
+            else
+            {
+                // 비번(password) 계정: 기존 비밀번호 재확인 게이트(현행 유지).
+                var prompt = _services.GetService<Services.IPasswordPromptDialogService>();
+                if (prompt is null) return; // fail-closed(현행)
+                if (!prompt.Prompt(pw => account.VerifyPasswordAsync(uid, pw)))
+                    return;
+            }
         }
         await NavigateToOverlayAsync(AppState.Settings);
     }

@@ -260,6 +260,40 @@ public class XamlResourceTests
         });
     }
 
+    // ── it14: PinPromptWindow(설정 진입 PIN 게이트 모달) StaticResource 정적 안전망 ──
+    // PasswordPromptWindow와 동일하게 창 인스턴스화를 피하고 소스에서 참조 키를 추출해 테마 조회로만 검증.
+
+    [Fact]
+    public void PinPromptWindow_StaticResource_Keys_Resolve_In_Theme()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "PinPromptWindow.xaml"));
+
+        // 자체 정의 리소스(Window.Resources)는 제외(현재 없음).
+        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+
+        var appKeys = new HashSet<string>
+        {
+            "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
+            "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
+            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "RoleActionVis", "RoleLabel", "FilePathToImage",
+        };
+
+        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(k => k.Length > 0 && !localKeys.Contains(k) && !appKeys.Contains(k))
+            .Distinct()
+            .ToArray();
+
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var missing = referenced.Where(k => !theme.Contains(k)).ToList();
+            Assert.True(missing.Count == 0,
+                "PinPromptWindow.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
+        });
+    }
+
     [Fact]
     public void SettingsView_StaticResource_Keys_Resolve_In_Theme()
     {

@@ -161,6 +161,20 @@ public sealed class AccountService : IAccountService
     public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default)
         => throw new NotSupportedException(NotSupportedMsg);
 
+    // ── it14: 설정 진입 PIN 게이트 (HTTP 전용 기능) ──
+    // 레거시 Firebase 경로엔 SSO 계정이 없어(SSO는 백엔드 모드 전용) PIN이 필요 없다. 설정 진입은 비번 게이트로
+    // 남는다. 도달하면 설정 오류이므로 명확히 실패시킨다(SSO·이메일 인프라와 동일 정책, it14 §5.2).
+    private const string PinNotSupportedMsg = "설정 진입 PIN은 백엔드 모드에서만 지원됩니다.";
+
+    public Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default)
+        => throw new NotSupportedException(PinNotSupportedMsg);
+
+    public Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default)
+        => throw new NotSupportedException(PinNotSupportedMsg);
+
+    public Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default)
+        => throw new NotSupportedException(PinNotSupportedMsg);
+
     private static User ToUser(UserDoc d) => new()
     {
         Id = d.Id,

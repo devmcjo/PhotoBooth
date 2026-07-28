@@ -52,6 +52,9 @@ public class AccountViewModelTempUserTests
         public Task RequestEmailVerificationAsync(string idOrEmail, CancellationToken ct = default) => Task.CompletedTask;
         public Task<bool> ConfirmEmailVerificationAsync(string id, string code, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> ConfirmEmailVerificationByTokenAsync(string id, string token, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> VerifyPinAsync(string id, string pin, CancellationToken ct = default) => Task.FromResult(true);
+        public Task SetOwnPinAsync(string id, string? currentPin, string newPin, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ResetPinAsync(string targetId, string newPin, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     /// <summary>전역 한도 서비스 fake — 조회값 반환 + 저장 호출 기록.</summary>

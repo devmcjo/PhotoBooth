@@ -41,6 +41,8 @@ internal static class ServiceRegistration
         services.AddSingleton<ICameraTestDialogService, CameraTestDialogService>();
         // 보완#1: 설정 진입 전 비밀번호 확인 모달.
         services.AddSingleton<IPasswordPromptDialogService, PasswordPromptDialogService>();
+        // it14: 설정 진입 전 PIN 확인/설정 모달(SSO 계정 게이트 — 비번 게이트와 분리, fail-closed).
+        services.AddSingleton<IPinPromptDialogService, PinPromptDialogService>();
 
         // item1b §7.8: Google SSO(시스템 브라우저 + loopback + PKCE). ISettingsService(client_id)·ILogger 주입.
         // VM은 System.Net·Process 미의존(이 서비스에 캡슐화). 백엔드 교환·검증은 IAccountService가 담당.
