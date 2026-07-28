@@ -52,12 +52,14 @@ firebase login
 firebase login                      # (0-1에서 했으면 생략)
 bash functions/scripts/set-secrets.sh
 ```
-- 실행하면 JWT_SECRET·CLIENT_API_KEYS·SENDGRID_API_KEY·GOOGLE_OAUTH_CLIENT_SECRET 4개가 등록되고, 마지막에 이런 줄이 출력됩니다:
+- 실행하면 JWT_SECRET·CLIENT_API_KEYS·GOOGLE_OAUTH_CLIENT_SECRET 3개가 등록되고, 마지막에 이런 줄이 출력됩니다:
   ```
   BackendApiKey=1a2b3c...   ← 이 값을 A5에서 WPF MCPhoto.ini 에 넣습니다
   ```
   이 값을 메모하세요(분실 시 `firebase functions:secrets:access CLIENT_API_KEYS --project mcphoto-955fb` 로 재확인).
-- SendGrid/Google 시크릿은 아직 안 쓰면 placeholder로 들어갑니다(첫 배포 통과용). 실제 값은 §B1/§B2에서 교체.
+- Google 시크릿은 아직 안 쓰면 placeholder로 들어갑니다(첫 배포 통과용). 실제 값은 §B2에서 교체.
+- **it15**: `SENDGRID_API_KEY` 는 더 이상 필요 없습니다(이메일 기능 폐지). 이미 등록돼 있어도 무해하며, 정리하려면
+  Google Cloud Console → Secret Manager 에서 삭제하면 됩니다.
 - 비밀-아닌 설정(STORAGE_BUCKET·HOSTING_BASE_URL·JWT_EXPIRES_IN_SECONDS)은 `web/functions/.env`에 이미 들어 있어 배포 시 함께 적용됩니다(추가 작업 없음).
 
 ### A2. IAM — 서명 URL 권한 (⚠️ Emulator로는 못 잡는 지점) `[ ]`
@@ -141,34 +143,20 @@ firebase deploy --only functions
 
 ---
 
-## B. 계정 기능 — 이메일/SSO 관련 콘솔 작업
+## B. 계정 기능 — Google SSO 콘솔 작업
 
 > 사전조건: B1·B2 모두 **백엔드 모드(A 섹션)** 가 선행돼야 실제로 동작.
 
-### B1. 이메일 발송 공급자 (item1a 이메일 인증·비밀번호 찾기)
-> 서버 코드는 완료. **개발 기본은 `log` sender = 실제 메일 미발송**(콘솔 로그로만 코드/링크 출력). 프로덕션 실발송은 아래 수행.
+### ~~B1. 이메일 발송 공급자~~ — **it15에서 폐지. 할 일 없음** ✅
 
-- **B1-1. SendGrid 계정·API 키** `[ ]`
-  1. <https://sendgrid.com> 가입 → 본인 이메일 인증.
-  2. 좌측 **Settings → API Keys → Create API Key** → 이름 입력 → 권한 **Restricted Access** 중 "Mail Send" 만 ON(또는 Full Access) → **Create** → **키가 한 번만 표시되니 즉시 복사**.
-  3. 이 키를 Secret Manager에 등록(둘 중 하나):
-     - 재실행: `SENDGRID_API_KEY="SG.복사한키" bash functions/scripts/set-secrets.sh` (JWT 등도 새 버전으로 회전됨), 또는
-     - 개별: `firebase functions:secrets:set SENDGRID_API_KEY` 실행 후 키 붙여넣기.
-- **B1-2. 발신 도메인·발신자 인증** `[ ]`
-  - **Settings → Sender Authentication** 에서 둘 중 하나:
-    - **Authenticate Your Domain**(권장): SendGrid가 준 CNAME(SPF/DKIM) 레코드를 당신 도메인 DNS에 추가 → 인증되면 `no-reply@도메인` 발신 가능.
-    - **Single Sender Verification**(간단): 발신 주소 1개를 이메일 확인 → 그 주소만 발신 가능.
-  - 인증된 발신 주소를 기억(B1-3의 `EMAIL_FROM`).
-- **B1-3. 프로덕션 활성화(env 전환, 소스 수정 불요)** `[ ]`
-  - `web/functions/.env.mcphoto-955fb` 파일을 만들어(없으면 새로) 아래 두 줄 추가 — 이 프로젝트 배포에만 적용되는 비밀-아닌 설정:
-    ```
-    EMAIL_PROVIDER=sendgrid
-    EMAIL_FROM=no-reply@your-domain.example   # B1-2에서 인증한 주소
-    ```
-  - **에뮬레이터는 log로 유지**하려면 `web/functions/.env.local`(에뮬레이터 전용, 배포 안 됨)에 `EMAIL_PROVIDER=log` 한 줄. (안 만들면 로컬 에뮬레이터도 sendgrid를 시도 → EMAIL_FROM/키 없으면 부팅 실패하니, 로컬에서 돌릴 거면 이 파일 권장.)
-  - `firebase deploy --only functions` 재배포 → 이후 인증/재설정 메일이 실제로 발송됨.
-- **B1-4. (링크 방식 채택 시) 웹 verify/reset 페이지** `[ ]`: 앱 내 6자리 코드 입력 방식만 쓰면 **불요**. 이메일 링크 방식을 원하면 `{hostingBaseUrl}/verify`·`/reset` 정적 페이지 필요.
-- **B1-5. (선택) 토큰 TTL 정책** `[ ]`: `users/{id}/tokens` 의 `expiresAt`에 Firestore 네이티브 TTL. 서버가 만료를 코드로도 재확인하므로 미설정이어도 보안엔 무해(청소 목적).
+> it15로 **이메일 인증·비밀번호 재설정 기능 자체가 제거**됐다. 서버는 더 이상 메일을 보내지 않는다.
+> 따라서 SendGrid 가입·API 키·발신자 인증·`EMAIL_PROVIDER`/`EMAIL_FROM` 설정은 **전부 불필요**하다.
+>
+> - `SENDGRID_API_KEY` 시크릿이 이미 등록돼 있어도 무해하다(어떤 함수도 선언·참조하지 않음). 정리하려면
+>   Google Cloud Console → **Secret Manager** 에서 삭제.
+> - `web/functions/.env.mcphoto-955fb` 에 `EMAIL_PROVIDER`/`EMAIL_FROM` 줄이 있다면 지워도 된다(무시됨).
+> - 비밀번호를 잊었을 때의 복구 경로는 이제 **PIN 재설정**이다: 관리자가 사용자 관리 화면에서 하위 계정 PIN을
+>   재설정하고, admin 본인 PIN 분실은 §D1-7 스크립트로 복구한다.
 
 ### B2. Google OAuth 클라이언트 (item1b Google SSO)
 > 서버 코드는 완료. **개발 기본은 client id/secret 미설정 → `/auth/google` 501(비활성).** id·secret **둘 다** 설정돼야 켜짐.
@@ -192,11 +180,94 @@ firebase deploy --only functions
   - ⚠️ **id와 secret 중 하나만** 설정하면 서버가 "부분 구성" 오류로 전 요청 실패하니 **반드시 둘 다**. 로컬 에뮬레이터에서 Google을 안 켤 거면 `.env.local`엔 넣지 말 것.
   - `firebase deploy --only functions` 재배포.
 - **B2-4. 클라이언트 설정(배포 PC INI)** `[ ]`: 대상 PC `MCPhoto.ini` `[MCPhoto]`에 `GoogleClientId=<B2-2 Client ID>` 추가. **client secret은 클라에 넣지 않음**(백엔드 전용). 설정되면 로그인 화면에 "Google로 로그인" 노출.
-- **B2-5. (선택) 허용 도메인(hd) 제한** `[ ]`: 특정 Workspace 도메인만 허용하려면 `.env.mcphoto-955fb`에 `GOOGLE_ALLOWED_HD=<도메인>` (서버가 id_token.hd와 대조). 미설정이면 등록·검증된 email 매핑 화이트리스트로만 통제.
-- **B2-6. 실왕복 스모크** `[ ]`: 스테이징에서 **운영자 계정 1건 선등록(email + emailVerified=true)** → SSO 로그인 → 화면 진입 수동 확인(실 Google 왕복은 코드로 검증 불가).
+- **B2-5. (선택) 허용 도메인(hd) 제한** `[ ]`: 특정 Workspace 도메인만 허용하려면 `.env.mcphoto-955fb`에 `GOOGLE_ALLOWED_HD=<도메인>` (서버가 id_token.hd와 대조). 미설정이면 email 매핑으로만 통제.
+- **B2-6. 실왕복 스모크** `[ ]`: 스테이징에서 SSO 로그인 → 화면 진입 수동 확인(실 Google 왕복은 코드로 검증 불가).
+  - ⚠️ **it15**: Google SSO가 **유일한 로그인 수단**이다. 계정 선등록은 불요 — 처음 로그인하는 Google 계정은
+    서버가 자동으로 만든다. 단 **신규 계정은 무조건 `temp_user`** (QR 전송 48시간/30회 한도)로 생성되므로,
+    실사용 계정은 admin이 사용자 관리 화면에서 `user` 이상으로 승격해야 한다.
 
 ---
 
 ## C. (예정) 장치 연동
 ### C1. 카메라(DSLR)·프린터 장비 선정 `[ ]` (item3)
 - 실제 하드웨어 연동은 특정 모델/SDK/연결방식(BT·WiFi) 의존 → **장비 선정·드라이버·SDK 조사 필요**. 코드엔 추상 인터페이스·설정 자리(`IExternalCamera`/`IPhotoPrinter`·로그인 전용 옵션)만 있고, 실제 연동은 장비 확정 후. 확장 지점: `ServiceRegistration.cs`의 `Null*` 등록을 실 구현으로 교체.
+
+---
+
+## D. it15 계정 마이그레이션 (1회성)
+
+> **배경**: it15로 ID/PW 인증이 폐지되고 Google SSO + 4자리 PIN만 남았다. 기존 Firestore `users` 문서에는
+> `password`·`emailVerified` 같은 폐지 필드가 남아 있고, `devmcjo@gmail.com` 으로 SSO 가입한 계정은
+> 문서 ID가 `devmcjo-2`(원래 `devmcjo` 를 구 비번 계정이 선점) 상태다.
+> Firestore는 문서 ID를 바꿀 수 없으므로 **재생성 → 참조 갱신 → 삭제** 순서의 스크립트로 정리한다.
+>
+> **이 스크립트가 최초 admin을 만든다.** HTTP API로는 admin을 지정할 수 없으므로(서버 `canSetRole`이 차단),
+> 마이그레이션을 돌리기 전까지는 승격 권한을 가진 계정이 존재하지 않는다.
+
+**스크립트**: `web/functions/scripts/migrate-google-only-accounts.mjs`
+
+### D1. 실행 절차
+
+- **D1-1. 사전 — 서비스 중단 창 확보** `[ ]`
+  - **키오스크 앱을 종료**한다. 실행 중 Step 2~3 사이에 같은 email을 가진 문서가 잠시 2건 공존하는데,
+    그 구간에 SSO 로그인이 들어오면 어느 문서로 매핑될지 비결정적이다(실행 시간은 수 초).
+  - (강력 권장) 실행 전 백업: `gcloud firestore export gs://<버킷>/backup-$(date +%Y%m%d)`
+    — **스크립트에 undo 경로는 없다.**
+- **D1-2. 준비** `[ ]`
+  ```
+  cd web/functions
+  npm ci
+  npm run build          # 순수 계획 로직(lib/domain/migration.js)이 필요합니다
+  ```
+- **D1-3. 인증(ADC)** `[ ]`
+  - `gcloud auth application-default login` (또는 서비스 계정 키 경로를 `GOOGLE_APPLICATION_CREDENTIALS` 에 설정)
+- **D1-4. dry-run — 반드시 먼저** `[ ]`
+  ```
+  node scripts/migrate-google-only-accounts.mjs --project mcphoto-955fb
+  ```
+  - **기본이 dry-run이라 아무것도 바뀌지 않는다.** 출력의 Step 2/3/4 계획과 **Step 5 목록을 육안 확인**한다.
+  - Step 5에 뜬 계정은 email이 없어 Google 로그인이 불가능한 계정이다. **지워도 되는지 직접 판단**할 것.
+  - 전체 문서를 보려면 `--verbose` 추가.
+- **D1-5. 적용(비파괴)** `[ ]`
+  ```
+  node scripts/migrate-google-only-accounts.mjs --project mcphoto-955fb --apply
+  ```
+  - admin 재생성 + 프레임 참조 갱신 + 필드 정리까지만 한다. **계정 삭제는 하지 않는다.**
+- **D1-6. 적용(파괴 — 선택)** `[ ]`
+  ```
+  node scripts/migrate-google-only-accounts.mjs --project mcphoto-955fb --apply --delete-orphans
+  ```
+  - D1-4에서 확인한 로그인 불가 계정과 그 소유 프레임(문서 + Storage 이미지)을 **영구 삭제**한다.
+  - 프레임 이미지 삭제에 버킷명이 필요하다. `web/functions/.env` 의 `STORAGE_BUCKET` 을 읽거나
+    `--bucket mcphoto-955fb.firebasestorage.app` 로 직접 지정한다(모르면 스크립트가 중단한다 — 고아 파일 방지).
+- **D1-7. admin PIN 분실 시 복구** `[ ]`
+  ```
+  node scripts/migrate-google-only-accounts.mjs --project mcphoto-955fb --clear-pin devmcjo --apply
+  ```
+  - 해당 계정의 `pinHash` 필드만 지운다(다른 단계는 실행하지 않음). 이후 앱에서 설정/계정 관리에 진입하면
+    PIN 최초 설정을 요구하므로 새 PIN을 만들면 된다.
+  - ⚠️ admin 본인 PIN은 앱 안에서 복구할 수 없다(자기 자신 PIN 재설정은 서버가 400으로 거부).
+    이 CLI 경로가 유일한 복구 수단이다.
+- **D1-8. 검증** `[ ]`
+  - 멱등 확인: dry-run을 다시 돌려 **계획 0건**이 나오는지 본다.
+    ```
+    node scripts/migrate-google-only-accounts.mjs --project mcphoto-955fb
+    ```
+  - 앱 실행 → Google 로그인(`devmcjo@gmail.com`) → 상단 바에 `devmcjo` 표시 + **관리자 도구 노출** 확인.
+  - Firestore 콘솔에서 `users/devmcjo` 가 `role:"admin"`·`authMethod:"google"` 이고
+    `password`·`emailVerified` 필드가 **없는지** 확인.
+
+### D2. 운영 전제 — admin 1인 상시 유지 ⚠️
+
+- 신규 SSO 계정은 **전원 `temp_user`** 로 생성된다. 그리고 **승격(등급 올리기)은 admin만 할 수 있다**
+  (manager는 `user → temp_user` 강등만 가능 — it13에서 확정된 매트릭스).
+- 따라서 **admin 계정이 하나도 없으면 아무도 승격할 수 없는 상태**가 된다. admin 계정을 삭제하거나
+  강등하지 말 것. 부득이하게 admin이 사라졌다면 위 마이그레이션 스크립트로 다시 지정해야 한다.
+
+### D3. 종료 코드
+
+| 코드 | 의미 | 조치 |
+|---|---|---|
+| 0 | 성공(또는 dry-run 완료) | — |
+| 1 | 인자 오류 / admin-email 계정 미발견 / 버킷 미지정 | 메시지대로 인자 수정 후 재실행 |
+| 2 | 실행 중 실패(**부분 적용**) | **같은 명령을 그대로 재실행**한다. 스크립트는 멱등이라 남은 작업만 이어서 처리한다 |
