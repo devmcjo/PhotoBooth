@@ -55,20 +55,28 @@
   - 드래그(`UpdateSlot`, `:147-172`): 경계 클램프 + `_baseSlots` 중심 동기화. **좌표 변환은 순수함수 `EditorTransform`**(`EditorTransform.cs`)로 표시·드래그·클램프가 동일 변환(Uniform 스케일 + 중앙 레터박스) → WYSIWYG. 캔버스 기준은 `SlotCanvas.ActualWidth/Height`(`FrameEditorView.xaml.cs:70-73`), 절대 위치 이동(그랩 오프셋, `:106-143`).
   - 저장 유효성(`SlotLayout.IsValid`, `:165-175`): 개수 1~6, 경계 내, 겹침 없음.
   - 저장(`Save`) **역할별 분기**:
-    - **power**(admin/manager) **신규 생성**: 공용 기본 프레임 → DB(`isDefault=true, userId=null`) + 로컬 캐시(frameId 기반, 접두 없음).
+    - **power**(admin/manager) **신규 생성**: 공용 기본 프레임 → DB(`isDefault=true, userId=null`) + 로컬 캐시(frameId 기반, 접두 없음). **공용 기본 프레임을 서버에 배포하는 유일한 경로**.
     - **user**: 로컬 전용(DB 미저장), `{계정}_{이름}.png` 접두.
-    - 10개 초과 등은 `InvalidOperationException` 메시지 노출.
+    - 10개 초과는 `InvalidOperationException`, 이름 금지문자는 `IOException` 메시지를 그대로 노출.
+- **프레임 편집은 로컬 전용(it15 F1)**: 편집기 상단에 상시 배너 **"이 프레임 편집은 해당 PC에서만 적용됩니다. 서버의 기본 프레임은 변경되지 않으며, 다른 PC에는 반영되지 않습니다."** 를 표시한다(역할·출처·모드 무관, `Visibility` 바인딩 없음).
+  - it2의 "로컬만 / DB도 업데이트" 확인 팝업과 `SaveToDb`·`FrameDiff`·`IFrameRepository.UpdateAsync`/`SupportsUpdateById`는 **클라이언트에서 전면 제거**됐다. 편집 저장은 어떤 경로로도 서버를 호출하지 않는다.
+  - **fork 저장**(`FrameEditPolicy.RequiresFork` = 출처가 `UserLocal`이 아님): DB/번들/fallback 유래 프레임을 편집하면 원본 파일을 건드리지 않고 `FrameNaming.NextCopyName`이 만든 **`{원본이름} 사본`**(충돌 시 ` 2`, ` 3` … 99, 그 뒤 GUID 8자)으로 신규 저장한다. 이름 제안값은 진입 시 1회 계산되며 사용자가 수정할 수 있다.
+  - fork 저장은 `FrameTemplate.Id = ""`로 `SaveLocal(ownerName: null)`을 호출해 **`.slots`에 `#dbid`를 기록하지 않는다** → 로컬 사본은 `local:{파일명}` id를 갖고 서버 문서와 연결이 끊긴다. 원본 이름이 `PublicFrameNames()`에 남으므로 `FrameCatalogService`의 이름 dedup이 유지되어 **DB 재다운로드가 발생하지 않는다**.
+  - **원본 덮어쓰기 가드**: 공용 스코프(power) fork에서 이름을 원본과 같게 두면 저장을 중단하고 *"원본과 같은 이름은 사용할 수 없습니다. 이름을 변경해 주세요."* 를 표시한다. user 스코프는 파일명이 `{계정}_{이름}`이라 공용 원본과 겹치지 않으므로 가드하지 않는다.
+  - 저장 스코프(power=공용 `{이름}.png` / user=개인 `{계정}_{이름}.png`)는 **현행 유지**. 저장 버튼 위 `SaveScopeNotice` 캡션이 이번 저장의 실제 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임)를 동적으로 안내한다 — 배너는 정책, 캡션은 결과.
+  - power 스코프 저장 시 이름에 `_`가 있으면 *"이름에 '_'가 있어 공용 목록에서 보이지 않을 수 있습니다."* 를 **비차단** 경고로 남긴다(공용/user 구분자 충돌, `LocalFrameStore` 규약).
+- **기존 프레임 불러오기(it15 F2)**: "이미지 불러오기" 바로 아래 **"기존 프레임 불러오기"** 버튼(`IsCreateMode` = 생성 모드 전용). 파일 탐색기가 아니라 편집기 내부 **오버레이 모달**(새 `Window` 아님)에서 프레임 선택 화면과 같은 썸네일 그리드로 고른다.
+  - 목록 VM = `FramePickerViewModel`(Transient). 후보 = `FrameCatalogService.GetDefaultFramesAsync()`(공용: 번들 + DB 캐시 + DB 다운로드) + `GetUserFramesAsync(userId)`(본인 개인 로컬). 번들·fallback도 **복사는 허용**(원본을 수정하지 않으므로 안전) — 역할 필터 없음.
+  - `ApplyPickedFrame`: 반드시 `LoadImage` 경유(번들 `.jpg` 대응 + 장변 4000 축소)로 이미지를 **읽기만** 하고, 슬롯은 `FrameWidth / src.ImageSize.Width` 배율로 보정해 새 `Slot` 인스턴스로 값 복사한다. **임시 파일을 만들지 않는다**(디스크 쓰기는 `Save()` 1회뿐) → "저장 전 취소 시 임시 파일 정리"가 임시 파일 부재로 자동 충족.
+  - 세션 정체성은 항상 fork(`ForkFromCatalog`)이며 `_isEditing`은 건드리지 않는다 → 생성 흐름 유지(다른 프레임으로 다시 바꿀 수 있음). **F2로 불러온 세션은 power여도 DB에 등록되지 않는다**(서버 배포는 빈 편집기 신규 생성만).
+  - [취소]는 모달만 닫고 편집기 상태·디스크 모두 무변경. 목록 로딩은 `CancellationToken`으로 중단한다.
+  - 썸네일 카드는 `Themes/Controls.xaml`의 공유 리소스(`FrameCard.ItemContainer` / `FrameCard.Content` / `FrameCard.FilePathToImage`)로 프레임 선택 화면과 시각을 공유하며, 삭제 ✕ 버튼만 `FrameSelectView`가 합성한다.
 - **편집 권한 규칙(역할×출처, item2)**: 편집 진입·"선택 편집" 버튼 노출은 순수 함수 `FrameEditPolicy.CanEdit`가 게이트한다.
   - 출처 판정 `FrameOrigin.Classify`(`FrameOrigin.cs`): `local:`=본인 로컬 생성분, 접두 없는 실 DB id+`isDefault`=DB 공용 기본, `bundle:`=번들, `fallback`/빈 Id=코드 생성.
   - **게스트**: 편집 불가(전부). **user**: 본인 로컬 생성분만(`UserId==현재계정` 검증). **power**: 본인 로컬 + DB 공용 기본. **번들·fallback**: 누구도 불가.
   - `FrameSelectViewModel.CanEdit`는 이 순수 함수에 위임(기존 `local:` 무검증 결함 제거). 진입(`EditFrame`)·버튼(`CanEditSelected`) 이중 게이트.
-- **power 기본 프레임 편집 저장 플로우(item2 §4)**: power가 DB 공용 기본 프레임을 편집·저장하면 확인 팝업(`IsDbUpdatePromptVisible`) 표시.
-  - **[로컬에만 적용]**(`SaveLocalOnly`): DB 미호출, 로컬 공용 캐시만 갱신(`#dbid` 보존).
-  - **[DB에도 업데이트]**(`SaveToDb`): `FrameDiff.Compare`(`FrameDiff.cs`, 이미지=SHA-256·슬롯=좌표 정수일치·이름)로 변경 판정 → 변경 있으면 같은 frameId `IFrameRepository.UpdateAsync`(레거시=`SetAsync` 덮어쓰기 / HTTP=`PUT /frames/{id}`) + 로컬 캐시, 이미지 변경 시에만 `replaceImage=true`. **변경 없으면 DB 미호출**(로컬만·"변경 없음" 안내).
-  - **[취소]**: 팝업만 닫고 편집 유지(저장·이동 없음). 저장 실패 시 화면 유지 + 안내.
-  - 업데이트 대상은 id·`userId(null)`·`isDefault(true)`·`createdAt` 보존, name·slots·imageSize만 갱신(서버 `updateFrame`와 정합).
-- **저장소 update capability(item2 §5)**: `IFrameRepository.SupportsUpdateById`(레거시=true, HTTP=true) + `UpdateAsync(frame, imageBytes, replaceImage)`. **레거시·백엔드 양 모드 모두 완전 지원**(HTTP는 `PUT /frames/{id}` 파워 엔드포인트).
-- **근거**: `FrameEditorViewModel.cs`, `FrameEditorView.xaml`(+ code-behind), `FrameOrigin.cs`, `FrameEditPolicy.cs`, `FrameDiff.cs`, `IFrameRepository.cs`, `FrameRepository.cs`, `HttpFrameRepository.cs`, `EditorTransform.cs`, `SlotLayout.cs`, `SlotAspect.cs`.
+  - ⚠️ **폐지(it15)**: it2의 power 기본 프레임 편집 저장 팝업(`IsDbUpdatePromptVisible` / `SaveLocalOnly` / `SaveToDb` / `CancelDbUpdatePrompt`)과 `FrameDiff`, `IFrameRepository.SupportsUpdateById`·`UpdateAsync`, `FrameEditPolicy.RequiresDbUpdatePrompt`는 모두 삭제됐다. 서버 라우트 `PUT /frames/{id}`는 남아 있지만 **앱은 호출하지 않는다**(운영/관리 도구 전용).
+- **근거**: `FrameEditorViewModel.cs`, `FramePickerViewModel.cs`, `FrameEditorView.xaml`(+ code-behind), `FrameSelectView.xaml`, `Themes/Controls.xaml`, `FrameOrigin.cs`, `FrameEditPolicy.cs`, `FrameNaming.cs`, `IFrameRepository.cs`, `HttpFrameRepository.cs`, `EditorTransform.cs`, `SlotLayout.cs`, `SlotAspect.cs`. 설계: `docs/design/wpf-it15-frame-ux-design.md`.
 
 ### 4.2 삭제(역할별)
 

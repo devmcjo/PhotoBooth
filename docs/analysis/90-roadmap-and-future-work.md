@@ -4,7 +4,7 @@
 |------|-----|
 | 문서 | 알려진 이슈·기술 부채·개선 예정·비범위 |
 | 범위 | 미해결/대기 항목의 단일 집합소. 완료되면 이 문서에서 제거하고 해당 세부 문서로 반영 |
-| 최종 업데이트 | 2026-07-23 |
+| 최종 업데이트 | 2026-07-28 |
 | 갱신 규칙 | 이슈 발견·수정·범위 결정 시 즉시 이 문서 갱신. "상태" 컬럼 유지 |
 
 ---
@@ -20,7 +20,10 @@
 | 인스톨러 self-contained 불일치 | `installer/MCPhoto.iss` 주석은 `--self-contained false` 예시, 실제 `publish.ps1`은 `true`(단일 파일) | `installer/MCPhoto.iss`, `publish.ps1` | 확정 필요(배포 방식 통일) |
 | ~~ffprobe 잔존~~ | `tools/ffmpeg/ffprobe.exe` 코드 미사용 | `tools/ffmpeg/` | **정리 완료(2026-07-23)**: 삭제 |
 | ~~Preview 데드코드~~ | `PreviewView`/`PreviewViewModel` 미매핑 | — | **정리 완료(2026-07-23)**: 파일·DI 등록 제거 |
-| 만료 물리삭제는 인프라 의존 | `PurgeExpiredAsync` 코드 존재하나 앱에서 호출 안 함 → GCS Lifecycle/Firestore TTL 설정에 의존 | `Firebase/UploadService.cs` | 의도된 설계([50](./50-infra-gcp-lifecycle-and-ttl.md)). 인프라 미설정 시 미삭제 주의 |
+| 만료 물리삭제는 인프라 의존 | `PurgeExpiredAsync` 코드 존재하나 앱에서 호출 안 함 → GCS Lifecycle/Firestore TTL 설정에 의존 | `Core/Upload/UploadService.cs` | 의도된 설계([50](./50-infra-gcp-lifecycle-and-ttl.md)). 인프라 미설정 시 미삭제 주의 |
+| 프레임 피커 썸네일 가상화 미적용 | "기존 프레임 불러오기" 모달(과 프레임 선택 화면)이 `WrapPanel` ItemsPanel로 **UI 가상화가 꺼져** 있고 `DecodePixelWidth`도 미적용 → 후보 수가 늘면 모달 오픈이 지연될 수 있다. 현재 상한(공용 소수 + 계정당 최대 10)에서는 수용 | `Views/FrameEditorView.xaml`, `Views/FrameSelectView.xaml`, `Themes/Controls.xaml`(`FrameCard.Content`) | 후속 과제(it15 F2-D5 수용). ⚠️ 개선 시 `FilePathToImageConverter`의 **OnLoad + IgnoreImageCache + Freeze** 3종 규약을 깨지 말 것 — 위 "프레임 로컬 삭제 안 됨" 파일 잠금 수정의 본체다 |
+| ~~업로드 진행률 테스트 flaky~~ | `UploadServiceTests.Upload_Reports_Stage_Progress_In_Order`가 전체 스위트 실행 시 간헐 실패(단독 실행은 항상 통과, 4회 중 1회 관측). 원인은 **제품 코드가 아니라 테스트 단언**: `UploadService.MakeStageProgress`가 쓰는 `System.Progress<T>`는 캡처된 SynchronizationContext(테스트 환경엔 없음 → 스레드풀)로 콜백을 **비동기 게시**하므로, 파일 단위 보고가 동기 호출인 `Finalizing`보다 늦게 도착할 수 있다. `stages[^1] == Finalizing` 단언이 제품이 보장하지 않는 성질을 요구했고, 수집기 `CollectingProgress`도 `List<T>`를 락 없이 여러 스레드에서 변경했다 | `tests/MCPhoto.Tests/UploadServiceTests.cs`, `Core/Upload/UploadService.cs:95-98`(원인 지점, **무수정**) | **기존 잠복 결함 — it15에서 발견·테스트 수정으로 해소(2026-07-28)**: it15가 만든 회귀가 아니다(`UploadService`는 `MCPhoto.Firebase`→`MCPhoto.Core` 이관 시 본문 바이트 동일, 테스트도 `using` 1줄만 변경). 테스트 증가(610→613)로 스레드풀 경합이 늘며 드러났다. 조치 = **테스트만 수정**: 수집기를 `lock` + 스냅샷으로 스레드 안전화, `Finalizing`은 위치 대신 존재만 단언(`Assert.Contains`), 순서 단언은 **동기 보고만**(단계 시작 마커 `Fraction==0.0`) 골라 `[Photo, Timelapse]` + `Finalizing > Timelapse 시작`으로 재작성. ⚠️ 실제 앱에서 `Progress<T>`가 UI SynchronizationContext로 마샬링하는 것은 **의도된 올바른 동작**이므로 제품 코드는 건드리지 않았다. 전체 스위트 8회 연속 무실패 확인 |
+| 프레임 편집 fork 시 옛 이름 파일 잔존 | user가 자기 로컬 프레임 **이름을 바꿔 저장**하면 `SaveLocal`이 새 파일명으로만 쓰기 때문에 옛 `{계정}_{옛이름}.png`/`.slots`가 남는다(it15 이전부터의 기존 동작, 범위 밖으로 유지) | `Core/Frames/LocalFrameStore.cs` | 대기: 이름 변경 시 옛 파일 정리 여부 결정 필요(삭제 vs 유지) |
 
 ## 2. 다음 착수 예정 (우선순위 큐)
 

@@ -7,3 +7,4 @@
 - [Firebase 접근 추상화](firebase-access-abstraction.md) — Core 인터페이스 5종으로 격리·구현만 HTTP 교체 시 UI 무변경·만료정리 앱 미호출
 - [소스 파일 인코딩](source-file-encoding.md) — .cs는 UTF-8 no BOM(한글 주석)·수정/신규도 no BOM 유지
 - [백엔드 계정/인증 계약](backend-account-auth-contract.md) — 역할 강등 서버무변경·self-signup은 canCreate 게이트 우회 필요·SSO/이메일 격리 지점·PasswordResetView 2단계 패턴
+- [it15 프레임 로컬 전용 정책](it15-frame-local-only-policy.md) — DB업데이트 경로 제거·fork 저장(이름 사본)·이름 dedup으로 재다운로드 차단·모달은 오버레이

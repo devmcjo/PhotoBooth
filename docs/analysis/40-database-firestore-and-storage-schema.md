@@ -26,17 +26,28 @@
 
 ### 2.1 `users` (문서 ID = 계정 id)
 
-문서 ID는 계정 id를 사용한다(`AccountService.cs:43,58` — `Document(id)`).
+문서 ID는 계정 id를 사용한다. id는 Google email의 local-part에서 파생하며 충돌 시 `-2`/`-3` suffix가 붙는다
+(`web/functions/src/domain/accountId.ts`).
+
+> **it15 갱신**: 비밀번호 개념 폐지. 자격증명은 ① Google SSO(신원, 서버가 id_token 검증) +
+> ② `pinHash`(설정·계정 관리 진입 게이트) 두 가지뿐이다. `password`·`emailVerified` 필드는 삭제됐다.
+> 계정 문서 조작은 전부 백엔드 API(Cloud Functions)를 거치며, 앱은 Firestore에 직접 접근하지 않는다.
 
 | 필드(저장 키) | 타입 | 의미 | 근거 |
 |---------------|------|------|------|
-| `id` | string | 로그인 ID(문서 ID와 동일) | `UserDoc.cs:9-10` |
-| `password` | string | ⚠️ **MVP 평문**. 노출 시 전체 계정 유출 → 웹 전면 차단이 방어선 | `UserDoc.cs:12-13`, `User.cs:11` |
-| `role` | string | `"user"` / `"manager"` / `"admin"`. 기본 `"user"` | `UserDoc.cs:15-16`, `UserRole.cs:19-32` |
-| `createdAt` | timestamp | 생성 시각(UTC) | `UserDoc.cs:18-19` |
+| `id` | string | 계정 ID(문서 ID와 동일) | `services/dto.ts` `UserDoc` |
+| `role` | string | `"temp_user"` / `"user"` / `"manager"` / `"admin"`. 신규 SSO 계정은 `temp_user` | `domain/roles.ts` |
+| `createdAt` | timestamp | 생성 시각(UTC). TempUser 시간 한도의 기준점 | `services/dto.ts` |
+| `email` | string | Google 계정 이메일(소문자 정규화). SSO 신원의 근거 — 항상 존재 | `services/accounts.ts` `loginWithGoogleEmail` |
+| `authMethod` | string | 인증 제공자. 현재 `"google"` 고정 | `services/accounts.ts` `createGoogleAccount` |
+| `pinHash` | string? | 진입 PIN(4자리)의 bcrypt 해시. 미설정 시 필드 부재. **응답 절대 미포함** | `services/accounts.ts` `setOwnPin` |
+| `qrUsedCount` | int? | TempUser QR 전송 성공 세션 누적 수. 미설정=0 | `services/uploads.ts` commit |
 
-- 시드 문서: `id=devmcjo`, `password=1111`, `role=admin`(`AccountService.cs:17-18,106-112`).
-- **DTO↔도메인 매핑**(`AccountService.cs:118-124`): `role` 문자열 ↔ `UserRole` enum은 `UserRoleExtensions.ToFirestoreValue`/`ParseRole`로 변환(`UserRole.cs:19-32`). `User` 도메인은 추가로 `Password`를 보유(평문).
+- **부트스트랩**: HTTP API로는 admin을 지정할 수 없다(`canSetRole`). 최초 admin은 마이그레이션 스크립트
+  `web/functions/scripts/migrate-google-only-accounts.mjs`가 만든다.
+- **클라 응답(`UserResponse`)**: `{id, role, createdAt(ISO8601), email, authMethod, hasPin}`.
+  `hasPin`은 `pinHash != null` 파생값이며 해시 원문은 어떤 응답에도 실리지 않는다
+  (와이어 형식은 `docs/design/wpf-it15-google-only-auth-design.md` §9.1에서 동결).
 
 ### 2.2 `frameTemplates` (문서 ID = 프레임 id)
 
@@ -134,10 +145,12 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 
 | 경로 | get | list | write | 의도 | 근거 |
 |------|-----|------|-------|------|------|
-| `users/{uid}` | deny | deny | deny | 평문 pw 보호(전체 계정 유출 방지) | `firestore.rules:16-18` |
-| `frameTemplates/{fid}` | deny | deny | deny | 웹 접근 없음(WPF 전용) | `firestore.rules:21-23` |
-| `resultSessions/{sid}` | **allow** | **deny** | deny | 토큰 단건 get만. list 열면 토큰 열거 가능 → 금지 | `firestore.rules:28-32` |
-| `{document=**}` | deny | deny | deny | 그 외 기본 차단 | `firestore.rules:35-37` |
+| `users/{uid}` | deny | deny | deny | PIN 해시·역할·이메일 보호(전체 계정 유출 방지) | `firestore.rules:18-20` |
+| `frameTemplates/{fid}` | deny | deny | deny | 웹 접근 없음(WPF 전용) | `firestore.rules:23-25` |
+| `resultSessions/{sid}` | **allow** | **deny** | deny | 토큰 단건 get만. list 열면 토큰 열거 가능 → 금지 | `firestore.rules:30-34` |
+| `{document=**}` | deny | deny | deny | 그 외 기본 차단 | `firestore.rules:37-39` |
+
+> 위 줄번호는 `web/firestore.rules` 현행 기준(it15 주석 갱신 반영).
 
 - 핵심: `resultSessions`는 `allow get: if true` + `allow list: if false`를 **분리**한다. `allow read`(get+list 통합) 금지(주석 `firestore.rules:29-30`).
 - WPF 서비스 계정(Admin SDK)은 이 규칙을 우회하므로 `write:false`가 WPF 문서 생성을 막지 않는다(주석 `firestore.rules:9-11`).

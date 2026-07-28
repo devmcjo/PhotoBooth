@@ -41,15 +41,31 @@
 
 ### 2.1 `users` 컬렉션 (문서 ID = 계정 id 또는 자동 ID)
 
+> **it15 갱신**: 비밀번호 개념 폐지. 자격증명은 ① Google SSO(신원) + ② `pinHash`(설정·계정 관리 진입 게이트)
+> 두 가지뿐이다. `password`·`emailVerified` 필드는 삭제됐다(설계 `wpf-it15-google-only-auth-design.md` §5.3).
+
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `id` | string | 로그인 ID (문서 ID와 동일 권장) |
-| `password` | string | ⚠️ **MVP 평문**(인증/해싱 제외). **웹 접근 절대 차단**(노출 시 전체 계정 유출) |
-| `role` | string | `"user"` / `"manager"` / `"admin"` |
-| `createdAt` | timestamp | 생성 시각 |
+| `id` | string | 계정 ID (문서 ID와 동일). Google email의 local-part에서 파생, 충돌 시 `-2`/`-3` suffix |
+| `role` | string | `"temp_user"` / `"user"` / `"manager"` / `"admin"` |
+| `createdAt` | timestamp | 생성 시각. TempUser 시간 한도의 기준점 |
+| `email` | string | Google 계정 이메일(소문자 정규화). SSO 신원의 근거 — 항상 존재 |
+| `authMethod` | string | 인증 제공자. 현재 `"google"` 고정(추후 `"kakao"`/`"apple"` 확장) |
+| `pinHash` | string? | 진입 PIN(4자리)의 bcrypt 해시. 미설정 시 필드 부재. **응답에 절대 미포함** |
+| `qrUsedCount` | int? | TempUser QR 전송 성공 세션 누적 수. 미설정=0 |
 
-- 시드: `id=devmcjo`, `password=1111`, `role=admin` 사전 등록.
+- **부트스트랩**: 신규 SSO 계정은 무조건 `role:"temp_user"`로 생성된다. 최초 admin(`devmcjo`)은
+  마이그레이션 스크립트 `web/functions/scripts/migrate-google-only-accounts.mjs`가 만든다(HTTP API로는 admin 지정 불가).
 - **웹 접근**: **전면 차단**(read/write 모두 deny). 웹은 users를 절대 읽지 않는다.
+
+**클라 응답(`UserResponse`) 와이어 형식** — it15 설계 §9.1에서 동결:
+
+```json
+{ "id": "devmcjo", "role": "admin", "createdAt": "2025-11-02T08:31:00.000Z",
+  "email": "devmcjo@gmail.com", "authMethod": "google", "hasPin": true }
+```
+
+`hasPin`은 `pinHash != null` 파생값이며 해시 원문은 어떤 응답에도 실리지 않는다.
 
 ### 2.2 `frameTemplates` 컬렉션 (문서 ID = 자동 ID)
 
@@ -66,6 +82,7 @@
 
 - 계정당 최대 10개(커스텀). 기본 프레임(isDefault=true, userId=null)은 별개.
 - **웹 접근**: **전면 차단**. 웹 다운로드 페이지는 프레임 목록을 다루지 않는다(§10 #33). *(프레임 관리는 WPF 전용)*
+- **it15 F1 — 프레임 편집은 로컬 전용**: WPF 앱은 **`PUT /frames/{id}` 라우트를 호출하지 않는다**. 프레임 편집은 해당 PC에만 적용되며, DB/번들 유래 프레임을 편집하면 원본을 보존하고 `{원본이름} 사본`으로 로컬에 분기 저장한다(`docs/design/wpf-it15-frame-ux-design.md` §3.2). ⚠️ 서버 라우트(`web/functions/src/routes/frames.ts`)는 `frameTemplates` 문서를 갱신하는 유일한 API 경로로 **유지**되지만 **운영/관리 도구 전용**이다 — 앱 동작을 근거로 이 라우트를 제거하지 말 것. 앱이 `frameTemplates`에 쓰는 경우는 **파워의 프레임 신규 생성(`POST /frames`)뿐**이다.
 - **it8 A2 저장 하이브리드**: `frameTemplates`(DB)에는 **공용 기본 프레임(isDefault=true, userId=null)만** 저장한다(파워=admin/manager가 생성). **일반 user 커스텀 프레임은 DB에 저장하지 않고 WPF 로컬 전용**(`%ProgramData%\MCPhoto\Frame\{계정}_{이름}.png` + `.slots`)이다. 따라서 `userId != null` 문서는 신규 생성되지 않는다(기존 문서는 하위호환 유지). 파워 프레임은 로컬에도 캐시(`Frame/default/{frameId}.png`)해 재다운로드를 피한다. `frameTemplates`는 웹 접근이 없어 이 변경은 웹·보안 규칙에 영향 없음. 계정당 10개 제한은 **user는 로컬 파일 수**로, 파워 DB 프레임은 별개.
 
 ### 2.3 `resultSessions` 컬렉션 (문서 ID = **추측 불가 토큰**, §3.3)
@@ -179,7 +196,7 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 ### 5.1 Firestore 규칙 요구사항
 
 ```
-users/{uid}          : read=false, write=false   // 전면 차단 (평문 pw 보호)
+users/{uid}          : read=false, write=false   // 전면 차단 (PIN 해시·역할·이메일 보호)
 frameTemplates/{fid}  : read=false, write=false   // 웹 접근 없음 (WPF 전용)
 resultSessions/{sid}  :
     get   = true      // 토큰 ID 단건 get만 허용

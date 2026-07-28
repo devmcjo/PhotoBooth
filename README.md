@@ -32,7 +32,7 @@ photobooth/
 ├─ src/
 │  ├─ MCPhoto.Core/        # 도메인 모델·설정(INI)·브랜딩·내비게이션·계약(인터페이스)
 │  ├─ MCPhoto.Capture/     # OpenCvSharp 카메라, ffmpeg 녹화/타임랩스, 합성, 필터
-│  ├─ MCPhoto.Firebase/    # Firestore/Storage 연동, 업로드, 프레임/계정 저장소
+│  ├─ MCPhoto.Http/        # 백엔드(HTTPS API) 클라이언트 — 계정·프레임·업로드·설정
 │  └─ MCPhoto.App/         # WPF UI(Views/ViewModels), DI 부트스트랩, 상태머신
 ├─ tests/MCPhoto.Tests/    # 단위·headless XAML 회귀 테스트 (268개)
 ├─ web/                    # 모바일 다운로드 페이지 + Firebase 규칙 + TTL 운영문서
