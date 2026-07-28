@@ -26,10 +26,26 @@ describe("validation — 서버 입력 검증(경계 방어)", () => {
     expect(validateAccountId("x".repeat(41)).ok).toBe(false);
   });
 
-  test("validateRole: 화이트리스트", () => {
+  test("validateRole: 화이트리스트(it16 advanced_user 포함)", () => {
+    expect(validateRole("temp_user").ok).toBe(true);
+    expect(validateRole("user").ok).toBe(true);
+    expect(validateRole("advanced_user").ok).toBe(true);
+    expect(validateRole("manager").ok).toBe(true);
     expect(validateRole("admin").ok).toBe(true);
     expect(validateRole("root").ok).toBe(false);
+    expect(validateRole("advanceduser").ok).toBe(false); // snake_case만 허용
     expect(validateRole(undefined).ok).toBe(false);
+  });
+
+  test("validateRole 실패 문구가 허용 목록을 그대로 노출(클라 오류 표시 계약)", () => {
+    const r = validateRole("root");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // 화이트리스트와 문구가 어긋나면 사용자에게 거짓 안내가 나간다(설계 §5.3).
+      for (const role of ["temp_user", "user", "advanced_user", "manager", "admin"]) {
+        expect(r.error).toContain(role);
+      }
+    }
   });
 
   test("validateRetentionHours: 정수 1~72", () => {

@@ -121,10 +121,16 @@ export function accountsRouter(): Router {
     })
   );
 
-  // PUT /accounts/{id}/pin  (로그인, 권한 기반) — {newPin} → 타 계정 PIN 재설정(E3).
+  // PUT /accounts/{id}/pin  (파워, 위계) — {newPin} → 타 계정 PIN 재설정(E3).
   //   canManage(actor.role, targetRole) 강제(위반 403). 자기 자신 대상은 400(본인은 E2 사용). → 204.
+  // it16 §3.5: 형제 라우트(DELETE /:id · PATCH /:id/role)에는 있던 power 게이트가 이 라우트에만
+  //   빠져 있었다 → canManage는 "같은 위계"를 허용하므로 temp_user가 다른 temp_user의 PIN을 재설정할 수
+  //   있었다(it15로 신규 SSO 계정이 전원 temp_user가 되며 모집단이 커졌다). power 게이트로 하위 대역
+  //   (temp_user·user·advanced_user) 전원을 차단한다. **canManage 자체는 손대지 않는다** —
+  //   deleteAccount와 공유되므로 좁히면 admin↔admin·manager↔manager 삭제가 회귀한다.
   router.put(
     "/:id/pin",
+    requirePower(),
     asyncHandler(async (req, res) => {
       const idRes = validateAccountId(req.params.id);
       if (!idRes.ok) throw HttpError.invalid(idRes.error);

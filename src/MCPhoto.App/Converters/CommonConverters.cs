@@ -123,7 +123,10 @@ public sealed class CameraStateToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>UserRole → 한글 표시 라벨("임시 유저"/"사용자"/"매니저"/"관리자"). 생성 콤보·사용자 관리 목록. (it13 §9.1)</summary>
+/// <summary>
+/// UserRole → 한글 표시 라벨("임시 유저"/"사용자"/"고급 유저"/"매니저"/"관리자"). 생성 콤보·사용자 관리 목록.
+/// (it13 §9.1, it16 §6.1 — 라벨 추가는 UserRoleExtensions.ToLabel() 1곳으로 전부 커버되므로 이 코드는 불변)
+/// </summary>
 public sealed class RoleLabelConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

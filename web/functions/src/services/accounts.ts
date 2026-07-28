@@ -160,12 +160,13 @@ export async function deleteAccount(
 }
 
 /**
- * 역할 지정(it13 권한 매트릭스, 서버 강제 — 클라 전달 actor 무시, actor는 JWT에서 도출).
- *   - Admin: target ∈ {temp_user, user, manager}. admin 지정/admin 대상 불가.
- *   - Manager: 오직 현재=user → 목표=temp_user 강등만. 그 외 403.
- *   - 승격(랭크 상승)은 admin 전용, user→temp_user 강등은 admin+manager.
+ * 역할 지정(it16 권한 매트릭스, 서버 강제 — 클라 전달 actor 무시, actor는 JWT에서 도출).
+ *   - Admin: target ∈ {temp_user, user, advanced_user, manager}. admin 지정/admin 대상 불가.
+ *   - Manager: 하위 3역할 대역(temp_user·user·advanced_user) 내에서만 자유 지정(승격 포함).
+ *              manager·admin 지정과 manager·admin 대상 변경은 admin 전용 → 403.
+ *   - 그 외 actor(하위 대역 전원): 전부 403(라우트의 power 게이트가 이미 조기 차단).
  * 판정은 순수 함수 canSetRole(roles.ts)에 위임. 대상 계정 없으면 getRole이 404.
- * 근거: AccountService.SetRoleAsync (AccountService.cs:96-101) + 설계 it13 §3.
+ * 근거: AccountService.SetRoleAsync (AccountService.cs:96-101) + 설계 it16 §3.3 전수 표.
  */
 export async function setRole(
   targetId: string,

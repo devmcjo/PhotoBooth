@@ -9,7 +9,7 @@ import { Timestamp } from "firebase-admin/firestore";
 /** users/{id} — it15: 비밀번호 개념 폐지. 자격증명은 Google(신원) + pinHash(게이트) 뿐. */
 export interface UserDoc {
   id: string;
-  role: string; // "temp_user" | "user" | "manager" | "admin"
+  role: string; // "temp_user" | "user" | "advanced_user"(it16) | "manager" | "admin"
   createdAt: Timestamp;
   /** Google 계정 이메일(소문자 정규화). SSO 신원의 근거 — 항상 존재. */
   email: string;

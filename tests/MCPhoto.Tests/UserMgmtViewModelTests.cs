@@ -94,32 +94,47 @@ public class UserMgmtViewModelTests
             new User { Id = "u1", Role = UserRole.User },
             new User { Id = "m1", Role = UserRole.Manager },
             new User { Id = "t1", Role = UserRole.TempUser },
+            new User { Id = "a1", Role = UserRole.AdvancedUser },   // it16
             new User { Id = "otherAdmin", Role = UserRole.Admin },
         };
         var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
 
         Assert.False(Row(vm, "admin").CanChangeRole);        // 자기 계정 미노출
         Assert.False(Row(vm, "otherAdmin").CanChangeRole);   // admin 대상 미노출
-        var all = new[] { UserRole.TempUser, UserRole.User, UserRole.Manager };
+        // it16: 콤보 목록에 AdvancedUser 추가(위계 오름차순).
+        var all = new[] { UserRole.TempUser, UserRole.User, UserRole.AdvancedUser, UserRole.Manager };
         Assert.Equal(all, Row(vm, "u1").AssignableRoles);
         Assert.Equal(all, Row(vm, "m1").AssignableRoles);
         Assert.Equal(all, Row(vm, "t1").AssignableRoles);
+        Assert.Equal(all, Row(vm, "a1").AssignableRoles);
     }
 
+    /// <summary>
+    /// it16 §8.2-24·25(E3): manager는 하위 3역할 대역(temp_user·user·advanced_user) 행에서 콤보가 노출되고
+    /// 대역 내 자유 지정(승격 포함)이 가능하다. manager·admin 행은 여전히 미노출.
+    /// (it13의 "manager는 user→temp_user 강등만" 규칙이 이 이터레이션에서 완화됐다)
+    /// </summary>
     [Fact]
-    public async Task Manager_Rows_Only_User_Target_Offers_Demote()
+    public async Task Manager_Rows_Lower_Band_Offers_Free_Assign()
     {
         var list = new[]
         {
             new User { Id = "u1", Role = UserRole.User },
             new User { Id = "t1", Role = UserRole.TempUser },
+            new User { Id = "a1", Role = UserRole.AdvancedUser },
             new User { Id = "m2", Role = UserRole.Manager },
+            new User { Id = "ad1", Role = UserRole.Admin },
         };
         var (vm, _) = await MakeVmAsync(UserRole.Manager, "mgrSelf", list);
 
-        Assert.Equal(new[] { UserRole.User, UserRole.TempUser }, Row(vm, "u1").AssignableRoles); // user→temp_user 강등
-        Assert.False(Row(vm, "t1").CanChangeRole);   // manager는 temp_user 대상 미노출(승격 불가)
-        Assert.False(Row(vm, "m2").CanChangeRole);    // manager는 manager 대상 미노출
+        var band = new[] { UserRole.TempUser, UserRole.User, UserRole.AdvancedUser };
+        Assert.Equal(band, Row(vm, "u1").AssignableRoles);
+        Assert.Equal(band, Row(vm, "t1").AssignableRoles);   // it16: temp_user 행도 콤보 노출(승격 허용)
+        Assert.Equal(band, Row(vm, "a1").AssignableRoles);
+        Assert.True(Row(vm, "t1").CanChangeRole);
+        Assert.True(Row(vm, "a1").CanChangeRole);
+        Assert.False(Row(vm, "m2").CanChangeRole);   // manager 대상 미노출(manager 지정·강등은 admin 전용)
+        Assert.False(Row(vm, "ad1").CanChangeRole);  // admin 대상 미노출
     }
 
     // ── Apply 동작 ──
@@ -153,16 +168,35 @@ public class UserMgmtViewModelTests
     [Fact]
     public async Task Apply_Beyond_Matrix_Blocked_Client_Side()
     {
-        // manager가 temp_user를 user로 승격 시도(매트릭스 밖) → 클라 차단, SetRole 미호출.
-        var list = new[] { new User { Id = "t1", Role = UserRole.TempUser } };
+        // manager가 user를 manager로 승격 시도(매트릭스 밖 — manager 지정은 admin 전용) → 클라 차단, SetRole 미호출.
+        // ⚠️ it16 E3로 manager의 하위 3역할 대역 내 승격(temp_user→user 등)은 **허용**으로 반전됐다.
+        //    따라서 이 테스트의 "매트릭스 밖" 케이스를 manager 지정으로 교체했다(설계 §3.3 변경점 표).
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
         var (vm, accounts) = await MakeVmAsync(UserRole.Manager, "mgrSelf", list);
-        var row = Row(vm, "t1");
-        row.SelectedRole = UserRole.User;   // 승격(manager 불가)
+        var row = Row(vm, "u1");
+        row.SelectedRole = UserRole.Manager;   // manager 지정(admin 전용)
 
         await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
 
         Assert.False(accounts.SetRoleCalled);
         Assert.Equal("해당 역할로 변경할 권한이 없습니다.", vm.StatusMessage);
+    }
+
+    /// <summary>it16 §8.2-27: AdvancedUser 지정이 서버로 전달되고 성공 토스트에 "고급 유저" 라벨이 실린다.</summary>
+    [Fact]
+    public async Task Apply_To_AdvancedUser_Calls_SetRole_And_Labels_Toast()
+    {
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Manager, "mgrSelf", list);
+        var row = Row(vm, "u1");
+        row.SelectedRole = UserRole.AdvancedUser;   // it16 E3: manager도 대역 내 승격 가능
+
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
+
+        Assert.True(accounts.SetRoleCalled);
+        Assert.Equal("u1", accounts.SetRoleId);
+        Assert.Equal(UserRole.AdvancedUser, accounts.SetRoleValue);
+        Assert.Contains("고급 유저", vm.StatusMessage);
     }
 
     [Fact]
@@ -261,6 +295,43 @@ public class UserMgmtViewModelTests
 
         Assert.False(Row(vm, "a1").CanResetPin);   // 상위 역할
         Assert.True(Row(vm, "u1").CanResetPin);    // 하위 관리 가능
+    }
+
+    /// <summary>
+    /// it16 §8.2-26·§3.5: 비power actor는 PIN 재설정 UI가 **전부 미노출**이다(가정 A6 검증).
+    /// CanManage만 보던 종전 판정은 advanced_user가 user·temp_user의 PIN을, user가 다른 user의 PIN을
+    /// 만질 수 있게 했다 — 서버 requirePower()와 대칭으로 power 항을 추가해 모집단 전체를 차단한다.
+    /// </summary>
+    [Theory]
+    [InlineData(UserRole.AdvancedUser)]
+    [InlineData(UserRole.User)]
+    [InlineData(UserRole.TempUser)]
+    public async Task CanResetPin_False_For_NonPower_Actor(UserRole actorRole)
+    {
+        var list = new[]
+        {
+            new User { Id = "self", Role = actorRole },
+            new User { Id = "t1", Role = UserRole.TempUser },   // 위계상 하위 → 종전이면 노출됐다
+            new User { Id = "u1", Role = UserRole.User },
+        };
+        var (vm, _, _) = await MakePinVmAsync(actorRole, "self", list);
+
+        Assert.All(vm.Rows, r => Assert.False(r.CanResetPin));
+    }
+
+    /// <summary>it16 §3.5: 커맨드 직접 호출도 power 가드로 차단(UI 미노출·커맨드 가드·서버 3중 방어).</summary>
+    [Fact]
+    public async Task ResetUserPin_Blocked_For_NonPower_Actor()
+    {
+        var list = new[] { new User { Id = "t1", Role = UserRole.TempUser } };
+        var (vm, accounts, pin) = await MakePinVmAsync(UserRole.AdvancedUser, "adv", list);
+        var row = Row(vm, "t1");
+
+        vm.ResetUserPinCommand.Execute(row);
+
+        Assert.False(pin.SetupCalled);
+        Assert.Null(accounts.ResetPinId);
+        Assert.Equal("상위 역할 계정은 관리할 수 없습니다.", vm.StatusMessage);
     }
 
     // ── it15 §6.5 T7: PIN 설정 여부 열 ──

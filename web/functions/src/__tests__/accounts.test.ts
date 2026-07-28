@@ -105,9 +105,11 @@ describe("BE-1 setRole — 역할 양방향 변경 회귀", () => {
   });
 });
 
-// ── it13: setRole 권한 매트릭스(TempUser + manager 강등) ──────────────────────
-// it15 T11: 신규 SSO 계정이 전원 temp_user가 되므로 "승격은 admin 전용" 회귀 방어가 더 중요해졌다.
-describe("it13 setRole — 권한 매트릭스(서버 강제)", () => {
+// ── it16: setRole 권한 매트릭스(설계 §3.3 전수 표) ────────────────────────────
+// it13의 "승격=admin 전용"이 **하위 3역할 대역(temp_user·user·advanced_user)에서 완화**된다:
+// manager가 그 대역 안에서 자유 지정(승격 포함). manager·admin 지정과 manager·admin 대상은 여전히 admin 전용.
+// 순수 판정 전수 검증은 roles.test.ts(canSetRole 125조합)이고, 여기서는 서비스 레벨(문서 write·에러 상태)을 본다.
+describe("it16 setRole — 권한 매트릭스(서버 강제)", () => {
   const admin = { id: "root", role: "admin" as const };
   const manager = { id: "mgr", role: "manager" as const };
 
@@ -117,7 +119,7 @@ describe("it13 setRole — 권한 매트릭스(서버 강제)", () => {
     expect(fake.peek("users", "u1")?.role).toBe("temp_user");
   });
 
-  test("admin이 temp_user→user 승격 성공(승격은 admin 전용)", async () => {
+  test("admin이 temp_user→user 승격 성공", async () => {
     seedUser("t1", { role: "temp_user" });
     await setRole("t1", "user", admin);
     expect(fake.peek("users", "t1")?.role).toBe("user");
@@ -129,22 +131,70 @@ describe("it13 setRole — 권한 매트릭스(서버 강제)", () => {
     expect(fake.peek("users", "t0")?.role).toBe("manager");
   });
 
-  test("manager가 user→temp_user 강등 성공(유일 허용)", async () => {
+  test("admin이 user→advanced_user 승격 성공(it16 운영 동선)", async () => {
+    seedUser("ua1", { role: "user" });
+    await setRole("ua1", "advanced_user", admin);
+    expect(fake.peek("users", "ua1")?.role).toBe("advanced_user");
+  });
+
+  test("admin이 advanced_user→manager 승격 성공", async () => {
+    seedUser("aa1", { role: "advanced_user" });
+    await setRole("aa1", "manager", admin);
+    expect(fake.peek("users", "aa1")?.role).toBe("manager");
+  });
+
+  test("manager가 user→temp_user 강등 성공", async () => {
     seedUser("u2", { role: "user" });
     await setRole("u2", "temp_user", manager);
     expect(fake.peek("users", "u2")?.role).toBe("temp_user");
   });
 
-  test("manager가 temp_user→user 승격 거부(403, role 불변)", async () => {
+  test("manager가 temp_user→user 승격 성공(it16 완화 — it13에서는 403이었다)", async () => {
     seedUser("t2", { role: "temp_user" });
-    await expect(setRole("t2", "user", manager)).rejects.toMatchObject({ status: 403 });
-    expect(fake.peek("users", "t2")?.role).toBe("temp_user");
+    await setRole("t2", "user", manager);
+    expect(fake.peek("users", "t2")?.role).toBe("user");
   });
 
-  test("manager가 user→manager 승격 거부(403)", async () => {
+  test("manager가 temp_user→advanced_user 승격 성공(it16 §8.4-35)", async () => {
+    seedUser("t4", { role: "temp_user" });
+    await setRole("t4", "advanced_user", manager);
+    expect(fake.peek("users", "t4")?.role).toBe("advanced_user");
+  });
+
+  test("manager가 user→advanced_user 승격 성공(it16 §8.4-35)", async () => {
+    seedUser("u4", { role: "user" });
+    await setRole("u4", "advanced_user", manager);
+    expect(fake.peek("users", "u4")?.role).toBe("advanced_user");
+  });
+
+  test("manager가 advanced_user→user 강등 성공(it16 §8.4-35)", async () => {
+    seedUser("a4", { role: "advanced_user" });
+    await setRole("a4", "user", manager);
+    expect(fake.peek("users", "a4")?.role).toBe("user");
+  });
+
+  test("manager가 advanced_user→temp_user 강등 성공", async () => {
+    seedUser("a5", { role: "advanced_user" });
+    await setRole("a5", "temp_user", manager);
+    expect(fake.peek("users", "a5")?.role).toBe("temp_user");
+  });
+
+  test("manager가 temp_user 대상 no-op(멱등 write) 성공", async () => {
+    seedUser("t3", { role: "temp_user" });
+    await setRole("t3", "temp_user", manager);
+    expect(fake.peek("users", "t3")?.role).toBe("temp_user");
+  });
+
+  test("manager가 user→manager 승격 거부(403, manager 지정은 admin 전용)", async () => {
     seedUser("u3", { role: "user" });
     await expect(setRole("u3", "manager", manager)).rejects.toMatchObject({ status: 403 });
     expect(fake.peek("users", "u3")?.role).toBe("user");
+  });
+
+  test("manager가 advanced_user→manager 승격 거부(403, it16 §8.4-35)", async () => {
+    seedUser("a6", { role: "advanced_user" });
+    await expect(setRole("a6", "manager", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "a6")?.role).toBe("advanced_user");
   });
 
   test("manager가 manager 대상 변경 거부(403)", async () => {
@@ -153,16 +203,25 @@ describe("it13 setRole — 권한 매트릭스(서버 강제)", () => {
     expect(fake.peek("users", "m2")?.role).toBe("manager");
   });
 
+  test("manager가 manager 대상을 advanced_user로 강등 거부(403, it16 §8.4-35)", async () => {
+    seedUser("m3", { role: "manager" });
+    await expect(setRole("m3", "advanced_user", manager)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(fake.peek("users", "m3")?.role).toBe("manager");
+  });
+
   test("manager가 admin 대상 변경 거부(403)", async () => {
     seedUser("a3", { role: "admin" });
     await expect(setRole("a3", "temp_user", manager)).rejects.toMatchObject({ status: 403 });
     expect(fake.peek("users", "a3")?.role).toBe("admin");
   });
 
-  test("manager가 temp_user 대상 변경 거부(403, no-op도)", async () => {
-    seedUser("t3", { role: "temp_user" });
-    await expect(setRole("t3", "temp_user", manager)).rejects.toMatchObject({ status: 403 });
-    expect(fake.peek("users", "t3")?.role).toBe("temp_user");
+  test("advanced_user actor는 역할 변경 전부 거부(403 — 계정 관리 권한 없음)", async () => {
+    const advanced = { id: "adv", role: "advanced_user" as const };
+    seedUser("t5", { role: "temp_user" });
+    await expect(setRole("t5", "user", advanced)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "t5")?.role).toBe("temp_user");
   });
 
   test("존재하지 않는 대상 → 404", async () => {

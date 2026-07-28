@@ -24,10 +24,12 @@ export function validateAccountId(value: unknown): ValidationResult<string> {
   return ok(v);
 }
 
-/** 역할: 화이트리스트(temp_user/user/manager/admin). */
+/** 역할: 화이트리스트(temp_user/user/advanced_user/manager/admin — it16). */
 export function validateRole(value: unknown): ValidationResult<UserRole> {
   if (!isUserRole(value))
-    return fail("역할이 올바르지 않습니다(temp_user/user/manager/admin).");
+    return fail(
+      "역할이 올바르지 않습니다(temp_user/user/advanced_user/manager/admin)."
+    );
   return ok(value);
 }
 

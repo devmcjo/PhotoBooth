@@ -33,6 +33,8 @@ public sealed partial class UserRowViewModel : ObservableObject
     /// it14: PIN 재설정 UI 노출 여부: 자기 계정 아님 + actor가 대상을 관리 가능(CanManage).
     /// 자기 PIN은 계정 관리 화면에서 변경(서버도 자기 자신 E3는 400).
     /// it15: 백엔드 전용이 되어 isBackend 조건 삭제.
+    /// it16 §3.5: **power 항 추가** — 서버가 `PUT /accounts/:id/pin`에 requirePower()를 붙였으므로 클라도 대칭.
+    ///   CanManage만으로는 비power(temp_user·user·advanced_user)가 같은 위계의 남의 PIN을 만질 수 있었다.
     /// </summary>
     public bool CanResetPin { get; }
 
@@ -47,7 +49,7 @@ public sealed partial class UserRowViewModel : ObservableObject
         // 자기 계정은 역할 변경 금지(대칭·안전) → 빈 목록으로 UI 미노출.
         AssignableRoles = isSelf ? Array.Empty<UserRole>() : RoleChangePolicy.AssignableRoles(actorRole, user.Role);
         _selectedRole = user.Role;
-        CanResetPin = !isSelf && actorRole.CanManage(user.Role);
+        CanResetPin = !isSelf && actorRole.IsPower() && actorRole.CanManage(user.Role);   // it16 §3.5 power 게이트
     }
 }
 
@@ -126,7 +128,7 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
 
     /// <summary>
     /// 타 계정 PIN 재설정(it14 §6.2, 권한 기반). 소형 PIN 다이얼로그로 새 4자리 PIN을 입력(2회 확인) → ResetPinAsync.
-    /// CanManage 클라 1차 가드(UI 미노출과 이중 방어) + 서버 canManage 최종 강제(403 우아 처리, 비번 초기화와 동형).
+    /// IsPower + CanManage 클라 1차 가드(UI 미노출과 이중 방어) + 서버 requirePower + canManage 최종 강제(403 우아 처리).
     /// 고정값(비번 "0000") 대신 입력값 사용 — PIN 자격성 유지(설계 O4).
     /// </summary>
     [RelayCommand]
@@ -134,8 +136,13 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     {
         if (row is null) return;
         var user = row.User;
-        // 권한 가드: 자기와 같거나 낮은 역할만(예: manager는 admin PIN 재설정 불가). UI 미노출과 이중 방어.
-        if (!ActorRole.CanManage(user.Role)) { StatusMessage = "상위 역할 계정은 관리할 수 없습니다."; return; }
+        // 권한 가드: power + 자기와 같거나 낮은 역할만(예: manager는 admin PIN 재설정 불가). UI 미노출과 이중 방어.
+        // it16 §3.5: IsPower() 항 추가(서버 requirePower와 대칭). 문구는 기존 것 재사용.
+        if (!ActorRole.IsPower() || !ActorRole.CanManage(user.Role))
+        {
+            StatusMessage = "상위 역할 계정은 관리할 수 없습니다.";
+            return;
+        }
         // fail-closed: PIN 다이얼로그 서비스가 없으면(레거시/DI 미구성) 재설정하지 않는다.
         if (_pinPrompt is null) { StatusMessage = "PIN 재설정을 사용할 수 없습니다."; return; }
 
