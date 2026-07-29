@@ -103,7 +103,7 @@ publish.bat  더블클릭    (또는)  powershell -ExecutionPolicy Bypass -File 
 | `00-overview-and-architecture.md` | 전체 아키텍처·컴포넌트·데이터 흐름 |
 | `10~12-exe-app-*.md` | WPF 앱 구조 / 기능 상세 / 설정·구성 |
 | `20-frontend-web-download-page.md` | 웹 다운로드 페이지 |
-| `30-backend-firebase-integration.md` | Firebase 연동(초기화·업로드·QR) |
+| `30-backend-firebase-integration.md` | 백엔드 API 연동(인증·업로드·프레임/계정·한도) |
 | `40-database-firestore-and-storage-schema.md` | Firestore/Storage 스키마·경로·규칙 |
 | `50-infra-gcp-lifecycle-and-ttl.md` | GCP 인프라·보관/만료(Lifecycle·TTL) |
 | `60-auth-accounts-and-roles.md` | 로그인·계정·역할 권한 |

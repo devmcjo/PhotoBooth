@@ -17,7 +17,7 @@
 | **11** | [exe-app-features](./11-exe-app-features.md) | Exe 앱 | 기능 상세(촬영·프레임·필터·타임랩스·QR·유휴·설정·브랜딩 등) |
 | **12** | [exe-app-settings-and-config](./12-exe-app-settings-and-config.md) | Exe 앱 | AppSettings 전 항목·기본값·INI 폴백·브랜딩·표시모드 |
 | **20** | [frontend-web-download-page](./20-frontend-web-download-page.md) | 프론트엔드 | 웹 다운로드 페이지 상태머신·만료 판정·미디어 옵션 구분 |
-| **30** | [backend-firebase-integration](./30-backend-firebase-integration.md) | 백엔드 | Firebase 초기화·서비스계정·업로드·프레임/계정·QR·오프라인 폴백 |
+| **30** | [backend-firebase-integration](./30-backend-firebase-integration.md) | 백엔드 | 백엔드 API(Cloud Functions) 연동 — 인증 게이트·업로드 3단계·프레임/계정·TempUser 한도·미도달 시 동작 |
 | **40** | [database-firestore-and-storage-schema](./40-database-firestore-and-storage-schema.md) | DB | Firestore 컬렉션·Storage 경로 규약·보안 규칙·계약 불변식 |
 | **50** | [infra-gcp-lifecycle-and-ttl](./50-infra-gcp-lifecycle-and-ttl.md) | 인프라 | 보관/만료(GCS Lifecycle·Firestore TTL)·적용 명령·비용 |
 | **60** | [auth-accounts-and-roles](./60-auth-accounts-and-roles.md) | 인증 | 역할(user/manager/admin)·권한 매트릭스·로그인 유지·계정 저장소 |
