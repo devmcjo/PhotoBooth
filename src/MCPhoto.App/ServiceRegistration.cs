@@ -48,6 +48,8 @@ internal static class ServiceRegistration
         // it11 #14: 진단·상태 모달(관리자 트러블슈팅). 로그 폴더 서비스 + 다이얼로그 서비스.
         services.AddSingleton<ILogFolderService, LogFolderService>();
         services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();
+        // 진단 카드의 개발자 메일 주소 복사(best-effort — 실패해도 예외 없음).
+        services.AddSingleton<IClipboardService, ClipboardService>();
 
         // Step 2: 설정(INI). 백엔드 게이트 키 기본값은 exe 빌드 시 내장(AssemblyMetadata, publish -p) → ini 불요.
         services.AddSingleton<ISettingsService>(sp => new IniSettingsService(
@@ -125,6 +127,18 @@ internal static class ServiceRegistration
                 s.StorageBucket,
                 configured: !string.IsNullOrWhiteSpace(s.BackendBaseUrl),
                 sp.GetService<ILogger<HttpFirebaseClient>>());
+        });
+
+        // 진단 화면의 "Web Deploy Date" — GET /health의 deployedAt(유효 API 키 제시 시에만 응답에 포함).
+        services.AddSingleton<IServerDeployInfoService>(sp =>
+        {
+            var s = sp.GetRequiredService<ISettingsService>().Current;
+            return new HttpServerDeployInfoService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IBackendSession>(),
+                s.BackendApiKey,
+                configured: !string.IsNullOrWhiteSpace(s.BackendBaseUrl),
+                sp.GetService<ILogger<HttpServerDeployInfoService>>());
         });
 
         services.AddSingleton<IFrameRepository>(sp =>

@@ -31,8 +31,12 @@ public sealed class DiagnosticsDialogService : IDiagnosticsDialogService
             Owner = Application.Current?.MainWindow
         };
 
-        // 진입 시 카메라 자동 검사(백그라운드 열거). UI 스레드에서 await → 완료 후 창 표시.
-        await vm.RefreshCamerasCommand.ExecuteAsync(null);
+        // 진입 시 카메라 자동 검사(백그라운드 열거) + 웹 배포일 서버 조회. UI 스레드에서 await → 완료 후 창 표시.
+        // 두 작업은 서로 독립이라 병렬로 돌린다 — 배포일 조회는 자체 타임아웃(5초)이 있어 카메라 열거보다
+        // 오래 끌지 않는다. 둘 다 내부에서 실패를 흡수하므로 여기서 예외가 새지 않는다.
+        await Task.WhenAll(
+            vm.RefreshCamerasCommand.ExecuteAsync(null),
+            vm.RefreshWebDeployDateCommand.ExecuteAsync(null));
 
         win.ShowDialog();          // 모달: 닫힐 때까지 블로킹
         _logger?.LogInformation("진단·상태 모달 종료");

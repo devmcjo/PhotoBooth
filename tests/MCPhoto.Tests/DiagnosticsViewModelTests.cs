@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.IO;
 using MCPhoto.App;
 using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Capture;
+using MCPhoto.Core.Build;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
@@ -14,9 +16,47 @@ namespace MCPhoto.Tests;
 /// it11 #14: 진단·상태 VM 헬스체크 조립 + LogFolderService 경로 산출.
 /// 실제 explorer 실행/서버 실호출은 금지 — 페이크/주입 경계로 검증(A3 스모크 포함).
 /// it15 §6.6: "서비스 계정 키 후보 경로" 항목이 사라지고 "서버 연결(백엔드)" 항목으로 재구성됐다.
+/// 개발자 문의 카드: 연락처(고정)·버전·빌드일(bldinfo) + 웹 배포일(서버 /health) — 조회 실패는 "(확인 불가)".
 /// </summary>
 public class DiagnosticsViewModelTests
 {
+    /// <summary>빌드 정보 스텁 — bldinfo.ini 파일 없이 값 주입(IniBuildInfoService 폴백과 무관하게 결정적).</summary>
+    private sealed class StubBuildInfoService : IBuildInfoService
+    {
+        public string Version { get; init; } = "0.0.0";
+        public string BuildDate { get; init; } = string.Empty;
+        public string Site { get; init; } = string.Empty;
+        public string DisplayText => $"v{Version}";
+    }
+
+    /// <summary>웹 배포일 조회 페이크 — 반환값 또는 예외를 주입(실제 HTTP 미호출).</summary>
+    private sealed class FakeServerDeployInfoService : IServerDeployInfoService
+    {
+        public DateTimeOffset? Result { get; init; }
+        public Exception? Throws { get; init; }
+        public int CallCount { get; private set; }
+
+        public Task<DateTimeOffset?> GetWebDeployedAtAsync(CancellationToken ct = default)
+        {
+            CallCount++;
+            if (Throws is not null) return Task.FromException<DateTimeOffset?>(Throws);
+            return Task.FromResult(Result);
+        }
+    }
+
+    /// <summary>클립보드 페이크 — 성공/실패 주입 + 전달된 텍스트 캡처(실제 클립보드 미접근).</summary>
+    private sealed class FakeClipboardService : IClipboardService
+    {
+        public FakeClipboardService(bool succeeds = true) => Succeeds = succeeds;
+        public bool Succeeds { get; }
+        public string? LastText { get; private set; }
+
+        public bool TrySetText(string text)
+        {
+            LastText = text;
+            return Succeeds;
+        }
+    }
     private sealed class StubSettingsService : ISettingsService
     {
         private readonly AppSettings _settings;
@@ -61,7 +101,10 @@ public class DiagnosticsViewModelTests
         IFirebaseClient? firebase = null,
         ILogFolderService? logFolder = null,
         AppSettings? settings = null,
-        User? loginUser = null)
+        User? loginUser = null,
+        IBuildInfoService? buildInfo = null,
+        IServerDeployInfoService? serverDeploy = null,
+        IClipboardService? clipboard = null)
     {
         camera ??= new FakeCameraService();
         // 존재하지 않는 경로를 명시 주입 → FfmpegAvailable=false로 결정적(실제 번들 유무와 무관).
@@ -69,9 +112,13 @@ public class DiagnosticsViewModelTests
         firebase ??= new FakeFirebaseClient { IsInitialized = false };
         logFolder ??= new FakeLogFolderService(Path.Combine(Path.GetTempPath(), "logs"));
         settings ??= new AppSettings();
+        buildInfo ??= new StubBuildInfoService();
+        serverDeploy ??= new FakeServerDeployInfoService();
+        clipboard ??= new FakeClipboardService();
         var session = new SessionContext();
         if (loginUser is not null) session.Login(loginUser);
-        return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder, new StubSettingsService(settings), session);
+        return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder, new StubSettingsService(settings), session,
+            buildInfo, serverDeploy, clipboard);
     }
 
     [Fact]
@@ -193,6 +240,111 @@ public class DiagnosticsViewModelTests
         vm.OpenLogFolderCommand.Execute(null); // A3 스모크: 예외 미발생
 
         Assert.Equal(1, fake.OpenCount);
+    }
+
+    // ── 개발자 문의 카드 ──
+
+    [Fact]
+    public void DeveloperEmail_Is_The_Fixed_Contact_Address()
+    {
+        var vm = MakeVm();
+
+        Assert.Equal("devmcjo@gmail.com", vm.DeveloperEmail);
+        Assert.Equal(DiagnosticsViewModel.DeveloperEmailAddress, vm.DeveloperEmail);
+    }
+
+    [Fact]
+    public void Version_And_BuildDate_Come_From_BuildInfo()
+    {
+        var vm = MakeVm(buildInfo: new StubBuildInfoService { Version = "1.1.3", BuildDate = "2026-07-29" });
+
+        Assert.Equal("1.1.3", vm.AppVersion);
+        Assert.Equal("2026-07-29", vm.AppBuildDate);
+    }
+
+    [Fact]
+    public void BuildDate_Missing_Shows_Unknown()
+    {
+        // bldinfo.ini에 BuildDate 키가 없으면 빈 문자열 → 빈칸 대신 "(확인 불가)"로 표기한다.
+        var vm = MakeVm(buildInfo: new StubBuildInfoService { Version = "1.1.3", BuildDate = "" });
+
+        Assert.Equal("(확인 불가)", vm.AppBuildDate);
+    }
+
+    [Fact]
+    public void WebDeployDate_Before_Probe_Is_Unknown()
+    {
+        var vm = MakeVm();
+
+        Assert.Equal("(확인 불가)", vm.WebDeployDate);
+        Assert.False(vm.IsCheckingWebDeploy);
+    }
+
+    [Fact]
+    public async Task RefreshWebDeployDate_Formats_Server_Utc_As_Local_Minutes()
+    {
+        var deployedAt = new DateTimeOffset(2026, 7, 29, 4, 12, 3, TimeSpan.Zero); // 서버는 UTC로 준다
+        var fake = new FakeServerDeployInfoService { Result = deployedAt };
+        var vm = MakeVm(serverDeploy: fake);
+
+        await vm.RefreshWebDeployDateCommand.ExecuteAsync(null);
+
+        // 운영자가 읽는 로컬 시간·분 단위 표기(초 없음). ToLocalTime과 다른 API로 기대값을 계산한다.
+        var expected = TimeZoneInfo.ConvertTime(deployedAt, TimeZoneInfo.Local)
+            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        Assert.Equal(expected, vm.WebDeployDate);
+        Assert.Equal(1, fake.CallCount);
+        Assert.False(vm.IsCheckingWebDeploy);
+    }
+
+    [Fact]
+    public async Task RefreshWebDeployDate_Null_Shows_Unknown()
+    {
+        // 미구성·미도달·서버가 필드를 안 준 경우 모두 null로 온다.
+        var vm = MakeVm(serverDeploy: new FakeServerDeployInfoService { Result = null });
+
+        await vm.RefreshWebDeployDateCommand.ExecuteAsync(null);
+
+        Assert.Equal("(확인 불가)", vm.WebDeployDate);
+    }
+
+    [Fact]
+    public async Task RefreshWebDeployDate_Absorbs_Exception()
+    {
+        // 조회 구현이 던져도 진단 화면은 열려야 한다(예외 전파 금지).
+        var vm = MakeVm(serverDeploy: new FakeServerDeployInfoService
+        {
+            Throws = new InvalidOperationException("백엔드에 연결할 수 없습니다."),
+        });
+
+        var ex = await Record.ExceptionAsync(() => vm.RefreshWebDeployDateCommand.ExecuteAsync(null));
+
+        Assert.Null(ex);
+        Assert.Equal("(확인 불가)", vm.WebDeployDate);
+        Assert.False(vm.IsCheckingWebDeploy);
+    }
+
+    [Fact]
+    public void CopyDeveloperEmail_Copies_Address_And_Notifies()
+    {
+        var clipboard = new FakeClipboardService(succeeds: true);
+        var vm = MakeVm(clipboard: clipboard);
+
+        vm.CopyDeveloperEmailCommand.Execute(null);
+
+        Assert.Equal("devmcjo@gmail.com", clipboard.LastText);
+        Assert.Equal("메일 주소를 복사했습니다.", vm.CopyNotice);
+    }
+
+    [Fact]
+    public void CopyDeveloperEmail_Failure_Guides_Manual_Copy()
+    {
+        // 클립보드 점유 등으로 실패해도 예외 없이 안내만 바뀐다(주소는 TextBox로 항상 선택 가능).
+        var vm = MakeVm(clipboard: new FakeClipboardService(succeeds: false));
+
+        vm.CopyDeveloperEmailCommand.Execute(null);
+
+        Assert.Equal("복사에 실패했습니다. 위 주소를 직접 선택해 복사하세요.", vm.CopyNotice);
     }
 }
 

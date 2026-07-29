@@ -30,6 +30,23 @@ function headerValue(v: string | string[] | undefined): string | undefined {
 }
 
 /**
+ * 유효 클라이언트 키가 제시됐는지 여부만 판정(거부하지 않음).
+ *
+ * requireApiKey는 게이트(미통과 시 401)라서 "무인증도 허용하되 인증된 호출자에게만 정보를 더 주는"
+ * 응답에는 쓸 수 없다 — GET /health의 deployedAt이 그 경우다(설계 §6.2 도달성 체크는 무인증 유지).
+ * 오구성(loadConfig 실패)은 "유효하지 않음"으로 처리한다 — 무인증 헬스 체크를 500으로 바꾸지 않기 위함.
+ */
+export function hasValidApiKey(req: Request): boolean {
+  const key = headerValue(req.headers[API_KEY_HEADER]);
+  if (!key) return false;
+  try {
+    return loadConfig().clientApiKeys.includes(key);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 배포 API 키 검증. 유효 키 목록에 포함되지 않으면 401.
  * 게스트 흐름(프레임 조회·업로드·로그인)이 이 게이트를 통과한다.
  */

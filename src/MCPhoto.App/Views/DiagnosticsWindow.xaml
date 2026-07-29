@@ -194,7 +194,7 @@
                 </Border>
 
                 <!-- ══════════ 로그 ══════════ -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,4">
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                     <StackPanel>
                         <TextBlock Text="로그" Style="{StaticResource Text.Title}" Margin="0,0,0,8" />
                         <TextBlock Text="폴더 경로" Style="{StaticResource Text.Body}"
@@ -205,6 +205,95 @@
                         <Button Content="로그 폴더 열기" Style="{StaticResource Button.Secondary}"
                                 HorizontalAlignment="Left" MinWidth="0" Padding="20,0"
                                 Command="{Binding OpenLogFolderCommand}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ══════════ 개발자 문의 ══════════ -->
+                <!-- 문의 시 그대로 옮겨 적을 수 있게 연락처·버전·빌드일·웹 배포일을 한 카드에 모은다.
+                     버전/빌드일 = 로컬 bldinfo.ini, 웹 배포일 = 서버 GET /health(deployedAt) — 출처가 달라
+                     두 값은 어긋날 수 있고, 그 차이 자체가 "앱만 오래됨/웹만 오래됨" 진단 정보다. -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,4">
+                    <StackPanel>
+                        <TextBlock Text="개발자 문의" Style="{StaticResource Text.Title}" Margin="0,0,0,8" />
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="130" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Developer" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <!-- 주소는 항상 선택·복사 가능한 TextBox로 둔다(복사 버튼이 실패해도 수동 복사 가능). -->
+                            <TextBox Grid.Column="1" Text="{Binding DeveloperEmail, Mode=OneWay}" IsReadOnly="True"
+                                     BorderThickness="0" Background="Transparent" Padding="0"
+                                     VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Content="복사" Style="{StaticResource Button.Secondary}"
+                                    MinWidth="0" Padding="16,0" Command="{Binding CopyDeveloperEmailCommand}" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Version" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Style="{StaticResource HealthValue}" Text="{Binding AppVersion}" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Build Date" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Style="{StaticResource HealthValue}" Text="{Binding AppBuildDate}" />
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="130" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Web Deploy Date" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <!-- 조회 중이면 "확인 중…"으로 덮어쓴다(카메라 검사와 동일 패턴). -->
+                            <TextBlock Grid.Column="1">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource HealthValue}">
+                                        <Setter Property="Text" Value="{Binding WebDeployDate}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCheckingWebDeploy}" Value="True">
+                                                <Setter Property="Text" Value="확인 중…" />
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Muted}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <Button Grid.Column="2" Content="다시 확인" Style="{StaticResource Button.Secondary}"
+                                    MinWidth="0" Padding="16,0" Command="{Binding RefreshWebDeployDateCommand}"
+                                    IsEnabled="{Binding IsCheckingWebDeploy, Converter={StaticResource InverseBool}}" />
+                        </Grid>
+
+                        <!-- 복사 결과 안내: 값이 없으면 자리를 차지하지 않는다. -->
+                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                                    <Setter Property="Text" Value="{Binding CopyNotice}" />
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Muted}" />
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CopyNotice}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Border>
             </StackPanel>
