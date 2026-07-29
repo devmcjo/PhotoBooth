@@ -10,3 +10,5 @@
 - [it16 권한 축 3개](it16-permission-axes.md) — IsPower·CanWriteFrames·CanManage 혼용 금지. 관리 게이트는 IsPower+CanManage 2항, CanDelete는 소유자 미판정
 - [it16 창 기하 계약](it16-window-geometry-contract.md) — _appliedMode가 모드변경 판정 유일 기준, 저장 시 캡처는 s.DisplayMode 갱신보다 먼저
 - [dotnet format은 게이트 아님](dotnet-format-baseline-fails.md) — HEAD부터 실패(기존 한 줄 초기화자 관례). 재포맷 금지, WARN으로만 보고
+- [로그아웃 JWT 폐기 불변식](logout-token-invariant.md) — IBackendSession은 동기화기가 소유. AddSingleton 한 줄로 되돌리면 런타임에서만 조용히 깨진다
+- [합성 루트 테스트법](composition-root-testable.md) — 배선 결함은 ServiceRegistration을 조립해야 재현. IHttpClientFactory는 마지막 등록으로 덮어쓴다

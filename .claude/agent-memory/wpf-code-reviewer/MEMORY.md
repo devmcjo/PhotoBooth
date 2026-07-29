@@ -2,3 +2,5 @@
 - [백엔드 프록시 HTTP 계약](photobooth-backend-proxy-contract.md) — MCPhoto.Http↔web/functions 1:1 계약 체크포인트(에러봉투·API키/Bearer·서명URL·토큰 재조립·DI flag 무회귀)
 - [`local:` id ↔ 공용 스코프 충돌](photobooth-local-id-scope-collision.md) — 프레임 편집/삭제 권한은 3파일 교차 확인 필수. `local:`≠본인 소유
 - [역할 enum 서수 재배치 검증 레시피](role-enum-ordinal-verify-recipe.md) — 배치값이 diff에 보이면 5-grep(캐스팅·JSON·XAML·ini·DTO) 무매치 직접 확인. 매치=🔴 권한상승
+- [DI 등록 되돌리기 실험](di-wiring-revert-experiment.md) — 배선 수정 리뷰는 옛 등록으로 되돌려 실패를 실측(direct 승격). 복원 후 --no-build 금지
+- [로그아웃 경로는 실질 1개](photobooth-logout-paths.md) — Reset(clearUser:true) 실호출 0(it8 A1). 업로드 중엔 상단바 숨김이라 로그아웃 자체가 불가
