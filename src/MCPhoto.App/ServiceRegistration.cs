@@ -107,7 +107,13 @@ internal static class ServiceRegistration
                 client.BaseAddress = new Uri(s.BackendBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(100);
         });
-        services.AddSingleton<IBackendSession, BackendSession>();
+        // JWT 홀더 + 로그아웃 동기화. 홀더를 동기화기가 소유·노출하도록 등록해, "토큰이 존재할 수 있는
+        // 모든 시점"에 SessionContext.CurrentUserChanged 구독이 반드시 살아 있게 한다
+        // (홀더 없이는 토큰도 없으므로, 별도의 eager 해석 없이 구독 누락이 원천 차단된다).
+        services.AddSingleton<BackendSessionSynchronizer>(sp =>
+            new BackendSessionSynchronizer(sp.GetRequiredService<SessionContext>(), new BackendSession()));
+        services.AddSingleton<IBackendSession>(sp =>
+            sp.GetRequiredService<BackendSessionSynchronizer>().Session);
 
         services.AddSingleton<IFirebaseClient>(sp =>
         {

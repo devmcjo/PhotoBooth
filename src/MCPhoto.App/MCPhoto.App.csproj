@@ -26,6 +26,13 @@
     <ProjectReference Include="..\MCPhoto.Http\MCPhoto.Http.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- ServiceRegistration(합성 루트) 배선 단위 테스트 접근 허용.
+         로그아웃 시 JWT 폐기처럼 "어디에도 코드가 없어서 생기는" 결함은 합성 루트를 실제로
+         조립해봐야 재현된다 — 개별 클래스 단위 테스트로는 잡히지 않는다. -->
+    <InternalsVisibleTo Include="MCPhoto.Tests" />
+  </ItemGroup>
+
   <!-- 백엔드 게이트 키 exe 내장: publish 시 -p:BackendApiKeyDefault=<키>를 주면 AssemblyMetadata로 바이너리에 박힌다.
        키 값은 로컬 backend-apikey.local(gitignore)에서 publish.ps1이 읽어 전달 → git·소스엔 없음. 미지정 시 속성 없음(빈 값). -->
   <ItemGroup Condition="'$(BackendApiKeyDefault)' != ''">
