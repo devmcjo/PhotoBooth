@@ -38,7 +38,7 @@
 - **핵심 규칙**:
   - 진입(`OnEnterAsync` → `ReloadFramesAsync`, `FrameSelectViewModel.cs:70-93`): 공용 프레임(`catalog.GetDefaultFramesAsync`) + 로그인 시 본인 커스텀(`catalog.GetUserFramesAsync(user.Id)`) 로드, 첫 항목 자동 선택. **목록 로딩은 역할과 무관하다**(it16 E4) — 프레임 쓰기 권한이 없는 `user`·`temp_user`의 기존 프레임도 그대로 보이고 촬영에 쓸 수 있다(편집·삭제 UI만 사라진다).
   - 권한 플래그(같은 함수, `:80-82`): `CanCreateFrame`·`CanDeleteFrames` = `Role.CanWriteFrames()`(고급 유저 이상), `IsPower` = manager/admin. 두 축은 별개다(§4.1·§4.2).
-  - 목록 우선순위(`FrameCatalogService.GetDefaultFramesAsync`, `FrameCatalogService.cs:45-84`): ① 로컬 공용(번들+파워캐시, 접두 없는 파일) → ② DB `isDefault` 중 **로컬에 이름 없는 것만** 다운로드·캐시(이름 dedup) → ③ 번들 폴더 이미지(slots 없으면 2×2 격자 자동) → ④ 코드 생성 fallback. 오프라인/DB 미초기화 시 ②이하로 폴백.
+  - 목록 우선순위(`FrameCatalogService.GetDefaultFramesAsync`, `FrameCatalogService.cs:45-84`): ① 로컬 공용(번들+파워캐시, 접두 없는 파일) → ② DB `isDefault` 중 **로컬에 이름 없는 것만** 다운로드·캐시(이름 dedup) → ③ 번들 폴더 이미지(slots 없으면 2×2 격자 자동) → ④ 코드 생성 fallback. 오프라인·백엔드 미도달 시 ②를 건너뛰고 ③④로 폴백.
   - [다음](`FrameSelectViewModel.cs:170-177`): 선택 프레임을 `Session.SelectedFrame`에 고정 + `Session.Capture.Begin(frame, Settings.CutCount)`.
 - **근거**: `FrameSelectViewModel.cs`, `FrameCatalogService.cs`.
 
@@ -293,7 +293,7 @@
 - **목적**: 관리자 현장 트러블슈팅 — 카메라·ffmpeg·Firebase 상태와 로그 폴더를 한눈에.
 - **흐름**: 설정 [고급] → [진단·상태](로그인 전용, 게스트 Disable) → **모달**(별도 AppState 없음) → [로그 폴더 열기]/[닫기].
 - **화면·VM·서비스**: `DiagnosticsWindow` · `DiagnosticsViewModel`(Transient — 진입마다 최신 상태) · `IDiagnosticsDialogService`(`CameraTestDialogService` 모달 패턴 재사용) · `ILogFolderService`.
-- **표시 4섹션**: 카메라(연결 수·목록, `EnumerateDevices`), ffmpeg(`IsAvailable`·경로), Firebase(`IsInitialized`·버킷·키 후보 경로 존재여부 `KeyCandidatePaths`), 로그(경로 상시 표시 + 폴더 열기). 정상=성공색/이상=danger색 트리거.
+- **표시 4섹션**: 카메라(연결 수·목록, `EnumerateDevices`), ffmpeg(`IsAvailable`·경로), **서버 연결**(백엔드 구성 여부 `IsBackendConfigured`·버킷·base URL·게이트 키 **설정됨/미설정**(값은 절대 미표시)·로그인 계정), 로그(경로 상시 표시 + 폴더 열기). 정상=성공색/이상=danger색 트리거. (it15 §6.6 — 종전 "Firebase(서비스 계정 키 경로)" 섹션을 대체)
 - **로그 열기**: `explorer.exe`로 `%ProgramData%\MCPhoto\logs` 열기, 실패해도 크래시 없음(로깅). 경로 텍스트 상시 노출(수동 탐색 대체).
 - **근거**: `DiagnosticsViewModel.cs`, `DiagnosticsWindow.xaml`, `DiagnosticsDialogService.cs`, `LogFolderService.cs`. 로그 위치 상세 [70](./70-logging-and-troubleshooting.md).
 

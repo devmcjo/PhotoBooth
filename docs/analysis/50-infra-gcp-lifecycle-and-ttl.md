@@ -3,9 +3,9 @@
 | 항목 | 내용 |
 |------|------|
 | 문서 | 결과물(Storage 파일)·세션 문서(Firestore)의 보관/삭제 설계와 **현재 확정 상태**(2026-07-23 반영) |
-| 범위 | `web/lifecycle.json`, `web/OPS-ttl.md`, `web/storage.rules`, `web/firestore.rules`, WPF 만료 정리 코드(`UploadService.PurgeExpiredAsync`·`FirebaseClient.QueryExpiredSessionsAsync`). 웹 만료 판정은 [20 · 프론트엔드](./20-frontend-web-download-page.md) §5, 스키마는 [40 · 스키마](./40-database-firestore-and-storage-schema.md) |
-| 최종 업데이트 | 2026-07-23 |
-| 관련 소스 | `web/lifecycle.json`, `web/OPS-ttl.md`, `web/storage.rules`, `web/firestore.rules`, `web/firebase.json`, `src/MCPhoto.Firebase/UploadService.cs`, `src/MCPhoto.Firebase/FirebaseClient.cs`, `src/MCPhoto.Core/Settings/AppSettings.cs` |
+| 범위 | `web/lifecycle.json`, `web/OPS-ttl.md`, `web/storage.rules`, `web/firestore.rules`, 앱에 남은 만료 정리 코드(`UploadService.PurgeExpiredAsync` — **미사용**). 웹 만료 판정은 [20 · 프론트엔드](./20-frontend-web-download-page.md) §5, 스키마는 [40 · 스키마](./40-database-firestore-and-storage-schema.md) |
+| 최종 업데이트 | 2026-07-29 (it15 반영 — 삭제 주체·근거 경로를 백엔드/Core 기준으로 정리) |
+| 관련 소스 | `web/lifecycle.json`, `web/OPS-ttl.md`, `web/storage.rules`, `web/firestore.rules`, `web/firebase.json`, `web/functions/src/services/uploads.ts`, `src/MCPhoto.Core/Upload/{UploadService,UploadContract}.cs`, `src/MCPhoto.Http/HttpFirebaseClient.cs`, `src/MCPhoto.Core/Settings/AppSettings.cs` |
 | 갱신 규칙 | `web/lifecycle.json`·`web/OPS-ttl.md`·보안 규칙이나 삭제 주체 채택 상태가 바뀌면 표/명령/근거(`파일:라인`)를 갱신 |
 
 > 표기 규칙: 근거는 `파일:라인`. **가정**으로 표시한 항목은 소스에서 직접 확인되지 않은 추정. 명령의 실제 실행 여부(콘솔/CLI 적용)는 이 저장소에서 확인 불가 → **가정**.
@@ -16,7 +16,7 @@
 |----|-----|------|
 | project | `mcphoto-955fb` | `web/.firebaserc:3`, `web/public/firebase-config.js:8` |
 | bucket | `mcphoto-955fb.firebasestorage.app` | `web/firebase.json:32`, `web/public/firebase-config.js:9` |
-| HostingBaseUrl | `https://mcphoto-955fb.web.app` | `src/MCPhoto.Core/Settings/AppSettings.cs:103` |
+| HostingBaseUrl | `https://mcphoto-955fb.web.app` | `src/MCPhoto.Core/Settings/AppSettings.cs:123` |
 | age(물리 삭제) | 3일 | `web/lifecycle.json:7` |
 | 프리픽스 | `results/` | `web/lifecycle.json:8` |
 
@@ -30,7 +30,7 @@
 |------|------|-----------|------|------|
 | GCS Lifecycle 규칙 | 인프라(자동) | **채택**(파일 삭제 주력) | `results/` 프리픽스 파일만(age 3일) | `web/lifecycle.json`, `web/OPS-ttl.md:19` |
 | Firestore 네이티브 TTL | 인프라 | **채택**(문서 삭제) | `resultSessions` 만료 문서(`expiresAt` 기준) | `web/OPS-ttl.md:20,60-76` |
-| WPF 앱 직접 삭제(`PurgeExpiredAsync`) | WPF | **코드 존재·미사용**(인프라로 대체) | `results/{sid}/` 파일 + `resultSessions/{sid}` 문서 함께 | `src/MCPhoto.Firebase/UploadService.cs:80-102`, `web/OPS-ttl.md:21` |
+| 앱 직접 삭제(`PurgeExpiredAsync`) | WPF | **코드 존재·미사용**(인프라로 대체). it15 이후엔 **실행조차 불가** — HTTP 경로가 만료 조회·삭제를 지원하지 않는다 | `results/{sid}/` 파일 + `resultSessions/{sid}` 문서 함께 | `src/MCPhoto.Core/Upload/UploadService.cs:100-122`, `src/MCPhoto.Http/HttpFirebaseClient.cs:163-176`, `web/OPS-ttl.md:21` |
 | 스케줄 Cloud Functions | 웹/인프라 | **미채택**(D-2) | — | `web/OPS-ttl.md:22` |
 
 > **핵심**: 파일(GCS Lifecycle)과 문서(Firestore TTL)는 서로 다른 서비스라 각각 설정해야 한다. Lifecycle 은 Storage 파일만, TTL 은 Firestore 문서만 지운다. 둘을 함께 켜야 파일+문서가 모두 정리된다(`web/OPS-ttl.md:24,52-53,60-62`).
@@ -97,7 +97,7 @@ gcloud firestore fields ttls update expiresAt \
 | 속성 | 값 | 근거 |
 |------|-----|------|
 | 컬렉션 그룹 | `resultSessions` | `web/OPS-ttl.md:66` |
-| TTL 필드 | `expiresAt`(Firestore `Timestamp`) | `web/OPS-ttl.md:65`, `FirebaseClient.cs:159` |
+| TTL 필드 | `expiresAt`(Firestore `Timestamp`) | `web/OPS-ttl.md:65`, `web/functions/src/services/uploads.ts:190-200` |
 | 삭제 시점 | 즉시 아님, 며칠 내 best-effort | `web/OPS-ttl.md:72` |
 
 - 무료·서버리스·Functions 불요(`web/OPS-ttl.md:71`).
@@ -106,18 +106,19 @@ gcloud firestore fields ttls update expiresAt \
 
 ---
 
-## 4. WPF 직접 삭제 (`PurgeExpiredAsync`) — 코드 존재·미사용
+## 4. 앱 직접 삭제 (`PurgeExpiredAsync`) — 코드 존재·미사용·실행 불가
 
-WPF에 만료 세션 정리 코드가 구현되어 있으나 **현재 미사용**(인프라 2종으로 대체, `web/OPS-ttl.md:6,21`).
+만료 세션 정리 코드가 `MCPhoto.Core`에 남아 있으나 **미사용**이며(인프라 2종으로 대체, `web/OPS-ttl.md:6,21`), it15 이후로는 실행해도 동작하지 않는다.
 
-| 요소 | 동작 | 근거 |
-|------|------|------|
-| `UploadService.PurgeExpiredAsync` | 만료 세션마다 `DeleteStoragePrefixAsync("results/{id}/")` + `DeleteResultSessionAsync(id)`를 **함께** 호출(고아 최소화, 불변식 3) | `src/MCPhoto.Firebase/UploadService.cs:80-102` |
-| `FirebaseClient.QueryExpiredSessionsAsync` | `resultSessions`에서 `WhereLessThan("expiresAt", now)` 쿼리로 만료 문서 조회 | `src/MCPhoto.Firebase/FirebaseClient.cs:165-187` |
-| `DeleteStoragePrefixAsync` | 프리픽스 하위 객체 열거 후 개별 삭제(실패는 warning) | `FirebaseClient.cs:136-148` |
+| 요소 | 현행 동작 | 근거 |
+|------|-----------|------|
+| `UploadService.PurgeExpiredAsync` | 만료 세션마다 `DeleteStoragePrefixAsync("results/{id}/")` + `DeleteResultSessionAsync(id)`를 **함께** 호출하도록 짜여 있다(고아 최소화, 불변식 3) | `src/MCPhoto.Core/Upload/UploadService.cs:100-122` |
+| `IFirebaseClient.QueryExpiredSessionsAsync` | **`NotSupportedException`** — 서버에 만료 조회 엔드포인트가 없다 | `src/MCPhoto.Http/HttpFirebaseClient.cs:168-171` |
+| `IFirebaseClient.DeleteResultSessionAsync` / `DeleteStoragePrefixAsync` | **`NotSupportedException`**(동상) | `HttpFirebaseClient.cs:163-166`, `:173-176` |
 
-- 호출부는 인터페이스 정의(`src/MCPhoto.Core/Upload/IUploadService.cs:24`)와 구현(`UploadService.cs:80`)뿐이며, 실제 실행 트리거(스케줄러·기동 시 호출 등)는 리포지토리에서 확인되지 않는다 → **미사용**(`web/OPS-ttl.md:21` 명시와 일치).
-- `IsInitialized=false`(서비스 계정 키 부재)면 `PurgeExpiredAsync`는 0을 반환하고 아무것도 하지 않는다(`UploadService.cs:82`).
+- 앱 런타임 호출부는 **0건**이며(테스트만 참조), 첫 단계인 만료 조회에서 `NotSupportedException`이 나므로 실수로 호출해도 아무것도 삭제되지 않는다.
+- 백엔드에도 만료 정리 라우트가 없다(`/auth` `/accounts` `/config` `/frames` `/uploads` `/health` 6종뿐, `web/functions/src/app.ts:27-32`). 즉 **삭제 주체는 인프라 2종뿐**이다.
+- 백엔드 미구성(`BackendBaseUrl` 빈 값)이면 `PurgeExpiredAsync`는 0을 반환하고 아무것도 하지 않는다(`UploadService.cs:102`).
 
 ---
 
@@ -127,7 +128,7 @@ WPF에 만료 세션 정리 코드가 구현되어 있으나 **현재 미사용*
 
 | 축 | 기준 | 무엇을 하나 | 근거 |
 |----|------|-------------|------|
-| 접근 만료(웹 차단) | `expiresAt = createdAt + retentionHours`(세션별 1~72h) | 웹이 `expiresAt < now`이면 다운로드 차단(만료 화면). 파일은 아직 존재할 수 있음 | `UploadContract.cs:43-44`, `AppSettings.cs:62`(기본 24h, 범위 1~72), [20번](./20-frontend-web-download-page.md) §5 |
+| 접근 만료(웹 차단) | `expiresAt = createdAt + retentionHours`(세션별 1~72h, **서버가 commit 시 기록**) | 웹이 `expiresAt < now`이면 다운로드 차단(만료 화면). 파일은 아직 존재할 수 있음 | `UploadContract.cs:56-57`, `web/functions/src/services/uploads.ts:190-200`, `AppSettings.cs`(기본 24h, 범위 1~72), [20번](./20-frontend-web-download-page.md) §5 |
 | 물리 삭제(파일) | GCS Lifecycle age 3일(`results/`) | Storage 객체 실제 삭제. `retentionHours`와 무관하게 최댓값(72h) 이후 일괄 | `web/lifecycle.json:7-8`, `web/OPS-ttl.md:38` |
 | 물리 삭제(문서) | Firestore TTL(`expiresAt`) | `resultSessions` 문서 실제 삭제(best-effort) | `web/OPS-ttl.md:60-72` |
 
@@ -138,7 +139,8 @@ WPF에 만료 세션 정리 코드가 구현되어 있으나 **현재 미사용*
 토큰 URL(`?alt=media&token=...`)은 capability 이며 보안 규칙을 우회하므로 `results/`의 SDK read 를 닫아도 웹 다운로드는 동작한다. 규칙은 SDK 경로 열거/직접 접근만 차단한다(`web/storage.rules:6-8,16-19`). 물리 삭제 후에는 토큰 URL 자체가 404 → 웹은 미디어 로드 실패 폴백으로 만료 처리한다([20번](./20-frontend-web-download-page.md) §5.1).
 
 - Firestore: `resultSessions` get allow / list deny / write deny, `users`·`frameTemplates` 전면 deny(`web/firestore.rules:16-38`).
-- WPF 서비스 계정(Admin SDK)은 보안 규칙을 완전히 우회하므로 write:false 가 WPF 업로드/문서 생성을 막지 않는다(`web/firestore.rules:9-11`, `web/storage.rules:10-11`).
+- 규칙의 `write:false`는 **SDK 경로(웹)** 에만 적용된다. 문서·파일을 만드는 주체는 **백엔드(Cloud Functions)** 이고, Admin(ADC)으로 동작하므로 규칙을 우회한다. it15 이전엔 이 우회 주체가 WPF(서비스 계정)였으나 지금은 서버뿐이다([30 §3.3](./30-backend-firebase-integration.md)).
+- 앱이 Storage에 직접 쓰는 유일한 경로는 서버가 발급한 **V4 서명 URL PUT**이며, 경로·Content-Type·유효시간(15분)이 서명에 고정되어 있다.
 
 ---
 
@@ -173,5 +175,5 @@ WPF에 만료 세션 정리 코드가 구현되어 있으나 **현재 미사용*
 ## 9. 상호 참조
 
 - 웹 만료 판정 로직·미디어 로드 실패 폴백: [20 · 프론트엔드](./20-frontend-web-download-page.md) §5.
-- 업로드가 만드는 `results/{token}/` 경로·`resultSessions` 문서·`expiresAt` 필드: [30 · 백엔드](./30-backend-firebase-integration.md), [40 · 스키마](./40-database-firestore-and-storage-schema.md).
-- 서비스 계정 키(git·인스톨러 미포함): [80 · 빌드/배포](./80-build-and-deployment.md), `src/MCPhoto.Firebase/FirebaseClient.cs:14-15,92-102`.
+- 업로드가 만드는 `results/{sessionId}/` 경로·`resultSessions` 문서·`expiresAt` 필드: [30 · 백엔드 API 연동](./30-backend-firebase-integration.md) §5, [40 · 스키마](./40-database-firestore-and-storage-schema.md).
+- 자격증명 취급(앱은 서비스 계정 키 없음, 게이트 키만 내장): [80 · 빌드/배포](./80-build-and-deployment.md) §2.1·§6.2.

@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 10-exe-app-architecture.md |
 | 범위 | MCPhoto Exe 앱(WPF/.NET 8)의 솔루션 구성·계층·MVVM/DI·상태머신·캡처 파이프라인·전역 예외/데이터 폴더 |
-| 최종 업데이트 | 2026-07-23 |
+| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — `MCPhoto.Firebase` → `MCPhoto.Http`, DI 등록·부트스트랩·계정 모드 갱신) |
 | 관련 소스 경로 | `src/MCPhoto.App/**`, `src/MCPhoto.Core/Navigation/**`, `src/MCPhoto.Core/Capture/**`, `src/MCPhoto.Capture/**`, `MCPhoto.sln` |
 | 갱신 규칙 | 프로젝트 참조 관계, DI 등록(`ServiceRegistration.cs`), 상태 enum/전이표(`SessionStateMachine.cs`), View↔VM 매핑(`App.xaml`), 캡처 스레딩 모델(`OpenCvCameraService`)이 바뀌면 이 문서를 갱신한다. |
 
@@ -20,7 +20,7 @@
 | --- | --- | --- | --- | --- |
 | `MCPhoto.Core` | `net8.0` | 도메인 라이브러리(순수, WPF 비의존) | `Microsoft.Extensions.Logging.Abstractions`, `QRCoder` | 모델·상태머신·설정·프레임·업로드 계약·QR 등 플랫폼 무관 로직 |
 | `MCPhoto.Capture` | `net8.0-windows` (`UseWPF`) | 캡처/합성 구현 | `OpenCvSharp4.Windows`, `OpenCvSharp4.WpfExtensions` | 카메라(OpenCV)·ffmpeg 녹화·타임랩스·합성·필터·폴백 프레임 |
-| `MCPhoto.Firebase` | `net8.0` | 클라우드 구현 | `FirebaseAdmin`, `Google.Cloud.Firestore`, `Google.Cloud.Storage.V1` | 업로드/계정/프레임 저장소의 Firebase 구상(서비스 계정 Admin SDK 직결) |
+| `MCPhoto.Http` | `net8.0` | 백엔드 API 클라이언트 | `Microsoft.Extensions.Http`, `Microsoft.Extensions.Logging.Abstractions` | 업로드/계정/프레임/한도의 HTTP 구상 + JWT 세션 홀더. **it15에서 `MCPhoto.Firebase`(Admin SDK 직결)를 대체** |
 | `MCPhoto.App` | `net8.0-windows` (`WinExe`, `UseWPF`) | WPF 실행 파일(`AssemblyName=MCPhoto`) | `CommunityToolkit.Mvvm`, `Microsoft.Extensions.Hosting/DI/Logging`, `Serilog(.File)` | UI·ViewModel·셸·DI 부트스트랩·이미징 |
 | `MCPhoto.Tests` | (tests) | 테스트 | — | 순수 로직·headless XAML 회귀 테스트 |
 
@@ -29,21 +29,22 @@
 ```
 MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
      │                                     ▲
-     ├───────────▶  MCPhoto.Firebase  ─────┘
+     ├───────────▶  MCPhoto.Http  ─────────┘
      └───────────────────────────────────▶ (Core)
 ```
 
-- `MCPhoto.App.csproj:22-26` — App은 Core/Capture/Firebase를 모두 참조.
-- `MCPhoto.Capture.csproj:15-17`, `MCPhoto.Firebase.csproj:16-18` — 둘 다 Core만 참조.
-- Core는 어떤 프로젝트도 참조하지 않음(도메인 순수성). App·Capture·Firebase는 Core의 인터페이스(`ICameraService`, `ICompositionService`, `IFrameRepository`, `IUploadService`, `ISettingsService`, `IBrandingService` 등)에만 의존하고, 구상은 DI로 조립된다.
+- `MCPhoto.App.csproj` — App은 Core/Capture/Http를 모두 참조.
+- `MCPhoto.Capture.csproj:17`, `MCPhoto.Http.csproj` — 둘 다 Core만 참조.
+- Core는 어떤 프로젝트도 참조하지 않음(도메인 순수성). App·Capture·Http는 Core의 인터페이스(`ICameraService`, `ICompositionService`, `IFrameRepository`, `IUploadService`, `IFirebaseClient`, `IAccountService`, `ISettingsService`, `IBrandingService` 등)에만 의존하고, 구상은 DI로 조립된다.
 
-계층 요약: **도메인(Core)** = 모델·상태 규칙·순수 로직(`SessionStateMachine`, `SlotLayout`, `EditorTransform`, `CropCalculator`, `PreviewReadiness`, `IdleCountdown`, `QrDeliveryPolicy`, `UploadContract`) + 서비스 인터페이스. **앱(App)** = MVVM·셸·DI·이미징·다이얼로그 서비스. **인프라(Capture/Firebase)** = 인터페이스 구상.
+계층 요약: **도메인(Core)** = 모델·상태 규칙·순수 로직(`SessionStateMachine`, `SlotLayout`, `EditorTransform`, `CropCalculator`, `PreviewReadiness`, `IdleCountdown`, `QrDeliveryPolicy`, `UploadContract`) + 서비스 인터페이스 + **백엔드 비의존 오케스트레이션**(`UploadService`·`QrService`는 it15에서 Core로 이관). **앱(App)** = MVVM·셸·DI·이미징·다이얼로그 서비스. **인프라(Capture/Http)** = 인터페이스 구상. 백엔드 계약 상세는 [30](./30-backend-firebase-integration.md).
 
 ### 1.1 번들 자산(App 빌드 산출물)
 
 - `tools/ffmpeg/ffmpeg.exe`가 존재하면 출력·publish에 복사(녹화·타임랩스 필수, `MCPhoto.App.csproj:28-48`). ffprobe는 미사용이라 제외.
 - 루트 `Frame/**`를 출력 `Frame/`으로 복사(번들 기본 프레임, `MCPhoto.App.csproj:50-55`).
-- `branding.ini.sample`을 실행 폴더에 동봉(고객이 `branding.ini`로 리네임해 앱 이름 변경, `MCPhoto.App.csproj:57-60`).
+- `branding.ini.sample`을 실행 폴더에 동봉(고객이 `branding.ini`로 리네임해 앱 이름 변경, `MCPhoto.App.csproj`).
+- `bldinfo.ini`(버전·빌드일·사이트 표기)를 실행 폴더로 복사(`MCPhoto.App.csproj`, 상세는 [12 §6](./12-exe-app-settings-and-config.md)).
 
 ---
 
@@ -57,47 +58,52 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 
 ### 2.2 부트스트랩(Generic Host)
 
-`App.OnStartup`(`App.xaml.cs:26-77`)에서:
+`App.OnStartup`(`App.xaml.cs:26-82`)에서:
 
-1. `DataFolder`(`%ProgramData%\MCPhoto`) 생성 + Serilog 파일 싱크 구성(일 롤링, 14일 보존, `App.xaml.cs:31-35`).
+1. `DataFolder`(`%ProgramData%\MCPhoto`) 생성 + Serilog 파일 싱크 구성(일 롤링, 14일 보존, `App.xaml.cs:28-35`).
 2. 이전 실행 잔재 세션 폴더 정리(`SessionWorkspace.CleanupOnStartup`, `App.xaml.cs:38-43`).
 3. `Host.CreateDefaultBuilder()`로 DI 컨테이너를 조립하고 `ServiceRegistration.Register(services)` 호출(`App.xaml.cs:45-55`). 로깅은 `AddSerilog(dispose:true)`로 교체.
-4. 전역 예외 핸들러 3종 등록(§5).
-5. 브랜딩 로드 후 `Resources["Branding.AppName"]` 주입(창 생성 **전**이어야 `DynamicResource`가 최신값 반영, `App.xaml.cs:64-70`).
-6. 시드 계정 보장(`EnsureSeedAsync`, 비동기·오프라인 안전, `App.xaml.cs:73/79-91`).
-7. `MainWindow`를 DI에서 해결해 `Show()`(`App.xaml.cs:75-76`).
+4. 전역 예외 핸들러 3종 등록(§5, `:58-60`).
+5. 브랜딩 로드 후 `Resources["Branding.AppName"]`·`["Branding.Subtitle"]` 주입(창 생성 **전**이어야 `DynamicResource`가 최신값 반영, `App.xaml.cs:64-71`).
+6. 기본 프레임 백그라운드 prefetch(fire-and-forget, 실패 무시 — 로컬 캐시가 목적, `App.xaml.cs:78`).
+7. `MainWindow`를 DI에서 해결해 `Show()`(`App.xaml.cs:80-81`).
+
+> ⚠️ **시드 계정 보장(`EnsureSeedAsync`)은 it15에서 삭제**됐다 — ID/PW 계정이 폐지되어 시드 개념 자체가 소멸했고, 최초 admin은 마이그레이션 스크립트가 부트스트랩한다(`App.xaml.cs:73-74` 주석, [60](./60-auth-accounts-and-roles.md)).
 
 `App.Services`는 뷰에서 VM 해결에 쓰이는 서비스 프로바이더(`App.xaml.cs:22`), `App.Current`는 강타입 재정의(`App.xaml.cs:24`).
 
 ### 2.3 DI 등록과 ViewModel 수명
 
-`ServiceRegistration.Register`(`ServiceRegistration.cs:23-81`)의 수명 정책:
+`ServiceRegistration.Register`(`ServiceRegistration.cs:29-93`)의 수명 정책:
 
 | 등록 | 수명 | 근거 |
 | --- | --- | --- |
-| `MainWindow` | Singleton | 셸 창(`ServiceRegistration.cs:26`) |
-| `IBrandingService`→`IniBrandingService` | Singleton | 시작 1회 로드(`:29`) |
-| `ICameraTestDialogService`→`CameraTestDialogService` | Singleton | 다이얼로그 서비스(`:32`) |
-| `ISettingsService`→`IniSettingsService` | Singleton | 설정 단일 소스(`:35`) |
-| `ICameraService`→`OpenCvCameraService` | **Singleton** | 카메라 하드웨어·스레드 단일 소유(§4, `:38`) |
-| `IIdleWatchdog`→`IdleWatchdog` | Singleton | 유휴 감시(`:42`) |
-| `AppShellViewModel` | Singleton | 셸 상태머신(`:43`) |
-| `ILocalSaveService`, `FfmpegRunner`, `ITimelapseService`, `ICompositionService` | Singleton | 상태 없는(또는 공유) 서비스(`:46/49/50/53`) |
-| `FirebaseClient`/`IFirebaseClient`, `IUploadService`, `IQrService`, `IFrameRepository`, `IAccountService` | Singleton | 클라우드 클라이언트 공유(`:58-71`) |
-| `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=`AppContext.BaseDirectory\Frame`(`:74-75`) |
-| `SessionContext`, `FrameCatalogService` | Singleton(`:78-79`) |
-| **화면 VM 전부** | **Transient**(진입마다 새 인스턴스) | `RegisterScreens`(`:84-99`): Home/LoginGuest/FrameSelect/Guide/Capture/CutSelect/Result/QrPopup/Done/FrameEditor/Settings/UserMgmt/Account |
-| `PreviewViewModel` | Transient(`:39`) |
+| `MainWindow` | Singleton | 셸 창(`ServiceRegistration.cs:32`) |
+| `IBrandingService`→`IniBrandingService`, `IBuildInfoService`→`IniBuildInfoService` | Singleton | 시작 1회 로드(`:35`, `:37`) |
+| `ICameraTestDialogService`, `IPinPromptDialogService`, `IDiagnosticsDialogService`, `ILogFolderService` | Singleton | 모달·유틸 서비스(`:40`, `:42`, `:49-50`) |
+| `IGoogleSignInService`→`GoogleSignInService` | Singleton | Google SSO(시스템 브라우저 + loopback + PKCE, `:46`) |
+| `ISettingsService`→`IniSettingsService` | Singleton | 설정 단일 소스. **백엔드 게이트 키 기본값은 exe 내장값 주입**(`:53-55`) |
+| `ICameraService`→`OpenCvCameraService` | **Singleton** | 카메라 하드웨어·스레드 단일 소유(§4, `:58`) |
+| `IExternalCamera`→`NullExternalCamera`, `IPhotoPrinter`→`NullPhotoPrinter` | Singleton | 외부 장치 스캐폴드(현재 no-op, `:62-63`) |
+| `IIdleWatchdog`→`IdleWatchdog`, `AppShellViewModel` | Singleton | 유휴 감시·셸 상태머신(`:66-67`) |
+| `ILocalSaveService`, `FfmpegRunner`, `ITimelapseService`, `ICompositionService` | Singleton | 상태 없는(또는 공유) 서비스(`:70`, `:73-74`, `:77`) |
+| **백엔드 서비스 묶음** — `BackendSessionSynchronizer`/`IBackendSession`, `IFirebaseClient`→`HttpFirebaseClient`, `IFrameRepository`→`HttpFrameRepository`, `IAccountService`→`HttpAccountService`, `IQrUsageService`, `ITempUserLimitsService` | Singleton | `RegisterBackendServices`(`:81`, `:100-169`) + 명명 HttpClient `"backend"`(`:103-109`) |
+| `IUploadService`→`UploadService`, `IQrService`→`QrService` | Singleton | Core 구현(백엔드 비의존, `:82-83`) |
+| `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=`AppContext.BaseDirectory\Frame`(`:86-87`) |
+| `SessionContext`, `FrameCatalogService` | Singleton(`:90-91`) |
+| **화면 VM 전부** | **Transient**(진입마다 새 인스턴스) | `RegisterScreens`(`:173-193`): Home/LoginGuest/FrameSelect/Guide/Capture/CutSelect/Result/QrPopup/Done/FrameEditor/FramePicker/Settings/UserMgmt/Account/Diagnostics |
+| `PreviewViewModel` | Transient |
 
-`FirebaseClient`는 구상 인스턴스 하나를 `FirebaseClient`·`IFirebaseClient` 둘로 공유하고, 버킷은 `AppSettings.StorageBucket`로 주입(빈 값이면 project_id 유도, `ServiceRegistration.cs:58-65`).
+- 백엔드 접근은 **feature flag 분기 없이 HTTP 경로 하나**다 — it15에서 레거시 Admin SDK 직결이 폐지됐다(`ServiceRegistration.cs:80`). 각 Http 구현은 설정에서 `BackendApiKey`·`StorageBucket`을 주입받고, `configured`는 `BackendBaseUrl`이 비어 있지 않은지로 판정한다(`:118-128`).
+- `BackendSessionSynchronizer`가 JWT 홀더를 **소유**하고 `IBackendSession`으로 노출한다 — 토큰이 존재할 수 있는 모든 시점에 로그아웃 구독이 살아 있도록 보장하는 배선이다(`:113-116`, [30 §3.1](./30-backend-firebase-integration.md)).
 
 ### 2.4 View↔VM 매핑(DataTemplate 화면 스왑)
 
-`App.xaml`의 `Application.Resources`에 VM 타입→View `DataTemplate`이 선언되어 있다(`App.xaml:33-72`). 셸이 `CurrentViewModel`을 바꾸면 `MainWindow`의 `ContentControl`(`MainWindow.xaml:15-17`)이 해당 `DataTemplate`으로 View를 자동 해결·스왑한다. 매핑 목록:
+`App.xaml`의 `Application.Resources`에 VM 타입→View `DataTemplate`이 선언되어 있다(`App.xaml:38-76`). 셸이 `CurrentViewModel`을 바꾸면 `MainWindow`의 `ContentControl`(`MainWindow.xaml:15-17`)이 해당 `DataTemplate`으로 View를 자동 해결·스왑한다. 매핑 목록:
 
 `HomeViewModel→HomeView`, `LoginGuestViewModel→LoginGuestView`, `FrameSelectViewModel→FrameSelectView`, `GuideViewModel→GuideView`, `CaptureViewModel→CaptureView`, `CutSelectViewModel→CutSelectView`, `ResultViewModel→ResultView`, `QrPopupViewModel→QrPopupView`, `DoneViewModel→DoneView`, `FrameEditorViewModel→FrameEditorView`, `SettingsViewModel→SettingsView`, `UserMgmtViewModel→UserMgmtView`, `AccountViewModel→AccountView`.
 
-`App.xaml`에는 공용 컨버터도 등록되어 있다(`App.xaml:20-31`; 상세는 §6). `CameraTestWindow`는 상태머신 화면이 아닌 모달 `Window`라 `DataTemplate` 매핑이 아니라 다이얼로그 서비스로 직접 생성된다(§4.6).
+`App.xaml`에는 공용 컨버터도 등록되어 있다(`App.xaml:21-35`; 상세는 §6). `CameraTestWindow`·`DiagnosticsWindow`·`PinPromptWindow`·프레임 선택 모달은 상태머신 화면이 아닌 모달 `Window`라 `DataTemplate` 매핑이 아니라 다이얼로그 서비스로 직접 생성된다(§4.6).
 
 ---
 
@@ -142,9 +148,11 @@ Settings/Login/Account는 별도 화면이지만 **오버레이성 진입**으�
 
 - `NavigateToOverlayAsync(target)`(`AppShellViewModel.cs:152-157`): 현재 상태가 Settings/Login이 아니면 `_returnState`에 저장 후 전이.
 - `ReturnFromOverlay()`(`:164-170`): 저장된 `_returnState`로 **검증 면제** 복귀(진입의 역방향은 항상 합법). 세션 데이터는 Reset하지 않고 보존.
-- 계정 페이지는 단일 `AppState.Account` + **진입 모드**(`AccountMode` = PasswordChange/AccountCreate/Admin)로 UI 분기(상태 폭증 방지). 모드는 `_pendingAccountMode`에 저장 후 `CreateAccountViewModel`에서 주입(`:191-196`, `:300-317`).
+- 계정 페이지는 단일 `AppState.Account` + **진입 모드**(`AccountMode` = **Account**(내 정보 + PIN 변경) / **Admin**(관리자 도구·전역 한도·앱 종료))로 UI 분기(상태 폭증 방지, `AccountViewModel.cs:13-20`). 모드는 팝오버 항목이 지정한 뒤 VM 생성 시 주입된다.
+  - ⚠️ **it15 폐지**: `AccountMode.PasswordChange`·`AccountCreate`는 없다 — 비밀번호 개념과 계정 생성 UI가 제거됐고, 신규 계정은 Google SSO 최초 로그인 시 서버가 `temp_user`로 자동 생성한다([60 §1.5](./60-auth-accounts-and-roles.md), [11 §15](./11-exe-app-features.md)).
+  - 계정·관리자 도구 진입은 **PIN 게이트**(`AppShellViewModel.EnsurePinGateAsync`)를 통과해야 한다(설정 진입과 동일 PIN·동일 다이얼로그, fail-closed).
 
-상단바 계정 팝오버(`MainWindow.xaml:53-78`)는 오버레이가 아니라 `Popup`으로, 로그인 시 계정 항목(비번변경/계정생성/관리자도구/로그아웃)을 연다.
+상단바 계정 팝오버(`MainWindow.xaml:54-75`)는 오버레이가 아니라 `Popup`으로, 로그인 시 계정 항목(**계정 관리 / 관리자 도구(파워만) / 로그아웃**)을 연다.
 
 ### 3.4 상단 바 표시 규칙
 
@@ -259,7 +267,7 @@ Settings/Login/Account는 별도 화면이지만 **오버레이성 진입**으�
 
 ### 6.1 컨버터(`Converters/CommonConverters.cs`)
 
-`App.xaml:20-31`에 등록되어 바인딩에서 참조. 표시/색/판정 로직:
+`App.xaml:21-35`에 등록되어 바인딩에서 참조. 표시/색/판정 로직:
 
 | 컨버터 | 용도 |
 | --- | --- |
@@ -271,7 +279,10 @@ Settings/Login/Account는 별도 화면이지만 **오버레이성 진입**으�
 | `SlotAspectLabelConverter` | SlotAspect→"4:3"/"3:4"/"1:1" |
 | `AspectRatioToHeightConverter` | 종횡비→높이(썸네일 컨테이너 WYSIWYG) |
 | `StartsWithToVisibilityConverter` | 문자열 접두 일치 시 Visible |
+| `FilePathToImageConverter` | 파일 경로→`BitmapImage`(OnLoad+IgnoreImageCache — **파일 잠금 방지**, 프레임 삭제 실패 회피) |
+| `RoleLabelConverter` | `UserRole`→한글 라벨("임시 유저"/"사용자"/"고급 유저"/"매니저"/"관리자") |
 | `FrameDeleteVisibilityConverter`(멀티) | 프레임 삭제 ✕ 노출: 게스트/번들/fallback/빈 Id=숨김, `local:`=본인 노출, 공용/DB=파워만 |
+| `RoleActionVisibilityConverter`(멀티) | 사용자 관리 액션 노출: 대상이 행위자와 같거나 낮은 역할일 때만(형식 불일치면 Collapsed) |
 | `AllTrueToVisibilityConverter`(멀티) | 모두 참일 때만 Visible |
 
 ### 6.2 테마(`Themes/*`)
@@ -282,4 +293,5 @@ Settings/Login/Account는 별도 화면이지만 **오버레이성 진입**으�
 
 ## 7. 참고
 
-- 반영된 설계 결정 요약은 `docs/design/wpf-architecture.md`(전체 아키텍처)와 최근 이터레이션 설계 `docs/design/wpf-it10-*`·`wpf-it11-*`에 근거(롱프레스 폐지·게스트 직행·계정 단일 소스·에디터 좌표 순수함수화·QR 세분화·유휴 경고 팝업·서버 연동·재촬영·진단·카메라명·업로드 진행률 등). 과거 이터레이션(it2~it9) 설계 문서는 완료되어 제거됨(git 이력 참조). 본 문서는 실제 소스 기반으로 작성했으며, 세부 동작은 실제 소스가 진실의 소스다.
+- 반영된 설계 결정 요약은 `docs/design/wpf-architecture.md`(전체 아키텍처)와 최근 이터레이션 설계에 근거한다: `wpf-it10-*`(서버 연동) · `wpf-it11-*`(재촬영·진단·업로드 진행률) · `wpf-it12-*` · `wpf-it13-temp-user-role-design.md` · `wpf-it14-settings-pin-gate-design.md` · `wpf-it15-{google-only-auth,frame-ux}-design.md` · `wpf-it16-advanced-user-role-design.md` · `wpf-backend-proxy-migration-design.md`(백엔드 프록시 전환) · `wpf-google-sso-design.md`.
+- 과거 이터레이션(it2~it9) 설계 문서는 완료되어 제거됨(git 이력 참조). 본 문서는 실제 소스 기반으로 작성했으며, 세부 동작은 실제 소스가 진실의 소스다.

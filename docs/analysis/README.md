@@ -4,8 +4,8 @@
 
 | 항목 | 값 |
 |------|-----|
-| 최종 업데이트 | 2026-07-24 |
-| 대상 | Exe 앱 / 프론트엔드(웹) / 백엔드(Firebase) / DB / 인프라 / 인증·역할 / 운영 |
+| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — 전 문서를 백엔드 API 경유 구조 기준으로 정리) |
+| 대상 | Exe 앱 / 프론트엔드(웹) / 백엔드 API(Cloud Functions) / DB / 인프라 / 인증·역할 / 운영 |
 | 갱신 규칙 | **기능·구성·인프라가 바뀌면 해당 번호 문서와 [00](./00-overview-and-architecture.md)/[90](./90-roadmap-and-future-work.md)를 함께 갱신** |
 
 ## 문서 지도
@@ -20,7 +20,7 @@
 | **30** | [backend-firebase-integration](./30-backend-firebase-integration.md) | 백엔드 | 백엔드 API(Cloud Functions) 연동 — 인증 게이트·업로드 3단계·프레임/계정·TempUser 한도·미도달 시 동작 |
 | **40** | [database-firestore-and-storage-schema](./40-database-firestore-and-storage-schema.md) | DB | Firestore 컬렉션·Storage 경로 규약·보안 규칙·계약 불변식 |
 | **50** | [infra-gcp-lifecycle-and-ttl](./50-infra-gcp-lifecycle-and-ttl.md) | 인프라 | 보관/만료(GCS Lifecycle·Firestore TTL)·적용 명령·비용 |
-| **60** | [auth-accounts-and-roles](./60-auth-accounts-and-roles.md) | 인증 | 역할(user/manager/admin)·권한 매트릭스·로그인 유지·계정 저장소 |
+| **60** | [auth-accounts-and-roles](./60-auth-accounts-and-roles.md) | 인증 | 역할 5종(temp_user/user/advanced_user/manager/admin)·권한 매트릭스·Google SSO·PIN 게이트·계정 저장소 |
 | **70** | [logging-and-troubleshooting](./70-logging-and-troubleshooting.md) | 운영 | **로그 위치**·세션/결과물 경로·증상별 원인 위치 매핑 |
 | **80** | [build-and-deployment](./80-build-and-deployment.md) | 배포 | 빌드 경로·단일 EXE publish·ffmpeg 번들·인스톨러 |
 | **90** | [roadmap-and-future-work](./90-roadmap-and-future-work.md) | 계획 | 알려진 이슈·기술 부채·개선 예정·비범위 |

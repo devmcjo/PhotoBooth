@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 12-exe-app-settings-and-config.md |
 | 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성, 브랜딩(branding.ini), 빌드 정보(bldinfo.ini), 표시 모드 즉시 적용, 창 위치 저장 |
-| 최종 업데이트 | 2026-07-24 |
+| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — 백엔드/SSO 설정 키 추가, 브랜딩 기본값·샘플 정정) |
 | 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.Core/Build/**`, `src/MCPhoto.App/branding.ini.sample`, `src/MCPhoto.App/bldinfo.ini`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
 | 갱신 규칙 | `AppSettings` 필드 추가/기본값/Clamp 변경, INI 매핑(`IniSettingsService`) 변경, 폴백 경로(`SettingsPathResolver`) 변경, 브랜딩 로직/기본값 변경 시 이 문서를 갱신한다. |
 
@@ -14,9 +14,9 @@
 
 ## 1. AppSettings 전 항목
 
-정의: `AppSettings`(`AppSettings.cs`). INI 매핑: `IniSettingsService.ReadInto`/`WriteFrom`(`IniSettingsService.cs:129-181`). **INI 섹션명은 모두 `[MCPhoto]`**(`IniSettingsService.cs:11`). 대부분 INI 키는 프로퍼티명과 동일(`nameof`), 예외는 `WindowBounds` 4개(`WindowLeft/Top/Width/Height`).
+정의: `AppSettings`(`AppSettings.cs`). INI 매핑: `IniSettingsService.ReadInto`(`:136`)/`WriteFrom`(`:174`). **INI 섹션명은 모두 `[MCPhoto]`**(`IniSettingsService.cs:11`). 대부분 INI 키는 프로퍼티명과 동일(`nameof`), 예외는 `WindowBounds` 4개(`WindowLeft/Top/Width/Height`).
 
-값 범위·옵션 제약은 `AppSettings.Clamp()`(`:115-133`)가 로드/저장 시 강제한다.
+값 범위·옵션 제약은 `AppSettings.Clamp()`(`:157-180`)가 로드/저장 시 강제한다.
 
 | 키(프로퍼티) | 타입 | 기본값 | 범위·Clamp | INI 키 | 영향 |
 | --- | --- | --- | --- | --- | --- |
@@ -40,19 +40,25 @@
 | `DisplayMode` | enum `DisplayMode` | **Windowed**(오늘 확정, 개발용) | {Fullscreen, Windowed} | `DisplayMode` | 창 표시 모드(§4) |
 | `WindowBounds` | `WindowBounds` | Left/Top=NaN, Width=1280, Height=720 | Width≥1280, Height≥720; Left/Top는 미클램프 | `WindowLeft`,`WindowTop`,`WindowWidth`,`WindowHeight` | 창모드 크기·위치(§5) |
 | `CameraDevice` | int | **0** | 음수면 0 | `CameraDevice` | 사용할 웹캠 장치 인덱스 |
-| `HostingBaseUrl` | string | **`https://mcphoto-955fb.web.app`**(오늘 확정, 개발 기본값) | 트레일링 `/` 제거 | `HostingBaseUrl` | 다운로드 페이지 URL 조립 base |
-| `StorageBucket` | string | **`mcphoto-955fb.firebasestorage.app`**(오늘 확정, 개발 기본값) | — | `StorageBucket` | Firebase Storage 버킷(빈 값이면 project_id 유도) |
+| `HostingBaseUrl` | string | **`https://mcphoto-955fb.web.app`**(운영 기본값 내장) | 트레일링 `/` 제거 | `HostingBaseUrl` | 다운로드 페이지 URL 조립 base |
+| `StorageBucket` | string | **`mcphoto-955fb.firebasestorage.app`**(운영 기본값 내장) | — | `StorageBucket` | 토큰 URL 조립용 버킷명. 실제 값은 업로드 prepare 응답의 `bucket`으로 갱신된다([30 §5.3](./30-backend-firebase-integration.md)) |
+| `ExternalCameraEnabled` | bool | **false** | — | `ExternalCameraEnabled` | 외부 카메라(DSLR) — **미지원 스캐폴드**(INI 저장만, 실기능 미배선) |
+| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 — **미지원 스캐폴드**(동상) |
+| `BackendBaseUrl` | string | **`https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api`**(운영 기본값 내장) | 트림 + 트레일링 `/` **부여**(`NormalizeBackend`) | `BackendBaseUrl` | 백엔드 API 주소. 빈 값이면 백엔드 미구성(업로드·로그인 불가) |
+| `BackendApiKey` | string | **""** — 실제 기본값은 **exe 내장 키**(`AssemblyMetadata "MCPhoto.BackendApiKey"`)를 로드 시 주입 | 트림 | `BackendApiKey` | 배포 게이트 키(`X-MCPhoto-Client`). ⚠️ INI에 평문 — 유출 시 서버에서 해당 키만 폐기 |
+| `GoogleClientId` | string | 운영 프로젝트 Desktop 클라이언트 ID 내장 | 트림 | `GoogleClientId` | Google SSO authorize URL 조립. **빈 값이면 로그인 화면의 "Google로 로그인" 버튼을 숨김**(SSO opt-out) |
 
 보조 상수(`AppSettings.cs:36-42`): `AllowedCutCounts={6,8,10}`, `AllowedCountdownSecs={3,6,8,10}`, `AllowedRetakeLimits={1,2,3}`, `MinRetentionHours=1`, `MaxRetentionHours=72`, `MinSlots=1`, `MaxSlots=6`.
 
 > **it12 R1 — 로그인 전용 편집(게이트)**: 게스트(비로그인) 설정 화면에서 `MirrorMode`·`RetakeEnabled`·`RetakeLimit`·`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`·`EnableQrDelivery`(+`SendPhoto`/`SendTimelapse`)·`HostingBaseUrl`·`StorageBucket`는 OFF 표시·컨트롤 비활성 + "로그인 필요" 인라인 노티 상시 표시(R3, hover 툴팁에서 개정)이며 저장 시 미기록(ini 원값 보존=클로버 금지). 게이트는 `SettingsViewModel`(VM)에만 존재 — `AppSettings` 모델은 전 필드 항상 직렬화되고, 촬영/필터 런타임은 `Settings.Current`(ini=관리자값)대로 동작한다(편집 권한만 제한, 기능은 불변).
 
-### 1.1 오늘(2026-07-23) 확정 기본값
+### 1.1 코드에 내장된 기본값(운영자 INI 입력 불요)
 
-- `DisplayMode = DisplayMode.Windowed` — **개발 기간 기본**(배포 시 Fullscreen으로 되돌릴 것; `AppSettings.cs:91-92` 주석).
-- `SaveLocalCopy = true` — QR 전송과 독립(`AppSettings.cs:84-85`).
-- `HostingBaseUrl = "https://mcphoto-955fb.web.app"` — 개발 기본값 하드코딩(`AppSettings.cs:102-103`).
-- `StorageBucket = "mcphoto-955fb.firebasestorage.app"` — 개발 기본값 하드코딩(`AppSettings.cs:105-110`). 신규 프로젝트는 보통 `{project}.firebasestorage.app`, 레거시는 `{project}.appspot.com`.
+- `DisplayMode = DisplayMode.Windowed` — **개발 기간 기본**(배포 시 Fullscreen으로 되돌릴 것; `AppSettings.cs:102-103` 주석).
+- `SaveLocalCopy = true` — QR 전송과 독립(`AppSettings.cs:95-96`).
+- `HostingBaseUrl = "https://mcphoto-955fb.web.app"`(`AppSettings.cs:122-123`), `StorageBucket = "mcphoto-955fb.firebasestorage.app"`(`:125-130`). 신규 프로젝트는 보통 `{project}.firebasestorage.app`, 레거시는 `{project}.appspot.com`.
+- `BackendBaseUrl`(`:137`)·`GoogleClientId`(`:152`)도 **운영 프로젝트 값이 내장**되어 있어 보통 INI에 적지 않는다. 다른 백엔드/구글 프로젝트를 쓸 때만 해당 키로 오버라이드한다(공개값이라 하드코딩 무해).
+- `BackendApiKey`는 코드 기본값이 빈 문자열이고, **publish 시 exe에 내장된 키**(`-p:BackendApiKeyDefault`)를 `IniSettingsService`가 로드 시 주입한다. INI에 값이 있으면 그 값이 우선하며, 저장 시 INI에 다시 쓰지는 않는다(평문 유출 방지, `IniSettingsService.cs:16-18,36-37`).
 
 ### 1.2 enum·WindowBounds 정의
 
@@ -62,8 +68,9 @@
 
 ### 1.3 Clamp / QR 정규화 세부
 
-- `Clamp()`(`AppSettings.cs:126-147`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`, `:162-173`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 제거 → `NormalizeQr()`.
-- `NormalizeQr()`(`:139-146`) = `QrDeliveryPolicy.Normalize`: `EnableQrDelivery && !SendPhoto && !SendTimelapse`이면 `EnableQrDelivery=false`(하위 토글 값은 보존). off→on 재활성 시 하위 둘 다 on 강제(`QrDeliveryPolicy.OnReEnabled`)는 UI(`SettingsViewModel`)에서 처리(`AppSettings`/`IniSettingsService` 자체엔 없음).
+- `Clamp()`(`AppSettings.cs:157-180`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 **제거** → `NormalizeBackend()` → `NormalizeQr()`.
+- `NormalizeBackend()`(`:187-199`): `BackendBaseUrl`·`BackendApiKey`·`GoogleClientId` 트림 + base URL이 **슬래시로 끝나도록 보정**(`HttpClient.BaseAddress`가 상대 경로를 안전히 결합하도록). ⚠️ `HostingBaseUrl`(슬래시 제거)과 방향이 반대다 — 용도가 다르다(URL 문자열 조립 vs HttpClient base). base URL이 비면 보정하지 않고 그대로 둔다(미구성은 런타임 호출 실패로 드러남).
+- `NormalizeQr()` = `QrDeliveryPolicy.Normalize`: `EnableQrDelivery && !SendPhoto && !SendTimelapse`이면 `EnableQrDelivery=false`(하위 토글 값은 보존). off→on 재활성 시 하위 둘 다 on 강제(`QrDeliveryPolicy.OnReEnabled`)는 UI(`SettingsViewModel`)에서 처리(`AppSettings`/`IniSettingsService` 자체엔 없음).
 - `Clone()`(`:162-189`): 편집 취소 대비 얕은 복제(WindowBounds는 새 인스턴스).
 
 > 정정 주의: Clamp에는 `Left`/`Top`(창 위치) 클램프가 **없다**. 창 위치는 `MainWindow.OnClosing`에서만 갱신되며, INI에는 NaN이어도 `WindowLeft`/`WindowTop` 키가 항상 기록된다(`IniSettingsService.cs:177-178`, `WindowBounds` 미저장이면 값이 NaN 문자열로 직렬화되고 재로드 시 다시 NaN 폴백).
@@ -116,7 +123,7 @@
 
 ## 3. 브랜딩(앱 이름)
 
-- 정의: `IBrandingService`(프로퍼티 `AppName`·`Subtitle`) · `IniBrandingService`(`IniBrandingService.cs`). DI Singleton(`ServiceRegistration.cs:29`), 시작 1회 로드.
+- 정의: `IBrandingService`(프로퍼티 `AppName`·`Subtitle`) · `IniBrandingService`(`IniBrandingService.cs`). DI Singleton(`ServiceRegistration.cs:35`), 시작 1회 로드.
 - **파일**: `branding.ini`, 섹션 `[Branding]`, 키 `AppName`(앱 이름) · `Subtitle`(홈 화면 소제목).
 - **탐색 경로 순서**(`Candidates`, `IniBrandingService.cs:59-64`):
   1. 실행 경로 `{AppContext.BaseDirectory}\branding.ini`
@@ -125,7 +132,7 @@
 - **폴백**: 파일 부재 / 빈 값 / 손상·예외 → 기본값 **AppName="MC Photo"**(`DefaultAppName`) · **Subtitle="self custom photobooth"**(`DefaultSubtitle`). 두 키는 독립 폴백(한 키만 비어도 그 키만 기본값). 어떤 실패에도 크래시 금지.
 - **인코딩**: UTF-8 명시 읽기(`File.ReadAllText(resolved, Encoding.UTF8)`, `:32`) — 한글 이름·메모장 인코딩 편차 대비.
 - **로딩 시점·적용**: `App.OnStartup`이 `AppName`→`Resources["Branding.AppName"]`, `Subtitle`→`Resources["Branding.Subtitle"]`에 주입(창 생성 **전**, `App.xaml.cs`) → `App.xaml` 기본값을 덮어씀 → `DynamicResource`로 창 제목(`MainWindow.xaml`)·홈 타이틀(`HomeView.xaml`, `Branding.AppName`)·홈 소제목(`HomeView.xaml`, `Branding.Subtitle`)에 반영. 변경은 앱 재시작 필요(읽기 전용).
-- **동봉 샘플**: `branding.ini.sample`(빌드 시 실행 폴더 복사, `MCPhoto.App.csproj`). 내용은 `[Branding]` + `AppName=우리동네 포토부스` · `Subtitle=추억을 남기는 순간` 예시와 사용 안내(`branding.ini.sample`).
+- **동봉 샘플**: `branding.ini.sample`(빌드 시 실행 폴더 복사, `MCPhoto.App.csproj:76`). 현재 내용은 3줄뿐이다 — `[Branding]` / `AppName=MC Photo` / `Subtitle=(prototype)`. 고객은 이 파일을 `branding.ini`로 리네임해 값만 바꾸면 된다.
 
 ---
 
@@ -149,12 +156,12 @@
 
 ## 6. 빌드 정보(bldinfo.ini) — 앱 버전 표기
 
-- 정의: `IBuildInfoService`(프로퍼티 `Version`·`BuildDate`·`Site` + `DisplayText`) · `IniBuildInfoService`(`IniBuildInfoService.cs`). DI Singleton(`ServiceRegistration.cs:32`), 시작 1회 로드. **버전을 소스코드에 하드코딩하지 않기 위한 외부 파일**(brandbranding과 동일 패턴).
+- 정의: `IBuildInfoService`(프로퍼티 `Version`·`BuildDate`·`Site` + `DisplayText`) · `IniBuildInfoService`(`IniBuildInfoService.cs`). DI Singleton(`ServiceRegistration.cs:37`), 시작 1회 로드. **버전을 소스코드에 하드코딩하지 않기 위한 외부 파일**(brandbranding과 동일 패턴).
 - **파일**: `bldinfo.ini`, 섹션 `[General]`, 키 `Version`(예 `1.0.0`) · `BuildDate`(예 `2026-07-23`) · `Site`(예 `Beta`).
 - **탐색 경로 순서**(`Candidates`): ① 실행 경로 `{AppContext.BaseDirectory}\bldinfo.ini` → ② `%ProgramData%\MCPhoto\bldinfo.ini`. 존재하는 첫 파일 사용.
 - **폴백**: 파일/키 부재·손상 → `Version="0.0.0"`, `BuildDate`·`Site` 빈 문자열. 크래시 금지. UTF-8 명시 읽기, `IniFile` 파서 재사용(`;`/`#` 주석 무시).
 - **표기**: `DisplayText`(예 `v1.0.0 · Beta`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭). (it12 R4: `BuildDate`는 표기에서 제외 — 업데이트 지연 시 오래된 앱으로 보일 위험. 프로퍼티·ini 키·로드 로직은 유지)
-- **배포**: 실행 폴더 동봉(`MCPhoto.App.csproj`의 `None CopyToOutputDirectory`) + `publish.ps1`이 publish 산출물에 명시 복사(`publish.bat`/`publish-nokey.bat` 공통). `.gitignore`는 `*.ini` 무시 + `!bldinfo.ini` 예외로 추적. **버전 값은 배포 시 사용자가 직접 관리**(현재 미배포).
+- **배포**: 실행 폴더 동봉(`MCPhoto.App.csproj:82`의 `None CopyToOutputDirectory`) + `publish.ps1`이 publish 산출물에 명시 복사(`publish.ps1:81-90` — 원본 부재 시 경고만 하고 계속, 앱은 폴백 버전 표시). `.gitignore`는 `*.ini` 무시 + `!bldinfo.ini` 예외로 추적(`.gitignore:58`). **버전 값은 배포 시 사용자가 직접 관리**한다(현재 값: `1.1.3` / `Beta`).
 - 근거: `IBuildInfoService.cs`, `IniBuildInfoService.cs`, `MainWindow.xaml`, `AppShellViewModel.cs`, `publish.ps1`, `bldinfo.ini`.
 
 ---

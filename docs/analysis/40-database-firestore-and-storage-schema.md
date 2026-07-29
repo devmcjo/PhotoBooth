@@ -3,22 +3,27 @@
 | 항목 | 내용 |
 |------|------|
 | 문서 | Firestore 컬렉션 스키마 + Cloud Storage 경로 규약 + 보안 규칙 + TTL/만료 계약 |
-| 범위 | `src/MCPhoto.Firebase/Dto/*`, `src/MCPhoto.Core/Models/*`, `UploadContract.cs`, `web/firestore.rules`, `web/storage.rules`, `web/OPS-ttl.md`. 연동 흐름은 [30 · 백엔드 Firebase 연동](./30-backend-firebase-integration.md) |
-| 최종 업데이트 | 2026-07-29 (it16 — §2.1 `users.role`) |
-| 관련 소스 | `UserDoc.cs`, `FrameTemplateDoc.cs`, `ResultSessionDoc.cs`, `User.cs`, `FrameTemplate.cs`, `ResultSession.cs`, `Slot.cs`, `UserRole.cs`, `UploadContract.cs`, `firestore.rules`, `storage.rules`, `OPS-ttl.md` |
-| 갱신 규칙 | DTO의 `[FirestoreProperty]` 필드명·타입, Storage 경로 조립(`UploadContract`), 보안 규칙(`*.rules`)이 바뀌면 해당 표/근거(`파일:라인`)를 갱신. 연동 절차 변경은 30번 문서와 동시 갱신 |
+| 범위 | `web/functions/src/services/dto.ts`(Firestore 문서 형태), `web/functions/src/services/{accounts,frames,uploads}.ts`(문서 조립), `src/MCPhoto.Core/Models/*`·`UploadContract.cs`(앱 도메인·경로 규약), `web/firestore.rules`, `web/storage.rules`, `web/OPS-ttl.md`. 연동 흐름은 [30 · 백엔드 API 연동](./30-backend-firebase-integration.md) |
+| 최종 업데이트 | 2026-07-29 (it15·it16 — §2.1 `users.role` + **근거 경로를 삭제된 `MCPhoto.Firebase`에서 서버(TS)·Core 기준으로 전면 교체**) |
+| 관련 소스 | `web/functions/src/services/dto.ts`, `web/functions/src/services/{accounts,frames,uploads,signing}.ts`, `web/functions/src/domain/{session,roles}.ts`, `src/MCPhoto.Core/Models/{User,FrameTemplate,ResultSession,Slot,UserRole}.cs`, `src/MCPhoto.Core/Upload/UploadContract.cs`, `firestore.rules`, `storage.rules`, `OPS-ttl.md` |
+| 갱신 규칙 | `dto.ts`의 필드명·타입, 서버의 문서 조립 로직, Storage 경로 조립(`UploadContract`↔`domain/session.ts`), 보안 규칙(`*.rules`)이 바뀌면 해당 표/근거(`파일:라인`)를 갱신. 연동 절차 변경은 30번 문서와 동시 갱신 |
 
-> 표기 규칙: 근거는 `파일:라인`. Firestore 필드명은 DTO의 `[FirestoreProperty("...")]` 속성값이 실제 저장 키다.
+> 표기 규칙: 근거는 `파일:라인`.
+>
+> ⚠️ **문서를 쓰는 주체는 백엔드(Cloud Functions)다.** it15에서 앱의 Firestore/Storage 직결(`MCPhoto.Firebase`, `[FirestoreData]` DTO)이 폐지되어, 저장 키의 진실원은 `web/functions/src/services/dto.ts`의 TypeScript 인터페이스다(camelCase 고정, 웹·앱 공통 계약이라 임의 변경 불가).
 
 ---
 
 ## 1. Firestore 컬렉션 개요
 
-| 컬렉션 | 문서 ID | DTO | 도메인 모델 | 웹 접근 | 근거 |
-|--------|---------|-----|-------------|---------|------|
-| `users` | 계정 id | `UserDoc` | `User` | 전면 차단 | `AccountService.cs:16`, `UserDoc.cs:7`, `User.cs:7` |
-| `frameTemplates` | 프레임 id | `FrameTemplateDoc` | `FrameTemplate` | 전면 차단 | `FrameRepository.cs:16`, `FrameTemplateDoc.cs:7`, `FrameTemplate.cs:6` |
-| `resultSessions` | `{yyyyMMdd_HHmmss}_{UUIDv4}` 토큰 | `ResultSessionDoc` | `ResultSession` | 단건 get만 | `FirebaseClient.cs:162`, `ResultSessionDoc.cs:9`, `ResultSession.cs:6` |
+| 컬렉션 | 문서 ID | 서버 DTO | 앱 도메인 모델 | 웹 접근 | 근거 |
+|--------|---------|----------|----------------|---------|------|
+| `users` | 계정 id | `UserDoc` | `User` | 전면 차단 | `services/dto.ts:10-28`, `services/accounts.ts`, `User.cs` |
+| `frameTemplates` | 프레임 id(UUID) | `FrameTemplateDoc` | `FrameTemplate` | 전면 차단 | `services/dto.ts:42-51`, `services/frames.ts:103-120` |
+| `resultSessions` | `{yyyyMMdd_HHmmss}_{UUIDv4}` 토큰 | `ResultSessionDoc` | `ResultSession` | 단건 get만 | `services/dto.ts:54-61`, `services/uploads.ts:190-212` |
+| `config/tempUserLimits` | 고정 문서 1개 | `TempUserLimitsDoc` | `TempUserLimits` | 전면 차단 | `services/dto.ts:34-39`, `services/config.ts` |
+
+> 경로는 모두 `web/functions/src/` 기준이다. `config/tempUserLimits`는 it13에서 추가된 전역 한도 문서로, 부재 시 서버가 기본값(48h/30회)으로 폴백한다([30 §6](./30-backend-firebase-integration.md)).
 
 ---
 
@@ -60,23 +65,24 @@
 
 ### 2.2 `frameTemplates` (문서 ID = 프레임 id)
 
-문서 ID는 프레임 id(`FrameRepository.cs:72` — `Document(frame.Id)`). id는 저장 시 `Guid.NewGuid()`로 부여(`FrameRepository.cs:56-57`).
+문서 ID = 프레임 id. **서버가 `randomUUID()`로 부여**하며 클라가 정하지 않는다(`services/frames.ts:103,120`).
 
 | 필드(저장 키) | 타입 | 의미 | 근거 |
 |---------------|------|------|------|
-| `id` | string | 프레임 ID(문서 ID와 동일) | `FrameTemplateDoc.cs:9-10` |
-| `userId` | string \| null | 소유 계정 id. **기본 프레임은 null** | `FrameTemplateDoc.cs:12-13`, `FrameTemplate.cs:11` |
-| `isDefault` | bool | 공용 기본 프레임 여부(true면 게스트 노출) | `FrameTemplateDoc.cs:15-16`, `FrameTemplate.cs:14` |
-| `name` | string | 프레임 이름 | `FrameTemplateDoc.cs:18-19` |
-| `imageUrl` | string | 프레임 이미지 다운로드 토큰 URL(Storage `frames/{owner}/…`) | `FrameTemplateDoc.cs:21-22`, `FrameRepository.cs:67` |
-| `imageSize` | map `{ width:int, height:int }` | 등록 원본 픽셀 크기 | `FrameTemplateDoc.cs:24-25`, `FrameRepository.cs:157` |
-| `slots` | array&lt;map&gt; | `{ index, x, y, width, height }` (int) 1~6개. 프레임 픽셀 좌표계 | `FrameTemplateDoc.cs:27-28`, `FrameRepository.cs:158-161`, `Slot.cs:6` |
-| `createdAt` | timestamp | 생성 시각(UTC) | `FrameTemplateDoc.cs:30-31` |
+| `id` | string | 프레임 ID(문서 ID와 동일) | `services/dto.ts:43` |
+| `userId` | string \| null | 소유 계정 id. **공용 기본 프레임은 null** | `services/dto.ts:44`, `FrameTemplate.cs` |
+| `isDefault` | bool | 공용 기본 프레임 여부(true면 게스트 노출) | `services/dto.ts:45` |
+| `name` | string | 프레임 이름 | `services/dto.ts:46` |
+| `imageUrl` | string | 프레임 이미지 다운로드 토큰 URL(Storage `frames/{owner}/…`) — **서명 발급 시 만들어진 URL** | `services/dto.ts:47`, `services/frames.ts:107,115` |
+| `imageSize` | map `{ width:number, height:number }` | 등록 원본 픽셀 크기 | `services/dto.ts:48` |
+| `slots` | array&lt;map&gt; | `{ index, x, y, width, height }` 1~6개. 프레임 픽셀 좌표계 | `services/dto.ts:49`, `domain/validation.ts`, `Slot.cs` |
+| `createdAt` | timestamp | 생성 시각(UTC, `Timestamp.now()`) | `services/dto.ts:50`, `services/frames.ts:109` |
 
-- **map/array 저장 방식**: `imageSize`·`slots`는 강타입이 아닌 `Dictionary<string,object>`/`List<Dictionary<string,object>>`로 저장된다(`FrameTemplateDoc.cs:25,28`). 읽을 때 `ToInt`로 long/int/double을 int로 정규화(`FrameRepository.cs:131-133,140-145,165-171`).
-- **Slot 도메인 파생값**: `Slot.AspectRatio = Width/Height`는 계산 프로퍼티로 **저장되지 않음**(`Slot.cs:15`).
-- 계정당 최대 10개(커스텀), `SaveAsync`에서 강제(`FrameRepository.cs:48-54`).
-- **하이브리드(it8 A2, 가정 포함)**: 계약상 DB `frameTemplates`에는 공용 기본 프레임(isDefault=true, userId=null)만 신규 저장하고 user 커스텀은 로컬 파일 전용이다(`firebase-contract.md:69`). 따라서 신규 흐름에서 `userId != null` 문서는 생성되지 않을 것으로 계약이 규정하나, `FrameRepository.SaveAsync` 코드 자체는 여전히 userId 경로를 지원한다(하위호환). 로컬 저장 스키마(`.png` + `.slots`)는 이 문서 범위 밖(`LocalFrameStore.cs` 참조).
+- **서버가 소유·공개 여부를 강제한다**: `POST /frames`는 클라가 보낸 값과 무관하게 `userId=null`·`isDefault=true`로 고정한다(`routes/frames.ts:71-80`). 즉 신규 서버 문서는 **공용 기본 프레임뿐**이다.
+- **문서 먼저, 이미지 나중**: 서명 URL 발급 → 문서 `set` → 클라가 이미지 PUT 순서라, PUT이 실패하면 이미지 없는 문서가 남을 수 있다(수용된 트레이드오프 — 프레임은 웹 접근이 없고 재저장으로 덮어쓰기 가능, `services/frames.ts:85-89`).
+- **Slot 도메인 파생값**: `Slot.AspectRatio = Width/Height`는 앱의 계산 프로퍼티로 **저장되지 않는다**(`Slot.cs`).
+- 계정당 최대 10개(`userId`가 있을 때만) 서버 재검증 — 초과 시 409(`services/frames.ts:93-101`).
+- **하이브리드(it8 A2)**: 일반 사용자 커스텀 프레임은 **로컬 파일 전용**(`ILocalFrameStore`, `.png` + `.slots`)이며 DB에 올라가지 않는다. 서버의 `userId != null` 경로는 레거시 문서 방어용으로만 남아 있다(`services/frames.ts:130-131`). 로컬 저장 스키마는 이 문서 범위 밖.
 
 ### 2.3 `resultSessions` (문서 ID = `{yyyyMMdd_HHmmss}_{UUIDv4}` 토큰)
 
@@ -84,36 +90,43 @@
 
 | 필드(저장 키) | 타입 | 의미 | 근거 |
 |---------------|------|------|------|
-| `id` | string | 세션 ID = 문서 ID = URL 토큰 = 폴더명. `{yyyyMMdd_HHmmss}_{UUIDv4}` | `ResultSessionDoc.cs:11-12`, `UploadContract.NewSessionId` |
-| `finalImageUrl` | string \| null | 최종 이미지 토큰 URL. **사진 전송(SendPhoto) off면 null** | `ResultSessionDoc.cs:14-15`, `ResultSession.cs:15` |
-| `timelapseUrl` | string \| null | 타임랩스 토큰 URL. 옵션 off·생성 실패·미포함 시 null | `ResultSessionDoc.cs:17-18`, `ResultSession.cs:17` |
-| `createdAt` | timestamp | 생성 시각(UTC) | `ResultSessionDoc.cs:20-21`, `UploadService.cs:64` |
-| `expiresAt` | timestamp | `createdAt + retentionHours`. **자동 삭제 기준** | `ResultSessionDoc.cs:23-24`, `UploadContract.cs:43-44` |
-| `downloadPageUrl` | string | 모바일 다운로드 페이지 URL(QR 인코딩 대상) | `ResultSessionDoc.cs:26-27`, `UploadContract.cs:36-40` |
+| `id` | string | 세션 ID = 문서 ID = URL 토큰 = 폴더명. `{yyyyMMdd_HHmmss}_{UUIDv4}` | `services/dto.ts:55`, `UploadContract.cs:25` |
+| `finalImageUrl` | string \| null | 최종 이미지 토큰 URL. **사진 전송(SendPhoto) off면 null** | `services/dto.ts:56`, `services/uploads.ts:195` |
+| `timelapseUrl` | string \| null | 타임랩스 토큰 URL. 옵션 off·생성 실패·미포함 시 null | `services/dto.ts:57`, `services/uploads.ts:196` |
+| `createdAt` | timestamp | **서버 시각**(commit 시점) | `services/uploads.ts:190-191` |
+| `expiresAt` | timestamp | `createdAt + retentionHours`(서버 계산). **자동 삭제 기준** | `services/uploads.ts:192`, `domain/session.ts` |
+| `downloadPageUrl` | string | 모바일 다운로드 페이지 URL(QR 인코딩 대상) | `services/dto.ts:60`, `UploadContract.cs:49-53` |
 
-- **DTO↔도메인 매핑**(`FirebaseClient.cs:153-161` 쓰기, `:174-184` 읽기): `DateTime`(UTC) ↔ `Timestamp` 변환. 나머지 필드는 1:1.
+- **시각의 진실원은 서버다**: 앱도 `ResultSession`에 `CreatedAt`/`ExpiresAt`을 채우지만 문서에 기록되는 값은 서버가 commit 시점에 다시 만든다. 앱이 보낸 것은 `retentionHours`(시간 차이)로 환산되어 전달된다(`HttpFirebaseClient.cs:126-128`, `services/uploads.ts:190-200`).
+- **URL 위조 방어**: commit은 `finalImageUrl`·`timelapseUrl`이 **서버 버킷 + `results/{sessionId}/` 경로**를 가리키는지 검증한다. prepare 없이 임의 URL을 심을 수 없다(`services/uploads.ts:129-152`).
+- **중복 방어**: 같은 `sessionId`로 다시 commit하면 409다(TempUser는 트랜잭션 안에서 검사 — 카운트 이중집계 차단, `services/uploads.ts:206-211,240-244`).
 
 #### 미디어 URL null 의미론 (it7 F2)
 
 | 상황 | 판정 근거 | 근거 |
 |------|-----------|------|
-| **전송 옵션 꺼짐** | 미만료 문서 + URL이 null (의도적 제외, 실패·만료 아님) | `ResultSession.cs:12-14`, `ResultSessionDoc.cs:15` |
+| **전송 옵션 꺼짐** | 미만료 문서 + URL이 null (의도적 제외, 실패·만료 아님) | `ResultSession.cs`, `services/dto.ts:56-57` |
 | 만료 | `expiresAt < now` 또는 문서 부재 | `firebase-contract.md:83`, §5 |
 | 로드 실패 | URL 있는데 fetch 실패 | `firebase-contract.md:84` |
 
-- **최소 1개 불변식**: 미만료 `resultSessions` 문서는 `finalImageUrl`·`timelapseUrl` 중 최소 1개가 non-null. 둘 다 off면 `QrDeliveryPolicy.Normalize`가 `enableQrDelivery`를 off로 정규화해 문서 자체가 생성되지 않음(`QrDeliveryPolicy.cs:13-19`, `UploadService.cs:37-38`). `photoSent`/`timelapseSent` 같은 명시 플래그는 추가하지 않음(계약 `firebase-contract.md:84-85`).
+- **최소 1개 불변식**: 미만료 `resultSessions` 문서는 `finalImageUrl`·`timelapseUrl` 중 최소 1개가 non-null. 둘 다 off면 `QrDeliveryPolicy.Normalize`가 `enableQrDelivery`를 off로 정규화해 문서 자체가 생성되지 않으며(`QrDeliveryPolicy.cs`, `UploadService.cs:38-39`), **서버도 commit에서 같은 불변식을 강제한다**(`services/uploads.ts:169-176`). `photoSent`/`timelapseSent` 같은 명시 플래그는 추가하지 않음(계약 `firebase-contract.md:84-85`).
 
 ---
 
-## 3. 도메인 모델 ↔ DTO 매핑 요약
+## 3. 앱 도메인 ↔ 와이어 ↔ Firestore 매핑
 
-| 도메인(Core) | DTO(Firebase) | 변환기 | 근거 |
-|--------------|---------------|--------|------|
-| `User` | `UserDoc` | `AccountService.ToUser`, `role` 문자열↔enum | `AccountService.cs:118-124`, `UserRole.cs:19-32` |
-| `FrameTemplate`/`ImageSize`/`Slot` | `FrameTemplateDoc` | `FrameRepository.ToTemplate`/`ToDoc`, map/array 수동 조립, `ToInt` 정규화 | `FrameRepository.cs:120-171` |
-| `ResultSession` | `ResultSessionDoc` | `FirebaseClient.CreateResultSessionAsync`/`QueryExpiredSessionsAsync`, `DateTime`↔`Timestamp` | `FirebaseClient.cs:150-187` |
+앱은 Firestore를 직접 읽고 쓰지 않는다. 매핑은 **2단**이다: 앱 도메인 ↔ JSON 응답(`*Response`) ↔ Firestore 문서(`*Doc`).
 
-- DTO는 모두 `[FirestoreData]` 클래스이며 필드명이 소문자 카멜(camelCase) 저장 키로 고정된다. 이 키가 웹과의 계약(웹이 읽는 필드명)이다.
+| 앱 도메인(Core) | 와이어(JSON) | Firestore 문서 | 변환 지점 |
+|-----------------|--------------|----------------|-----------|
+| `User` | `UserResponse` `{id, role, createdAt(ISO8601), email, authMethod, hasPin}` | `UserDoc`(+`pinHash`·`qrUsedCount`) | 앱: `HttpAccountService.ToUser`(`:182-194`) / 서버: `services/accounts.ts` |
+| `FrameTemplate`/`ImageSize`/`Slot` | `FrameResponse`(`createdAt`만 ISO8601) | `FrameTemplateDoc` | 앱: `HttpFrameRepository.ToTemplate`(`:169-184`) / 서버: `services/frames.ts` `toResponse` |
+| `ResultSession` | `ResultSessionResponse` | `ResultSessionDoc` | 앱: `HttpFirebaseClient.CreateResultSessionAsync`(`:124-150`) / 서버: `services/uploads.ts` `commitUpload` |
+| `TempUserLimits` | `{qrHours, qrCount}` | `TempUserLimitsDoc` | 앱: `HttpTempUserLimitsService`(`:28-40`) / 서버: `services/config.ts` |
+
+- **응답에서 제외되는 필드**: `pinHash`는 어떤 응답에도 실리지 않고 `hasPin`(bool)로만 파생 노출된다. `qrUsedCount`도 원본 대신 `/accounts/me/qr-usage`의 게이트 판정 결과로만 나간다(`services/dto.ts:18-27,63-74`).
+- **타임스탬프 표현**: Firestore `Timestamp` → 응답 ISO8601 문자열 → 앱 `DateTime`(UTC). 앱은 파싱 실패 시 `DateTime.UtcNow`로 방어 폴백한다(`HttpAccountService.cs:196-204`).
+- 저장 키는 camelCase로 고정되며 이것이 **웹이 읽는 계약**이다(`services/dto.ts:2`).
 
 ---
 
@@ -123,16 +136,17 @@
 
 | 용도 | 경로 | 파일명 규칙 | TTL 대상 | 근거 |
 |------|------|-------------|----------|------|
-| 결과물(사진) | `results/{sessionId}/final.{jpg\|png}` | 확장자 = `AppSettings.OutputFormat` | **O** | `UploadContract.cs:15-16` |
-| 결과물(타임랩스) | `results/{sessionId}/timelapse.mp4` | 항상 mp4(H.264 무음) | **O** | `UploadContract.cs:19-20` |
-| 프레임 이미지 | `frames/{owner}/{frameId}.png` | `owner = userId ?? "default"`, 항상 png | **X**(비대상) | `FrameRepository.cs:59-61` |
+| 결과물(사진) | `results/{sessionId}/final.{jpg\|png}` | 확장자 = `AppSettings.OutputFormat` | **O** | `UploadContract.cs:28-29`, `domain/session.ts` |
+| 결과물(타임랩스) | `results/{sessionId}/timelapse.mp4` | 항상 mp4(H.264 무음) | **O** | `UploadContract.cs:32-33`, `domain/session.ts` |
+| 프레임 이미지 | `frames/{owner}/{frameId}.png` | `owner = userId ?? "default"`, 항상 png | **X**(비대상) | `services/frames.ts:104-105` |
 
+- 경로 규약은 **앱과 서버 양쪽에 이식**되어 있다(`UploadContract` ↔ `domain/session.ts`). 실제 Storage 경로는 서버가 prepare에서 결정하므로 서버가 진실원이고, 앱 쪽 값은 토큰 URL 재조립용이다([30 §5.3](./30-backend-firebase-integration.md)).
 - `{sessionId}` = `{yyyyMMdd_HHmmss}_{UUIDv4}`(§2.3) → **results/ 하위 세션 폴더가 시각순 정렬**되어 Storage 콘솔에서 찾기 쉽다(사용자 요청). 파일명(`final`/`timelapse`)은 고정.
-- `results/`만 TTL/만료 삭제 대상, `frames/`는 비대상(`FrameRepository.cs:59`, `firebase-contract.md:141-144`). **자동삭제 정합**: `PurgeExpired`가 `results/{s.Id}/` prefix로 삭제하는데 `s.Id`가 곧 폴더명이라 ID 형식 변경과 무관하게 동작(`UploadService.cs`).
+- `results/`만 TTL/만료 삭제 대상, `frames/`는 비대상(`firebase-contract.md:141-144`). 삭제는 인프라(Lifecycle·TTL)가 `results/` prefix로 수행하며, `sessionId`가 곧 폴더명이라 ID 형식과 무관하게 정합한다([50](./50-infra-gcp-lifecycle-and-ttl.md)).
 
 ### 4.2 다운로드 토큰 URL 형식
 
-업로드 시 GCS 객체 메타데이터 `firebaseStorageDownloadTokens`에 UUID 토큰을 심고(`FirebaseClient.cs:20,119-128`), 그 토큰으로 URL을 조립한다(`UploadContract.cs:26-30`):
+**서버가** 서명 URL 발급 시 객체 메타데이터 `firebaseStorageDownloadTokens`에 UUID 토큰을 심도록 서명에 포함시키고(`services/signing.ts:14-16,63,81-91`), 클라는 PUT 시 그 헤더(`x-goog-meta-firebaseStorageDownloadTokens`)를 그대로 보내야 메타가 설정된다. URL 형식은 앱·서버 공통이다(`UploadContract.cs:39-43`, `domain/session.ts`):
 
 ```
 https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=media&token={downloadToken}
@@ -144,7 +158,7 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 
 ### 4.3 다운로드 페이지 URL(QR 인코딩 대상)
 
-`UploadContract.DownloadPageUrl`(`UploadContract.cs:36-40`): `{hostingBaseUrl 트레일링슬래시제거}/?s={token}` (쿼리형 확정, `firebase-contract.md:106`). 예: `https://mcphoto-955fb.web.app/?s={uuid}`.
+`UploadContract.DownloadPageUrl`(`UploadContract.cs:49-53`): `{hostingBaseUrl 트레일링슬래시제거}/?s={sessionId}` (쿼리형 확정, `firebase-contract.md:106`). 예: `https://mcphoto-955fb.web.app/?s={yyyyMMdd_HHmmss}_{uuid}`. **앱이 조립해 commit에 넘기고 서버가 문서에 저장**한다.
 
 ---
 
@@ -162,7 +176,7 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 > 위 줄번호는 `web/firestore.rules` 현행 기준(it15 주석 갱신 반영).
 
 - 핵심: `resultSessions`는 `allow get: if true` + `allow list: if false`를 **분리**한다. `allow read`(get+list 통합) 금지(주석 `firestore.rules:29-30`).
-- WPF 서비스 계정(Admin SDK)은 이 규칙을 우회하므로 `write:false`가 WPF 문서 생성을 막지 않는다(주석 `firestore.rules:9-11`).
+- 이 규칙은 **SDK 경로(웹)** 에만 적용된다. 문서를 쓰는 주체인 **백엔드(Cloud Functions)** 는 Admin(ADC)으로 동작해 규칙을 우회한다. it15 이전엔 그 주체가 WPF(서비스 계정)였으나 지금은 서버뿐이며, **앱은 Firestore에 아예 접근하지 않는다**(주석 `firestore.rules:9-11`은 구 표현, [30 §3.3](./30-backend-firebase-integration.md)).
 
 ### 5.2 Storage (`web/storage.rules`)
 
@@ -184,7 +198,7 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 
 ### 6.1 개념
 
-- `expiresAt = createdAt + retentionHours`(`UploadContract.cs:43-44`). `retentionHours`는 `AppSettings.RetentionHours`(기본 24, 범위 1~72, `AppSettings.cs:62`, `MinRetentionHours=1`/`MaxRetentionHours=72` `:39-40`).
+- `expiresAt = createdAt + retentionHours`. 앱은 `UploadContract.ComputeExpiresAt`(`:56-57`)로 계산해 표시하고, **문서에 기록되는 값은 서버가 commit 시 계산**한다(`services/uploads.ts:190-192`). `retentionHours`는 `AppSettings.RetentionHours`(기본 24, 범위 1~72)이며 서버도 `validateRetentionHours`로 재검증한다(`routes/uploads.ts:55-56`).
 - 웹은 `expiresAt < now` 또는 문서 부재 시 만료 안내를 표시하고, 별도 `expired` 플래그는 두지 않는다(`firebase-contract.md:83`).
 
 ### 6.2 TTL 대상 vs 비대상
@@ -202,8 +216,8 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 |------|------|------|------|
 | GCS Lifecycle | `results/` 파일(age 3일) | **채택**(파일 주력) | `OPS-ttl.md:7,19` |
 | Firestore 네이티브 TTL | `resultSessions` 문서(`expiresAt`) | **채택**(문서) | `OPS-ttl.md:20,60-69` |
-| WPF `PurgeExpiredAsync` | `results/{sid}/` + 문서 함께 | **코드 존재·미사용**(인프라 대체) | `OPS-ttl.md:6,21`, `UploadService.cs:80` |
-| 스케줄 Cloud Functions | — | **미채택**(D-2) | `OPS-ttl.md:22`, `firebase-contract.md:230` |
+| 앱 `PurgeExpiredAsync` | `results/{sid}/` + 문서 함께 | **코드 존재·미사용**. it15 이후 HTTP 경로가 만료 조회·삭제를 지원하지 않아 **실행해도 `NotSupportedException`** | `OPS-ttl.md:6,21`, `UploadService.cs:100-122`, `HttpFirebaseClient.cs:163-176` |
+| 스케줄 Cloud Functions | — | **미채택**(D-2). 백엔드 라우터 6종에 만료 정리 엔드포인트 없음 | `OPS-ttl.md:22`, `web/functions/src/app.ts:27-32` |
 
 - GCS Lifecycle는 파일만, Firestore TTL은 문서만 삭제하므로 **둘 다 켜야** 파일+문서가 모두 정리된다(`OPS-ttl.md:24`).
 - 이 프로젝트 설정값: project `mcphoto-955fb`, bucket `mcphoto-955fb.firebasestorage.app`, age 3일, prefix `results/`(`OPS-ttl.md:7`).
@@ -217,15 +231,18 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 |---|--------|------|
 | 1 | TTL/만료 삭제는 **`results/`만** 대상 | `OPS-ttl.md:30`, `firebase-contract.md:232` |
 | 2 | `frames/`·로컬 저장분은 **삭제 비대상** | `OPS-ttl.md:31` |
-| 3 | 삭제는 **문서 + Storage 파일 함께** 정리(고아 최소화) | `OPS-ttl.md:32`, `UploadService.cs:90-92` |
-| 4 | 미만료 `resultSessions` 문서는 미디어 URL **최소 1개 non-null**(둘 다 off면 문서 미생성) | `firebase-contract.md:85`, `QrDeliveryPolicy.cs:13-19` |
-| 5 | 프레임 삭제 시 문서 삭제 **전에** owner를 읽어 Storage 경로 확정(고아 이미지 방지) | `FrameRepository.cs:89-94` |
-| 6 | 계정 삭제 시 소유 프레임(Firestore 문서 + `frames/{userId}/`) cascade 삭제 | `AccountService.cs:85-89`, `FrameRepository.cs:106-118` |
-| 7 | `resultSessions` 문서 ID·프레임 다운로드 토큰은 **추측 불가 UUID** | `UploadContract.cs:11-12`, `FirebaseClient.cs:119` |
+| 3 | 삭제는 **문서 + Storage 파일 함께** 정리(고아 최소화) — 현재는 Lifecycle(파일)+TTL(문서) 둘을 켜서 충족 | `OPS-ttl.md:32`, [50 §1.1](./50-infra-gcp-lifecycle-and-ttl.md) |
+| 4 | 미만료 `resultSessions` 문서는 미디어 URL **최소 1개 non-null**(둘 다 off면 문서 미생성) — 앱·서버 양쪽에서 강제 | `UploadService.cs:38-39`, `services/uploads.ts:169-176` |
+| 5 | 프레임 삭제 시 문서 삭제 **전에** owner를 읽어 Storage 경로 확정(고아 이미지 방지) | `services/frames.ts:184-192` |
+| 6 | 계정 삭제 시 소유 프레임(Firestore 문서 + `frames/{userId}/`) cascade 삭제 — **서버가 수행**(클라 no-op) | `services/frames.ts:201-211`, `HttpFrameRepository.cs:117-126` |
+| 7 | `resultSessions` 문서 ID·프레임 다운로드 토큰은 **추측 불가 UUID**(토큰은 서버가 `randomUUID()`로 발급) | `UploadContract.cs:12,25`, `services/signing.ts:63` |
+| 8 | commit의 미디어 URL은 **서버 버킷 + 해당 세션 경로**여야 한다(prepare 없이 임의 URL 주입 차단) | `services/uploads.ts:129-152` |
 
 ---
 
 ## 관련 문서
 
-- [30 · 백엔드 — Firebase 연동](./30-backend-firebase-integration.md) — 초기화·인증·업로드/프레임/계정 흐름·폴백
-- 인덱스: [README](./README.md)(타 담당)
+- [30 · 백엔드 API 연동](./30-backend-firebase-integration.md) — 인증 게이트·업로드 3단계·프레임/계정 흐름·미도달 시 동작
+- [60 · 인증·계정·역할](./60-auth-accounts-and-roles.md) — `users.role` 위계·권한 매트릭스·PIN 게이트
+- [50 · 인프라 보관/만료](./50-infra-gcp-lifecycle-and-ttl.md) — Lifecycle·TTL 적용 절차
+- 인덱스: [README](./README.md)

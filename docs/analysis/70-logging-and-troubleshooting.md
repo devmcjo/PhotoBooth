@@ -3,12 +3,12 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 70-logging-and-troubleshooting.md |
-| 범위 | 로그 파일 실제 위치·롤링·레벨, 세션 임시/결과 폴더 경로, 전역 예외 처리(크래시 대신 Home 복귀), 증상→의심 지점 매핑(소스만으로 진단), Firebase 초기화 실패 진단, 인앱 진단·상태 화면(it11 #14) |
-| 최종 업데이트 | 2026-07-24 |
-| 관련 소스 경로 | `src/MCPhoto.App/App.xaml.cs`, `src/MCPhoto.Core/Capture/SessionWorkspace.cs`, `src/MCPhoto.Core/LocalSave/LocalSaveService.cs`, `src/MCPhoto.Core/Settings/{IniSettingsService,SettingsPathResolver,AppSettings}.cs`, `src/MCPhoto.Capture/{OpenCvCameraService,FfmpegRunner,TimelapseService}.cs`, `src/MCPhoto.Firebase/{FirebaseClient,UploadService,FrameRepository}.cs`, `src/MCPhoto.App/ViewModels/{CaptureViewModel,QrPopupViewModel,FrameSelectViewModel}.cs` |
+| 범위 | 로그 파일 실제 위치·롤링·레벨, 세션 임시/결과 폴더 경로, 전역 예외 처리(크래시 대신 Home 복귀), 증상→의심 지점 매핑(소스만으로 진단), **백엔드 연결 실패 진단**, 인앱 진단·상태 화면(it11 #14) |
+| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — §4.2·§4.5·§4.6 근거 경로 교체, §5 색인 갱신, **§6 전면 재작성**: Firebase 초기화 → 백엔드 연결 진단) |
+| 관련 소스 경로 | `src/MCPhoto.App/App.xaml.cs`, `src/MCPhoto.Core/Capture/SessionWorkspace.cs`, `src/MCPhoto.Core/LocalSave/LocalSaveService.cs`, `src/MCPhoto.Core/Settings/{IniSettingsService,SettingsPathResolver,AppSettings}.cs`, `src/MCPhoto.Capture/{OpenCvCameraService,FfmpegRunner,TimelapseService}.cs`, `src/MCPhoto.Core/Upload/UploadService.cs`, `src/MCPhoto.Http/{HttpBackendClient,HttpFirebaseClient,HttpFrameRepository,HttpQrUsageService}.cs`, `src/MCPhoto.App/ViewModels/{CaptureViewModel,QrPopupViewModel,FrameSelectViewModel,DiagnosticsViewModel}.cs` |
 | 갱신 규칙 | Serilog 설정(경로·롤링·레벨, `App.xaml.cs`), `App.DataFolder` 정의, 전역 예외 핸들러, ffmpeg/설정/키 경로 탐색 순서, 각 서비스 로그 문자열이 바뀌면 이 문서를 갱신한다. 증상 매핑 표는 로그 키워드가 바뀔 때 함께 수정. |
 
-관련 문서: [10 Exe 앱 아키텍처](./10-exe-app-architecture.md) · [30 Firebase 연동](./30-backend-firebase-integration.md) · [40 Firestore/Storage 스키마](./40-database-firestore-and-storage-schema.md) · [60 인증/계정/역할](./60-auth-accounts-and-roles.md) · 인덱스 [README](./README.md)
+관련 문서: [10 Exe 앱 아키텍처](./10-exe-app-architecture.md) · [30 백엔드 API 연동](./30-backend-firebase-integration.md) · [40 Firestore/Storage 스키마](./40-database-firestore-and-storage-schema.md) · [60 인증/계정/역할](./60-auth-accounts-and-roles.md) · 인덱스 [README](./README.md)
 
 ---
 
@@ -27,7 +27,7 @@ C:\ProgramData\MCPhoto\logs\mcphoto-YYYYMMDD.log
 
 > `ProgramData`는 기본 숨김 폴더다. 탐색기 주소창에 `%ProgramData%\MCPhoto\logs` 또는 `C:\ProgramData\MCPhoto\logs`를 직접 입력하면 열린다.
 
-> **앱 내에서 열기(it11 #14)**: 로그인 후 **설정 [고급] → [진단·상태]** 모달의 **[로그 폴더 열기]** 버튼으로 위 폴더를 바로 열 수 있다. 같은 모달에서 카메라·ffmpeg·Firebase 상태도 함께 확인 가능([11](./11-exe-app-features.md) §17).
+> **앱 내에서 열기(it11 #14)**: 로그인 후 **설정 [고급] → [진단·상태]** 모달의 **[로그 폴더 열기]** 버튼으로 위 폴더를 바로 열 수 있다. 같은 모달에서 카메라·ffmpeg·**서버 연결**(백엔드 구성 여부·주소·버킷·게이트 키 설정 여부·로그인 계정) 상태도 함께 확인 가능([11](./11-exe-app-features.md) §17).
 
 ### 1.2 콘솔/탐색기에서 로그 폴더 여는 법(사용자 안내)
 
@@ -122,15 +122,17 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 
 | 확인 | 값 | 근거 |
 | --- | --- | --- |
-| 업로드 실패(우아 처리) | `"업로드/QR 실패 — 로컬 보존, 완료 진행 가능"` (Warning) | `src/MCPhoto.App/ViewModels/QrPopupViewModel.cs:82` |
-| Firebase 미초기화 | `InvalidOperationException "Firebase 미초기화 — 업로드 불가(QR off/로컬 저장 완화 경로 사용)."` | `src/MCPhoto.Firebase/UploadService.cs:31-32` |
-| 전송 미디어 없음 | `InvalidOperationException "전송할 미디어가 없습니다…"` | `UploadService.cs:37-38` |
-| 업로드 성공 로그 | `"업로드 완료: session={Token}, page={Url}"` (Information) | `UploadService.cs:76` |
-| 버킷 불일치 경고 | `"Storage 버킷 미지정 — 레거시 규약 '{Bucket}'으로 유도함…"` (Warning) | `src/MCPhoto.Firebase/FirebaseClient.cs:73-76` |
-| QR 진입 조건 | `EnableQrDelivery` on + (`SendPhoto`/`SendTimelapse` 중 최소 1개). 둘 다 off면 QR 자체 off | `AppSettings.NormalizeQr`(`AppSettings.cs:139-146`); `QrPopupViewModel.cs:45-54` |
-| QR 생성 | 업로드 성공 후에만 `QrService.GenerateQrPng(url)` | `QrPopupViewModel.cs:70-72`; `src/MCPhoto.Core/Upload/QrService.cs` |
+| 업로드 실패(우아 처리) | `"업로드/QR 실패 — 로컬 보존, 완료 진행 가능"` (Warning) | `src/MCPhoto.App/ViewModels/QrPopupViewModel.cs:117` |
+| **TempUser 한도 초과** | `"TempUser QR 한도 초과({Reason}) — 로컬 보존, 완료 진행 가능"` (Information). 화면엔 사유별 문구(시간/횟수) | `QrPopupViewModel.cs:101-112` |
+| 백엔드 미구성 | `InvalidOperationException "Firebase 미초기화 — 업로드 불가(QR off/로컬 저장 완화 경로 사용)."` — 실제 의미는 **`BackendBaseUrl` 미설정**(예외 문구는 레거시 표현) | `src/MCPhoto.Core/Upload/UploadService.cs:32-33` |
+| 백엔드 미도달 | `"백엔드 요청 실패(네트워크/타임아웃): {Method} {Url}"` (Warning) → `InvalidOperationException("백엔드에 연결할 수 없습니다.")` | `src/MCPhoto.Http/HttpBackendClient.cs:139-140` |
+| 파일 PUT 실패 | `"파일 PUT 실패(네트워크)"` (Warning) 또는 `InvalidOperationException("파일 업로드에 실패했습니다(HTTP {code}).")` — 서명 URL 만료(15분)·권한 문제 의심 | `src/MCPhoto.Http/HttpFirebaseClient.cs:221`, `:227-229` |
+| 전송 미디어 없음 | `InvalidOperationException "전송할 미디어가 없습니다…"`(앱)·서버도 commit에서 동일 불변식 강제 | `UploadService.cs:38-39`, `web/functions/src/services/uploads.ts:172-176` |
+| 업로드 성공 로그 | `"업로드 완료: session={Token}, page={Url}"` (Information) | `UploadService.cs:87` |
+| QR 진입 조건 | `EnableQrDelivery` on + (`SendPhoto`/`SendTimelapse` 중 최소 1개). 둘 다 off면 QR 자체 off | `AppSettings.NormalizeQr`; `QrPopupViewModel.cs` |
+| QR 생성 | 업로드 성공 후에만 `QrService.GenerateQrPng(url)` | `QrPopupViewModel.cs:94-97`; `src/MCPhoto.Core/Upload/QrService.cs` |
 
-의심 순서: Firebase 초기화 여부([§6](#6-firebase-초기화-실패-진단)) → `StorageBucket` 실제 값 일치 → `QrPopupViewModel`(비차단 실패 안내, [재시도] 제공). 업로드가 실패해도 흐름은 막지 않고 로컬 결과물은 보존된다(`QrPopupViewModel.cs:80-88`).
+의심 순서: 백엔드 구성·도달 여부([§6](#6-백엔드-연결-실패-진단)) → 게이트 키(`X-MCPhoto-Client`) 유효성(401) → 계정 한도(403) → `QrPopupViewModel`(비차단 실패 안내, [재시도] 제공). 업로드가 실패해도 흐름은 막지 않고 로컬 결과물은 보존된다(`QrPopupViewModel.cs:113-118`).
 
 ### 4.3 타임랩스가 없음 / 영상 미생성
 
@@ -163,26 +165,28 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 
 | 확인 | 값 | 근거 |
 | --- | --- | --- |
-| 삭제 가능 판정 | `bundle:`·`fallback` 접두는 삭제 불가, 그 외 로컬 저장분만 가능 | `FrameSelectViewModel.IsDeletable`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:54-57`) |
-| 삭제 UI 노출 | 로그인 시만(`CanDeleteFrames = user is not null`), 게스트 미노출 | `:67` |
-| 로컬 삭제 | 항상 실행 `_localStore.DeleteLocal(frame)`(PNG + `.slots` 삭제, 실패 무시) | `:101`; `src/MCPhoto.Core/Frames/LocalFrameStore.cs:82-94` |
-| 서버 삭제 조건 | `"서버에서도 제거" 체크 && IsPower`(파워 전용) | `:102`, `:109-110` |
-| 서버 문서 없음 | `"프레임 서버 삭제: 문서 없음 id={Id}…"` (Warning) → 이름 매칭 재삭제 시도 | `src/MCPhoto.Firebase/FrameRepository.cs:85`; `FrameSelectViewModel.cs:127-138` |
-| 서버 삭제 실패 안내 | `DeleteNotice`에 실패 노출(성공 오인 금지) + `"프레임 서버 삭제 실패 id={Id}"` (Error) | `FrameSelectViewModel.cs:147-157` |
-| Storage 이미지 삭제 실패 | `"프레임 Storage 이미지 삭제 실패(문서는 계속 삭제): {Id}"` (Warning) | `FrameRepository.cs` |
+| 삭제 가능 판정 | `bundle:`·`fallback`·빈 Id는 삭제 불가(출처 판정) | `FrameSelectViewModel.IsDeletable`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:62`) |
+| 삭제 UI 노출 | **it16**: `CanDeleteFrames = Role.CanWriteFrames()`(고급 유저 이상). `user`·`temp_user`·게스트는 미노출 | `:81`; [60 §1.2](./60-auth-accounts-and-roles.md) |
+| 권한 게이트(커맨드) | `FrameEditPolicy.CanDelete(frame, role) && IsDeletable(frame)` 이중 판정 | `:109` |
+| 로컬 삭제 | 항상 실행(PNG + `.slots`). 실패 시 `"로컬 프레임 삭제 실패: {Name} ({Path})"` (Warning) | `:141`; `src/MCPhoto.Core/Frames/LocalFrameStore.cs` |
+| 서버 삭제 조건 | `"서버에서도 제거" 체크 && IsPower`(manager/admin). 서버도 `requirePower()`로 재검증 | `:115`; `web/functions/src/routes/frames.ts:120-132` |
+| 서버 id 불일치 | `"서버 삭제 id 불일치 → 이름 매칭 재삭제: {Name} (id={Id})"` (Information) | `:170` |
+| 서버 문서 없음 | `"서버 삭제 실패: 문서 미발견 name={Name} triedId={Id}"` (Warning) + `DeleteNotice`에 안내 | `:182-184` |
+| 서버 삭제 실패 | `"프레임 서버 삭제 실패 id={Id}"` (Error) + `DeleteNotice`에 실패 노출(성공 오인 금지) | `:190-192` |
 
-진단: 로컬만 지워지고 서버(공용)에 남는 증상이면 → 파워 권한인지 + "서버에서도 제거" 체크했는지 + 로컬 id와 서버 문서 id 일치 여부(`local:` 접두/`#dbid` 매칭)를 로그로 확인. 파워 삭제 권한 규칙은 [60 §2](./60-auth-accounts-and-roles.md#2-권한-매트릭스화면기능별).
+- 서버 삭제는 `DELETE /frames/{id}` → `{deleted:bool}`이며, **없는 문서를 지웠을 때 성공으로 오인하지 않는다**([30 §7](./30-backend-firebase-integration.md)).
+- 진단: 로컬만 지워지고 서버(공용)에 남는 증상이면 → 파워 권한인지 + "서버에서도 제거" 체크했는지 + 로컬 id와 서버 문서 id 일치 여부를 로그로 확인. 403이면 권한, 404면 id 불일치다. 권한 규칙은 [60 §1.2·§2](./60-auth-accounts-and-roles.md).
 
 ### 4.6 만료 결과물이 안 지워짐 (TTL/Lifecycle)
 
 | 확인 | 값 | 근거 |
 | --- | --- | --- |
-| 만료 기준 | `resultSessions.expiresAt`(`CreatedAt + RetentionHours`) | `src/MCPhoto.Core/Models/ResultSession.cs:22-23`; `RetentionHours` 기본 24, 1~72(`AppSettings.cs:62`, `:123`) |
-| 만료 쿼리 | `expiresAt < now` 문서 조회 | `FirebaseClient.QueryExpiredSessionsAsync`(`src/MCPhoto.Firebase/FirebaseClient.cs:165-187`) |
-| 정리 서비스 | `UploadService.PurgeExpiredAsync`(Storage `results/{id}/` 파일 + DB 문서 함께 삭제) | `src/MCPhoto.Firebase/UploadService.cs:80-102` |
-| 정리 성공/실패 로그 | `"만료 세션 {Count}건 정리"` (Information, `UploadService.cs:100`) / `"만료 세션 정리 실패: {Id}"` (Warning, `:97`) | `UploadService.cs:97`, `:100` |
+| 만료 기준 | `resultSessions.expiresAt`(`createdAt + retentionHours`, **서버가 commit 시 기록**) | `web/functions/src/services/uploads.ts:190-200`; `RetentionHours` 기본 24, 1~72(`AppSettings.cs`) |
+| 앱 정리 코드 | `UploadService.PurgeExpiredAsync`는 Core에 남아 있으나 **앱 런타임 호출부 0**(테스트만) | `src/MCPhoto.Core/Upload/UploadService.cs:100-122` |
+| HTTP 경로 지원 | 만료 조회·문서 삭제·Storage prefix 삭제는 **`NotSupportedException`** — 서버에 해당 엔드포인트가 없다 | `src/MCPhoto.Http/HttpFirebaseClient.cs:163-176` |
+| 실제 정리 주체 | GCS Object Lifecycle(파일, `results/` age 3일) + Firestore 네이티브 TTL(문서, `expiresAt`) | `web/lifecycle.json`, `web/OPS-ttl.md`; [50](./50-infra-gcp-lifecycle-and-ttl.md) |
 
-**중요(사실)**: 앱 내부에 만료 정리를 자동 구동하는 스케줄러/lifecycle 서비스는 없다. `PurgeExpiredAsync`는 존재하나 **주기 호출 지점이 소스에 정의돼 있지 않다**(호출 스케줄 부재). 따라서 결과물 자동 삭제는 **웹/인프라 측(Firebase 함수·수명주기 규칙 등, 50번대 인프라 문서 소관)**에 의존한다는 것이 코드상 현재 상태다. 로컬 `result\` 폴더는 TTL 무관 영구 보관이므로([§2.2](#22-로컬-저장-결과물-폴더)) "안 지워짐"이 정상이다.
+**중요(사실)**: 앱에도 서버에도 만료 정리를 구동하는 코드 경로가 없다. 결과물 자동 삭제는 **전적으로 인프라(Lifecycle·TTL)** 소관이다. 로컬 `result\` 폴더는 TTL 무관 영구 보관이므로([§2.2](#22-로컬-저장-결과물-폴더)) "안 지워짐"이 정상이다.
 
 ---
 
@@ -190,52 +194,82 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 
 | 키워드(로그) | 의미 | 파일 |
 | --- | --- | --- |
-| `Firebase 초기화 완료` / `서비스 계정 키 없음` / `Firebase 초기화 실패` | Firebase 상태 | `FirebaseClient.cs:78`, `:50`, `:82` |
-| `시드 계정 생성` / `시드 계정 보장 실패` | 시드 admin | `AccountService.cs:114`; `App.xaml.cs:89` |
+| `백엔드 요청 실패(네트워크/타임아웃)` | 백엔드 미도달(모든 API 공통) | `HttpBackendClient.cs:139` |
+| `백엔드 헬스 체크 실패` | `/health` 프로브 실패(진단 모달) | `HttpFirebaseClient.cs:66` |
+| `파일 PUT 실패(네트워크)` / `프레임 이미지 PUT 실패(네트워크)` | 서명 URL 직접 업로드 실패 | `HttpFirebaseClient.cs:221`; `HttpFrameRepository.cs:157` |
+| `QR 사용량 조회 실패 … fail-open` | TempUser 한도 조회 실패(허용 후 서버가 최종 거부) | `HttpQrUsageService.cs:40,46` |
+| `TempUser QR 한도 초과` | 서버가 업로드 거부(403, 사유 time/count) | `QrPopupViewModel.cs:105` |
 | `카메라 장치 … 열기 실패` / `촬영 화면: …` | 카메라 | `OpenCvCameraService.cs:82`; `CaptureViewModel.cs:74,84` |
 | `ffmpeg 미탑재` / `ffmpeg 실패` / `녹화 시작 실패` | ffmpeg/타임랩스 | `TimelapseService.cs:28`; `FfmpegRunner.cs`; `OpenCvCameraService.cs:276` |
-| `업로드 완료` / `업로드/QR 실패` | 업로드/QR | `UploadService.cs:76`; `QrPopupViewModel.cs:82` |
+| `업로드 완료` / `업로드/QR 실패` | 업로드/QR | `UploadService.cs:87`; `QrPopupViewModel.cs:117` |
 | `설정 저장 …` / `설정 로드 실패` | 설정 INI | `IniSettingsService.cs:42,67,74,122` |
-| `프레임 서버 삭제 …` / `cascade 프레임 삭제 실패` | 프레임/계정 삭제 | `FrameRepository.cs`; `AccountService.cs:87` |
-| `Home 복귀:` / `미처리 예외` / `IsTerminating` | 전역 예외·복귀 | `AppShellViewModel.cs:204`; `App.xaml.cs:95,102,107` |
+| `서버 삭제 id 불일치` / `서버 삭제 실패` / `프레임 서버 삭제 실패` | 프레임 삭제 | `FrameSelectViewModel.cs:170,184,192` |
+| `브랜딩 로드` / `브랜딩 설정 파일 없음` | 브랜딩(branding.ini) | `IniBrandingService.cs:35,50` |
+| `Home 복귀:` / `미처리 예외` / `IsTerminating` | 전역 예외·복귀 | `AppShellViewModel.cs`; `App.xaml.cs:95,102,107` |
 | `시작 시 sessions 잔재 … 정리` | 임시 폴더 정리 | `App.xaml.cs:41` |
+
+> ⚠️ 폐지된 키워드(로그에 더 이상 나오지 않음): `Firebase 초기화 완료`·`서비스 계정 키 없음`·`Firebase 초기화 실패`·`시드 계정 생성`. 모두 it15에서 삭제된 `MCPhoto.Firebase`·시드 계정 경로의 것이다.
 
 ---
 
-## 6. Firebase 초기화 실패 진단
+## 6. 백엔드 연결 실패 진단
 
-QR·계정 쓰기·프레임 서버 삭제가 전부 안 되면 근본 원인은 대개 **서비스 계정 키 부재 → `IsInitialized=false`**다.
+로그인·QR·계정/프레임 서버 작업이 전부 안 되면 근본 원인은 대개 **백엔드 구성 누락 또는 미도달**이다.
 
-### 6.1 키 탐색 순서
+> 이 절은 2026-07-29에 전면 재작성됐다. it15에서 `MCPhoto.Firebase`가 삭제돼 **서비스 계정 키·`FirebaseClient`·`IsInitialized`(키 로드 여부) 판정은 존재하지 않는다.** 앱은 백엔드 HTTPS API만 호출한다. 계정 관점의 동작은 [60 §4.5](./60-auth-accounts-and-roles.md#45-백엔드-미도달-시-동작-구-미초기화-폴백-재정의), 계약 전체는 [30](./30-backend-firebase-integration.md).
 
-`FirebaseClient.DefaultKeyPath()`(`src/MCPhoto.Firebase/FirebaseClient.cs:92-102`):
+### 6.1 먼저 확인할 두 값
 
-1. `{실행경로}\serviceAccountKey.json` (**실행 폴더 전용**, publish가 동봉)
-
-과거 `%ProgramData%\MCPhoto\` 폴백은 **제거됨**(사용자 결정). 파일이 없으면 실행경로를 반환하되 파일이 없으므로 미초기화로 진행한다(`:47-52`). 키는 비밀이라 git/인스톨러에 포함하지 않는다.
-
-### 6.2 초기화 결과별 로그
-
-| 상황 | 로그 문자열 | 레벨 | 근거 |
-| --- | --- | --- | --- |
-| 키 파일 없음 | `"서비스 계정 키 없음 — Firebase 미초기화(QR off/오프라인 완화 경로): {Path}"` | Warning | `FirebaseClient.cs:50` |
-| 초기화 성공 | `"Firebase 초기화 완료: project={Project}, bucket={Bucket}"` | Information | `:78` |
-| 버킷 미지정(성공하나 위험) | `"Storage 버킷 미지정 — 레거시 규약 '{Bucket}'으로 유도함…"` | Warning | `:73-76` |
-| 초기화 예외(키 손상·권한 등) | `"Firebase 초기화 실패 — 미초기화로 진행"` | Error | `:82` |
-
-### 6.3 미초기화(`IsInitialized=false`)의 파급
-
-| 기능 | 미초기화 시 동작 | 근거 |
+| 값 | 어디서 오나 | 없으면 |
 | --- | --- | --- |
-| 로그인(일반 계정) | 불가. 시드 `devmcjo/1111`만 인메모리 admin 허용 | `AccountService.cs:35-40` |
-| 계정 쓰기(생성/변경/삭제) | `InvalidOperationException "Firebase 미초기화 — 계정 쓰기 불가…"` | `AccountService.cs:126-130` |
-| 계정 목록 | 빈 목록 | `AccountService.cs:77` |
-| 프레임 목록 | 빈 목록(번들·게스트 모드) | `FrameRepository.cs:32`, `:39` |
-| 업로드/QR | `InvalidOperationException` → QrPopup이 우아 처리(로컬 보존) | `UploadService.cs:31-32`; `QrPopupViewModel.cs:82` |
+| `BackendBaseUrl` | 코드 내장 기본값(운영 프로젝트) → `MCPhoto.ini`로 오버라이드 | 빈 값이면 **미구성** — `IFirebaseClient.IsInitialized=false`가 되어 업로드가 즉시 예외. 다른 API는 BaseAddress 없이 상대 URL을 조립하지 못해 실패 |
+| `BackendApiKey` | publish 시 exe 내장(`-p:BackendApiKeyDefault`) → `MCPhoto.ini`의 `BackendApiKey=`가 우선 | 모든 API가 **401**(`유효한 클라이언트 키가 필요합니다`) |
 
-진단 절차:
-1. `logs`에서 `"서비스 계정 키 없음"` 또는 `"Firebase 초기화 실패"`를 찾는다. 있으면 키 문제 확정.
-2. `{실행경로}\serviceAccountKey.json`(실행 폴더 전용) 존재/유효성 확인.
-3. 초기화는 됐는데 업로드만 실패하면 `"Storage 버킷 미지정"` 경고와 설정 `StorageBucket` 값(기본 `mcphoto-955fb.firebasestorage.app`, `AppSettings.cs:110`)이 실제 프로젝트 버킷과 일치하는지 확인. 신규 프로젝트는 `*.firebasestorage.app`, 레거시는 `*.appspot.com`이라 불일치 시 업로드 실패.
+- 일반 빌드(`dotnet build`)에는 내장 키가 없다 — 개발 PC에서 백엔드를 쓰려면 `MCPhoto.ini`에 `BackendApiKey=`를 넣어야 한다([12 §1.1](./12-exe-app-settings-and-config.md), [80 §2](./80-build-and-deployment.md)).
+- ⚠️ `UploadService`의 예외 문구는 아직 `"Firebase 미초기화 — 업로드 불가…"`다(레거시 표현). 실제 의미는 **`BackendBaseUrl` 미설정**이다(`UploadService.cs:32-33`).
 
-> ⚠️ **이 §6 전체가 구서술이다(2026-07-29 확인)**: it15에서 `MCPhoto.Firebase` 프로젝트가 삭제돼 `FirebaseClient`·서비스 계정 키·`IsInitialized` 판정이 모두 존재하지 않는다. 앱은 백엔드 HTTPS API만 호출한다. **현재의 "백엔드 미도달 시 동작"은 [60 §4.5](./60-auth-accounts-and-roles.md#45-백엔드-미도달-시-동작-구-미초기화-폴백-재정의)** 를 근거로 삼는다. 이 절의 재작성/폐기는 [90 §1 "문서 동기화 지연"](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채)에 등재.
+### 6.2 인앱 진단 모달에서 볼 것
+
+설정 [고급] → [진단·상태]의 **서버 연결** 섹션(`DiagnosticsViewModel`):
+
+| 표시 | 의미 |
+| --- | --- |
+| 백엔드 구성 여부 | `BackendBaseUrl`이 설정됐는지(**도달 성공이 아니다**) |
+| 백엔드 주소 | 실제 사용 중인 base URL(미설정이면 `(미설정)`) |
+| 버킷 | 토큰 URL 조립용 버킷명 |
+| 게이트 키 | **설정됨/미설정만** 표시 — 키 값 자체는 절대 노출하지 않는다 |
+| 로그인 계정 | 현재 세션 계정(게스트면 비로그인) |
+
+실도달 확인은 `/health` 프로브다 — 실패 시 `"백엔드 헬스 체크 실패"`(Warning) 로그가 남는다(`HttpFirebaseClient.cs:55-69`).
+
+### 6.3 상태코드별 의미
+
+| 코드 | 서버 판정 | 앱 동작 |
+| --- | --- | --- |
+| 401 | 게이트 키 무효 / Bearer 없음·만료·위조 | 로그인은 `null`(자격 실패), PIN 검증은 `false`, 그 외 예외 전파 |
+| 403 | 권한 부족(power·admin·`canManage`) 또는 **TempUser QR 한도 초과** | `UnauthorizedAccessException` / 한도는 `QrLimitExceededException`(사유별 문구) |
+| 404 | 대상 없음(문서·엔드포인트) | `InvalidOperationException` |
+| 409 | 중복(세션 ID 재commit·PIN 미설정) | `InvalidOperationException` |
+| 501 | **Google SSO 미구성**(서버에 `GOOGLE_OAUTH_CLIENT_ID` 없음) | `GoogleSsoNotConfiguredException` — 자격 문제·네트워크와 구분됨 |
+| 네트워크·타임아웃(100초) | — | `InvalidOperationException("백엔드에 연결할 수 없습니다.")` + Warning 로그 |
+
+근거: `HttpBackendClient.cs:158-196`, `HttpAccountService.cs:57-72`, `HttpFirebaseClient.cs:156-161`.
+
+### 6.4 미도달의 파급
+
+| 기능 | 동작 | 근거 |
+| --- | --- | --- |
+| 로그인 | **불가**(오프라인 폴백 없음). 화면 유지 + "네트워크를 확인해 주세요" | [60 §4.5](./60-auth-accounts-and-roles.md) |
+| 게스트 촬영·로컬 저장 | **정상 동작** | §2.2 |
+| 계정 목록 | 예외 전파("사용자 목록을 불러올 수 없습니다.") — 빈 목록 폴백 없음 | `HttpAccountService.cs:75-88` |
+| 프레임 목록 | 공용 프레임은 로컬 캐시·번들·fallback으로 폴백([11 §3](./11-exe-app-features.md)) | `FrameCatalogService` |
+| 업로드/QR | 예외 → QrPopup이 우아 처리(로컬 보존, [재시도]) | `QrPopupViewModel.cs:113-118` |
+| PIN 게이트 | **fail-closed** — 진입 거부 | [60 §4.5](./60-auth-accounts-and-roles.md) |
+| TempUser 한도 조회 | **fail-open** — 앱은 허용, 서버가 업로드에서 최종 거부 | `HttpQrUsageService.cs:37-48` |
+
+### 6.5 진단 절차
+
+1. `logs`에서 `"백엔드 요청 실패(네트워크/타임아웃)"`를 찾는다 → 있으면 네트워크·주소 문제.
+2. 없고 401이면 게이트 키 문제 → 진단 모달의 "게이트 키" 표시와 `MCPhoto.ini`의 `BackendApiKey` 확인(publish 산출물인지, 일반 빌드인지).
+3. 로그인만 실패하고 나머지는 되면 Google SSO 구성(501) 또는 계정 도메인 제한(401)을 의심한다.
+4. 업로드만 실패하면 서명 URL PUT 단계(`"파일 PUT 실패(네트워크)"`·HTTP 4xx)와 TempUser 한도(403)를 구분한다.

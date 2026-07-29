@@ -304,7 +304,7 @@ Http 구현 4종(`HttpFirebaseClient`·`HttpFrameRepository`·`HttpAccountServic
 | PIN 게이트 확인 불가 | **fail-closed** — 진입 거부 | [60 §4.5](./60-auth-accounts-and-roles.md#45-백엔드-미도달-시-동작-구-미초기화-폴백-재정의) |
 | 로그인 | 오프라인에서는 어떤 계정으로도 로그인할 수 없다(인메모리 폴백 없음). **게스트 촬영·로컬 저장은 계속 동작** | 같은 문서 §4.5 |
 
-> ⚠️ [70 §6 "Firebase 초기화 실패 진단"](./70-logging-and-troubleshooting.md#6-firebase-초기화-실패-진단)은 삭제된 `MCPhoto.Firebase` 기준의 구서술이다(서비스 계정 키·`IsInitialized`·시드 인메모리 admin). 진단은 이 절과 [70 §1·§5](./70-logging-and-troubleshooting.md)를 근거로 삼는다.
+> 로그 기반 진단 절차는 [70 §6 "백엔드 연결 실패 진단"](./70-logging-and-troubleshooting.md#6-백엔드-연결-실패-진단)에 정리돼 있다(2026-07-29 재작성 — 종전의 "Firebase 초기화 실패 진단"을 대체).
 
 ---
 

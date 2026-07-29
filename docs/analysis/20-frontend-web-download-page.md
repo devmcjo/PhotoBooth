@@ -123,7 +123,7 @@ init()                          (app.js:235)
 
 - 옵션꺼짐 안내(`.media__optout`)는 만료(빨강)·로드실패와 시각적으로 구분되는 **중립 정보 톤**(점선 테두리·회색)이다(`styles.css:184-194`, `index.html:43-45,67-69`).
 - 영상 섹션은 옵션 꺼짐이어도 `#video-section`을 **숨기지 않고**(it7) 안내만 노출한다(`app.js:169`).
-- 둘 다 옵션 꺼짐(계약상 미발생, 방어적)이면 성공 화면을 유지하며 안내 2개를 보여준다(`app.js:184`). WPF는 사진·타임랩스 중 최소 1개가 있어야 업로드하므로(`src/MCPhoto.Firebase/UploadService.cs:37-38`) 실제로는 발생하지 않는다.
+- 둘 다 옵션 꺼짐(계약상 미발생, 방어적)이면 성공 화면을 유지하며 안내 2개를 보여준다(`app.js:184`). WPF는 사진·타임랩스 중 최소 1개가 있어야 업로드하고 서버도 commit에서 같은 불변식을 강제하므로(`src/MCPhoto.Core/Upload/UploadService.cs:38-39`, `web/functions/src/services/uploads.ts:169-176`) 실제로는 발생하지 않는다.
 
 ---
 
