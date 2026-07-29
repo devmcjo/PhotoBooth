@@ -94,7 +94,7 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 | AppDomain(비 UI 스레드) | `AppDomain.CurrentDomain.UnhandledException` | 로그만(복귀 없음 — 이미 치명적일 수 있음, `IsTerminating` 기록) | `"도메인 미처리 예외 (IsTerminating={Terminating})"` (Error) | `:100-103` |
 | 관측 안 된 Task | `TaskScheduler.UnobservedTaskException` | `e.SetObserved()` 후 로그 | `"관측되지 않은 Task 예외"` (Error) | `:105-109` |
 
-- Home 복귀는 `AppShellViewModel.ReturnHome("전역 예외 복구")` 경유(`App.xaml.cs:111-122`), 실패 시 `"Home 복귀 실패"` (Fatal) `:120`. 이 복귀는 **로그아웃하지 않는다**(clearUser 미지정=false; [60 §3.4](./60-auth-accounts-and-roles.md#34-로그아웃--세션-유지-규칙중요) 참조).
+- Home 복귀는 `AppShellViewModel.ReturnHome("전역 예외 복구")` 경유(`App.xaml.cs:111-122`), 실패 시 `"Home 복귀 실패"` (Fatal) `:120`. 이 복귀는 **로그아웃하지 않는다**(clearUser 미지정=false; [60 §3.5](./60-auth-accounts-and-roles.md#35-로그아웃--세션-유지-규칙중요) 참조).
 - 화면 진입/이탈 예외도 셸이 잡아 로그만 남기고 진행: `"화면 이탈 오류: {State}"`·`"화면 진입 오류: {State}"`(`src/MCPhoto.App/AppShellViewModel.cs:133`, `:143`).
 - 유휴 만료 시 Home 복귀는 `"Home 복귀: {Reason} (clearUser={Clear})"`(Information, `AppShellViewModel.cs:204`).
 
@@ -238,4 +238,4 @@ QR·계정 쓰기·프레임 서버 삭제가 전부 안 되면 근본 원인은
 2. `{실행경로}\serviceAccountKey.json`(실행 폴더 전용) 존재/유효성 확인.
 3. 초기화는 됐는데 업로드만 실패하면 `"Storage 버킷 미지정"` 경고와 설정 `StorageBucket` 값(기본 `mcphoto-955fb.firebasestorage.app`, `AppSettings.cs:110`)이 실제 프로젝트 버킷과 일치하는지 확인. 신규 프로젝트는 `*.firebasestorage.app`, 레거시는 `*.appspot.com`이라 불일치 시 업로드 실패.
 
-계정·역할 관점의 폴백 요약은 [60 §4.5](./60-auth-accounts-and-roles.md#45-미초기화-폴백-요약)를 참조.
+> ⚠️ **이 §6 전체가 구서술이다(2026-07-29 확인)**: it15에서 `MCPhoto.Firebase` 프로젝트가 삭제돼 `FirebaseClient`·서비스 계정 키·`IsInitialized` 판정이 모두 존재하지 않는다. 앱은 백엔드 HTTPS API만 호출한다. **현재의 "백엔드 미도달 시 동작"은 [60 §4.5](./60-auth-accounts-and-roles.md#45-백엔드-미도달-시-동작-구-미초기화-폴백-재정의)** 를 근거로 삼는다. 이 절의 재작성/폐기는 [90 §1 "문서 동기화 지연"](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채)에 등재.

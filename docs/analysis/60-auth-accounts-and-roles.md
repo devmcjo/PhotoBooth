@@ -3,16 +3,18 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 60-auth-accounts-and-roles.md |
-| 범위 | MCPhoto의 계정 역할 위계(temp_user/user/advanced_user/manager/admin + 게스트), 권한 매트릭스, 로그인/로그아웃 흐름, 계정 저장소(Firestore users + 오프라인 시드 폴백)와 CRUD·cascade 삭제 |
-| 최종 업데이트 | 2026-07-29 (it16 — §1·§2) |
-| 관련 소스 경로 | `src/MCPhoto.Core/Accounts/IAccountService.cs`, `src/MCPhoto.Core/Models/UserRole.cs`, `src/MCPhoto.Core/Models/RoleChangePolicy.cs`, `src/MCPhoto.Core/Models/User.cs`, `src/MCPhoto.Core/Frames/FrameEditPolicy.cs`, `src/MCPhoto.Firebase/AccountService.cs`, `src/MCPhoto.Firebase/Dto/UserDoc.cs`, `src/MCPhoto.App/SessionContext.cs`, `src/MCPhoto.App/AppShellViewModel.cs`, `src/MCPhoto.App/MainWindow.xaml`, `src/MCPhoto.App/ViewModels/{LoginGuestViewModel,AccountViewModel,UserMgmtViewModel,FrameSelectViewModel}.cs`, `web/functions/src/domain/roles.ts` |
-| 갱신 규칙 | `UserRole` enum·`IsPower`/`CanWriteFrames`/`CanManage`/`CreatableRoles`/`CanCreate` 규칙, `RoleChangePolicy.AssignableRoles`(서버 `canSetRole`과 1:1), `IAccountService` 시그니처, 시드 계정 상수, 상단 바 팝오버 항목·가시성 바인딩(`MainWindow.xaml`), 세션 단일 소스(`SessionContext`)의 Login/Logout/Reset 계약이 바뀌면 이 문서를 갱신한다. |
+| 범위 | MCPhoto의 계정 역할 위계(temp_user/user/advanced_user/manager/admin + 게스트), 권한 매트릭스, Google SSO 로그인/로그아웃 흐름, 진입 PIN 게이트, 계정 저장소(백엔드 API 경유 `users` 컬렉션)와 CRUD·cascade 삭제 |
+| 최종 업데이트 | 2026-07-29 (it16 — §1·§2 최신화 + **§3~§5 전면 재작성**: it13~it16 반영) |
+| 관련 소스 경로 | `src/MCPhoto.Core/Accounts/{IAccountService,IGoogleSignInService,GoogleOAuthPkce,GoogleSsoNotConfiguredException}.cs`, `src/MCPhoto.Core/Models/{UserRole,RoleChangePolicy,User}.cs`, `src/MCPhoto.Core/Frames/FrameEditPolicy.cs`, `src/MCPhoto.Http/HttpAccountService.cs`, `src/MCPhoto.Http/{HttpBackendClient.cs,Session/BackendSession.cs}`, `src/MCPhoto.App/{SessionContext,AppShellViewModel}.cs`, `src/MCPhoto.App/MainWindow.xaml`, `src/MCPhoto.App/Services/{GoogleSignInService,PinPromptDialogService}.cs`, `src/MCPhoto.App/Views/PinPromptWindow.xaml.cs`, `src/MCPhoto.App/ViewModels/{LoginGuestViewModel,AccountViewModel,UserMgmtViewModel,FrameSelectViewModel}.cs`, `web/functions/src/routes/{auth,accounts}.ts`, `web/functions/src/services/{accounts,googleAuth,dto}.ts`, `web/functions/src/domain/{roles,jwt,accountId}.ts` |
+| 갱신 규칙 | `UserRole` enum·`IsPower`/`CanWriteFrames`/`CanManage`/`CreatableRoles`/`CanCreate` 규칙, `RoleChangePolicy.AssignableRoles`(서버 `canSetRole`과 1:1), `IAccountService` 시그니처(현재 7메서드), Google SSO 흐름(loopback+PKCE ↔ `POST /auth/google`)과 JWT 보관 위치, 진입 PIN 게이트(`AppShellViewModel.EnsurePinGateAsync`)의 호출부·fail-closed 규약, 상단 바 팝오버 항목·가시성 바인딩(`MainWindow.xaml`), 세션 단일 소스(`SessionContext`)의 Login/Logout/Reset 계약이 바뀌면 이 문서를 갱신한다. |
 
 관련 문서: [10 Exe 앱 아키텍처](./10-exe-app-architecture.md) · [30 Firebase 연동](./30-backend-firebase-integration.md) · [40 Firestore/Storage 스키마](./40-database-firestore-and-storage-schema.md) · [70 로깅/이슈 진단](./70-logging-and-troubleshooting.md) · 인덱스 [README](./README.md)
 
 > ⚠️ 자격증명(it15 갱신, 사실): **비밀번호 개념은 폐지됐다.** 자격증명은 ① Google SSO(신원 — 서버가 id_token 검증) + ② `pinHash`(설정·계정 관리 진입 게이트, bcrypt 4자리 PIN) 두 가지뿐이며 `users` 문서의 `password`·`emailVerified` 필드는 삭제됐다(설계 `docs/design/wpf-it15-google-only-auth-design.md` §5.3). it15 이전의 "평문 비밀번호 저장·비교"는 **이력**이다. "웹 접근 전면 차단"이 여전히 `users` 컬렉션의 방어선이다([40 §5.1](./40-database-firestore-and-storage-schema.md#51-firestore-webfirestorerules)).
 
-> ⚠️ 문서 동기화 상태(사실): **§1·§2는 it16 기준으로 최신**이다. **§3~§5는 it13~it15 변경(Google SSO 로그인·PIN·백엔드 프록시 경유 계정 CRUD)이 아직 반영되지 않은 구서술**이며, id/pw 로그인·`ChangePasswordAsync`·시드 비밀번호 서술은 현재 코드와 다르다. 해당 절을 근거로 삼기 전에 [40 §2.1](./40-database-firestore-and-storage-schema.md#21-users-문서-id--계정-id)과 `docs/design/wpf-it15-google-only-auth-design.md`를 확인한다([90 §1 "문서 동기화 지연"](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채) 등재).
+> ✅ 문서 동기화 상태(2026-07-29): **§1~§5 전부 it16 기준 최신**이다. §3~§5는 이날 it13~it16(Google SSO 단일 경로·진입 PIN·백엔드 프록시 경유 계정 CRUD·`advanced_user`)에 맞춰 **전면 재작성**됐다. 종전의 id/pw 로그인 흐름·`ChangePasswordAsync`·시드 계정 비밀번호·"SSO 미지원" 서술은 **이력**이며 아래 각 절에 "~에서 폐지"로 남겨 두었다.
+>
+> ⚠️ 단, [70 §6 "Firebase 초기화 실패 진단"](./70-logging-and-troubleshooting.md#6-firebase-초기화-실패-진단)은 **삭제된 `MCPhoto.Firebase` 기준의 구서술**이다(서비스 계정 키·`IsInitialized`·시드 인메모리 admin). 백엔드 미도달 시 동작은 [§4.5](#45-백엔드-미도달-시-동작-구-미초기화-폴백-재정의)를 근거로 삼는다.
 
 ---
 
@@ -183,128 +185,213 @@ public static bool CanWriteFrames(this UserRole role)
 
 ## 3. 로그인 / 로그아웃 흐름
 
-### 3.1 세션 단일 소스 = `SessionContext`
+> **it15 전면 개편(사실)**: ID/PW 로그인·회원가입·이메일 인증·비밀번호 재설정이 **클라·서버 양쪽에서 전량 삭제**됐다.
+> 남은 로그인 수단은 **Google SSO 하나**다(`src/MCPhoto.Core/Accounts/IAccountService.cs:11-21`,
+> `web/functions/src/routes/auth.ts:1-7`). 제거된 HTTP 경로는 410 스텁 없이 404로 떨어진다(`auth.ts:6`).
 
-계정 진실 소스는 `SessionContext.CurrentUser`(private set) 하나이며, 진입점은 `Login`/`Logout`/`Reset(clearUser)`뿐이다(`src/MCPhoto.App/SessionContext.cs:13-14`, `:47-59`, `:65-80`). 계정 수명은 촬영 세션보다 상위(앱 사용 동안 유지)이며(`:7-8`), 변경 시 `CurrentUserChanged` 이벤트로 통지한다(`:17`, `:50`, `:58`). 상단 바는 이 이벤트를 구독해 자동 갱신한다(`src/MCPhoto.App/AppShellViewModel.cs:98`, `:101-109`).
+### 3.1 세션 단일 소스와 토큰 보관 위치
 
-상단 바 계정 상태는 미러 없이 세션에서 직접 읽는다(`src/MCPhoto.App/AppShellViewModel.cs:59-66`):
-- `IsLoggedIn` = `CurrentUser != null`, `IsGuest` = `CurrentUser == null`, `IsPower` = `CurrentUser?.Role.IsPower() == true`.
-- 상단 바 좌측 라벨 `AccountLabel` = 비로그인 시 "로그인", 로그인 시 계정 ID(`:66`).
+계정 진실 소스는 두 개의 싱글턴으로 **역할이 나뉜다**. 혼동하지 않는다.
+
+| 홀더 | 무엇을 들고 있나 | 수명 | 근거 |
+| --- | --- | --- | --- |
+| `SessionContext` | `CurrentUser`(도메인 `User`) — 화면·권한 판정의 유일한 근거 | 앱 사용 동안(촬영 세션보다 상위) | `src/MCPhoto.App/SessionContext.cs:11-14`, `:7-8` |
+| `IBackendSession` | 로그인 JWT + 같은 `User` 참조 — HTTP `Authorization: Bearer` 조립용 | 앱 프로세스 수명(**메모리 전용, 디스크 미저장**) | `src/MCPhoto.Http/Session/IBackendSession.cs:6-9`, `Session/BackendSession.cs:9-42` |
+
+- `SessionContext.CurrentUser`는 `private set`이고 진입점은 `Login`/`Logout`/`Reset(clearUser)`뿐이다(`SessionContext.cs:14`, `:46-51`, `:53-59`, `:61-80`). 변경 시 `CurrentUserChanged`로 통지한다(`:17`, `:50`, `:58`).
+- 상단 바는 이 이벤트를 구독해 자동 갱신하고(`src/MCPhoto.App/AppShellViewModel.cs:140`, `:144-159`), 셸 `Dispose`에서 반드시 해제한다(`:477`).
+- 상단 바 계정 상태는 **미러 없이** 세션에서 직접 읽는다(`AppShellViewModel.cs:66-70`): `IsLoggedIn` = `CurrentUser != null`, `IsGuest` = `CurrentUser == null`, `IsPower` = `CurrentUser?.Role.IsPower() == true`. 좌측 라벨 `AccountLabel`은 비로그인 "로그인", 로그인 시 계정 ID(`:89`).
+- 계정이 바뀔 때마다 TempUser QR 사용량 상태를 재평가한다 — 로그아웃·비TempUser는 즉시 클리어, TempUser는 서버 1회 조회(fire-and-forget, 실패는 fail-open)(`AppShellViewModel.cs:152-158`, `:165-185`).
 
 ### 3.2 상단 바 계정 버튼 동작
 
-`OpenAccount` 커맨드(`src/MCPhoto.App/AppShellViewModel.cs:290-297`):
+`OpenAccount` 커맨드(`src/MCPhoto.App/AppShellViewModel.cs:413-421`):
 
 | 상태 | 좌상단 계정 버튼 클릭 결과 | 근거 |
 | --- | --- | --- |
-| 비로그인 | 로그인 페이지(오버레이 진입, `AppState.Login`) | `src/MCPhoto.App/AppShellViewModel.cs:296` |
-| 로그인 | 계정 팝오버 토글(`IsAccountPopupOpen`) | `:293-294` |
+| 비로그인 | 로그인 페이지(오버레이 진입, `AppState.Login`) | `AppShellViewModel.cs:420` |
+| 로그인 | 계정 팝오버 토글(`IsAccountPopupOpen`) | `:417-418` |
 
-팝오버 항목(`src/MCPhoto.App/MainWindow.xaml:53-78`):
+팝오버 항목 — **it15에서 3항목으로 축소**됐다(`src/MCPhoto.App/MainWindow.xaml:54-75`):
 
 | 항목 | 노출 조건 | 커맨드 → 이동 | 근거 |
 | --- | --- | --- | --- |
-| 비밀번호 변경 | 로그인 전원 | `OpenPasswordChangeCommand` → `Account(PasswordChange)` | `MainWindow.xaml:61-63`; `AppShellViewModel.cs:308-309` |
-| 계정 생성 | `IsPower` | `OpenAccountCreateCommand` → `Account(AccountCreate)` | `MainWindow.xaml:65-68`; `AppShellViewModel.cs:312-313` |
-| 관리자 도구 | `IsPower` | `OpenAdminToolsCommand` → `Account(Admin)` | `MainWindow.xaml:69-72`; `AppShellViewModel.cs:316-317` |
-| 로그아웃 | 로그인 전원 | `LogoutCommand` | `MainWindow.xaml:73-75`; `AppShellViewModel.cs:327-333` |
+| 계정 관리 | 로그인 전원 | `OpenAccountManageCommand` → `Account(Account)` | `MainWindow.xaml:62-64`; `AppShellViewModel.cs:431-433` |
+| 관리자 도구 | `IsPower` | `OpenAdminToolsCommand` → `Account(Admin)` | `MainWindow.xaml:66-69`; `AppShellViewModel.cs:435-437` |
+| 로그아웃 | 로그인 전원 | `LogoutCommand` | `MainWindow.xaml:70-72`; `AppShellViewModel.cs:446-453` |
 
-`Account` 페이지는 진입 모드(`AccountMode`: PasswordChange/AccountCreate/Admin)로 한 VM이 UI를 분기한다(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:13-23`, `:43-53`). 진입 모드는 셸이 VM 생성 직후 주입한다(`src/MCPhoto.App/AppShellViewModel.cs:191-196`, `:300-305`).
+- **폐지 이력**: "비밀번호 변경"·"계정 생성" 항목은 it15에서 사라졌다. `AccountMode` enum도 `PasswordChange`/`AccountCreate`가 제거돼 **`Account`/`Admin` 2값**만 남았다(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:13-20`).
+- `Account` 페이지는 여전히 단일 상태 + 진입 모드로 UI를 분기하며(`AccountViewModel.cs:41-49`), 모드는 셸이 VM 생성 직후 주입한다(`AppShellViewModel.cs:267-272`, `:423-429`).
+- `Account(Account)` 화면 구성: **① 내 계정 정보(읽기 전용)** = 아이디·이메일·로그인 방식·역할·가입일(`AccountViewModel.cs:53-66`, `Views/AccountView.xaml:13-49`) + **② PIN 변경**(`AccountViewModel.cs:158-212`). "로그인 방식"은 `AuthMethod.ToLabel()`로 **"Google SSO"**, 서버가 모르는 값을 보내면 **"알 수 없음"**(조용한 오인 방지, `src/MCPhoto.Core/Models/User.cs:36-48`).
+- `Account(Admin)` 화면: 사용자 관리 진입(`IsPower` 가드, `AccountViewModel.cs:219-224`), 전역 TempUser 한도(admin 전용, `:87`, `:230-264`), 앱 종료(`:227-228`).
+- 우상단 ⚙ 설정 버튼은 상단 바가 보이는 상태면 게스트 포함 누구나 누를 수 있고(`MainWindow.xaml:45-51`), 로그인 사용자만 PIN 게이트를 통과해야 한다([3.4](#34-진입-pin-게이트설정계정-관리)).
 
-### 3.3 로그인 실행
+### 3.3 로그인 실행 — Google SSO 단일 경로
 
-`LoginGuestViewModel.Login`(`src/MCPhoto.App/ViewModels/LoginGuestViewModel.cs:32-56`):
-1. `IAccountService.LoginAsync(id.Trim(), pw)` 호출(`:40`).
-2. `null`이면 "아이디 또는 비밀번호가 올바르지 않습니다." 표시(`:41-45`).
-3. 성공 시 `_shell.Session.Login(user)` → `CurrentUserChanged` 통지 → 상단 바 자동 갱신(`:46`).
-4. `ReturnFromOverlay()`로 진입 직전 화면 복귀(`:48`). 예외 시 "네트워크를 확인해 주세요." + `LogWarning`(`:50-54`).
+로그인 화면은 **"Google로 로그인" 버튼 하나**다. `AppSettings.GoogleClientId`가 비면(SSO opt-out, 브라우저 봉쇄 키오스크 배려) 버튼을 통째로 숨기고 "로그인이 구성되지 않았습니다" 안내만 남긴다
+(`src/MCPhoto.App/ViewModels/LoginGuestViewModel.cs:29-30`, `Views/LoginGuestView.xaml:20-36`, `src/MCPhoto.Core/Settings/AppSettings.cs:152`).
 
-"게스트로 계속" 버튼은 **폐지**되었다(촬영 게스트 직행, `src/MCPhoto.App/ViewModels/LoginGuestViewModel.cs:10-11`).
+**흐름**(`LoginGuestViewModel.LoginWithGoogle`, `:46-88` — `IsBusy` 재진입 가드):
 
-### 3.4 로그아웃 / 세션 유지 규칙(중요)
-
-| 트리거 | CurrentUser | 촬영 세션 데이터 | 근거 |
+| # | 단계 | 수행 주체 | 근거 |
 | --- | --- | --- | --- |
-| 팝오버 "로그아웃" | 해제(Logout) | 폐기(ReturnHome) | `src/MCPhoto.App/AppShellViewModel.cs:327-333` |
-| 사용자 취소(홈 버튼 등) | **유지** | 폐기 | `GoHome` → `ReturnHome("사용자 취소")` clearUser 미지정=false(`:276-277`, `:202-210`) |
+| 1 | PKCE `code_verifier`/`code_challenge`(S256)·`state`·`nonce` 생성 | 클라(순수 로직) | `src/MCPhoto.Core/Accounts/GoogleOAuthPkce.cs:23-35` |
+| 2 | 빈 loopback 포트 확보 → `http://127.0.0.1:{port}/`(localhost→::1 회피) | 클라 | `Services/GoogleSignInService.cs:140-152`, `GoogleOAuthPkce.cs:41-46` |
+| 3 | `HttpListener` 시작 → **시스템 기본 브라우저**로 authorize URL 오픈(`response_type=code`, `scope="openid email profile"`, `code_challenge_method=S256`) | 클라 | `GoogleSignInService.cs:58-75`, `:155-167`; `GoogleOAuthPkce.cs:14-17`, `:57-73` |
+| 4 | 콜백 수신 → `state` 대조 → `{code, codeVerifier, redirectUri, nonce}` 반환 | 클라 | `GoogleSignInService.cs:89-120` |
+| 5 | `POST /auth/google`(**API 키 헤더만, Bearer 없음** — 로그인 전 상태) | 클라 → 서버 | `src/MCPhoto.Http/HttpAccountService.cs:35-50`; `web/functions/src/routes/auth.ts:33-36` |
+| 6 | 미구성 확인(501) → 입력 형식 검증(400) → `getToken`으로 code 교환 → `verifyIdToken` + payload 재확인(aud·iss·exp·`email_verified`·nonce·hd) → 검증된 email(소문자) | 서버 | `auth.ts:39-41`, `:44-57`, `:60-84`; `services/googleAuth.ts:1-13`, `:18` |
+| 7 | 계정 매핑: email로 조회 → **있으면 그대로 로그인(DB write 없음)**, 없으면 **`temp_user`로 자동 생성** | 서버 | `services/accounts.ts:213-234`, `:240-249`, `:256-278` |
+| 8 | JWT 발급(HS256, `sub`=계정 id, `role`) → `{token, expiresIn, user}` | 서버 | `auth.ts:96-106`; `domain/jwt.ts:28-41` |
+| 9 | `IBackendSession.SignIn(token, user)` — JWT를 메모리에 보관 | 클라 | `HttpAccountService.cs:53-55` |
+| 10 | `_shell.Session.Login(user)` → `CurrentUserChanged` → 상단 바 갱신 → `ReturnFromOverlay()`로 직전 화면 복귀 | 클라 | `LoginGuestViewModel.cs:72-73`; `AppShellViewModel.cs:240-246` |
+
+**계정 자동 생성·매핑 규칙**(서버 권위, `web/functions/src/services/accounts.ts`):
+
+- 계정 문서 id는 **email local-part에서 파생**한다(소문자화 + `[A-Za-z0-9._-]` 외 제거, 3~40자 보정, 충돌 시 `-2`/`-3`…, 전부 제거되면 `g-{uuid8}`) — `web/functions/src/domain/accountId.ts`.
+- 신규 계정은 **무조건 `temp_user`**(`accounts.ts:264`). 승격은 관리자·매니저가 사용자 관리 화면에서 수동 지정한다([1.4](#14-역할-지정변경-매트릭스)).
+- **기존 계정의 재로그인은 `role`·`authMethod`를 바꾸지 않는다**(읽기 전용 경로 — 승격된 계정이 재로그인으로 강등되지 않는다, `accounts.ts:236-249`).
+- 동시 첫 로그인 경합은 `create`(문서 부재 시에만 성공) 실패 → 재조회 → 로그인으로 흡수한다(`:222-233`, `:270-276`).
+
+**오류·취소 처리**(모두 인라인 문구, 화면 유지):
+
+| 상황 | 코드 경로 | 화면 문구 |
+| --- | --- | --- |
+| 사용자 취소·타임아웃(3분)·`state` 불일치·인가 거부·code 없음 | `AcquireAuthorizationCodeAsync` → `null` | "Google 로그인이 취소되었습니다." (`LoginGuestViewModel.cs:55-60`) |
+| Google 검증 실패(허용 도메인 밖·email 미검증 등) → 서버 **401**(열거 방지 일반화) | `LoginWithGoogleAsync` → `null` | "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요." (`:65-70`; `HttpAccountService.cs:57-62`) |
+| 서버 SSO 미구성 → **501** | `GoogleSsoNotConfiguredException` | "Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요." (`:75-80`; `HttpAccountService.cs:63-68`) |
+| 네트워크·기타 오류 | 일반 `Exception` | "Google 로그인 중 오류가 발생했습니다. 네트워크를 확인해 주세요." (`:81-86`) |
+| `GoogleClientId` 미설정 | 버튼 자체 미노출 | "로그인이 구성되지 않았습니다. 관리자에게 문의하세요."(정적 안내, `LoginGuestView.xaml:32-36`) |
+
+- 리스너·CTS는 `try-finally`로 항상 정리한다(포트·핸들 누수 0, `GoogleSignInService.cs:128-133`). 토큰·code·verifier·state·nonce는 **로그에 남기지 않는다**(`:18` 주석, 서버는 `auth.ts:76-78`).
+- [닫기] 버튼은 항상 노출돼 로그인 실패·미구성 상태에서도 게스트 촬영으로 복귀할 수 있다(`LoginGuestViewModel.cs:90-91`).
+- **폐지 이력**: "게스트로 계속" 버튼은 it2에서 폐지(촬영 게스트 직행, `LoginGuestViewModel.cs:9-10`). id/pw 입력·회원가입·비밀번호 찾기 UI는 it15에서 폐지(`:11`).
+
+### 3.4 진입 PIN 게이트(설정·계정 관리)
+
+설정·계정 관리 진입 게이트는 **4자리 PIN 단일 경로**다(비밀번호 게이트는 it15에서 소멸). 판정은 `AppShellViewModel.EnsurePinGateAsync(User)` **한 곳**에 모여 있다(`src/MCPhoto.App/AppShellViewModel.cs:396-411`) — 두 진입로가 같은 메서드·같은 다이얼로그·같은 PIN(서버 `pinHash` 1개)을 쓴다.
+
+| 진입로 | 호출 지점 | PIN 보유(`HasPin=true`) | PIN 미설정(`HasPin=false`) | 게스트 |
+| --- | --- | --- | --- | --- |
+| 설정(⚙) | `OpenSettings`(`:376-384`) | **매번 PIN 확인** | 최초 설정 강제 | **무가드**(현행 유지) |
+| 계정 관리 | `AccountViewModel.OnEnterAsync`(`:109-116`) | 재확인 없이 진입 | 최초 설정 강제, 취소 시 직전 화면 복귀 | 도달 불가(로그인 전용) |
+
+- **fail-closed**: `IAccountService`·`IPinPromptDialogService`가 미등록이면 `false`를 반환해 진입을 거부한다(`AppShellViewModel.cs:400`).
+- 최초 설정 경로는 현재 PIN 확인 없이 `SetOwnPinAsync(uid, null, p)`를 호출하고, 성공 시 세션 로컬 `user.HasPin = true`로 전환한다(데드락 방지, `:405-409`).
+- 다이얼로그 `PinPromptWindow`는 확인/최초설정 2모드이며, it15 §5.6 완화 2건을 보유한다: **연속 5회 불일치 시 창 자동 닫힘**(게이트 미통과)과 **불일치마다 1.5초 입력 비활성**(`src/MCPhoto.App/Views/PinPromptWindow.xaml.cs:23`, `:26`, `:117-127`).
+- 네트워크·서버 오류(PIN 미설정 409 포함)는 **실패 횟수에 세지 않고** 게이트도 열지 않는다("확인할 수 없습니다. 네트워크를 확인하세요.", `PinPromptWindow.xaml.cs:129-133`) — 정상 사용자가 장애로 잠기지 않게 하면서 fail-closed를 유지한다.
+- 서버는 **계정 잠금을 두지 않는다**(타인 계정 락아웃=DoS 도입 위험, `web/functions/src/services/accounts.ts:86` 주석). 브루트포스 완화는 위 클라 2건이 전부다 → [§5](#5-향후-개선-여지현재-비범위).
+
+### 3.5 로그아웃 / 세션 유지 규칙(중요)
+
+| 트리거 | `SessionContext.CurrentUser` | 촬영 세션 데이터 | 근거 |
+| --- | --- | --- | --- |
+| 팝오버 "로그아웃" | 해제(`Logout`) | 폐기(`ReturnHome`) | `src/MCPhoto.App/AppShellViewModel.cs:446-453` |
+| 사용자 취소(홈 버튼 등) | **유지** | 폐기 | `GoHome` → `ReturnHome("사용자 취소")`, `clearUser` 기본 false(`:370-371`, `:296-304`) |
 | 촬영 완료 후 | **유지** | (다음 세션 전까지 보존) | 촬영 후 로그인 유지(it5 B8) — 로그아웃 트리거 없음 |
-| 유휴 타임아웃 만료 | **유지(로그아웃 없음)** | 폐기 | `ReturnHome("유휴 타임아웃", clearUser: false)`(`src/MCPhoto.App/AppShellViewModel.cs:260`) |
-| 유휴 경고 "메인 화면으로" | **유지** | 폐기 | `GoHomeFromIdle` → `clearUser: false`(`:348-352`) |
-| 전역 예외 복구 | **유지** | 폐기 | `ReturnHome("전역 예외 복구")` clearUser=false(`src/MCPhoto.App/App.xaml.cs:117`) |
+| 유휴 타임아웃 만료 | **유지(로그아웃 없음)** | 폐기 | `ReturnHome("유휴 타임아웃", clearUser: false)`(`:354`) |
+| 유휴 경고 "메인 화면으로" | **유지** | 폐기 | `GoHomeFromIdle` → `clearUser: false`(`:467-472`) |
+| 전역 예외 복구 | **유지** | 폐기 | `ReturnHome("전역 예외 복구")` `clearUser`=false(`src/MCPhoto.App/App.xaml.cs:121-132`) |
 
-핵심(it8 A1, 사실): **유휴 타임아웃은 로그아웃하지 않는다.** 유휴는 2분 무동작 → 경고 팝업 + 10초 카운트다운 → 만료 시 홈 복귀이며(`src/MCPhoto.App/AppShellViewModel.cs:26-30`, `:232-262`), 어느 경로에서도 `clearUser`는 `false`다(`:260`, `:351`). 주석 "로그아웃 절대 금지(it8 A1)"(`:260`). `Reset`은 `clearUser=true`일 때만 `Logout`을 호출하므로(`src/MCPhoto.App/SessionContext.cs:65-80`), 유휴/취소 경로에서는 로그인이 보존된다.
+핵심(it8 A1, 사실): **유휴 타임아웃은 로그아웃하지 않는다.** 유휴는 2분 무동작 → 경고 팝업 + 10초 카운트다운 → 만료 시 홈 복귀이며(`AppShellViewModel.cs:29-33`, `:330-356`), 어느 경로에서도 `clearUser`는 `false`다(`:354`, `:471`). 주석 "로그아웃 절대 금지(it8 A1)"(`:354`). `Reset`은 `clearUser=true`일 때만 `Logout`을 호출하므로(`SessionContext.cs:78-79`), 유휴/취소 경로에서는 로그인이 보존된다.
 
-> 참고: `clearUser=true`로 실제 로그아웃까지 하는 경로는 코드상 존재하지 않는다(모든 `ReturnHome`/`Reset` 호출이 기본 false 또는 명시 false). 명시적 "로그아웃" 버튼만 `SessionContext.Logout()`을 직접 호출한다(`src/MCPhoto.App/AppShellViewModel.cs:331`).
+> 참고: `clearUser=true`로 실제 로그아웃까지 하는 경로는 코드상 존재하지 않는다(모든 `ReturnHome`/`Reset` 호출이 기본 false 또는 명시 false). 명시적 "로그아웃" 버튼만 `SessionContext.Logout()`을 직접 호출한다(`AppShellViewModel.cs:451`).
+
+> ⚠️ **로그아웃이 JWT를 비우지 않는다(사실, it15 이후 잠복)**: `IBackendSession.Clear()`는 **프로덕션 호출자가 0**이다 — 로그아웃은 `SessionContext`만 비우고 `BackendSession`의 토큰은 그대로 남는다(`AppShellViewModel.cs:446-453` vs `src/MCPhoto.Http/Session/BackendSession.cs:34-41`). 계정 조작 라우트는 화면 진입 자체가 `CurrentUser`를 요구해 UI 경로로는 도달하지 않지만, **업로드는 "선택적 Bearer"** 라서(`HttpBackendClient.cs:74-85`, `HttpFirebaseClient.cs:96`, `:143`) 로그아웃 후 게스트 촬영의 `uploads/prepare`·`uploads/commit`에 **직전 계정의 JWT가 그대로 붙는다** → 서버가 그 계정 소유로 처리한다(TempUser면 `qrUsedCount`도 증가). JWT 자체 만료는 기본 8시간(`web/functions/src/config.ts:78`). [90 §1](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채) 등재.
 
 ---
 
 ## 4. 계정 저장소
 
+> **it15 구조 변경(사실)**: 레거시 Firebase 직결 경로(`MCPhoto.Firebase` 프로젝트)가 **삭제**됐다. 앱은 Firestore SDK를 전혀 쓰지 않고 **백엔드 HTTPS API(Cloud Functions)만** 호출한다. `AppSettings.UseBackend` 플래그와 `serviceAccountKey.json`도 함께 사라졌다(`src/MCPhoto.App/ServiceRegistration.cs:95-96` 주석; `src/MCPhoto.Http/HttpAccountService.cs:22`).
+
 ### 4.1 저장 위치·DTO
 
-- 컬렉션: Firestore `users`, 문서 id = 계정 id(`src/MCPhoto.Firebase/AccountService.cs:16`, `:43`).
-- DTO: `UserDoc { id, password(평문), role(문자열), createdAt }`(`src/MCPhoto.Firebase/Dto/UserDoc.cs:6-20`).
-- 도메인 매핑: `ToUser`/`ParseRole`(`src/MCPhoto.Firebase/AccountService.cs:118-124`).
+- 컬렉션: Firestore `users`, 문서 id = 계정 id(email local-part 파생, [3.3](#33-로그인-실행--google-sso-단일-경로)). 서버 상수 `COLLECTION`(`web/functions/src/services/accounts.ts:28`).
+- 저장 문서 `UserDoc` = `{ id, role, createdAt, email, authMethod, pinHash?, qrUsedCount? }`(`web/functions/src/services/dto.ts:10-28`). **`password`·`emailVerified` 필드는 it15에서 삭제**됐다(`dto.ts:1-6`). 필드별 상세는 [40 §2.1](./40-database-firestore-and-storage-schema.md#21-users-문서-id--계정-id) — 여기서 중복하지 않는다.
+- 와이어 응답 `UserResponse` = `{ id, role, createdAt(ISO8601), email, authMethod, hasPin }`(`dto.ts:63-73`). `hasPin`은 `pinHash != null` 파생값이며 **해시 원문은 어떤 응답에도 실리지 않는다**(`services/accounts.ts:31-45`).
+- 클라 도메인 `User` = `{ Id, Role, CreatedAt, Email, AuthMethod, HasPin }`(`src/MCPhoto.Core/Models/User.cs:17-33`). 매핑은 `HttpAccountService.ToUser`(`:182-194`) 한 곳이며, `AuthMethod`는 `"google"`만 `Google`로 파싱하고 그 외는 **`Unknown`("알 수 없음")** 이다(`User.cs:39-40`) — 서버가 kakao·apple을 붙이기 전까지 조용한 오인을 막는다.
 
-### 4.2 시드 계정(기본 관리자)
+### 4.2 시드 계정(기본 관리자) — **it15에서 폐지됨**
 
-| 항목 | 값 | 근거 |
-| --- | --- | --- |
-| id | `devmcjo` | `src/MCPhoto.Firebase/AccountService.cs:17` |
-| 비밀번호 | `1111` | `:18` |
-| 역할 | `admin` | `:39`, `:110` |
+| 시점 | 동작 |
+| --- | --- |
+| ~it14 | 시드 계정 `devmcjo`/비밀번호 `1111`(역할 admin). 온라인이면 시작 시 `EnsureSeedAccountAsync`가 문서를 upsert하고, 미초기화/오프라인이면 `LoginAsync`가 이를 **인메모리 admin**으로 허용했다 |
+| **it15~(현재)** | **전부 삭제**. 비밀번호 자체가 없어져 시드 개념이 소멸했다. `EnsureSeedAccountAsync`·오프라인 시드 폴백·부트스트랩 호출부 모두 제거됐다 |
 
-- 온라인(Firebase 초기화됨): 앱 시작 시 `EnsureSeedAccountAsync`가 문서 없으면 생성하고 `"시드 계정 생성: {Id}"` 로그를 남긴다(`src/MCPhoto.Firebase/AccountService.cs:99-116`). 앱 부트스트랩에서 호출(`src/MCPhoto.App/App.xaml.cs:73`, `:79-91`; 실패 시 `"시드 계정 보장 실패(오프라인 가능)"` 경고).
-- 오프라인/미초기화: `EnsureSeedAccountAsync`는 no-op이고(`src/MCPhoto.Firebase/AccountService.cs:101`), 대신 `LoginAsync`가 `devmcjo/1111`을 **인메모리 admin으로** 허용한다(`:35-40`). 그 외 계정은 오프라인에서 로그인 불가.
+- 삭제 흔적은 앱 부트스트랩 주석에 남아 있다: "it15: 시드 계정 보장 삭제 — ID/PW 계정이 폐지되어 시드 개념 자체가 소멸"(`src/MCPhoto.App/App.xaml.cs:73-74`).
+- **최초 admin 부트스트랩은 마이그레이션 스크립트가 담당한다**: `web/functions/scripts/migrate-google-only-accounts.mjs`(`--admin-email`/`--admin-id`, 기본값 `devmcjo@gmail.com` / `devmcjo` — `web/functions/src/domain/migration.ts:39-40`). HTTP API로는 admin을 지정할 수 없다(`canSetRole` 규칙 1, [1.4](#14-역할-지정변경-매트릭스)).
+- 신규 계정은 Google SSO 최초 로그인 시 서버가 `temp_user`로 자동 생성한다 — "미리 만들어 두는 계정"은 존재하지 않는다.
 
-### 4.3 계정 CRUD(`IAccountService`)
+### 4.3 계정 CRUD(`IAccountService`) — 7메서드
 
-`src/MCPhoto.Core/Accounts/IAccountService.cs` + 구현 `src/MCPhoto.Firebase/AccountService.cs`:
+`src/MCPhoto.Core/Accounts/IAccountService.cs` + 유일 구현 `src/MCPhoto.Http/HttpAccountService.cs`. 모든 호출은 백엔드 경유이며, **역할 게이트는 서버가 JWT의 `role`로 재검증**한다(클라가 보낸 actingRole은 존재하지 않는다, `HttpAccountService.cs:21`).
 
-| 메서드 | 동작 | 미초기화(Db null) 처리 | 근거 |
-| --- | --- | --- | --- |
-| `LoginAsync(id, pw)` | 평문 비교, 성공 시 User·실패 시 null | 시드만 인메모리 허용, 그 외 null | `AccountService.cs:33-48` |
-| `CreateAsync(id, pw, role, actingRole)` | 역할 게이트→중복 확인→문서 생성 | 게이트 통과 후 `EnsureDb` 예외 | `:50-66` |
-| `ChangePasswordAsync(id, newPw)` | `password` 필드 업데이트 | `EnsureDb` 예외 | `:68-73` |
-| `GetAllAsync()` | 전체 계정 목록 | **빈 목록 반환**(예외 아님) | `:75-80` |
-| `DeleteAsync(id)` | cascade 프레임 삭제 후 계정 문서 삭제 | `EnsureDb` 예외(cascade 전 프레임 삭제는 미초기화 시 no-op) | `:82-90` |
-| `SetRoleAsync(id, role)` | `role` 필드 업데이트 | `EnsureDb` 예외 | `:92-97` |
-| `EnsureSeedAccountAsync()` | 시드 없으면 생성 | no-op | `:99-116` |
+| 메서드 | HTTP | 서버 게이트 | 클라 실패 매핑 | 근거 |
+| --- | --- | --- | --- | --- |
+| `LoginWithGoogleAsync(code, verifier, redirectUri, nonce?)` | `POST /auth/google` (API 키) | 없음(로그인 전) | 401→`null`, 501→`GoogleSsoNotConfiguredException`, 그 외→도메인 예외 | `HttpAccountService.cs:35-73`; `routes/auth.ts:33-108` |
+| `GetAllAsync()` | `GET /accounts` (Bearer) | `requireBearer` + `requirePower` | 403→`UnauthorizedAccessException` (**빈 목록 폴백 없음**) | `:75-88`; `routes/accounts.ts:33-39` |
+| `DeleteAsync(id)` | `DELETE /accounts/{id}` | `requirePower` + `canManage` + 자기 자신 403 | 403→`UnauthorizedAccessException`, 404→`InvalidOperationException` | `:90-103`; `routes/accounts.ts:94-106` |
+| `SetRoleAsync(id, role)` | `PATCH /accounts/{id}/role` | `requirePower` + `canSetRole` 매트릭스 | 상동 | `:105-118`; `routes/accounts.ts:110-122` |
+| `VerifyPinAsync(id, pin)` | `POST /accounts/me/pin/verify` | `requireBearer`(본인 `principal.id` 고정) | 401→`false`, 409(PIN 미설정)·네트워크→**예외 전파**(fail-open 금지) | `:122-143`; `routes/accounts.ts:54-69` |
+| `SetOwnPinAsync(id, currentPin?, newPin)` | `PUT /accounts/me/pin` | `requireBearer`(본인). 기존 PIN 있으면 `currentPin` 확인 | 401(현재 PIN 불일치)·404→`InvalidOperationException`, 400→`ArgumentException` | `:145-162`; `routes/accounts.ts:73-91` |
+| `ResetPinAsync(targetId, newPin)` | `PUT /accounts/{id}/pin` | **`requirePower`(it16 추가)** + `canManage`, 자기 자신은 400 | 403→`UnauthorizedAccessException` | `:164-179`; `routes/accounts.ts:131-148` |
 
-쓰기류는 `EnsureDb()`가 미초기화 시 `InvalidOperationException("Firebase 미초기화 — 계정 쓰기 불가(서비스 계정 키 필요).")`를 던진다(`src/MCPhoto.Firebase/AccountService.cs:126-130`). UI는 이를 잡아 사용자 메시지로 노출한다(예: `AccountViewModel.CreateAccount`의 `InvalidOperationException` 캐치, `src/MCPhoto.App/ViewModels/AccountViewModel.cs:159-163`).
+- **없는 메서드**(전부 it15 폐지): `LoginAsync`·`VerifyPasswordAsync`·`RegisterAsync`·`CreateAsync`·`ChangePasswordAsync`·`EnsureSeedAccountAsync`와 이메일 인증/재설정 계열. 서버 라우트도 함께 사라졌다(`routes/accounts.ts:5`, `routes/auth.ts:4-6`).
+- `me/pin*` 라우트는 파라미터 라우트(`/:id/pin`)보다 **먼저** 등록해 `"me"`가 `:id`로 잡히지 않게 한다(`routes/accounts.ts:50`).
+- HTTP 상태 → 예외 변환은 `HttpBackendClient.MapToDomainException` 한 곳(403→`UnauthorizedAccessException`, 409·404·그 외→`InvalidOperationException`, 400→`ArgumentException`, `:189-196`). **401은 호출부가 결정**한다(로그인만 `null`, PIN 확인은 `false`).
+- Bearer 필수 호출인데 토큰이 없으면 요청 조립 단계에서 `UnauthorizedAccessException("로그인이 필요합니다(토큰 없음).")`로 즉시 거부한다(`HttpBackendClient.cs:109-113`).
 
 ### 4.4 계정 삭제 시 cascade(소유 프레임 동반 삭제)
 
-`AccountService.DeleteAsync`가 계정 문서 삭제 **전에** `_frames.DeleteAllByUserAsync(id)`를 호출한다(`src/MCPhoto.Firebase/AccountService.cs:85-89`). 실패해도 계정 삭제는 진행하고 `"cascade 프레임 삭제 실패: {Id}"` 경고만 남긴다(`:87`).
+cascade는 **서버가 수행**한다(it15 이후 클라는 `DELETE /accounts/{id}` 한 번만 호출, `HttpAccountService.cs:94-97`).
 
-`FrameRepository.DeleteAllByUserAsync`(`src/MCPhoto.Firebase/FrameRepository.cs:106-118`):
-- Firestore `frameTemplates`에서 `userId == id` 문서 전부 삭제(개별 실패는 `"프레임 문서 삭제 실패"` 경고).
-- Storage `frames/{userId}/` 프리픽스 전체 삭제(§F8 cascade, 실패 시 `"프레임 Storage 삭제 실패"` 경고).
+`deleteAccount`(`web/functions/src/services/accounts.ts:149-160`):
+1. 대상 역할 조회(없으면 404) → `canManage(actor.role, targetRole)` 위반이면 **403**.
+2. `deleteAllFramesByUser(targetId)` — 소유 프레임 정리.
+3. `users/{id}` 문서 삭제.
 
-UI 안내: `UserMgmtViewModel.DeleteUser`는 성공 시 "`{id}` 삭제됨(소유 프레임 포함)."을 표시하고, 자기 계정 삭제를 막는다(`src/MCPhoto.App/ViewModels/UserMgmtViewModel.cs:56-72`).
+`deleteAllFramesByUser`(`web/functions/src/services/frames.ts:204-215`):
+- Firestore `frameTemplates`에서 `userId == id` 문서를 **배치 삭제**(`:206-209`).
+- Storage `frames/{userId}/` 프리픽스 전체 삭제. **이 단계 실패만 무시**하고 진행한다(`:210-214`).
 
-### 4.5 미초기화 폴백 요약
+> ⚠️ **it15에서 실패 의미가 바뀌었다**(사실): 종전 클라 구현은 프레임 삭제가 실패해도 계정 삭제를 강행하고 경고만 남겼다. 현재는 **Firestore 배치 삭제가 실패하면 `deleteAccount` 전체가 예외로 중단**되어 계정 문서가 남는다 — "계정만 지워지고 프레임이 고아로 남는" 상태가 발생하지 않는 방향이다. Storage 삭제 실패만 종전과 같이 무시된다.
 
-| 소스 | Firebase 초기화됨 | 미초기화(키 없음/오프라인) |
+UI 안내: `UserMgmtViewModel.DeleteUser`는 자기 계정 삭제를 막고(`src/MCPhoto.App/ViewModels/UserMgmtViewModel.cs:113`), `CanManage` 1차 가드를 건 뒤(`:115`), 성공 시 "`{id}` 삭제됨(소유 프레임 포함)."을 표시한다(`:120`).
+
+### 4.5 백엔드 미도달 시 동작 (구 "미초기화 폴백" 재정의)
+
+`Firebase 초기화됨/미초기화` 축은 **소멸했다** — `serviceAccountKey.json`·`FirebaseClient.Firestore is null` 판정·`AppSettings.UseBackend` 분기가 모두 사라졌기 때문이다. 현재의 축은 **백엔드 도달 가능/불가**다.
+
+| 상황 | 판정 지점 | 동작 |
 | --- | --- | --- |
-| 시드 계정 | Firestore에 upsert | `LoginAsync`가 인메모리 admin 제공 |
-| 일반 계정 로그인 | Firestore 조회 | 불가(null) |
-| 계정 목록(GetAll) | 조회 | 빈 목록 |
-| 계정 쓰기(생성/변경/삭제/역할) | 수행 | `InvalidOperationException` |
+| `BackendBaseUrl`이 빈 값 | `ServiceRegistration.cs:103-108`(비어 있으면 `BaseAddress` 미설정) | 상대 URL 요청을 조립할 수 없어 `InvalidOperationException`으로 즉시 실패 |
+| 네트워크 오류·타임아웃(100초) | `HttpBackendClient.cs:136-141` | `InvalidOperationException("백엔드에 연결할 수 없습니다.")` |
+| 미로그인 상태에서 Bearer 필수 호출 | `HttpBackendClient.cs:109-113` | `UnauthorizedAccessException("로그인이 필요합니다(토큰 없음).")` |
+| 로그인 시도 중 서버 미도달 | `LoginGuestViewModel.cs:81-86` | "Google 로그인 중 오류가 발생했습니다. 네트워크를 확인해 주세요."(화면 유지) |
+| 사용자 목록 조회 실패 | `UserMgmtViewModel.cs:100-104` | "사용자 목록을 불러올 수 없습니다."(**빈 목록 폴백 없음** — 종전 `GetAllAsync`의 빈 배열 폴백은 폐지) |
+| PIN 게이트 확인 불가 | `PinPromptWindow.xaml.cs:129-133` + `EnsurePinGateAsync` | **fail-closed** — 진입 거부, 실패 횟수 미가산 |
+| TempUser QR 한도 조회 실패 | `AppShellViewModel.cs:181-184` | **fail-open** — 앱은 허용하고 서버가 업로드 단계에서 최종 거부(한도 진실원은 서버) |
+| 업로드(게스트 포함) | `HttpFirebaseClient.cs:96`, `:143` | 선택적 Bearer — 토큰 있으면 부착, 없으면 익명 통과. 실패는 `QrPopup`이 우아 처리(로컬 보존) |
 
-`Db is null` 판정은 `FirebaseClient.Firestore`가 미초기화 시 null이라는 사실에 기반한다(`src/MCPhoto.Firebase/FirebaseClient.cs:26-30`, `:47-52`). Firebase 초기화 진단은 [70 로깅/이슈 진단 §6](./70-logging-and-troubleshooting.md#6-firebase-초기화-실패-진단)을 참조.
+- 로그인 자체가 불가능하므로 **오프라인에서는 어떤 계정으로도 로그인할 수 없다**(인메모리 폴백 없음). 게스트 촬영은 계속 가능하다.
+- 진단은 [70 §1(로그 위치)](./70-logging-and-troubleshooting.md#1-로그-파일-실제-위치-제일-먼저-볼-것)·[§5(로그 키워드)](./70-logging-and-troubleshooting.md#5-로그-키워드-빠른-색인)를 쓴다. **70 §6은 삭제된 `MCPhoto.Firebase` 기준의 구서술**이라 근거로 삼지 않는다(문서 상단 경고 참조).
 
 ---
 
 ## 5. 향후 개선 여지(현재 비범위)
 
-아래는 코드상 미구현이며, 현재 동작을 근거로 정리한 개선 후보다(일부 "가정" 표시).
+아래는 코드상 미구현이며, 현재 동작을 근거로 정리한 개선 후보다(일부 "가정" 표시). **해소된 항목은 목록에서 걷어내고 이력만 취소선으로 남긴다.** 착수 대기열은 [90 §1](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채)이 단일 진실이므로 여기서 중복 나열하지 않는다.
 
 | 항목 | 현재 상태(사실) | 개선 여지 |
 | --- | --- | --- |
-| 비밀번호 해싱 | 평문 저장·비교(`User.cs:11-12`, `AccountService.cs:46`) | 배포 시 해싱 필요 — 소스 주석이 "후순위"로 명시(`User.cs:11`) |
-| 세션 만료 | 유휴는 홈 복귀만, 로그인은 무기한 유지(`AppShellViewModel.cs:260`) | (가정) 파워 계정 자동 로그아웃/타임아웃 정책 부재 |
-| SSO / 외부 인증 | id/pw 단일 방식만(`IAccountService.LoginAsync`) | (가정) SSO·OAuth 미지원 |
-| 로그인 시도 제한 | 시도 횟수 제한·잠금 없음(`LoginGuestViewModel.Login`) | (가정) 브루트포스 방어 부재 — 단, 키오스크·평문 전제라 우선순위 낮음 |
-| 설정 페이지 권한 게이트 | 역할 검사 없음(`AppShellViewModel.cs:283-287`) | (가정) 운영자 전용 게이트 검토 여지 |
+| PIN 서버 측 시도 제한 | 서버 잠금 **없음**(`services/accounts.ts:86` 주석 — 계정 단위 잠금은 타인 락아웃=DoS 도입). 완화는 클라 2건(5회 실패 시 창 닫힘 + 1.5초 쿨다운)뿐이며 앱을 다시 열면 카운터가 초기화된다 | 4자리 = 10,000 조합. 물리 접근자의 반복 시도는 여전히 가능 → IP/계정 단위 rate limit(Cloud Armor 등) 검토([it15 설계 §5.6](../design/wpf-it15-google-only-auth-design.md) R1) |
+| admin PIN 분실 시 앱 내 복구 경로 | **없음**. 자기 자신 대상 PIN 재설정은 서버가 400으로 거부하고(`routes/accounts.ts:141-143`), 타 계정 재설정(E3)은 `canManage`상 admin을 대상으로 삼을 수 없다 | 현재 유일한 복구는 CLI: `migrate-google-only-accounts.mjs --clear-pin <id> --apply`([USER-ACTIONS D1-7](../USER-ACTIONS.md)). 앱 내 복구(예: 두 번째 admin 승인)는 미구현 |
+| 로그아웃 시 JWT 미소거 | `IBackendSession.Clear()` 호출자 0 — 로그아웃 후에도 토큰이 메모리에 남고, 선택적 Bearer를 쓰는 업로드에 붙는다([3.5](#35-로그아웃--세션-유지-규칙중요)) | `AppShellViewModel.Logout`에서 `Clear()` 호출(또는 `SessionContext.CurrentUserChanged` 구독으로 자동 소거). [90 §1](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채) 등재 |
+| 세션 만료 | 유휴는 홈 복귀만, 로그인은 앱 수명 동안 유지(`AppShellViewModel.cs:354`). 서버 JWT는 기본 8시간 만료(`web/functions/src/config.ts:78`)이나 클라에 **갱신·만료 감지 경로가 없다** | (가정) 만료 후 첫 계정 조작이 401로 실패할 때 "다시 로그인" 유도 UX 부재. 파워 계정 자동 로그아웃 정책도 없음 |
+| 설정 페이지 역할 게이트 | 역할 검사 없음 — 로그인 사용자는 PIN, 게스트는 무가드(`AppShellViewModel.cs:376-384`) | (가정) 운영자 전용 게이트 검토 여지. 키오스크 운영 동선상 현행 유지가 기본 |
+| 인증 수단 확장 | `authMethod`는 `"google"` 고정. 클라 `ParseAuthMethod`는 그 외 값을 `Unknown`으로 떨어뜨린다(`User.cs:39-40`) | Kakao·Apple 추가 시 enum 값 + 매핑 1줄 + 서버 provider 검증이 필요. 웹·Android 확장은 OAuth 클라이언트 유형이 별도([90 §7](./90-roadmap-and-future-work.md#7-향후-플랫폼-확장--웹--android-추후-논의)) |
+| ~~비밀번호 해싱~~ | **소멸(it15)**: 비밀번호 인증이 폐지돼 저장할 비밀번호가 없다. 남은 자격증명 `pinHash`는 bcrypt(`web/functions/src/domain/password.ts`) | — |
+| ~~SSO / 외부 인증 미지원~~ | **해결(it15)**: Google SSO가 **유일한** 로그인 수단이다([3.3](#33-로그인-실행--google-sso-단일-경로)) | 추가 IdP는 위 "인증 수단 확장" 항목 |
+| ~~로그인 시도 제한(id/pw 브루트포스)~~ | **소멸(it15)**: id/pw 로그인 경로가 없다. Google이 인증 시도를 책임진다 | 게이트 브루트포스는 위 "PIN 서버 측 시도 제한" 항목으로 대체 |
 | ~~역할 강등/admin 위임~~ | **해결(it13 도입 · it16 완화)**: 사용자 관리 목록의 역할 콤보로 승격·강등을 모두 지정한다([1.4](#14-역할-지정변경-매트릭스)). admin 위임(→admin 지정)은 여전히 불가(**최종 1인** 규칙, 서버·클라 공통 거부) | admin 이관이 필요해지면 마이그레이션 스크립트 경로만 존재(HTTP API 불가) |

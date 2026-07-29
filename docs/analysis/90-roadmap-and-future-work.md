@@ -4,7 +4,7 @@
 |------|-----|
 | 문서 | 알려진 이슈·기술 부채·개선 예정·비범위 |
 | 범위 | 미해결/대기 항목의 단일 집합소. 완료되면 이 문서에서 제거하고 해당 세부 문서로 반영 |
-| 최종 업데이트 | 2026-07-29 (it16 — 해결 2건 등재 + 이연 7건·비범위 5건 추가) |
+| 최종 업데이트 | 2026-07-29 (it16 — 해결 2건 등재 + 이연 7건·비범위 5건 추가 / 60번 §3~§5 문서 동기화 해소 + 신규 잠복 1건 등재) |
 | 갱신 규칙 | 이슈 발견·수정·범위 결정 시 즉시 이 문서 갱신. "상태" 컬럼 유지 |
 
 ---
@@ -15,8 +15,8 @@
 |------|------|------|------|
 | ~~프레임 로컬 삭제 안 됨~~ | 썸네일 `Image`가 png 파일을 잠가 `File.Delete` 실패(예외 삼킴) → png 잔존 | `Views/FrameSelectView.xaml`, `Core/Frames/LocalFrameStore.cs`, `ViewModels/FrameSelectViewModel.cs` | **수정 완료(2026-07-23)**: `FilePathToImageConverter`(OnLoad+IgnoreImageCache)로 파일 잠금 해소 → 삭제 성공. `DeleteLocal`은 png 존재 여부로 정직 반환, `ConfirmDelete`가 실패 시 안내(성공 오인 금지) |
 | ~~설정 진입 권한 게이트~~ | 게스트 QR/Firebase 소스단 off(ini 불변) + 로그인 시 비밀번호 가드 | `SettingsViewModel`, `SettingsView`, `ResultViewModel` | **완료(2026-07-23, 보완#1)** |
-| 문서 동기화 지연 | 셔터음(#7)·권한게이트(보완#1)·설정 레이아웃이 11·12 세부 문서에 아직 미반영. **추가(it16 확인)**: [60](./60-auth-accounts-and-roles.md) **§3~§5가 it13~it15 미반영**(id/pw 로그인 흐름·`ChangePasswordAsync`·시드 비밀번호·"SSO 미지원" 서술이 현재 코드와 다르다). §1·§2는 it16 기준 최신 | `docs/analysis/11`, `docs/analysis/12`, `docs/analysis/60` §3~§5 | **대기**: 60번 §3~§5는 Google SSO·PIN·백엔드 프록시 서술로 재작성 필요(다음 인증 관련 작업 시 함께) |
-| 비밀번호 평문 저장 | `users` 문서에 비밀번호 평문(MVP) | `Firebase/AccountService.cs`, `web/firestore.rules` | 개선 예정(해시/솔트, 규칙 강화) |
+| 문서 동기화 지연 | 셔터음(#7)·권한게이트(보완#1)·설정 레이아웃이 11·12 세부 문서에 아직 미반영. ~~60번 §3~§5가 it13~it15 미반영~~ → **해소(2026-07-29)**. **추가 발견**: [70 §6 "Firebase 초기화 실패 진단"](./70-logging-and-troubleshooting.md#6-firebase-초기화-실패-진단)이 **삭제된 `MCPhoto.Firebase` 기준 구서술**(서비스 계정 키 탐색·`IsInitialized` 파급·시드 인메모리 admin)이라 현재 코드와 다르다 | `docs/analysis/11`, `docs/analysis/12`, `docs/analysis/70` §6 | **부분 해소**: [60](./60-auth-accounts-and-roles.md) §3~§5를 Google SSO 단일 경로·진입 PIN 게이트·백엔드 API 계정 저장소로 **전면 재작성 완료**(백엔드 미도달 시 동작이 구 "미초기화 폴백"을 대체, 시드 계정 절은 "폐지됨" 이력으로 정리). 11·12와 **70 §6은 대기** — 70 §6은 [60 §4.5](./60-auth-accounts-and-roles.md#45-백엔드-미도달-시-동작-구-미초기화-폴백-재정의)로 대체 서술 후 폐기/재작성 필요 |
+| ~~비밀번호 평문 저장~~ | `users` 문서에 비밀번호 평문(MVP) | (삭제됨) `Firebase/AccountService.cs` | **해소(it15, 2026-07-28)**: 비밀번호 인증 자체가 폐지됐다. `users.password` 필드가 사라지고 자격증명은 bcrypt `pinHash` 하나만 남았으며, 평문을 다루던 `MCPhoto.Firebase.AccountService`는 프로젝트째 삭제됐다. 항목 소멸(해시/솔트 개선 불요) |
 | 인스톨러 self-contained 불일치 | `installer/MCPhoto.iss` 주석은 `--self-contained false` 예시, 실제 `publish.ps1`은 `true`(단일 파일) | `installer/MCPhoto.iss`, `publish.ps1` | 확정 필요(배포 방식 통일) |
 | ~~ffprobe 잔존~~ | `tools/ffmpeg/ffprobe.exe` 코드 미사용 | `tools/ffmpeg/` | **정리 완료(2026-07-23)**: 삭제 |
 | ~~Preview 데드코드~~ | `PreviewView`/`PreviewViewModel` 미매핑 | — | **정리 완료(2026-07-23)**: 파일·DI 등록 제거 |
@@ -33,6 +33,7 @@
 | `MainWindow`의 표시모드·기하 책임이 코드비하인드에 남음 | it16에서 **판정**은 순수 정책(`DisplayApplyPolicy`)으로 뽑았지만 **적용**(`WindowStyle`/`WindowState`/`Left`·`Top`·`Width`·`Height`)은 여전히 `MainWindow` 코드비하인드라 단위 테스트 불가 영역이 남는다 | `App/MainWindow.xaml.cs` | 대기: `IWindowGeometryService` 류 추상화는 별 이터레이션 과제 |
 | 창 이동·리사이즈 시 `WindowBounds` 실시간 반영 없음 | 캡처 시점은 **설정 저장 시**와 **종료 시** 두 곳뿐이다(it16에서 전자를 추가). 그 사이에 강제 종료되면 위치가 유실된다 | `App/MainWindow.xaml.cs` | 대기: `LocationChanged`/`SizeChanged` 구독은 이벤트 해제·디바운스 설계가 필요 |
 | `FrameSelectViewModel.IsLoggedIn` 미사용 잔존 | it16에서 "프레임 만들기" 버튼 바인딩이 `IsLoggedIn` → `CanCreateFrame`으로 옮겨져, 이 프로퍼티는 **할당만 되고 소비처가 없다**(XAML·VM 어디에서도 읽지 않음) | `App/ViewModels/FrameSelectViewModel.cs:77` | 대기(리뷰 제안, 비차단): 제거 여부 결정 — 무해하지만 드리프트 신호 |
+| 로그아웃이 JWT를 비우지 않음 | `IBackendSession.Clear()`의 **프로덕션 호출자가 0**이다 — 로그아웃은 `SessionContext.CurrentUser`만 해제하고 토큰 홀더는 그대로 둔다. 계정 라우트는 화면 진입 자체가 로그인을 요구해 UI로는 도달하지 않지만, **업로드는 "선택적 Bearer"** 라서 로그아웃 직후 **게스트 촬영의 `uploads/prepare`·`uploads/commit`에 직전 계정 JWT가 붙는다** → 서버가 그 계정 소유로 처리(TempUser면 `qrUsedCount`까지 증가). 토큰 자체 만료는 기본 8시간 | `App/AppShellViewModel.cs:446-453`, `Http/Session/BackendSession.cs:34-41`, `Http/HttpFirebaseClient.cs:96`·`:143` | 대기(2026-07-29 문서 재작성 중 발견, 미검증 잠복): `Logout`에서 `IBackendSession.Clear()` 호출 또는 `CurrentUserChanged` 구독으로 자동 소거. 상세 [60 §3.5](./60-auth-accounts-and-roles.md#35-로그아웃--세션-유지-규칙중요) |
 
 ## 2. 다음 착수 예정 (우선순위 큐)
 
@@ -56,10 +57,14 @@
 - **다국어(한/영) UI i18n** — 브랜딩 이름 외 라벨 전환.
 - **스티커/텍스트 오버레이** — 결과 꾸미기(필터 외 데코).
 - **사용량 통계 대시보드**(관리자) — 일별 촬영 수·세션 로그.
-- **비밀번호 해시/솔트** — 현재 평문(MVP). 릴리즈 전 필수(위 1번 표와 동일 항목).
+- ~~**비밀번호 해시/솔트**~~ — **소멸(it15)**: 비밀번호 인증 폐지로 저장할 비밀번호가 없다(자격증명 = bcrypt `pinHash`).
+- **PIN 시도 제한 강화** (2026-07-29 사용자 "좀 더 고민" 보류) — 현재 방어는 **클라 측뿐**이다(연속 5회 실패 시 창 닫힘 + 실패마다 1.5초 입력 비활성). 서버 `verifyPin`에는 시도 카운터가 없어 4자리(1만 조합)에 대한 온라인 브루트포스가 이론상 가능하다.
+  - 사용자 아이디어: **5회 실패 시 5분 잠금**.
+  - ⚠️ 설계 시 주의: **계정 단위 잠금은 DoS를 만든다** — 남의 PIN을 일부러 5회 틀려 그 계정을 잠글 수 있다. it15가 서버 잠금을 채택하지 않은 이유가 이것이다. 대안은 **기기(PIN 입력 창) 단위 잠금** 또는 IP 단위 rate limit(Cloud Armor 계층). 물리 접근이 전제인 키오스크에서는 기기 단위가 위협 모델에 더 맞는다.
+  - 관련: it15 설계 §5.6(서버 잠금 미채택 근거), §12 R1.
 - **로컬 결과물(`result\`) 보관/정리 정책** — 현재 무기한 영구 보관.
 - **키오스크 모드 강화**(자동 시작·종료 차단) + **오프라인(네트워크 끊김) 감지 안내**.
-- **서비스 계정 키 관리 재설계(상용화 시)** — 현재 베타는 Admin 서비스 계정 키를 publish 산출물(`publish\MCPhoto\serviceAccountKey.json`)에 **기본 포함**한다(사내 관리 전제, 사용자 결정 2026-07-23). exe 폴더 보유자는 DB admin 접근 가능(앱 역할은 표면 게이트)이라 **외부 판매/배포 시엔 부적합** → 판매 가정 시 Firebase 클라이언트 SDK+보안 규칙 이전, 키 회전, 또는 서버 프록시 등으로 재설계 필요. 키 미포함 배포가 필요하면 `publish-nokey.bat`(또는 `-NoServiceKey`) 사용. 상세 [it10 설계](../design/wpf-it10-server-connectivity-design.md).
+- ~~**서비스 계정 키 관리 재설계(상용화 시)**~~ — **해소(it15, 2026-07-28)**: 서버 프록시 이전이 완료돼 앱이 `serviceAccountKey.json`을 전혀 쓰지 않는다. 레거시 Firebase 직결 경로(`MCPhoto.Firebase`)가 삭제됐고 모든 DB·Storage 접근은 백엔드 HTTPS API를 경유한다. "exe 폴더 보유자가 DB admin 접근 가능"하던 구조적 문제는 사라졌다(exe에 남은 것은 백엔드 게이트 키뿐이며, 그 키로는 서버가 강제하는 역할 권한을 넘지 못한다). `installer/MCPhoto.iss`의 키 파일 제외 목록과 `.gitignore` 항목은 **방어적으로 유지**한다(과거 산출물·개발 PC 잔존분 대비).
 
 ## 3. 비범위 / 향후 검토 (현재 명시적 제외)
 
