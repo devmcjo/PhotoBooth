@@ -18,7 +18,7 @@ const JWT_SECRET = defineSecret("JWT_SECRET");
 const CLIENT_API_KEYS = defineSecret("CLIENT_API_KEYS");
 // item1b: Google OAuth client secret(백엔드 전용, code 교환에만 사용). 선언만 해 두면
 // GOOGLE_OAUTH_CLIENT_ID(env)만 켜면 /auth/google 활성화(소스 재수정 불요). 단 선언된 시크릿이라
-// 배포 시 반드시 존재해야 하므로, SSO 미사용이어도 최초 배포 전 임시값이라도 등록(USER-ACTIONS §B2-3).
+// 배포 시 반드시 존재해야 하므로, SSO 미사용이어도 최초 배포 전 임시값이라도 등록해 둔다.
 // it15: SENDGRID_API_KEY 선언은 제거했다(이메일 인증·재설정 폐지 → 배포 전제조건 1개 감소).
 const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 

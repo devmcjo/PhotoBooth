@@ -320,7 +320,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         if (!IsGuest) s.HostingBaseUrl = HostingBaseUrl;   // Firebase 관련: 게스트 미저장 (보완#1)
         s.CameraDevice = CameraDevice;
         // item3 스캐폴드: 외부 장치 placeholder 저장(로그인 전용 섹션 — 게스트는 미노출·미기록으로 ini 원값 보존).
-        // ⚠️ 값은 저장만 하고 실기능에 배선하지 않는다(미지원 골격). 실제 연동은 장비 확정 후. USER-ACTIONS §C1.
+        // ⚠️ 값은 저장만 하고 실기능에 배선하지 않는다(미지원 골격). 실제 연동은 장비 확정 후.
         if (!IsGuest)
         {
             s.ExternalCameraEnabled = ExternalCameraEnabled;

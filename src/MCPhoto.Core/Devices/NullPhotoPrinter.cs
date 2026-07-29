@@ -7,7 +7,6 @@ namespace MCPhoto.Core.Devices;
 /// 예외를 던지지 않아 호출측이 안전하게 미지원을 감지·우회할 수 있다.
 ///
 /// ⚠️ 실제 프린터 연동은 장비 확정 후 이 구현을 대체하는 실 구현으로 DI에서 교체한다.
-/// 참조: docs/USER-ACTIONS.md §C1.
 /// </summary>
 public sealed class NullPhotoPrinter : IPhotoPrinter
 {

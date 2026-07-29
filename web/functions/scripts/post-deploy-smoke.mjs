@@ -1,8 +1,8 @@
 /**
- * post-deploy-smoke.mjs — 배포된(실제) 백엔드 도달·기본 흐름 검증 (USER-ACTIONS §A6 일부).
+ * post-deploy-smoke.mjs — 배포된(실제) 백엔드 도달·기본 흐름 검증.
  *
  * Emulator smoke(smoke.mjs)와 달리 이건 **실제 배포된 함수 URL**을 친다. 읽기 전용 호출만 하므로
- * 데이터에 영향 없음(health / login / frames 조회). 서명 PUT·업로드 실왕복은 앱에서 수동 확인(§A6).
+ * 데이터에 영향 없음(health / login / frames 조회). 서명 PUT·업로드 실왕복은 앱에서 수동 확인한다.
  *
  * 사용법 (web/functions 또는 아무 곳에서):
  *   BASE_URL="https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api" \

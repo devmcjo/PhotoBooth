@@ -111,7 +111,7 @@ public sealed class AppSettings
 
     // ── 외부 장치(추후 지원 · item3 스캐폴드). 로그인 전용 옵션 자리. ──
     // ⚠️ placeholder: 값은 INI에 저장/복원만 하고 현재 실기능에 배선하지 않는다(미지원 골격).
-    //    실제 하드웨어 연동은 장비 확정 후. 참조: docs/USER-ACTIONS.md §C1.
+    //    실제 하드웨어 연동은 장비 확정 후.
     /// <summary>외부 카메라(DSLR 등) 사용. 기본 false(미지원 스캐폴드).</summary>
     public bool ExternalCameraEnabled { get; set; }
 

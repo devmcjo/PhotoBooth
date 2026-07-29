@@ -6,7 +6,6 @@ namespace MCPhoto.Core.Devices;
 /// ⚠️ 현재는 골격(자리)만 존재한다. 실제 하드웨어 연동은 특정 모델·SDK·연결방식(BT/WiFi)에
 /// 의존하므로 <b>장비 확정 후</b> 실제 구현(SDK/드라이버 배선)으로 교체한다.
 /// 기본 등록 구현은 <see cref="NullPhotoPrinter"/>(항상 미지원 · no-op).
-/// 참조: docs/USER-ACTIONS.md §C1(장치 선정).
 /// </summary>
 public interface IPhotoPrinter
 {

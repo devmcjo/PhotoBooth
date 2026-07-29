@@ -18,7 +18,7 @@ metadata:
 3. `.mjs`는 컴파일 산출물을 `await import("../lib/domain/<name>.js")`로 가져온다.
    tsc CJS 출력은 `exports.foo = foo` 형태라 Node ESM의 cjs-module-lexer가 named export를 인식한다.
 4. **`npm run build` 선행 필수** → 스크립트가 import 실패를 잡아 "먼저 `npm run build` 하세요"로 안내하고 exit 1.
-   운영 문서(`docs/USER-ACTIONS.md`)의 실행 절차에도 build 단계를 넣는다.
+   스크립트 상단 사용법 주석에도 build 단계를 명시한다.
 
 **Why:** 운영 DB를 만지는 스크립트는 실행으로 검증할 수 없다. 판정 로직만 순수화하면 멱등성·dry-run 기본값 같은
 "틀리면 데이터가 사라지는" 규칙을 회귀 테스트로 못박을 수 있다.

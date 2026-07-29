@@ -60,7 +60,7 @@ internal static class ServiceRegistration
         services.AddSingleton<ICameraService, OpenCvCameraService>();
 
         // item3 스캐폴드: 외부 장치(DSLR·프린터) 추상화. 현재는 미지원(no-op) Null 구현 등록.
-        // ⚠️ 실제 하드웨어 연동은 장비 확정 후 이 등록을 실 구현으로 교체한다(SDK/드라이버). USER-ACTIONS §C1.
+        // ⚠️ 실제 하드웨어 연동은 장비 확정 후 이 등록을 실 구현으로 교체한다(SDK/드라이버).
         services.AddSingleton<IExternalCamera, NullExternalCamera>();
         services.AddSingleton<IPhotoPrinter, NullPhotoPrinter>();
 

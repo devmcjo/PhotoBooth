@@ -6,7 +6,7 @@ namespace MCPhoto.Tests;
 
 /// <summary>
 /// item3 스캐폴드: 외부 장치(DSLR·프린터) 추상화 + Null 구현 + 설정 placeholder 검증.
-/// 실제 하드웨어 연동은 장비 확정 후(USER-ACTIONS §C1) — 현재는 미지원(no-op) 골격만 검증한다.
+/// 실제 하드웨어 연동은 장비 확정 후 — 현재는 미지원(no-op) 골격만 검증한다.
 /// </summary>
 public class ExternalDeviceScaffoldTests
 {

@@ -13,7 +13,8 @@ REM    deploy-web.bat functions nopause  끝나도 대기하지 않음 (자동�
 REM                                      DEPLOY_WEB_NOPAUSE=1 환경변수도 동일
 REM
 REM  전제: firebase login 완료 + functions 시크릿 등록됨
-REM        (최초 1회는 docs\DEPLOY-WALKTHROUGH.md 참조)
+REM        (JWT_SECRET / CLIENT_API_KEYS / GOOGLE_OAUTH_CLIENT_SECRET —
+REM         firebase functions:secrets:set 로 등록. 목록은 functions/src/config.ts)
 REM  프로젝트: mcphoto-955fb (.firebaserc 기본값)
 REM ============================================================
 
