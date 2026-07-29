@@ -129,7 +129,10 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 - **실행 중 잠금 경고**: `Get-Process MCPhoto`로 앱 실행을 감지하면(출력 exe 잠김) 게시를 중단하고 "Close the app, then run again." 경고 후 return 한다(`publish.ps1:38-43`).
 - 게시 후 `bldinfo.ini`를 명시 복사한다 — 단일 파일 publish가 csproj `None` 항목을 누락시킬 수 있기 때문(`publish.ps1:81-91`).
 - 성공 시 산출물 파일별 크기(MB) 목록을 출력한다(`publish.ps1:93-95`).
-- **인코딩 주의**: 두 스크립트 모두 의도적으로 **ASCII(영문)로 유지**한다. 한국어 Windows 의 cmd/PowerShell 5.1 에서 CP949/UTF-8 배치 파싱 mojibake 를 피하기 위함(`publish.bat:6`, `publish.ps1`은 전체 영문 주석).
+- **인코딩 주의(배치 스크립트 공통 규칙)**: `publish.bat`·`publish.ps1`·`web/deploy-web.bat` 모두 의도적으로 **ASCII(영문)로 유지**한다. 한국어 Windows 의 cmd/PowerShell 5.1 에서 CP949/UTF-8 mojibake 를 피하기 위함(`publish.bat:6`).
+  - ⚠️ **단순 표시 문제가 아니라 실행 사고로 이어진다.** cmd 는 배치 파일의 읽기 위치를 **바이트 오프셋**으로 추적하는데, `chcp` 로 코드페이지가 바뀐 상태에서 파일에 멀티바이트 문자가 있으면 오프셋이 문자 중간에 떨어져 **줄의 나머지가 명령으로 실행**된다. `REM` 주석도 예외가 아니다.
+  - 2026-07-29 실제 사고: `deploy-web.bat` 의 한글 주석 2줄을 편집했더니 더블클릭 실행 시 주석 안의 `firebase functions:secrets:set` 이 **실제로 호출**됐다(인자 불일치로 거부되어 시크릿 변경은 없었음). 조치 = 파일 전체 ASCII 영문화.
+  - 규칙: 배치 파일에는 **비ASCII 문자 금지** + **주석에 실행 가능한 명령 문자열 금지**. ASCII 전용이면 1바이트=1문자라 `chcp 65001`(CLI 의 UTF-8 출력용)을 써도 안전하다.
 
 ---
 

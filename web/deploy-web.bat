@@ -1,21 +1,30 @@
 @echo off
+REM UTF-8 console: npm / firebase / tsc all print UTF-8 (and box chars).
+REM Safe here ONLY because this file is pure ASCII - see the note below.
 chcp 65001 >nul
 setlocal EnableExtensions
 REM ============================================================
-REM  MC포토 웹 배포 (Cloud Functions / Hosting)
-REM  위치: web\ (firebase.json / .firebaserc 와 같은 폴더)
+REM  MCPhoto web deploy (Cloud Functions / Hosting)
+REM  Location: web\ (same folder as firebase.json / .firebaserc)
 REM
-REM  사용법:
-REM    deploy-web.bat                    functions 만 배포 (기본)
-REM    deploy-web.bat all                functions + hosting(다운로드 페이지)
-REM    deploy-web.bat hosting            hosting 만
-REM    deploy-web.bat functions nopause  끝나도 대기하지 않음 (자동화/CI용)
-REM                                      DEPLOY_WEB_NOPAUSE=1 환경변수도 동일
+REM  Usage:
+REM    deploy-web.bat                    functions only (default)
+REM    deploy-web.bat all                functions + hosting (download page)
+REM    deploy-web.bat hosting            hosting only
+REM    deploy-web.bat functions nopause  do not wait for a key at the end (CI)
+REM                                      env DEPLOY_WEB_NOPAUSE=1 does the same
 REM
-REM  전제: firebase login 완료 + functions 시크릿 등록됨
-REM        (JWT_SECRET / CLIENT_API_KEYS / GOOGLE_OAUTH_CLIENT_SECRET —
-REM         firebase functions:secrets:set 로 등록. 목록은 functions/src/config.ts)
-REM  프로젝트: mcphoto-955fb (.firebaserc 기본값)
+REM  Requires: firebase login done + functions secrets registered
+REM  Project: mcphoto-955fb (.firebaserc default)
+REM
+REM  ASCII ONLY - do not put Korean (or any non-ASCII) text in this file.
+REM  Why: cmd tracks its read position in this file by BYTE offset. When
+REM  chcp switches the codepage mid-run, a multi-byte character makes that
+REM  offset land mid-character, so the rest of a line gets executed as a
+REM  command - REM comments included. That once ran "firebase functions:
+REM  secrets:set" straight out of a comment. With pure ASCII, 1 byte = 1
+REM  char in every codepage, so chcp above is harmless.
+REM  Same rule as publish.bat / publish.ps1.
 REM ============================================================
 
 cd /d "%~dp0"
@@ -27,49 +36,49 @@ set "RC=0"
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=functions"
 
-REM 끝나고 키 입력을 기다린다(더블클릭 실행 시 창이 닫혀 결과를 놓치지 않도록).
+REM Wait for a key at the end so a double-clicked window does not vanish.
 set "HOLD=1"
 if /I "%~2"=="nopause" set "HOLD="
 if /I "%DEPLOY_WEB_NOPAUSE%"=="1" set "HOLD="
 
-REM 대상 오타로 엉뚱한 것이 배포되지 않도록 검증한다.
+REM Validate the target so a typo cannot deploy the wrong thing.
 if /I "%TARGET%"=="functions" goto :targetOk
 if /I "%TARGET%"=="all"       goto :targetOk
 if /I "%TARGET%"=="hosting"   goto :targetOk
-echo *** 알 수 없는 배포 대상: "%TARGET%"
-echo     사용 가능: functions ^| all ^| hosting
+echo *** Unknown deploy target: "%TARGET%"
+echo     Valid: functions ^| all ^| hosting
 set "RC=2"
 goto :fail
 :targetOk
 
-echo === MC포토 웹 배포  project=%PROJECT%  target=%TARGET% ===
+echo === MCPhoto web deploy  project=%PROJECT%  target=%TARGET% ===
 echo.
 
-REM hosting 만 배포하면 functions 빌드는 건너뛴다.
+REM hosting-only skips the functions build.
 if /I "%TARGET%"=="hosting" goto :deploy
 
-REM ---- [1/3] functions 의존성 (tsc 등) ----
-echo [1/3] functions 의존성 확인...
+REM ---- [1/3] functions dependencies (tsc etc.) ----
+echo [1/3] Checking functions dependencies...
 if exist "functions\node_modules\.bin\tsc.cmd" goto :haveDeps
-echo     - node_modules 없음, npm install 실행
+echo     - node_modules missing, running npm install
 call npm --prefix functions install
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" goto :fail
 goto :depsDone
 :haveDeps
-echo     - 이미 설치됨 (갱신하려면 functions 에서 npm install)
+echo     - already installed (to refresh: npm install inside functions)
 :depsDone
 echo.
 
-REM ---- [2/3] functions 빌드 (tsc) : 배포 전 조기 실패 확인 ----
-echo [2/3] functions 빌드 (tsc)...
+REM ---- [2/3] functions build (tsc): fail early, before deploying ----
+echo [2/3] Building functions (tsc)...
 call npm --prefix functions run build
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" goto :fail
 echo.
 
 :deploy
-echo [3/3] firebase 배포 (predeploy 훅이 tsc 재빌드)...
+echo [3/3] firebase deploy (predeploy hook rebuilds tsc)...
 if /I "%TARGET%"=="all"     goto :deployAll
 if /I "%TARGET%"=="hosting" goto :deployHosting
 call firebase deploy --only functions --project %PROJECT%
@@ -87,32 +96,32 @@ goto :after
 :after
 if not "%RC%"=="0" goto :fail
 echo.
-echo === 배포 완료 ===
+echo === Deploy finished ===
 if /I "%TARGET%"=="hosting" goto :done
 
-echo 함수 URL: %FN_URL%
+echo Function URL: %FN_URL%
 echo.
 
-REM ---- 배포 확인: 배포된 함수가 실제로 응답하는지 확인한다 ----
-echo [확인] GET %FN_URL%/health
+REM ---- Post-deploy check: does the deployed function actually answer? ----
+echo [check] GET %FN_URL%/health
 set "HTTP="
 for /f %%S in ('curl.exe -s -o nul -w "%%{http_code}" --max-time 20 "%FN_URL%/health" 2^>nul') do set "HTTP=%%S"
 if "%HTTP%"=="200"  goto :healthOk
 if "%HTTP%"==""     goto :healthUnknown
-echo     - 경고: HTTP %HTTP% — 함수가 정상 응답하지 않습니다.
+echo     - WARNING: HTTP %HTTP% - the function is not answering normally.
 echo       firebase functions:log --project %PROJECT% --only api
 goto :healthDone
 :healthUnknown
-echo     - 확인 불가 (curl 실행 실패). 위 URL 을 브라우저에서 직접 확인하세요.
+echo     - Could not check (curl failed). Open the URL above in a browser.
 goto :healthDone
 :healthOk
-echo     - OK (HTTP 200) — 배포된 함수가 정상 응답합니다.
+echo     - OK (HTTP 200) - the deployed function answers.
 :healthDone
 echo.
 
-echo 스모크 검증(선택) — API 키(CLIENT_API_KEYS 값)를 넣고:
+echo Optional smoke test - set your API key (a CLIENT_API_KEYS value) first:
 echo     set BASE_URL=%FN_URL%
-echo     set API_KEY=여기에_CLIENT_API_KEYS_값
+echo     set API_KEY=your_client_api_key
 echo     node functions\scripts\post-deploy-smoke.mjs
 
 :done
@@ -123,17 +132,17 @@ exit /b 0
 
 :fail
 echo.
-echo *** 배포 중단 (종료 코드 %RC%): 위 오류를 확인하세요. ***
-echo     - "tsc 없음" 이면 functions 폴더에 npm install 이 안 된 것입니다.
-echo     - "not logged in" 이면 firebase login 먼저.
+echo *** Deploy aborted (exit code %RC%): check the errors above. ***
+echo     - "tsc not found" means npm install was never run in functions.
+echo     - "not logged in" means you need firebase login first.
 call :hold
-REM endlocal 이 RC 를 지우기 전에 한 줄에서 확장시킨다.
+REM Expand RC on the same line, before endlocal clears it.
 endlocal & exit /b %RC%
 
-REM ---- 결과를 확인할 수 있도록 키 입력까지 대기 ----
+REM ---- Keep the window open so the result stays readable ----
 :hold
 if not defined HOLD goto :eof
 echo.
-echo 계속하려면 아무 키나 누르세요...
+echo Press any key to continue...
 pause >nul
 goto :eof
