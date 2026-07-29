@@ -96,7 +96,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 | 브랜딩 샘플 | `branding.ini.sample` | 출력 루트 | `MCPhoto.App.csproj:58-60` |
 
 - 프레임 복사는 프레임 소스 우선순위 ②(번들 기본 프레임)에 해당한다(`MCPhoto.App.csproj:50`). publish 산출물 `Frame\`에 `jport-camp.png`·`jport-camp.slots`·테스트 프레임 등이 포함됨(확인됨).
-- `branding.ini.sample`(it9 C3): 고객이 `branding.ini`로 리네임해 앱 표시 이름을 변경한다. UTF-8 저장 필수, 적용 지점은 창 제목·홈 화면 타이틀, 미존재/빈 값이면 기본 "MC포토"(`branding.ini.sample:4-13`, `MCPhoto.App.csproj:57`).
+- `branding.ini.sample`(it9 C3): 고객이 `branding.ini`로 리네임해 앱 표시 이름을 변경한다. UTF-8 저장 필수, 적용 지점은 창 제목·홈 화면 타이틀, 미존재/빈 값이면 기본 "MC Photo"(`branding.ini.sample:4-13`, `MCPhoto.App.csproj:57`).
 
 ---
 

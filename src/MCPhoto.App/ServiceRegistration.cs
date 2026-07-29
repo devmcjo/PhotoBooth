@@ -31,7 +31,7 @@ internal static class ServiceRegistration
         // 셸(부트스트랩)
         services.AddSingleton<MainWindow>();
 
-        // it9 C3: 앱 이름 브랜딩(branding.ini). 시작 시 1회 로드, 폴백 "MC포토".
+        // it9 C3: 앱 이름 브랜딩(branding.ini). 시작 시 1회 로드, 폴백 "MC Photo".
         services.AddSingleton<IBrandingService, IniBrandingService>();
         // 빌드 정보(bldinfo.ini): 버전·빌드일·사이트. 게스트 하단 상시 표기 + 설정 표기. 폴백 v0.0.0.
         services.AddSingleton<IBuildInfoService, IniBuildInfoService>();

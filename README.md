@@ -2,7 +2,7 @@
 
 **키오스크형 셀프 포토부스** — WPF/.NET 8 데스크톱 앱에서 촬영·합성·타임랩스를 만들고, Firebase로 업로드해 **QR 코드**로 모바일에서 사진·영상을 내려받는 시스템입니다.
 
-> 앱 표시명은 `branding.ini`로 바꿀 수 있습니다(기본값 "MC포토"). 아래 [설정](#-설정) 참고.
+> 앱 표시명은 `branding.ini`로 바꿀 수 있습니다(기본값 "MC Photo"). 아래 [설정](#-설정) 참고.
 
 ---
 
@@ -70,7 +70,7 @@ publish.bat  더블클릭    (또는)  powershell -ExecutionPolicy Bypass -File 
 
 | 파일 | 위치(우선순위) | 용도 |
 |------|----------------|------|
-| `branding.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` | 앱 표시명 변경(`[Branding] AppName=...`), 없으면 "MC포토". 샘플: `branding.ini.sample` |
+| `branding.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` | 앱 표시명 변경(`[Branding] AppName=...`), 없으면 "MC Photo". 샘플: `branding.ini.sample` |
 | `MCPhoto.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` → `%LocalAppData%\MCPhoto\` | 촬영·필터·QR·표시모드·카메라 등 앱 설정 |
 
 앱 화면의 **설정**에서도 대부분 항목을 편집·저장할 수 있습니다.

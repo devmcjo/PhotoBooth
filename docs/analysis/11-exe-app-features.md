@@ -264,7 +264,7 @@
 ## 15. 앱 이름·소제목 브랜딩
 
 - **목적**: 고객사별 앱 표시명 커스터마이즈.
-- **규칙**: `App.OnStartup`이 `AppName`·`Subtitle`을 각각 `Resources["Branding.AppName"]`·`Resources["Branding.Subtitle"]`에 주입(창 생성 전) → `DynamicResource`로 창 제목·홈 타이틀(`HomeView.xaml`, AppName)·홈 소제목(`HomeView.xaml`, Subtitle) 반영. 기본값 AppName="MC포토", Subtitle="셀프 포토부스". 상세는 [12 설정/구성](./12-exe-app-settings-and-config.md) §브랜딩.
+- **규칙**: `App.OnStartup`이 `AppName`·`Subtitle`을 각각 `Resources["Branding.AppName"]`·`Resources["Branding.Subtitle"]`에 주입(창 생성 전) → `DynamicResource`로 창 제목·홈 타이틀(`HomeView.xaml`, AppName)·홈 소제목(`HomeView.xaml`, Subtitle) 반영. 기본값 AppName="MC Photo", Subtitle="self custom photobooth". 상세는 [12 설정/구성](./12-exe-app-settings-and-config.md) §브랜딩.
 - **근거**: `App.xaml.cs`, `App.xaml`, `IniBrandingService.cs`, `HomeView.xaml`.
 
 ## 16. 표시 모드(전체화면/창모드)

@@ -19,8 +19,8 @@ public class BrandingServiceTests
     {
         var path = Path.Combine(Path.GetTempPath(), $"branding_absent_{Guid.NewGuid():N}.ini");
         var svc = new IniBrandingService(path);
-        Assert.Equal("MC포토", svc.AppName);
-        Assert.Equal("셀프 포토부스", svc.Subtitle); // 소제목 기본값
+        Assert.Equal("MC Photo", svc.AppName);
+        Assert.Equal("self custom photobooth", svc.Subtitle); // 소제목 기본값
     }
 
     [Fact]
@@ -45,8 +45,8 @@ public class BrandingServiceTests
         var path2 = TempIni("[Branding]\nSubtitle=\n");
         try
         {
-            Assert.Equal("셀프 포토부스", new IniBrandingService(path1).Subtitle);
-            Assert.Equal("셀프 포토부스", new IniBrandingService(path2).Subtitle);
+            Assert.Equal("self custom photobooth", new IniBrandingService(path1).Subtitle);
+            Assert.Equal("self custom photobooth", new IniBrandingService(path2).Subtitle);
         }
         finally { File.Delete(path1); File.Delete(path2); }
     }
@@ -70,7 +70,7 @@ public class BrandingServiceTests
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("MC포토", svc.AppName);
+            Assert.Equal("MC Photo", svc.AppName);
         }
         finally { File.Delete(path); }
     }
@@ -82,7 +82,7 @@ public class BrandingServiceTests
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("MC포토", svc.AppName);
+            Assert.Equal("MC Photo", svc.AppName);
         }
         finally { File.Delete(path); }
     }
@@ -106,7 +106,7 @@ public class BrandingServiceTests
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("MC포토", svc.AppName); // 크래시 없이 기본값
+            Assert.Equal("MC Photo", svc.AppName); // 크래시 없이 기본값
         }
         finally { File.Delete(path); }
     }

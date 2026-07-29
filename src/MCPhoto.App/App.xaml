@@ -14,8 +14,8 @@
             </ResourceDictionary.MergedDictionaries>
 
             <!-- it9 C3: 브랜딩 기본값. App.OnStartup에서 branding.ini 값으로 덮어씀(DynamicResource). -->
-            <sys:String x:Key="Branding.AppName">MC포토</sys:String>
-            <sys:String x:Key="Branding.Subtitle">셀프 포토부스</sys:String>
+            <sys:String x:Key="Branding.AppName">MC Photo</sys:String>
+            <sys:String x:Key="Branding.Subtitle">self custom photobooth</sys:String>
 
             <!-- 공용 컨버터 -->
             <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
