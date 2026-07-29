@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 60-auth-accounts-and-roles.md |
 | 범위 | MCPhoto의 계정 역할 위계(temp_user/user/advanced_user/manager/admin + 게스트), 권한 매트릭스, Google SSO 로그인/로그아웃 흐름, 진입 PIN 게이트, 계정 저장소(백엔드 API 경유 `users` 컬렉션)와 CRUD·cascade 삭제 |
-| 최종 업데이트 | 2026-07-29 (it16 — §1·§2 최신화 + **§3~§5 전면 재작성**: it13~it16 반영) |
+| 최종 업데이트 | 2026-07-29 (it16 — §1·§2 최신화 + **§3~§5 전면 재작성**: it13~it16 반영 / 로그아웃 JWT 폐기 수정 반영, 폐기된 USER-ACTIONS 링크 정리) |
 | 관련 소스 경로 | `src/MCPhoto.Core/Accounts/{IAccountService,IGoogleSignInService,GoogleOAuthPkce,GoogleSsoNotConfiguredException}.cs`, `src/MCPhoto.Core/Models/{UserRole,RoleChangePolicy,User}.cs`, `src/MCPhoto.Core/Frames/FrameEditPolicy.cs`, `src/MCPhoto.Http/HttpAccountService.cs`, `src/MCPhoto.Http/{HttpBackendClient.cs,Session/BackendSession.cs}`, `src/MCPhoto.App/{SessionContext,AppShellViewModel}.cs`, `src/MCPhoto.App/MainWindow.xaml`, `src/MCPhoto.App/Services/{GoogleSignInService,PinPromptDialogService}.cs`, `src/MCPhoto.App/Views/PinPromptWindow.xaml.cs`, `src/MCPhoto.App/ViewModels/{LoginGuestViewModel,AccountViewModel,UserMgmtViewModel,FrameSelectViewModel}.cs`, `web/functions/src/routes/{auth,accounts}.ts`, `web/functions/src/services/{accounts,googleAuth,dto}.ts`, `web/functions/src/domain/{roles,jwt,accountId}.ts` |
 | 갱신 규칙 | `UserRole` enum·`IsPower`/`CanWriteFrames`/`CanManage`/`CreatableRoles`/`CanCreate` 규칙, `RoleChangePolicy.AssignableRoles`(서버 `canSetRole`과 1:1), `IAccountService` 시그니처(현재 7메서드), Google SSO 흐름(loopback+PKCE ↔ `POST /auth/google`)과 JWT 보관 위치, 진입 PIN 게이트(`AppShellViewModel.EnsurePinGateAsync`)의 호출부·fail-closed 규약, 상단 바 팝오버 항목·가시성 바인딩(`MainWindow.xaml`), 세션 단일 소스(`SessionContext`)의 Login/Logout/Reset 계약이 바뀌면 이 문서를 갱신한다. |
 
@@ -297,7 +297,9 @@ public static bool CanWriteFrames(this UserRole role)
 
 > 참고: `clearUser=true`로 실제 로그아웃까지 하는 경로는 코드상 존재하지 않는다(모든 `ReturnHome`/`Reset` 호출이 기본 false 또는 명시 false). 명시적 "로그아웃" 버튼만 `SessionContext.Logout()`을 직접 호출한다(`AppShellViewModel.cs:451`).
 
-> ⚠️ **로그아웃이 JWT를 비우지 않는다(사실, it15 이후 잠복)**: `IBackendSession.Clear()`는 **프로덕션 호출자가 0**이다 — 로그아웃은 `SessionContext`만 비우고 `BackendSession`의 토큰은 그대로 남는다(`AppShellViewModel.cs:446-453` vs `src/MCPhoto.Http/Session/BackendSession.cs:34-41`). 계정 조작 라우트는 화면 진입 자체가 `CurrentUser`를 요구해 UI 경로로는 도달하지 않지만, **업로드는 "선택적 Bearer"** 라서(`HttpBackendClient.cs:74-85`, `HttpFirebaseClient.cs:96`, `:143`) 로그아웃 후 게스트 촬영의 `uploads/prepare`·`uploads/commit`에 **직전 계정의 JWT가 그대로 붙는다** → 서버가 그 계정 소유로 처리한다(TempUser면 `qrUsedCount`도 증가). JWT 자체 만료는 기본 8시간(`web/functions/src/config.ts:78`). [90 §1](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채) 등재.
+> ✅ **로그아웃은 JWT를 함께 폐기한다(2026-07-29 수정)**: `BackendSessionSynchronizer`가 `SessionContext.CurrentUserChanged`를 구독해 `CurrentUser == null`이 되는 **모든** 경로에서 `IBackendSession.Clear()`를 호출한다(`src/MCPhoto.App/Services/BackendSessionSynchronizer.cs:44-48`). 배선을 `Logout()` 한 곳이 아니라 통지 지점에 둔 이유는 게스트 전환 경로가 앞으로 늘어도 한 곳이 전부를 덮기 때문이다.
+>
+> 이 불변식이 없으면: 업로드는 **선택적 Bearer**라서(`HttpBackendClient.cs:74-85`, `HttpFirebaseClient.cs:96`, `:143`) 남은 토큰이 조용히 부착되고, 로그아웃 직후 게스트 촬영이 **직전 계정 소유로 기록**된다(TempUser면 `qrUsedCount`까지 차감). DI가 홀더를 동기화기 소유로 등록해 "토큰이 존재할 수 있는 모든 시점에 구독이 살아 있음"을 보장한다(`ServiceRegistration.cs`, [30 §3.1](./30-backend-firebase-integration.md)).
 
 ---
 
@@ -386,8 +388,8 @@ UI 안내: `UserMgmtViewModel.DeleteUser`는 자기 계정 삭제를 막고(`src
 | 항목 | 현재 상태(사실) | 개선 여지 |
 | --- | --- | --- |
 | PIN 서버 측 시도 제한 | 서버 잠금 **없음**(`services/accounts.ts:86` 주석 — 계정 단위 잠금은 타인 락아웃=DoS 도입). 완화는 클라 2건(5회 실패 시 창 닫힘 + 1.5초 쿨다운)뿐이며 앱을 다시 열면 카운터가 초기화된다 | 4자리 = 10,000 조합. 물리 접근자의 반복 시도는 여전히 가능 → IP/계정 단위 rate limit(Cloud Armor 등) 검토([it15 설계 §5.6](../design/wpf-it15-google-only-auth-design.md) R1) |
-| admin PIN 분실 시 앱 내 복구 경로 | **없음**. 자기 자신 대상 PIN 재설정은 서버가 400으로 거부하고(`routes/accounts.ts:141-143`), 타 계정 재설정(E3)은 `canManage`상 admin을 대상으로 삼을 수 없다 | 현재 유일한 복구는 CLI: `migrate-google-only-accounts.mjs --clear-pin <id> --apply`([USER-ACTIONS D1-7](../USER-ACTIONS.md)). 앱 내 복구(예: 두 번째 admin 승인)는 미구현 |
-| 로그아웃 시 JWT 미소거 | `IBackendSession.Clear()` 호출자 0 — 로그아웃 후에도 토큰이 메모리에 남고, 선택적 Bearer를 쓰는 업로드에 붙는다([3.5](#35-로그아웃--세션-유지-규칙중요)) | `AppShellViewModel.Logout`에서 `Clear()` 호출(또는 `SessionContext.CurrentUserChanged` 구독으로 자동 소거). [90 §1](./90-roadmap-and-future-work.md#1-알려진-이슈--기술-부채) 등재 |
+| admin PIN 분실 시 앱 내 복구 경로 | **없음**. 자기 자신 대상 PIN 재설정은 서버가 400으로 거부하고(`routes/accounts.ts:141-143`), 타 계정 재설정(E3)은 `canManage`상 admin을 대상으로 삼을 수 없다 | 현재 유일한 복구는 CLI: `node web/functions/scripts/migrate-google-only-accounts.mjs --clear-pin <id> --apply`(firebase-admin 자격으로 해당 계정의 `pinHash` 필드를 지운다). 앱 내 복구(예: 두 번째 admin 승인)는 미구현 |
+| ~~로그아웃 시 JWT 미소거~~ | **해소(2026-07-29)**: `BackendSessionSynchronizer`가 `CurrentUserChanged` 구독으로 게스트 전환 시 토큰을 폐기한다([3.5](#35-로그아웃--세션-유지-규칙중요)) | — |
 | 세션 만료 | 유휴는 홈 복귀만, 로그인은 앱 수명 동안 유지(`AppShellViewModel.cs:354`). 서버 JWT는 기본 8시간 만료(`web/functions/src/config.ts:78`)이나 클라에 **갱신·만료 감지 경로가 없다** | (가정) 만료 후 첫 계정 조작이 401로 실패할 때 "다시 로그인" 유도 UX 부재. 파워 계정 자동 로그아웃 정책도 없음 |
 | 설정 페이지 역할 게이트 | 역할 검사 없음 — 로그인 사용자는 PIN, 게스트는 무가드(`AppShellViewModel.cs:376-384`) | (가정) 운영자 전용 게이트 검토 여지. 키오스크 운영 동선상 현행 유지가 기본 |
 | 인증 수단 확장 | `authMethod`는 `"google"` 고정. 클라 `ParseAuthMethod`는 그 외 값을 `Unknown`으로 떨어뜨린다(`User.cs:39-40`) | Kakao·Apple 추가 시 enum 값 + 매핑 1줄 + 서버 provider 검증이 필요. 웹·Android 확장은 OAuth 클라이언트 유형이 별도([90 §7](./90-roadmap-and-future-work.md#7-향후-플랫폼-확장--웹--android-추후-논의)) |
