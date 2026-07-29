@@ -11,7 +11,7 @@
               "-NoProfile",
               "-NonInteractive",
               "-File",
-              "E:\\Study\\photobooth\\.claude\\hooks\\block-ui.ps1"
+              "C:\\STUDY\\PROJECT\\PhotoBooth\\.claude\\hooks\\block-ui.ps1"
             ],
             "timeout": 15,
             "statusMessage": "UI 실행 차단 검사"
