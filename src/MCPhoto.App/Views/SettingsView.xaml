@@ -365,7 +365,7 @@
                         <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}">
                             <Border Style="{StaticResource GroupDivider}" />
                             <TextBlock Text="외부 장치 (추후 지원)" Style="{StaticResource GroupTitle}" />
-                            <TextBlock Text="외부 카메라(DSLR)·프린터 연동은 장비 확정 후 지원됩니다. 현재는 설정 자리만 제공됩니다."
+                            <TextBlock Text="외부 카메라(DSLR)·프린터 연동은 추후 지원 예정입니다."
                                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
                                        TextWrapping="Wrap" Margin="0,0,0,8" />
                             <Grid Style="{StaticResource SettingRow}">
