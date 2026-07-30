@@ -2,7 +2,7 @@
 
 **키오스크형 셀프 포토부스** — WPF/.NET 8 데스크톱 앱에서 촬영·합성·타임랩스를 만들고, Firebase로 업로드해 **QR 코드**로 모바일에서 사진·영상을 내려받는 시스템입니다.
 
-> 앱 표시명은 `branding.ini`로 바꿀 수 있습니다(기본값 "MC Photo"). 아래 [설정](#-설정) 참고.
+> 앱 표시명은 `branding.ini`로 바꿀 수 있습니다(기본값 "MCPhoto"). 아래 [설정](#-설정) 참고.
 
 ---
 
@@ -81,7 +81,7 @@ publish.bat  더블클릭    (또는)  powershell -ExecutionPolicy Bypass -File 
 
 | 파일 | 위치(우선순위) | 용도 |
 |------|----------------|------|
-| `branding.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` | 앱 표시명 변경(`[Branding] AppName=...`), 없으면 "MC Photo". 샘플: `branding.ini.sample` |
+| `branding.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` | 앱 표시명 변경(`[Branding] AppName=...`), 없으면 "MCPhoto". 샘플: `branding.ini.sample` |
 | `MCPhoto.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` → `%LocalAppData%\MCPhoto\` | 촬영·필터·QR·표시모드·카메라 등 앱 설정 |
 
 > 버전 표기용 외부 파일은 없습니다. 앱 하단의 버전은 **exe의 어셈블리 버전 리소스**에서, 진단 화면의 빌드 시각은 **exe 파일 타임스탬프**에서 읽습니다. 버전을 올릴 때는 `Directory.Build.props`의 `<Version>` 한 줄만 수정하면 exe 파일 속성과 앱 표기가 함께 바뀝니다.

@@ -19,7 +19,7 @@ public class BrandingServiceTests
     {
         var path = Path.Combine(Path.GetTempPath(), $"branding_absent_{Guid.NewGuid():N}.ini");
         var svc = new IniBrandingService(path);
-        Assert.Equal("MC Photo", svc.AppName);
+        Assert.Equal("MCPhoto", svc.AppName);
         Assert.Equal("self custom photobooth", svc.Subtitle); // 소제목 기본값
     }
 
@@ -70,7 +70,7 @@ public class BrandingServiceTests
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("MC Photo", svc.AppName);
+            Assert.Equal("MCPhoto", svc.AppName);
         }
         finally { File.Delete(path); }
     }
@@ -82,7 +82,7 @@ public class BrandingServiceTests
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("MC Photo", svc.AppName);
+            Assert.Equal("MCPhoto", svc.AppName);
         }
         finally { File.Delete(path); }
     }
@@ -90,11 +90,11 @@ public class BrandingServiceTests
     [Fact]
     public void Korean_Utf8_Value_Preserved()
     {
-        var path = TempIni("[Branding]\nAppName=철이네 사진관 📸\n");
+        var path = TempIni("[Branding]\nAppName=MC 사진관 📸\n");
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("철이네 사진관 📸", svc.AppName);
+            Assert.Equal("MC 사진관 📸", svc.AppName);
         }
         finally { File.Delete(path); }
     }
@@ -106,7 +106,7 @@ public class BrandingServiceTests
         try
         {
             var svc = new IniBrandingService(path);
-            Assert.Equal("MC Photo", svc.AppName); // 크래시 없이 기본값
+            Assert.Equal("MCPhoto", svc.AppName); // 크래시 없이 기본값
         }
         finally { File.Delete(path); }
     }

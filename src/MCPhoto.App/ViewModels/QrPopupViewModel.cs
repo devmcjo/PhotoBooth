@@ -56,6 +56,14 @@ public sealed partial class QrPopupViewModel : ViewModelBase
         // 미디어 선택(it7 F2): 사진 옵션 on일 때만 최종 이미지 경로 전달, 타임랩스도 옵션 기준.
         var photoPath = settings.SendPhoto ? session.FinalImagePath : null;
         var timelapsePath = settings.SendTimelapse ? session.TimelapsePath : null;
+
+        // 옵션은 켜져 있는데 보낼 파일이 없는 경우를 남긴다. 종전에는 완전 무음이어서 그대로
+        // 전송에서 빠졌고, 웹은 URL 없음을 "전송 옵션 꺼짐"으로 표시하므로 켜 둔 사용자에게는
+        // 설정이 잘못된 것처럼 보였다. 이 한 줄이 설정 문제와 생성 실패를 로그에서 갈라준다.
+        if (settings.SendTimelapse && session.TimelapsePath is null)
+            _logger?.LogWarning("타임랩스 전송 옵션 on 이지만 생성된 파일이 없어 전송에서 제외 — 앞선 녹화/타임랩스 로그 확인");
+        if (settings.SendPhoto && session.FinalImagePath is null)
+            _logger?.LogWarning("사진 전송 옵션 on 이지만 결과 이미지가 없어 전송에서 제외");
         if (photoPath is null && timelapsePath is null)
         {
             // 연동 규칙상 둘 다 off면 QR 자체 off라 진입하지 않지만, 결과물 자체가 없을 때 방어.

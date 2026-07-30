@@ -1,4 +1,4 @@
-; MC포토 인스톨러 (Inno Setup) — WBS Step 12
+; MCPhoto 인스톨러 (Inno Setup) — WBS Step 12
 ; 앱 + 기본 프레임(Frame/) + ffmpeg 번들. 데이터 폴더는 %ProgramData%\MCPhoto (쓰기 가능).
 ; ⚠️ 서비스 계정 키(*serviceaccount*.json 등)는 절대 포함하지 않는다 (architecture §6.4).
 ;
@@ -6,7 +6,8 @@
 ;   dotnet publish src/MCPhoto.App -c Release -r win-x64 --self-contained false -o publish
 ; 그 후: iscc installer\MCPhoto.iss
 
-#define AppName "MC포토"
+; 표시 이름은 여기 한 곳에서만 정의한다({#AppName}로 참조 — 종전엔 아래 [Icons]·[Run]에 하드코딩돼 있었다).
+#define AppName "MCPhoto"
 #define AppVersion "1.0.0"
 #define AppPublisher "MCPhoto"
 #define AppExeName "MCPhoto.exe"
@@ -20,7 +21,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\MCPhoto
-DefaultGroupName=MC포토
+DefaultGroupName={#AppName}
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2
 SolidCompression=yes
@@ -45,15 +46,15 @@ Name: "{commonappdata}\MCPhoto\logs"; Permissions: users-modify
 Name: "{commonappdata}\MCPhoto\cache"; Permissions: users-modify
 
 [Icons]
-Name: "{group}\MC포토"; Filename: "{app}\{#AppExeName}"
-Name: "{group}\MC포토 제거"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\MC포토"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName} 제거"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "바탕화면 바로가기 생성"; GroupDescription: "추가 아이콘:"
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "MC포토 실행"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; Description: "{#AppName} 실행"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; 캐시는 정리, 사용자 설정/결과물은 보존

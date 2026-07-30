@@ -8,11 +8,19 @@ REM  MCPhoto web deploy (Cloud Functions / Hosting)
 REM  Location: web\ (same folder as firebase.json / .firebaserc)
 REM
 REM  Usage:
-REM    deploy-web.bat                    functions only (default)
-REM    deploy-web.bat all                functions + hosting (download page)
-REM    deploy-web.bat hosting            hosting only
-REM    deploy-web.bat functions nopause  do not wait for a key at the end (CI)
+REM    deploy-web.bat                    functions + hosting (default)
+REM    deploy-web.bat all                same as the default, spelled out
+REM    deploy-web.bat functions          functions only - download page NOT updated
+REM    deploy-web.bat hosting            hosting only  - backend API  NOT updated
+REM    deploy-web.bat all nopause        do not wait for a key at the end (CI)
 REM                                      env DEPLOY_WEB_NOPAUSE=1 does the same
+REM
+REM  Why the default is "all" (changed 2026-07-30):
+REM  it used to be "functions", so double-clicking this file deployed the
+REM  backend and silently left the download page on an old release. The page
+REM  sat 8 days behind (old product name, no share button, no one-click save)
+REM  while the deploy log said "Deploy complete". "web deploy" now means the
+REM  whole web surface; pass an explicit target to narrow it.
 REM
 REM  Requires: firebase login done + functions secrets registered
 REM  Project: mcphoto-955fb (.firebaserc default)
@@ -31,10 +39,12 @@ cd /d "%~dp0"
 
 set "PROJECT=mcphoto-955fb"
 set "FN_URL=https://asia-northeast3-%PROJECT%.cloudfunctions.net/api"
+set "HOSTING_URL=https://%PROJECT%.web.app"
 set "RC=0"
+set "VERIFY_FAILED="
 
 set "TARGET=%~1"
-if "%TARGET%"=="" set "TARGET=functions"
+if "%TARGET%"=="" set "TARGET=all"
 
 REM Wait for a key at the end so a double-clicked window does not vanish.
 set "HOLD=1"
@@ -52,6 +62,10 @@ goto :fail
 :targetOk
 
 echo === MCPhoto web deploy  project=%PROJECT%  target=%TARGET% ===
+REM Spell out what this run touches. A partial deploy must never look total.
+if /I "%TARGET%"=="all"       echo     Cloud Functions (backend API) + Hosting (download page)
+if /I "%TARGET%"=="functions" echo     Cloud Functions ONLY - the download page will NOT be updated.
+if /I "%TARGET%"=="hosting"   echo     Hosting ONLY - the backend API will NOT be updated.
 echo.
 
 REM hosting-only skips the functions build.
@@ -97,6 +111,31 @@ goto :after
 if not "%RC%"=="0" goto :fail
 echo.
 echo === Deploy finished ===
+echo.
+
+REM ---- Post-deploy check (hosting): is the live page really what we built? ----
+REM "Deploy complete" only means the CLI finished. This compares the served
+REM bytes against public\, which is the check that would have caught the page
+REM being 8 days stale. Byte compare is valid: hosting serves these verbatim.
+if /I "%TARGET%"=="functions" goto :hostingCheckDone
+echo [check] Comparing the live download page against public\
+call :verifyHostingFile index.html
+call :verifyHostingFile app.js
+call :verifyHostingFile styles.css
+if defined VERIFY_FAILED goto :verifyWarn
+echo     Hosting URL: %HOSTING_URL%
+echo.
+goto :hostingCheckDone
+:verifyWarn
+echo.
+echo *** WARNING: the live files do not match public\ ***
+echo     The CLI reported success but the served page is not what you built.
+echo     - Re-run:  deploy-web.bat hosting
+echo     - Still failing: delete the .firebase folder, then deploy again.
+echo     - Confirm the release: firebase hosting:channel:list --project %PROJECT%
+echo.
+:hostingCheckDone
+
 if /I "%TARGET%"=="hosting" goto :done
 
 echo Function URL: %FN_URL%
@@ -145,4 +184,31 @@ if not defined HOLD goto :eof
 echo.
 echo Press any key to continue...
 pause >nul
+goto :eof
+
+REM ---- Compare one live hosting file against its local copy ----
+REM  %1 = file name directly under public\ . Sets VERIFY_FAILED on mismatch.
+REM  A cache-buster query plus no-cache keeps a CDN/proxy copy of the previous
+REM  release from passing as the new one - that copy is exactly what fooled us.
+REM  Fetch failure is reported but does not fail the deploy: no network answer
+REM  is not evidence of a bad release.
+:verifyHostingFile
+set "VF_NAME=%~1"
+set "VF_TMP=%TEMP%\mcphoto-deploycheck-%VF_NAME%"
+if exist "%VF_TMP%" del "%VF_TMP%" >nul 2>&1
+curl.exe -s --max-time 25 -H "Cache-Control: no-cache" -o "%VF_TMP%" "%HOSTING_URL%/%VF_NAME%?deploycheck=%RANDOM%%RANDOM%" >nul 2>&1
+if not exist "%VF_TMP%" goto :vfNoFetch
+fc /b "%VF_TMP%" "public\%VF_NAME%" >nul 2>&1
+if errorlevel 1 goto :vfMismatch
+echo     - [ OK ] %VF_NAME%
+goto :vfCleanup
+:vfMismatch
+echo     - [FAIL] %VF_NAME% - served bytes differ from public\%VF_NAME%
+set "VERIFY_FAILED=1"
+goto :vfCleanup
+:vfNoFetch
+echo     - [ ?? ] %VF_NAME% - could not fetch it, check the page in a browser
+goto :eof
+:vfCleanup
+del "%VF_TMP%" >nul 2>&1
 goto :eof

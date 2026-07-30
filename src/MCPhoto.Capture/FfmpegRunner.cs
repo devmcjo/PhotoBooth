@@ -138,7 +138,12 @@ public sealed class FfmpegRunner : IDisposable
             // 인코딩 마무리 대기(최대 30초)
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await proc.WaitForExitAsync(cts.Token);
-            _logger?.LogInformation("녹화 종료(exit={Code})", proc.ExitCode);
+            // exit≠0 은 녹화가 실패한 것이다 — session.mp4 가 없거나 0바이트이므로 타임랩스도
+            // 만들어지지 않는다. INF 로 남기면 정상 종료와 섞여 묻히므로 WARN 으로 올린다.
+            if (proc.ExitCode != 0)
+                _logger?.LogWarning("녹화 실패(exit={Code}) — session.mp4 무효, 타임랩스 생성 불가", proc.ExitCode);
+            else
+                _logger?.LogInformation("녹화 종료(exit={Code})", proc.ExitCode);
         }
         catch (Exception ex)
         {

@@ -19,8 +19,9 @@
         "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
       },
       {
+        "//": "no-store 가 아니라 no-cache: ETag 조건부 요청으로 대개 304 만 오간다(바디 재전송 없음). max-age=3600 이던 종전 정책은 index.html(no-cache)만 새로 받고 app.js 는 최대 1시간 구버전을 쓰는 조합을 만들어, 새 HTML + 구 JS 로 페이지가 깨질 수 있었다. QR 로 1회 방문하는 페이지라 캐시 적중률 자체가 낮아 잃는 것이 거의 없다. 파일명 해시를 붙이는 것이 정석이지만 빌드 단계가 없는 바닐라 정적 페이지라 채택하지 않았다.",
         "source": "**/*.@(js|css)",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
       }
     ]
   },

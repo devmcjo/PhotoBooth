@@ -2,7 +2,7 @@
   "name": "mcphoto-functions",
   "version": "1.0.0",
   "private": true,
-  "description": "MC포토 백엔드 프록시 (Cloud Functions 2nd gen, TypeScript) — WPF Admin 키 제거용 서버 경유 계층",
+  "description": "MCPhoto 백엔드 프록시 (Cloud Functions 2nd gen, TypeScript) — WPF Admin 키 제거용 서버 경유 계층",
   "main": "lib/index.js",
   "engines": {
     "node": "20"

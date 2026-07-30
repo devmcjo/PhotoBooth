@@ -290,7 +290,7 @@ deleteLocal(frame):
 | 항목 | 규격 |
 |------|------|
 | 값 | `AppName`(앱 이름) · `Subtitle`(홈 화면 소제목) |
-| 기본값(폴백) | `AppName = "MC Photo"` · `Subtitle = "self custom photobooth"` |
+| 기본값(폴백) | `AppName = "MCPhoto"` · `Subtitle = "self custom photobooth"` |
 | 폴백 독립성 | 두 값은 **독립적으로** 폴백한다(한 값만 비어도 그 값만 기본값) |
 | 적용 지점 | 창/앱 제목 · 홈 화면 타이틀 · 홈 화면 소제목 |
 | 로딩 시점 | **첫 화면이 만들어지기 전에** 주입한다(초기 렌더에 반영되도록) |

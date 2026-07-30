@@ -153,10 +153,10 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
   1. 실행 경로 `{AppContext.BaseDirectory}\branding.ini`
   2. `%ProgramData%\MCPhoto\branding.ini`
   존재하는 첫 파일 사용.
-- **폴백**: 파일 부재 / 빈 값 / 손상·예외 → 기본값 **AppName="MC Photo"**(`DefaultAppName`) · **Subtitle="self custom photobooth"**(`DefaultSubtitle`). 두 키는 독립 폴백(한 키만 비어도 그 키만 기본값). 어떤 실패에도 크래시 금지.
+- **폴백**: 파일 부재 / 빈 값 / 손상·예외 → 기본값 **AppName="MCPhoto"**(`DefaultAppName`) · **Subtitle="self custom photobooth"**(`DefaultSubtitle`). 두 키는 독립 폴백(한 키만 비어도 그 키만 기본값). 어떤 실패에도 크래시 금지.
 - **인코딩**: UTF-8 명시 읽기(`File.ReadAllText(resolved, Encoding.UTF8)`, `:32`) — 한글 이름·메모장 인코딩 편차 대비.
 - **로딩 시점·적용**: `App.OnStartup`이 `AppName`→`Resources["Branding.AppName"]`, `Subtitle`→`Resources["Branding.Subtitle"]`에 주입(창 생성 **전**, `App.xaml.cs`) → `App.xaml` 기본값을 덮어씀 → `DynamicResource`로 창 제목(`MainWindow.xaml`)·홈 타이틀(`HomeView.xaml`, `Branding.AppName`)·홈 소제목(`HomeView.xaml`, `Branding.Subtitle`)에 반영. 변경은 앱 재시작 필요(읽기 전용).
-- **동봉 샘플**: `branding.ini.sample`(빌드 시 실행 폴더 복사, `MCPhoto.App.csproj:76`). 현재 내용은 3줄뿐이다 — `[Branding]` / `AppName=MC Photo` / `Subtitle=(prototype)`. 고객은 이 파일을 `branding.ini`로 리네임해 값만 바꾸면 된다.
+- **동봉 샘플**: `branding.ini.sample`(빌드 시 실행 폴더 복사, `MCPhoto.App.csproj:76`). 현재 내용은 3줄뿐이다 — `[Branding]` / `AppName=MCPhoto` / `Subtitle=(prototype)`. 고객은 이 파일을 `branding.ini`로 리네임해 값만 바꾸면 된다.
 
 ---
 
@@ -181,7 +181,8 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
 ## 6. 빌드 정보 — 앱 버전 표기 (it18: 외부 파일 폐기)
 
 - 정의: `IBuildInfoService`(프로퍼티 `Version`·`BuildDate` + `DisplayText`) · `AssemblyBuildInfoService`(`AssemblyBuildInfoService.cs`). DI Singleton(`ServiceRegistration.cs`), 시작 1회 확정 후 불변. **값은 실행 파일 자신에서 나온다 — 외부 파일 없음.**
-- **버전 출처**: 엔트리 어셈블리의 `AssemblyName.Version` 앞 3자리(`ToString(3)`). 원천은 `Directory.Build.props`의 `<Version>`이며 `AssemblyVersion`·`FileVersion`이 `$(Version).0`으로 파생된다 → **exe 파일 속성의 버전 리소스와 앱 표기가 항상 일치**한다. 릴리스 시 `<Version>` 한 줄만 올린다(현재 `1.1.6` → 리소스 `1.1.6.0`).
+- **버전 출처**: 엔트리 어셈블리의 `AssemblyName.Version` 앞 3자리(`ToString(3)`). 원천은 `Directory.Build.props`의 `<Version>`이며 `AssemblyVersion`·`FileVersion`이 `$(Version).0`으로 파생된다 → **exe 파일 속성의 버전 리소스와 앱 표기가 항상 일치**한다. 릴리스 시 `<Version>` 한 줄만 올린다(현재 `1.1.6` → 파일 버전 `1.1.6.0`, 제품 버전 `1.1.6`).
+- **⚠️ `IncludeSourceRevisionInInformationalVersion=false` 필수**: .NET SDK는 기본적으로 `AssemblyInformationalVersion`(= exe 파일 속성의 **제품 버전**)에 `+{git 커밋 SHA}`를 덧붙인다 → `1.1.6+c4469825f411…`. 운영자가 파일 속성에서 읽는 값이므로 이 속성으로 끈다. **표기 코드가 `InformationalVersion`을 쓰지 않는 이유도 같다** — `AssemblyName.Version`(4자리 숫자)은 해시가 섞일 수 없다.
 - **빌드 시각 출처**: exe 파일의 `LastWriteTime`을 `yyyy-MM-dd HH:mm`(로컬)으로. 경로는 `Environment.ProcessPath`다 — `Assembly.Location`은 **단일 파일 퍼블리시에서 빈 문자열**이라 쓸 수 없다. `CreationTime`을 쓰지 않는 이유: 설치·복사 시점으로 덮어써져 "설치 시각"이 된다. `LastWriteTime`은 Inno Setup이 원본 시각을 보존하므로 배포 후에도 빌드 시각으로 남는다.
 - **폴백**: 버전 확인 불가 → `"0.0.0"`. exe 경로 부재·읽기 실패 → `BuildDate` 빈 문자열. 어떤 경우에도 크래시 없음(예외는 삼켜 로그).
 - **표기**: `DisplayText`(예 `v1.1.6`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭). 진단 화면 "개발자 문의" 카드는 `Version`과 `BuildDate`(시각 포함)를 함께 보여준다([11 §17](./11-exe-app-features.md)).

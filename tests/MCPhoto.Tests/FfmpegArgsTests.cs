@@ -20,6 +20,32 @@ public class FfmpegArgsTests
         Assert.Contains("session.mp4", args);
     }
 
+    [Theory]
+    [InlineData(1443, 1080)] // 실측 실패 케이스(홀수 폭)
+    [InlineData(810, 1081)]  // 홀수 높이
+    [InlineData(321, 241)]   // 두 변 모두 홀수
+    public void Record_Args_Force_Even_Output_Dimensions(int w, int h)
+    {
+        var args = FfmpegArgs.BuildRecordArgs(w, h, 30, @"C:\temp\session.mp4");
+
+        // 출력은 crop 으로 짝수 보정한다 — yuv420p+libx264 는 홀수 변에서 인코더가 열리지 않고
+        // 프로세스가 죽는다. 그러면 session.mp4 도 타임랩스도 만들어지지 않는다.
+        Assert.Contains("-vf crop=trunc(iw/2)*2:trunc(ih/2)*2", args);
+
+        // 입력 크기는 원본 그대로여야 한다 — 여기를 짝수로 바꾸면 파이프로 보내는
+        // 프레임 바이트 수(WriteFrame 의 stride)와 어긋나 영상이 깨진다.
+        Assert.Contains($"-video_size {w}x{h}", args);
+    }
+
+    [Fact]
+    public void Timelapse_Args_Force_Even_Output_Dimensions()
+    {
+        var args = FfmpegArgs.BuildTimelapseArgs(@"C:\temp\session.mp4", 1.0, @"C:\temp\timelapse.mp4");
+
+        // 입력이 이미 짝수라 통상 no-op 이지만, 같은 yuv420p 제약이 걸리는 경로다.
+        Assert.Contains("crop=trunc(iw/2)*2:trunc(ih/2)*2", args);
+    }
+
     [Fact]
     public void Timelapse_Args_Are_Muted_H264()
     {
