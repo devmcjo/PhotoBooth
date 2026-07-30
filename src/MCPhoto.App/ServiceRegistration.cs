@@ -73,7 +73,11 @@ internal static class ServiceRegistration
         services.AddSingleton<ILocalSaveService, LocalSaveService>();
 
         // Step 6: 녹화/타임랩스(ffmpeg). CameraService·TimelapseService가 FfmpegRunner 공유.
-        services.AddSingleton<FfmpegRunner>(_ => new FfmpegRunner());
+        // 로거는 필수다: FfmpegRunner 는 변환 실패 시 ffmpeg stderr 꼬리를 LogError 로 남기는데,
+        // 종전 등록(new FfmpegRunner())은 로거가 없어 그 로그가 한 번도 남지 않았다. 그래서
+        // 홀수 해상도로 인코더가 열리지 않던 실패가 "타임랩스 생성 실패" 한 줄로만 보였고
+        // 원인(width not divisible by 2)이 로그에서 사라져 진단이 오래 걸렸다.
+        services.AddSingleton<FfmpegRunner>(sp => new FfmpegRunner(logger: sp.GetService<ILogger<FfmpegRunner>>()));
         services.AddSingleton<ITimelapseService, TimelapseService>();
 
         // Step 7: 합성. 세션 상태는 화면 통합(Step 9)에서 스코프 생성.

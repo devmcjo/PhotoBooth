@@ -23,8 +23,15 @@ public class FfmpegIntegrationTests
         return null;
     }
 
-    [Fact]
-    public async Task Record_Pipe_Then_Timelapse_Produces_Playable_Mp4()
+    [Theory]
+    [InlineData(320, 240)] // 짝수 — 종전 케이스
+    [InlineData(321, 241)] // 두 변 모두 홀수. 짝수 보정이 없으면 libx264 가 yuv420p 인코더를
+                           // 열지 못해(width not divisible by 2) 프로세스가 즉시 죽고, 파이프가
+                           // 끊겨 session.mp4 가 아예 안 만들어진다 → 타임랩스도 실패한다.
+                           // 실측 회귀: 1443x1080 세션에서 timelapseUrl 이 null 로 커밋되어
+                           // 웹에 "전송 옵션 꺼짐"으로 표시됐다. 여기서는 같은 성질(홀수 변)을
+                           // 작은 해상도로 재현한다 — 실측 크기는 프레임당 4.6MB 라 느리다.
+    public async Task Record_Pipe_Then_Timelapse_Produces_Playable_Mp4(int w, int h)
     {
         var ffmpegPath = FindFfmpeg();
         if (ffmpegPath is null)
@@ -44,8 +51,8 @@ public class FfmpegIntegrationTests
             var runner = new FfmpegRunner(ffmpegPath);
             Assert.True(runner.IsAvailable);
 
-            // 320x240 BGR24 더미 프레임 90장(3초 @30fps) → stdin 파이프 녹화
-            const int w = 320, h = 240, fps = 30, frames = 90;
+            // BGR24 더미 프레임 90장(3초 @30fps) → stdin 파이프 녹화
+            const int fps = 30, frames = 90;
             var frame = new byte[w * h * 3];
             for (int i = 0; i < frame.Length; i++) frame[i] = (byte)(i % 256);
 
