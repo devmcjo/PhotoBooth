@@ -8,6 +8,7 @@
 | 작성일 | 2026-07-30 |
 | 상태 | **설계 확정 v1.1 — 구현 착수 가능**. 단, [08 서버·인프라 선행 작업](./08-server-and-infra-prerequisites.md)의 P0 항목은 코드 작성 전에 처리해야 한다 |
 | v1.1 갱신(2026-07-30) | 원격 it17~it19 반영 — **자동 컷 수**(sentinel 0, WD19)·**오버레이 복귀 집합**(it19)·**버전 표기 채널 폐기**(it18)·설정 그룹 이동·진단 개발자 문의 카드·**CORS 실측 반영**(`web/OPS-cors.md` — 다운로드 GET 불필요/PUT 필수) + **개인 프레임 이연 컷라인**(WD20) |
+| v1.3 갱신(2026-07-30) | **Opus 적대 리뷰 반영(설계 리뷰 완료)** — 치명 3(M1 Zustand 배선·**은행가 반올림 `roundHalfToEven`**·삭제 소유자 검사 회귀)·중요 11(WBS Step 7 프레임 공급·`currentPin` 계약·`SlotPlacement` 이식·opfsWriter 명시·**JWT 만료 C10 등재**·빌드값 빈 문자열 폴백·**타임랩스 OPFS 스풀 재설계**·`prompt=select_account`·Ready "누적" 통일·E24 범위·stale 주석)·사소 9 |
 | v1.2 갱신(2026-07-30) | 소스 대조 검증 반영 — ① **게스트에게는 QR이 제공되지 않는다**(`QrEffectivePolicy`: 미로그인 → `Result→Done`. 도메인 모듈·화면·테스트·WBS 마일스톤 정정) ② 타임랩스 **경로 A는 메인 스레드 전용**(`MediaRecorder`/`captureStream`이 Worker에 없음) + 브라우저 지원 현실표 ③ **OPFS 쓰기는 Worker `createSyncAccessHandle`이 유일 경로**(Safari에 `createWritable` 없음) ④ iOS Safari API 하한표(`OffscreenCanvas` WebGL2 = 17+) ⑤ QR **ECC Q**(Windows와 일치) ⑥ WBS 버전 캡션 `Site` 제거·컷 수 해석 식 정정 |
 | 범위 | Windows 앱의 **모든 화면**(촬영·프레임 저작·설정·계정·사용자 관리·진단)을 웹으로 구현 + 기존 다운로드 페이지(P1) 유지 |
 
