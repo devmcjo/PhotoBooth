@@ -308,31 +308,6 @@ public class SettingsViewModelTests
     }
 
     [Fact]
-    public async Task IsAutoCutCount_Tracks_CutCount()
-    {
-        // [NotifyPropertyChangedFor] 배선 확인 — 캡션 노출이 콤보 선택 즉시 반영되어야 한다.
-        var vm = MakeVm();
-        await vm.OnEnterAsync();
-        Assert.False(vm.IsAutoCutCount);   // 기본 6
-
-        var notified = new List<string?>();
-        void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => notified.Add(e.PropertyName);
-        vm.PropertyChanged += OnChanged;
-        try
-        {
-            vm.CutCount = CutCountPolicy.AutoCutCount;
-            Assert.True(vm.IsAutoCutCount);
-            Assert.Contains(nameof(vm.IsAutoCutCount), notified);
-
-            notified.Clear();
-            vm.CutCount = 6;
-            Assert.False(vm.IsAutoCutCount);
-            Assert.Contains(nameof(vm.IsAutoCutCount), notified);
-        }
-        finally { vm.PropertyChanged -= OnChanged; }
-    }
-
-    [Fact]
     public async Task Auto_CutCount_Saved_To_Ini()
     {
         // CutCount는 게이트 비대상(VF-14) → 게스트 VM에서도 저장된다. Clamp 가드가 sentinel을 살려둔다.
@@ -345,7 +320,7 @@ public class SettingsViewModelTests
 
         Assert.Equal(CutCountPolicy.AutoCutCount, settings.Current.CutCount);
         Assert.Equal(CutCountPolicy.AutoCutCount, new IniSettingsService(iniPath: settings.IniPath).Load().CutCount);
-        Assert.True(vm.IsAutoCutCount);   // 저장 후 재로드(LoadSettings)에서도 자동 유지
+        Assert.Equal(CutCountPolicy.AutoCutCount, vm.CutCount);   // 저장 후 재로드(LoadSettings)에서도 자동 유지
     }
 
     // ── it9 C1: 카메라 열거 ──

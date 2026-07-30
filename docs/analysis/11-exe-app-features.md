@@ -222,7 +222,7 @@
 - **목적**: AppSettings 전 항목 편집(앱 설정만; 계정·관리자는 Account 페이지로 분리).
 - **화면·VM**: `SettingsView`(`SettingsView.xaml`) · `SettingsViewModel`. 서비스: `ISettingsService`, `ICameraService`, `ICameraTestDialogService`, `IDiagnosticsDialogService`(it11 #14).
 - **항목**(2열 그리드 + 그룹, `SettingsView.xaml`):
-  - 촬영: 컷 수(**자동**/6/8/10 — it17, "자동" 선택 시 콤보 아래에 `자동: 프레임 슬롯 수 + 2장 촬영(최소 6장)` 규칙 캡션. 설정 시점엔 프레임이 미선택이라 실제 숫자는 표기하지 않는다), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시, **셔터음**, **재촬영 사용**(+on일 때 **횟수 제한 1~3**, it11 #13).
+  - 촬영: 컷 수(**자동**/6/8/10 — it17. 콤보만 두고 **규칙 안내 캡션은 두지 않는다**(it19에서 제거 — 설정 시점엔 프레임이 미선택이라 실제 숫자를 못 보여줘 규칙만 반복하는 문구였다). 실제 숫자는 촬영 안내(Guide)에서 "(자동)" 배지와 함께 확정값으로 노출된다), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시, **셔터음**, **재촬영 사용**(+on일 때 **횟수 제한 1~3**, it11 #13).
   - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트, **실제 장치명 표시** it11 #15), 표시 모드(전체화면/창모드).
   - 출력·전송: 출력 포맷(JPG/PNG), **QR 전송(+하위 사진/타임랩스 토글·보관 시간 1~72h)**, **로컬 저장**, 로컬 저장 경로. (it12 R2: QR 전송·로컬 저장을 장치·표시 → 출력·전송으로 이동. 보관 시간은 QR 다운로드 페이지의 유효 기간이라 QR 전송 하위로 이동)
   - 필터: 원본(고정 on·Disable), 흑백/밝게/뷰티 노출 토글.
@@ -255,7 +255,8 @@
 - **목적**: 계정 관리(본인 정보 · PIN 변경), 사용자 관리(power), 앱 종료(power).
 - **화면·VM**: `AccountView`(단일 화면, 진입 모드 분기) · `AccountViewModel`; `UserMgmtView` · `UserMgmtViewModel`. 서비스: `IAccountService`.
 - **핵심 규칙**:
-  - 계정 페이지 모드(`AccountMode`, `AccountViewModel.cs:13-20`): **Account**(내 정보 + PIN 변경) / **Admin**(관리자 도구·전역 한도·앱 종료). 상단바 팝오버 항목이 지정(`AppShellViewModel.cs:431-437`). 진입 시 **PIN 게이트** 통과 필수(`AppShellViewModel.EnsurePinGateAsync` 공유 — 설정 진입과 동일 PIN·동일 다이얼로그).
+  - 계정 페이지 모드(`AccountMode`, `AccountViewModel.cs:13-20`): **Account**(내 정보 + PIN 변경) / **Admin**(관리자 도구·전역 한도·앱 종료). 상단바 팝오버 항목이 지정(`AppShellViewModel.cs:432-439`). 진입 시 **PIN 게이트** 통과 필수(`AppShellViewModel.EnsurePinGateAsync` 공유 — 설정 진입과 동일 PIN·동일 다이얼로그).
+  - **[닫기]는 오버레이 진입 전 화면으로 복귀**(`Close`→`ReturnFromOverlay`). 계정 페이지에도 상단바가 보이므로 계정관리↔관리자도구를 팝오버로 바로 전환할 수 있는데, 이때 복귀 지점을 덮어쓰면 [닫기]가 자기 자신으로 복귀해 **아무 일도 하지 않는다**(it19 버그). 그래서 오버레이 화면(`Settings`·`Login`·`Account`·`UserMgmt`)에서 오버레이로 전환할 때는 복귀 지점을 저장하지 않는다(`SessionStateMachine.IsOverlayScreen`). `UserMgmt`도 관리자 도구의 하위 페이지라 같은 묶음이다 — 아니면 Account↔UserMgmt를 [닫기]로 벗어날 수 없다. 회귀 테스트: `tests/MCPhoto.Tests/AppShellOverlayReturnTests.cs`.
   - PIN 변경(`ChangePin`, `AccountViewModel.cs:159-212`): `HasPin`이면 현재 PIN 확인 후 새 PIN 2회 일치, 미설정이면 최초 설정 → `PUT /accounts/me/pin`. ⚠️ **it15에서 비밀번호 개념이 폐지**되어 `ChangePassword`·`accounts.ChangePasswordAsync`는 존재하지 않는다.
   - ⚠️ **계정 생성 UI는 it15에서 폐지**됐다(팝오버 "계정 생성" 항목·`AccountMode.AccountCreate`·`CreateAccount` 모두 제거). 신규 계정은 Google SSO 최초 로그인 시 서버가 `temp_user`로 자동 생성한다. 순수 규칙 `CreatableRoles`/`CanCreate`는 남아 있으나 프로덕션 호출자가 없다([60 §1.5](./60-auth-accounts-and-roles.md#15-계정-생성-위계-게이트-it15-이후-비활성)).
   - TempUser QR 한도(시간·횟수) 편집은 **admin 전용**(`CanEditTempUserLimits`, `:87`) + 서버 `requireAdmin`(it13).

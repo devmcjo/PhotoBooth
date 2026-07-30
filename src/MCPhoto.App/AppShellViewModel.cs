@@ -223,12 +223,13 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 오버레이(설정/로그인) 진입: 현재 상태를 복귀 지점으로 저장 후 전이. (it2 §5.3)
-    /// 설정/로그인 자기 자신 재진입 시엔 복귀 지점을 덮어쓰지 않는다.
+    /// 오버레이(설정/로그인/계정) 진입: 현재 상태를 복귀 지점으로 저장 후 전이. (it2 §5.3)
+    /// 오버레이 화면에서 오버레이로 전환할 때는 복귀 지점을 덮어쓰지 않는다 — 덮어쓰면 [닫기]가
+    /// 자기 자신으로 복귀해 아무 일도 하지 않는다(it19: 계정관리↔관리자도구 전환 후 닫기 무반응 버그).
     /// </summary>
     public async Task NavigateToOverlayAsync(AppState target)
     {
-        if (CurrentState is not (AppState.Settings or AppState.Login))
+        if (!SessionStateMachine.IsOverlayScreen(CurrentState))
             _returnState = CurrentState;
         await NavigateAsync(target);
     }

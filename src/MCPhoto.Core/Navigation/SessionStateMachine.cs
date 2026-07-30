@@ -52,6 +52,14 @@ public static class SessionStateMachine
         or AppState.Qr;
 
     /// <summary>
+    /// 오버레이성 화면(촬영 흐름 밖의 설정·로그인·계정 계열)인지 — 복귀 지점 저장 제외 판정. (it19)
+    /// 오버레이끼리 전환할 때 복귀 지점을 덮어쓰면 [닫기]가 자기 자신으로 복귀해 아무 일도 하지 않는다.
+    /// UserMgmt는 관리자 도구(Account)의 하위 페이지라 같은 묶음이다(복귀 지점이 되면 Account↔UserMgmt를 벗어날 수 없다).
+    /// </summary>
+    public static bool IsOverlayScreen(AppState state) => state
+        is AppState.Settings or AppState.Login or AppState.Account or AppState.UserMgmt;
+
+    /// <summary>
     /// 상단 바(로그인·설정 버튼)를 표시할 상태인지. 몰입/모달 화면(촬영·카운트다운·QR 팝업)에서는 숨김.
     /// (it2 §3.1 — 오조작·산만 방지)
     /// </summary>

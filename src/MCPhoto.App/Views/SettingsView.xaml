@@ -105,15 +105,6 @@
                                               DisplayMemberPath="Label" SelectedValuePath="Value"
                                               SelectedValue="{Binding CutCount}" />
                                 </Grid>
-                                <!-- it17: 자동 규칙 안내. 설정 시점엔 프레임이 미선택이라 실제 컷 수 숫자를 못 보여준다(설계 §6.2) → 규칙만 표기.
-                                     실제 숫자는 촬영 안내(GuideView)에서 "(자동)" 배지와 함께 확정값으로 노출된다.
-                                     높이 22를 상시 예약해 자동↔고정 토글 시 아래 항목이 밀리지 않게 한다(it9 카메라 안내 관례). -->
-                                <Grid Height="22" Margin="0,2,0,6">
-                                    <TextBlock Text="자동: 프레임 슬롯 수 + 2장 촬영(최소 6장)"
-                                               Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
-                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                                               Visibility="{Binding IsAutoCutCount, Converter={StaticResource BoolToVis}}" />
-                                </Grid>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />

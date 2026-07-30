@@ -30,10 +30,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private DispatcherTimer? _noticeTimer;
 
     // ── [앱 설정] 필드 (AppSettings 전 항목, it2 §4.2) ──
-    // it17: 컷 수는 "자동"(sentinel 0) 선택이 가능해 규칙 캡션 노출 조건이 함께 갱신되어야 한다.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsAutoCutCount))]
-    private int _cutCount;
+    // it17: 컷 수는 "자동"(sentinel 0) 선택이 가능하다. 실제 컷 수는 프레임 확정 후 산출된다.
+    [ObservableProperty] private int _cutCount;
     [ObservableProperty] private int _countdownSec;
     [ObservableProperty] private bool _mirrorMode;
     [ObservableProperty] private bool _flashMode;
@@ -99,10 +97,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>컷수 옵션(콤보 바인딩). "자동"(sentinel 0) 최상단 + 고정 6/8/10. (it17)</summary>
     public IReadOnlyList<CutCountOption> CutCountOptions { get; } = BuildCutCountOptions();
-
-    /// <summary>자동 모드 선택 여부. 설정 화면의 규칙 캡션 노출 조건(실제 컷 수는 프레임 확정 후에만
-    /// 알 수 있어 여기선 숫자를 표시하지 않는다 — 설계 §6.2). (it17)</summary>
-    public bool IsAutoCutCount => CutCountPolicy.IsAuto(CutCount);
 
     private static CutCountOption[] BuildCutCountOptions()
     {

@@ -156,6 +156,35 @@ public class AppStateTests
         Assert.True(SessionStateMachine.CanTransition(AppState.Account, AppState.UserMgmt));
     }
 
+    // ── it19: 오버레이 화면 분류(복귀 지점 저장 제외 집합) ──
+
+    [Theory]
+    [InlineData(AppState.Settings)]
+    [InlineData(AppState.Login)]
+    [InlineData(AppState.Account)]
+    [InlineData(AppState.UserMgmt)]
+    public void Overlay_Screens_Excluded_From_Return_Point(AppState state)
+    {
+        // 이 화면들에서 오버레이로 전환할 때 복귀 지점을 덮어쓰면 [닫기]가 자기 자신으로 복귀한다.
+        Assert.True(SessionStateMachine.IsOverlayScreen(state), $"{state}는 오버레이 화면이어야 함");
+    }
+
+    [Theory]
+    [InlineData(AppState.Home)]
+    [InlineData(AppState.FrameSelect)]
+    [InlineData(AppState.Guide)]
+    [InlineData(AppState.Capture)]
+    [InlineData(AppState.CutSelect)]
+    [InlineData(AppState.Result)]
+    [InlineData(AppState.Qr)]
+    [InlineData(AppState.Done)]
+    [InlineData(AppState.FrameEditor)]
+    public void Non_Overlay_Screens_Are_Valid_Return_Points(AppState state)
+    {
+        // 촬영 흐름·홈·편집기는 복귀 지점이 되어야 한다(오버레이를 닫으면 여기로 돌아온다).
+        Assert.False(SessionStateMachine.IsOverlayScreen(state), $"{state}는 오버레이 화면이 아니어야 함");
+    }
+
     // ── it2 리뷰 사이클1 Major 회귀: 오버레이 복귀 방향 ──
     // 버그: ReturnFromOverlay가 CanTransition(Settings, _returnState)에 막혀 세션 화면 복귀 실패.
     // 근본 원인은 복귀 방향(Settings→세션화면)이 전이표에 없다는 것 — 이는 의도된 설계다

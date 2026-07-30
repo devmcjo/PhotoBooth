@@ -169,7 +169,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- ══════════ 헤더: 제목 + 인원 요약/정렬 규칙 + 새로고침 ══════════ -->
+        <!-- ══════════ 헤더: 제목 + 인원 요약 + 새로고침 ══════════ -->
+        <!-- it19: 정렬 규칙 안내 문구는 제거했다(컬럼 헤더의 ▼/▲ 표기로 충분). 정렬 로직은 그대로. -->
         <Grid Grid.Row="0" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -178,11 +179,7 @@
 
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="사용자 관리" Style="{StaticResource Text.H1}" />
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                    <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Text.Label}" />
-                    <TextBlock Text="역할이 높은 계정이 위 · 같은 역할은 먼저 가입한 계정이 위"
-                               Style="{StaticResource Text.Caption}" Margin="12,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
+                <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Text.Label}" Margin="0,4,0,0" />
             </StackPanel>
 
             <Button Grid.Column="1" Content="↻ 새로고침" Style="{StaticResource Cell.Button.Ghost}"
