@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// MC포토 Firestore 보안 규칙 — 웹(공개) 관점의 최소 권한.
+// MCPhoto Firestore 보안 규칙 — 웹(공개) 관점의 최소 권한.
 //
 // 웹 Firebase config(apiKey)는 공개되므로 이 규칙이 유일한 방어선이다(PRD §10).
 // 계약(firebase-contract.md §5.1) 준수: users/frameTemplates 전면 차단,

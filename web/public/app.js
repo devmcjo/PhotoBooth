@@ -231,7 +231,7 @@ function setBusy(anchor, busy) {
 /**
  * 수동 힌트("길게 눌러 저장")를 노출한다. present 인 미디어만 대상이다 —
  * present 여부는 renderSuccess 가 이미 다운로드 <a> 의 hidden 으로 표현해 두었다
- * (URL 있음 → hidden=false, 전송 옵션 꺼짐 → hidden=true). 별도 모듈 상태를 만들지 않는다.
+ * (URL 있음 → hidden=false, URL 없음 → hidden=true). 별도 모듈 상태를 만들지 않는다.
  */
 function revealManualHints() {
   for (const [anchorId, hintId] of [
@@ -389,8 +389,10 @@ function formatExpiry(date) {
 
 // ---- 성공 렌더(Step 5, it7 F3) ------------------------------------------
 // renderSuccess 는 loadSession 이 만료 판정(문서 부재/expiresAt 경과)을 통과한 뒤에만 호출된다(VF-10).
-// 따라서 여기서 URL 이 falsy 하면 "만료/실패"가 아니라 "전송 옵션이 꺼진 것"(의도적 제외)으로
-// 안전하게 해석한다(it7 F3, 계약 §5: 미만료 문서의 URL null = 전송 옵션 꺼짐).
+// 따라서 여기서 URL 이 falsy 하면 "만료"는 아니다 — 그 미디어가 이 세션에 없는 것이다.
+// 웹은 그 이유(전송 옵션 꺼짐 / 앱에서 생성 실패)를 구분할 수 없으므로 원인을 단정하지 않고
+// 중립 문구만 노출한다. 종전에는 "옵션 꺼짐"으로 단정해, 실제로는 타임랩스 생성이 실패한
+// 세션에서도 설정 문제로 오진하게 만들었다(2026-07-30).
 // token 은 파일명의 시각 prefix 도출에 쓴다(it17 §6.2). 전역 변수를 만들지 않고 인자로 받는다.
 function renderSuccess(data, token) {
   const photoPreview = document.getElementById("photo-preview");
@@ -407,7 +409,7 @@ function renderSuccess(data, token) {
   const expiryNotice = document.getElementById("expiry-notice");
 
   // 미디어별 상태:
-  //   present=false → URL null = 전송 옵션 꺼짐(의도적 제외). 실패 아님 → 만료 폴백에서 제외.
+  //   present=false → URL null = 이 세션에 없는 미디어. 만료 아님 → 만료 폴백에서 제외.
   //   present=true  → URL 있음. loadOk: null(로드 대기)/true(성공)/false(onerror=로드 실패).
   const mediaState = {
     photo: { present: false, loadOk: null },
@@ -415,7 +417,7 @@ function renderSuccess(data, token) {
   };
 
   // 만료 폴백은 "URL 이 있는데 로드에 실패한 경우"만 실패로 센다.
-  // 옵션 꺼짐(present=false)은 정상 성공의 부분 부재이므로 폴백 트리거에서 제외한다(it7 §4.2).
+  // 미디어 부재(present=false)는 정상 성공의 부분 부재이므로 폴백 트리거에서 제외한다(it7 §4.2).
   function maybeFallbackToExpired() {
     const photoLoadFailed = mediaState.photo.present && mediaState.photo.loadOk === false;
     const videoLoadFailed = mediaState.video.present && mediaState.video.loadOk === false;
@@ -429,7 +431,7 @@ function renderSuccess(data, token) {
     }
   }
 
-  // 사진: URL 있으면 프리뷰/다운로드 표시, 없으면 "전송 옵션 꺼짐" 안내.
+  // 사진: URL 있으면 프리뷰/다운로드 표시, 없으면 프리뷰를 감추고 안내 문구만.
   if (data.finalImageUrl) {
     mediaState.photo.present = true;
     if (photoOptout) photoOptout.hidden = true;
@@ -458,7 +460,8 @@ function renderSuccess(data, token) {
       buildFileName(token, data.finalImageUrl, null, "photo")
     );
   } else {
-    // 전송 옵션 꺼짐: 프리뷰·다운로드·힌트·실패문구 숨기고 옵션꺼짐 안내만 노출.
+    // 미디어 없음: 프리뷰·다운로드·힌트·실패문구를 모두 숨기고 안내 문구만 노출한다.
+    // 프리뷰를 남기면 빈 회색 박스가 로딩 중처럼 보인다(.media__preview[hidden] 참고).
     mediaState.photo.present = false;
     if (photoPreview) photoPreview.hidden = true;
     if (photoError) photoError.hidden = true;
@@ -467,7 +470,7 @@ function renderSuccess(data, token) {
     if (photoOptout) photoOptout.hidden = false;
   }
 
-  // 영상: URL 있으면 프리뷰/다운로드 표시, 없으면 영역을 표시하되 "전송 옵션 꺼짐" 안내(it7: 숨기지 않음).
+  // 영상: URL 있으면 프리뷰/다운로드 표시, 없으면 카드는 남기고 안내 문구만(it7: 카드 자체는 숨기지 않음).
   if (data.timelapseUrl) {
     mediaState.video.present = true;
     if (videoOptout) videoOptout.hidden = true;
@@ -496,7 +499,7 @@ function renderSuccess(data, token) {
     );
     if (videoSection) videoSection.hidden = false;
   } else {
-    // 전송 옵션 꺼짐: 영역은 표시하되 프리뷰·다운로드·힌트·실패문구 숨기고 옵션꺼짐 안내 노출.
+    // 미디어 없음: 카드는 남기고 프리뷰·다운로드·힌트·실패문구를 숨기고 안내 문구만 노출.
     mediaState.video.present = false;
     if (videoPreview) videoPreview.hidden = true;
     if (videoError) videoError.hidden = true;
@@ -520,8 +523,8 @@ function renderSuccess(data, token) {
 
   showState("success");
 
-  // 동기 확정분(옵션 꺼짐/로드 대기) 반영 후 폴백 평가. 옵션 꺼짐은 실패가 아니므로 폴백되지 않는다.
-  // present 인 미디어가 하나도 없으면(둘 다 옵션 꺼짐 — 계약상 미발생, 방어적) 성공 화면 유지(안내 2개).
+  // 동기 확정분(미디어 부재/로드 대기) 반영 후 폴백 평가. 부재는 실패가 아니므로 폴백되지 않는다.
+  // present 인 미디어가 하나도 없으면(둘 다 부재 — 계약상 미발생, 방어적) 성공 화면 유지(안내 2개).
   maybeFallbackToExpired();
 }
 

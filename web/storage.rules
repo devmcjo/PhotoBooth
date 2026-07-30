@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// MC포토 Cloud Storage 보안 규칙 — 웹(공개) 관점의 최소 권한.
+// MCPhoto Cloud Storage 보안 규칙 — 웹(공개) 관점의 최소 권한.
 //
 // 웹은 Storage SDK 로 파일을 읽지 않고 문서에 담긴 다운로드 토큰 URL 로 직접 GET 한다.
 // 토큰 URL(?alt=media&token=...) 은 그 자체가 capability 이며 보안 규칙을 우회하므로,

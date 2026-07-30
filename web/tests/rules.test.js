@@ -1,4 +1,4 @@
-// MC포토 보안 규칙 Emulator 테스트 (계약 §5.3, web-architecture.md §6.3).
+// MCPhoto 보안 규칙 Emulator 테스트 (계약 §5.3, web-architecture.md §6.3).
 //
 // 웹(비인증) 관점에서 allow/deny 를 단정한다. 7 케이스(a~g):
 //   (a) users/{u} get            → deny

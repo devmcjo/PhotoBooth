@@ -185,6 +185,14 @@ body {
   background: var(--bg);
 }
 
+/* .state[hidden] / #share-btn[hidden] / .toast[hidden] 과 같은 이유의 명시 처리 —
+   위 .media__preview 의 display:block(작성자 스타일)이 hidden 속성의 UA display:none 을
+   눌러 무시한다. 이게 없으면 사진·영상이 없는 세션에서 JS 가 hidden 을 걸어도 빈 미디어
+   슬롯(회색 박스)이 그대로 남아, 아직 불러오는 중인 것처럼 보인다. */
+.media__preview[hidden] {
+  display: none;
+}
+
 img.media__preview {
   object-fit: contain;
 }

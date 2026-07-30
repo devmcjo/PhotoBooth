@@ -51,12 +51,15 @@
           <p id="photo-hint" class="media__hint" hidden>
             저장이 안 되면 이미지를 길게 눌러(모바일)/우클릭(PC) 저장하세요.
           </p>
+          <!-- URL 이 없는 이유를 단정하지 않는다: 전송 옵션 꺼짐일 수도, 생성 실패일 수도 있다.
+               종전 문구("전송 옵션이 꺼져 있어")는 옵션을 켜 둔 사용자에게 설정이 잘못된 것처럼
+               보이게 해 오진을 유발했다. 원인은 앱 로그에서 갈린다. -->
           <p id="photo-optout" class="media__optout" hidden>
-            사진은 전송 옵션이 꺼져 있어 제공되지 않습니다.
+            이 세션에는 사진이 없습니다.
           </p>
         </div>
 
-        <!-- 영상 (timelapseUrl 이 있으면 프리뷰, 옵션 꺼짐이면 안내, 그 외 숨김) -->
+        <!-- 영상 (timelapseUrl 이 있으면 프리뷰, 없으면 프리뷰를 감추고 안내 문구만) -->
         <div id="video-section" class="media" hidden>
           <h2 class="media__title">영상</h2>
           <video
@@ -75,8 +78,9 @@
           <p id="video-hint" class="media__hint" hidden>
             저장이 안 되면 영상을 길게 눌러(모바일)/우클릭(PC) 저장하세요.
           </p>
+          <!-- 사진과 동일한 이유로 중립 문구다(위 photo-optout 주석 참고). -->
           <p id="video-optout" class="media__optout" hidden>
-            타임랩스는 전송 옵션이 꺼져 있어 제공되지 않습니다.
+            이 세션에는 영상이 없습니다.
           </p>
         </div>
 

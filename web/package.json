@@ -2,7 +2,7 @@
   "name": "mcphoto-web",
   "version": "1.0.0",
   "private": true,
-  "description": "MC포토 모바일 다운로드 웹 페이지 (Firebase Hosting)",
+  "description": "MCPhoto 모바일 다운로드 웹 페이지 (Firebase Hosting)",
   "type": "module",
   "scripts": {
     "serve": "firebase emulators:start --only hosting",
