@@ -18,6 +18,12 @@
 
 용어 치환표, 클라이언트 프로파일(P1~P4), 기능×플랫폼 지원 매트릭스, **Windows 전용 항목 식별**, 반드시 지켜야 하는 불변식 16개, 착수 전 해결해야 하는 서버 변경(블로커)이 정리돼 있습니다. 그다음 프로파일에 맞는 규격 문서로 이동합니다.
 
+### 🆕 **웹(브라우저) 클라이언트를 만든다면 → [`docs/web-client/`](../web-client/README.md)**
+
+Windows 앱의 **전 화면을 웹으로 구현**하는 전용 문서 세트(15개)가 별 폴더에 있습니다. 범위·결정·기술 스택·화면 명세·미디어 파이프라인·저장 설계·서버 선행 작업·WBS·**Web↔Windows 차이 보고서**를 포함합니다.
+
+> ⚠️ **[05 §7.4.5](./05-cross-platform-client-guide.md#745-그래서-웹-범위는)의 "웹 P2 촬영·개인 프레임 제외 권장" 판정은 2026-07-30 사용자 결정으로 대체됐습니다.** 막힌다고 판정했던 항목(타임랩스·결과물 로컬 보관·개인 프레임·로그)의 해결 방식은 [`docs/web-client/00-scope-and-decisions.md §3`](../web-client/00-scope-and-decisions.md)에 항목별로 재판정돼 있습니다. 05의 기능별 **사실 서술**(브라우저 API 제약)은 여전히 유효한 참고 자료입니다.
+
 ### Windows 데스크톱 앱을 유지·보수한다면
 
 **→ [00 · 전체 개요](./00-overview-and-architecture.md) → [10](./10-exe-app-architecture.md) → [11](./11-exe-app-features.md) → [12](./12-exe-app-settings-and-config.md)**

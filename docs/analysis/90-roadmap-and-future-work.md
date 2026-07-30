@@ -135,7 +135,14 @@
 | **B7** | 최소 지원 버전·강제 업데이트 신호 없음(`/health`는 `status`·`time`·`deployedAt`만) | **대기** — 스토어 배포 시 필요 |
 | **B8** | `authMethod`가 `"google"` 고정. iOS는 **Sign in with Apple 병행 요구** 가능 | **대기** — enum 확장 + 서버 provider 검증 + 동일 인물 계정 통합 정책 결정 |
 
-### 7.2.1 웹 클라이언트 범위 판정 (2026-07-30 — 결정 대기)
+### 7.2.1 웹 클라이언트 범위 판정 (2026-07-30 — **결정 완료: 전 화면 구현**)
+
+> ✅ **결정(2026-07-30, 사용자)**: 웹 클라이언트는 **Windows 앱과 완전히 동일하게 동작**하도록 **전 프로파일(P1+P2+P3+P4) 전 화면**을 구현한다. 아래 "제외 권장" 표는 **이력**이다.
+> - 전용 문서 세트: **[`docs/web-client/`](../web-client/README.md)** (15개 — 범위·결정 18건·화면 명세·미디어·저장·인증·서버 선행 작업·WBS·차이 보고서)
+> - **D4 = 지원**(웹 P2 촬영). M6는 폐기하지 않고 **M6-W**(OPFS/선택 폴더 기록 완료를 "보관"으로 정의)로 재정의했다 — 업로드 실패 시 사진 유실이 발생하지 않는다.
+> - **D4-1**: 타임랩스는 **미제공이 아니라 브라우저 직접 인코딩**(WebCodecs H.264 + MP4 muxer / MediaRecorder mp4). **서버 변환(B6) 불필요.** 미지원 브라우저에서만 `timelapseUrl=null`로 축소.
+> - **D7**(개인 프레임 서버 저장)은 **여전히 미도입**이다. 웹은 IndexedDB+OPFS 로컬 저장 + 내보내기/가져오기로 대응한다.
+> - 서버 블로커 중 웹에 필요한 것은 **B1·B2·B4·B5**뿐이다(**B3·B6는 불필요**). B5는 업로드 PUT 외에 **서버 프레임 이미지 canvas 합성**에도 필요하다는 점이 새로 확인됐다 → [`docs/web-client/08-server-and-infra-prerequisites.md §5`](../web-client/08-server-and-infra-prerequisites.md).
 
 웹은 다른 플랫폼과 달리 **계약·불변식을 만족할 수 없는 항목**이 있어 범위를 별도로 판정했다. 기능별 사실은 [05 §7.4](./05-cross-platform-client-guide.md), 판단 근거는 [`design/multiplatform-client-architecture.md` §4.3](../design/multiplatform-client-architecture.md).
 

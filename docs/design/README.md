@@ -13,7 +13,8 @@
 
 | 하려는 일 | 읽을 문서 |
 |-----------|-----------|
-| **다른 플랫폼(iOS·iPadOS·Android·macOS·웹) 클라이언트를 만든다** | [멀티플랫폼 클라이언트 아키텍처](./multiplatform-client-architecture.md) → 그다음 [`docs/analysis/05`](../analysis/05-cross-platform-client-guide.md) |
+| **웹(브라우저) 클라이언트를 만든다** | **[`docs/web-client/`](../web-client/README.md)** — 전용 문서 세트 15개(범위·결정·화면 명세·미디어·저장·인증·서버 선행 작업·WBS·**Web↔Windows 차이 보고서**). ⚠️ 아래 [멀티플랫폼 아키텍처 §4.3](./multiplatform-client-architecture.md)의 "웹 P2 제외" 판정은 **2026-07-30 사용자 결정으로 대체**됐다 |
+| **다른 플랫폼(iOS·iPadOS·Android·macOS) 클라이언트를 만든다** | [멀티플랫폼 클라이언트 아키텍처](./multiplatform-client-architecture.md) → 그다음 [`docs/analysis/05`](../analysis/05-cross-platform-client-guide.md) |
 | 백엔드 API를 확장한다 | [백엔드 프록시 전환 설계](./wpf-backend-proxy-migration-design.md) + [`docs/analysis/31`](../analysis/31-backend-api-reference.md) |
 | 인증·계정 모델을 바꾼다 | [it15 Google 전용 인증](./wpf-it15-google-only-auth-design.md) · [Google SSO 설계](./wpf-google-sso-design.md) · [it14 PIN 게이트](./wpf-it14-settings-pin-gate-design.md) |
 | 역할·권한을 바꾼다 | [it16 고급 유저 역할](./wpf-it16-advanced-user-role-design.md) · [it13 임시 유저 역할](./wpf-it13-temp-user-role-design.md) |
