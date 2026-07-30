@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| 최종 업데이트 | 2026-07-30 (인덱스 신설 + 멀티플랫폼 클라이언트 아키텍처 설계 추가) |
+| 최종 업데이트 | 2026-07-30 (인덱스 신설 + 멀티플랫폼 클라이언트 아키텍처 설계 추가, it17 설계 2건 등재·구현 완료) |
 | 갱신 규칙 | 새 설계 문서를 추가하면 이 인덱스의 해당 절에 등재한다. 이터레이션이 완료돼 내용이 `docs/analysis`에 흡수되면 §4로 옮긴다 |
 
 ---
@@ -18,7 +18,8 @@
 | 인증·계정 모델을 바꾼다 | [it15 Google 전용 인증](./wpf-it15-google-only-auth-design.md) · [Google SSO 설계](./wpf-google-sso-design.md) · [it14 PIN 게이트](./wpf-it14-settings-pin-gate-design.md) |
 | 역할·권한을 바꾼다 | [it16 고급 유저 역할](./wpf-it16-advanced-user-role-design.md) · [it13 임시 유저 역할](./wpf-it13-temp-user-role-design.md) |
 | 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
-| 웹 다운로드 페이지를 바꾼다 | [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
+| 촬영 컷 수·슬롯 관계를 바꾼다 | [it17 컷 수 자동 모드](./wpf-it17-auto-cutcount-design.md) |
+| 웹 다운로드 페이지를 바꾼다 | [it17 자동 저장·공유](./web-it17-download-share-design.md) → [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
 
 ---
@@ -46,6 +47,7 @@
 
 | 문서 | 내용 |
 |------|------|
+| [web-it17-download-share-design](./web-it17-download-share-design.md) | **it17** 원클릭 자동 저장(fetch→Blob→`<a download>`)·전역 degrade 폴백·상단 공유 버튼(링크 복사+토스트)·파일명 규칙·`MCPhoto` 네이밍. **버킷 CORS(GET) 선행 조건 포함** |
 | [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
 | [web-wbs](./web-wbs.md) | 웹 작업 분해 |
 
@@ -64,6 +66,7 @@
 | [wpf-it10-server-connectivity-design](./wpf-it10-server-connectivity-design.md) · [wpf-it10-wbs](./wpf-it10-wbs.md) | 서버 연결 상태 표시 |
 | [wpf-it11-deferred-features-design](./wpf-it11-deferred-features-design.md) · [wpf-it11-wbs](./wpf-it11-wbs.md) | 재촬영·진단 화면·카메라 이름·업로드 진행률. **컷별 재촬영은 미구현**(설계만 존재) |
 | [wpf-it12-design](./wpf-it12-design.md) · [wpf-it12-wbs](./wpf-it12-wbs.md) | 설정 편집 게이트·레이아웃·버전 표기 조정 |
+| [wpf-it17-auto-cutcount-design](./wpf-it17-auto-cutcount-design.md) | 촬영 컷 수 "자동" 모드(ini sentinel 0 → `max(6, 슬롯+2)`). 설정 도메인과 실효값 도메인을 분리한 근거, 단일 해석 지점(`CaptureSession.Begin`) |
 
 ---
 

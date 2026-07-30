@@ -142,6 +142,14 @@ gcloud firestore fields ttls update expiresAt \
 - 규칙의 `write:false`는 **SDK 경로(웹)** 에만 적용된다. 문서·파일을 만드는 주체는 **백엔드(Cloud Functions)** 이고, Admin(ADC)으로 동작하므로 규칙을 우회한다. it15 이전엔 이 우회 주체가 WPF(서비스 계정)였으나 지금은 서버뿐이다([30 §3.3](./30-backend-firebase-integration.md)).
 - 앱이 Storage에 직접 쓰는 유일한 경로는 서버가 발급한 **V4 서명 URL PUT**이며, 경로·Content-Type·유효시간(15분)이 서명에 고정되어 있다.
 
+### 5.2 CORS 는 보안 규칙과 별개의 레이어다
+
+**버킷 CORS 는 Storage 보안 규칙과 독립된 레이어이며, 서로를 대체하지 않는다.** CORS 는 "브라우저 JS 가 응답 바디를 읽을 수 있는지"만 통제하고, 보안 규칙은 "SDK 경로로 객체에 접근할 수 있는지"를 통제한다. 그래서 **GET CORS 를 열어도 `results/`의 SDK read `false`는 그대로 유효하다** — 열거·직접 접근은 계속 차단된다.
+
+it17 의 웹 자동 저장(`fetch` → Blob → `<a download>`)이 이 레이어에 닿는다. **2026-07-30 실측 결과 버킷 CORS 설정은 불필요하다** — 다운로드 URL 호스트(`firebasestorage.googleapis.com`)가 **서비스 프론트엔드에서 `Access-Control-Allow-Origin: *`를 반환**하며 버킷 구성과 무관하기 때문이다(GCS 직접 호스트 `storage.googleapis.com`은 CORS 헤더가 없다 — 대조군 확인). 따라서 `web/cors.json`을 **두지 않는다**. 판정 근거·잔여 불확실성·컨틴전시 절차는 [`web/OPS-cors.md`](../../web/OPS-cors.md), 상세는 [20번 §7C](./20-frontend-web-download-page.md).
+
+> ⚠️ 버킷 CORS 가 **실제로 필요해지는 유일한 시점은 브라우저 업로드 PUT**([90 §B5](./90-roadmap-and-future-work.md))이다. 그때 `gsutil cors set` / `gcloud storage buckets update --cors-file`은 기존 구성을 **전체 교체**한다(병합 아님)는 점에 주의하고, PUT 규칙의 `origin`은 `*`로 두지 않는다.
+
 ---
 
 ## 6. 비용

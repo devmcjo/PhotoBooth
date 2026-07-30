@@ -130,7 +130,7 @@
 | **B2** | audience가 단일 `GOOGLE_OAUTH_CLIENT_ID` 고정 | **대기** — client_id 목록으로 일반화([61 §4.2](./61-auth-platform-integration.md)) |
 | **B3** | code 교환에 client_secret을 **항상** 사용 → iOS/Android 유형 클라이언트(secret 없음)는 교환 실패 | **대기** — 유형별 조건부 분기([61 §4.3](./61-auth-platform-integration.md)) |
 | **B4** | 배포 게이트 키를 브라우저에 두면 **완전 공개** | **대기** — 웹용 별도 키 + 사용처 제한, 또는 웹은 게이트 키 불요 경로만 사용 |
-| **B5** | 브라우저에서 서명 URL PUT 시 **Storage 버킷 CORS** 미구성 | **대기** — `PUT`·`Content-Type`·`x-goog-meta-firebaseStorageDownloadTokens` 허용 필요 |
+| **B5** | 브라우저에서 서명 URL PUT 시 **Storage 버킷 CORS** 미구성 | **대기** — `PUT`·`Content-Type`·`x-goog-meta-firebaseStorageDownloadTokens` 허용 필요. ⚠️ **B5 는 PUT(업로드) 전용이다.** 다운로드 GET 은 it17 에서 **버킷 CORS 불필요**로 실측 판정됐다([`web/OPS-cors.md`](../../web/OPS-cors.md)) — `firebasestorage.googleapis.com`이 서비스 레벨에서 `ACAO: *`를 반환한다. `gsutil cors set`은 **전체 교체**이므로 B5 착수 시 그 시점의 기존 규칙을 지우지 말고 객체를 **추가**해야 하며, PUT 규칙의 `origin`은 `*` 금지 |
 | **B6** | 타임랩스 배속 변환이 클라이언트 책임 → 웹은 수단 없음 | **대기** — "타임랩스 미제공"으로 축소 vs 서버 변환 도입 결정 |
 | **B7** | 최소 지원 버전·강제 업데이트 신호 없음(`/health`는 `status`·`time`·`deployedAt`만) | **대기** — 스토어 배포 시 필요 |
 | **B8** | `authMethod`가 `"google"` 고정. iOS는 **Sign in with Apple 병행 요구** 가능 | **대기** — enum 확장 + 서버 provider 검증 + 동일 인물 계정 통합 정책 결정 |
@@ -153,7 +153,7 @@
 |---|------|------|
 | **D4** | 웹 P2 촬영을 지원할 것인가(지원 시 **M6 포기를 명시 결정**해야 함) | **대기** — 미지원 권장 |
 | **D7** | 개인 프레임을 서버 저장으로 승격할 것인가 | **대기** — 서버 인프라는 이미 대부분 존재(`userId` 파라미터·10개 제한·경로 분기·cascade). 막고 있는 것은 `POST /frames`의 `userId=null, isDefault=true` 하드코딩과 `requirePower()` 게이트뿐. 도입하면 §1의 "공용 로컬 프레임 소유자 메타 부재" 2건도 함께 해소된다. `it8 A2` 정책 변경이므로 사용자 결정 필요 |
-| — | 웹 P3 공용 프레임 저장에 필요한 **Storage 버킷 CORS**(B5) | **대기** — 웹 P3 착수 전 선행 |
+| — | 웹 P3 공용 프레임 저장에 필요한 **Storage 버킷 CORS**(B5) | **대기** — 웹 P3 착수 전 선행. **PUT 한정**이다 — 다운로드(GET)에는 버킷 CORS 가 불필요하다고 실측 판정됐다([20 §7C](./20-frontend-web-download-page.md)) |
 
 ### 7.3 재사용 가능한 것 (확장 불필요)
 
