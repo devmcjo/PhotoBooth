@@ -20,12 +20,13 @@
 
   Output:
       publish\MCPhoto\MCPhoto.exe     (single self-contained exe, gate key embedded)
-      publish\MCPhoto\bldinfo.ini     (version info)
 
   Notes:
     - Self-contained (.NET runtime embedded) -> no .NET install needed on target PC
     - Single file (PublishSingleFile) + bundled ffmpeg (tools\ffmpeg) for timelapse
     - Release, win-x64
+    - Version display: read from the exe itself (assembly version resource + exe timestamp).
+      Bump <Version> in Directory.Build.props to change it. No bldinfo.ini to ship (removed).
     - App defaults: UseBackend=true, BackendBaseUrl + GoogleClientId built in.
     - ASCII only on purpose: avoids CP949/UTF-8 console mojibake on Korean Windows.
 #>
@@ -78,16 +79,14 @@ if ($LASTEXITCODE -ne 0) {
     return
 }
 
-# ---- Build info file (bldinfo.ini) ----
-# App reads bldinfo.ini ([General] Version/BuildDate/Site) to show the version in the UI.
-# Single-file publish can drop csproj 'None' items, so copy it explicitly to guarantee inclusion.
-$bldSource = Join-Path $root 'src\MCPhoto.App\bldinfo.ini'
-$bldDest   = Join-Path $out 'bldinfo.ini'
-if (Test-Path -LiteralPath $bldSource -PathType Leaf) {
-    Copy-Item -LiteralPath $bldSource -Destination $bldDest -Force
-    Write-Host "bldinfo.ini copied -> $bldDest" -ForegroundColor Green
-} else {
-    Write-Host "bldinfo.ini NOT found at $bldSource (version will show fallback)." -ForegroundColor Yellow
+# ---- Version report ----
+# No file to copy: the app reads its version from its own assembly version resource and its
+# build time from the exe timestamp. Echo both so the operator can confirm what shipped.
+$exe = Join-Path $out 'MCPhoto.exe'
+if (Test-Path -LiteralPath $exe -PathType Leaf) {
+    $fv = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
+    $bt = (Get-Item -LiteralPath $exe).LastWriteTime.ToString('yyyy-MM-dd HH:mm')
+    Write-Host "Version resource: $fv   Build time: $bt" -ForegroundColor Green
 }
 
 Write-Host "`nDone: $out\MCPhoto.exe" -ForegroundColor Green

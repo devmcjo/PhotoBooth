@@ -97,7 +97,8 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>현재 설정 화면인지(설정 버튼은 설정 화면에서 숨김 — 자기 화면 재진입 방지).</summary>
     public bool IsSettings => CurrentState == AppState.Settings;
 
-    /// <summary>앱 하단 버전 표기(예: "v1.0.0 · Beta"). 로그인 무관 상시 노출.
+    /// <summary>앱 하단 버전 표기(예: "v1.1.6"). 로그인 무관 상시 노출.
+    /// it18: 배포 채널(종전 " · Beta")은 표기하지 않는다 — 개발·알파 서버를 운영하지 않아 의미가 없었다.
     /// 빌드 정보 미주입 시 빈 문자열. 값은 시작 시 고정(불변) → 통지 불필요.</summary>
     public string VersionText => _buildInfo?.DisplayText ?? string.Empty;
 
@@ -133,7 +134,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         _session = session;
         _logger = logger;
         _dispatcher = Dispatcher.CurrentDispatcher;
-        // 빌드 정보는 선택적(미등록/테스트 시 null → 표기 비노출). 앱에선 DI로 항상 주입.
+        // 빌드 정보는 선택적(미등록/테스트 시 null → 표기 비노출). 앱에선 DI로 항상 주입(it18: 어셈블리 출처).
         _buildInfo = services.GetService<IBuildInfoService>();
 
         _idle.IdleTimeout += OnIdleTimeout;

@@ -76,7 +76,8 @@
         </Grid>
 
         <!-- 앱 하단 버전 표기: 로그인 여부와 무관하게 상시 노출.
-             우하단, 흐린 캡션, 클릭 비간섭(하단 버튼과 겹쳐도 조작 방해 없음). bldinfo.ini에서 로드. -->
+             우하단, 흐린 캡션, 클릭 비간섭(하단 버튼과 겹쳐도 조작 방해 없음).
+             it18: 어셈블리 버전 리소스에서 읽고 버전만 표기한다(배포 채널 표기 폐지). -->
         <TextBlock Text="{Binding VersionText}"
                    VerticalAlignment="Bottom" HorizontalAlignment="Right"
                    Margin="0,0,16,10" IsHitTestVisible="False"

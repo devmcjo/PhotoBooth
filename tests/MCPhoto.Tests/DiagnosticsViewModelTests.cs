@@ -16,16 +16,15 @@ namespace MCPhoto.Tests;
 /// it11 #14: 진단·상태 VM 헬스체크 조립 + LogFolderService 경로 산출.
 /// 실제 explorer 실행/서버 실호출은 금지 — 페이크/주입 경계로 검증(A3 스모크 포함).
 /// it15 §6.6: "서비스 계정 키 후보 경로" 항목이 사라지고 "서버 연결(백엔드)" 항목으로 재구성됐다.
-/// 개발자 문의 카드: 연락처(고정)·버전·빌드일(bldinfo) + 웹 배포일(서버 /health) — 조회 실패는 "(확인 불가)".
+/// 개발자 문의 카드: 연락처(고정)·버전·빌드 시각(exe 자신) + 웹 배포일(서버 /health) — 조회 실패는 "(확인 불가)".
 /// </summary>
 public class DiagnosticsViewModelTests
 {
-    /// <summary>빌드 정보 스텁 — bldinfo.ini 파일 없이 값 주입(IniBuildInfoService 폴백과 무관하게 결정적).</summary>
+    /// <summary>빌드 정보 스텁 — 실행 파일 상태와 무관하게 값 주입(결정적). (it18: Site 폐지)</summary>
     private sealed class StubBuildInfoService : IBuildInfoService
     {
         public string Version { get; init; } = "0.0.0";
         public string BuildDate { get; init; } = string.Empty;
-        public string Site { get; init; } = string.Empty;
         public string DisplayText => $"v{Version}";
     }
 
@@ -256,17 +255,18 @@ public class DiagnosticsViewModelTests
     [Fact]
     public void Version_And_BuildDate_Come_From_BuildInfo()
     {
-        var vm = MakeVm(buildInfo: new StubBuildInfoService { Version = "1.1.3", BuildDate = "2026-07-29" });
+        // it18: BuildDate는 날짜만이 아니라 시각까지 포함한다(exe 타임스탬프).
+        var vm = MakeVm(buildInfo: new StubBuildInfoService { Version = "1.1.6", BuildDate = "2026-07-30 16:42" });
 
-        Assert.Equal("1.1.3", vm.AppVersion);
-        Assert.Equal("2026-07-29", vm.AppBuildDate);
+        Assert.Equal("1.1.6", vm.AppVersion);
+        Assert.Equal("2026-07-30 16:42", vm.AppBuildDate);
     }
 
     [Fact]
     public void BuildDate_Missing_Shows_Unknown()
     {
-        // bldinfo.ini에 BuildDate 키가 없으면 빈 문자열 → 빈칸 대신 "(확인 불가)"로 표기한다.
-        var vm = MakeVm(buildInfo: new StubBuildInfoService { Version = "1.1.3", BuildDate = "" });
+        // exe 경로를 못 찾으면 빈 문자열 → 빈칸 대신 "(확인 불가)"로 표기한다.
+        var vm = MakeVm(buildInfo: new StubBuildInfoService { Version = "1.1.6", BuildDate = "" });
 
         Assert.Equal("(확인 불가)", vm.AppBuildDate);
     }

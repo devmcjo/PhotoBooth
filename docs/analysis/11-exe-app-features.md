@@ -307,8 +307,9 @@
 - **로그 열기**: `explorer.exe`로 `%ProgramData%\MCPhoto\logs` 열기, 실패해도 크래시 없음(로깅). 경로 텍스트 상시 노출(수동 탐색 대체).
 - **근거**: `DiagnosticsViewModel.cs`, `DiagnosticsWindow.xaml`, `DiagnosticsDialogService.cs`, `LogFolderService.cs`. 로그 위치 상세 [70](./70-logging-and-troubleshooting.md).
 
-## 18. 앱 버전 표기 (it11, bldinfo.ini)
+## 18. 앱 버전 표기 (it11 → it18 개정)
 
-- **목적**: 실행 중 버전·배포 채널을 항상 확인.
-- **규칙**: `bldinfo.ini`(`[General]` Version/BuildDate/Site)를 시작 시 로드(`IBuildInfoService`), `DisplayText`(예 `v1.0.0 · Beta`)를 **앱 하단 우측에 로그인 여부 무관 상시** 노출(흐린 캡션, 클릭 비간섭). 파일/키 부재 시 `v0.0.0` 폴백. (it12 R4: BuildDate는 표기에서 제외 — 업데이트 지연 시 오래된 앱으로 보일 위험. `BuildDate` 프로퍼티·ini 키·로드 로직은 유지)
-- **근거**: `MainWindow.xaml`, `AppShellViewModel.cs`(`VersionText`), `IniBuildInfoService.cs`. 파일 규약·배포 상세 [12](./12-exe-app-settings-and-config.md) §6.
+- **목적**: 실행 중 버전을 항상 확인.
+- **규칙**: 시작 시 실행 파일 자신에서 버전을 읽어(`IBuildInfoService` / `AssemblyBuildInfoService`) `DisplayText`(예 `v1.1.6`)를 **앱 하단 우측에 로그인 여부 무관 상시** 노출(흐린 캡션, 클릭 비간섭). 확인 불가 시 `v0.0.0` 폴백.
+- **it18 변경**: 외부 파일 `bldinfo.ini`를 폐기하고 **어셈블리 버전 리소스**(`Directory.Build.props`의 `<Version>`)를 유일한 출처로 삼았다. 이전에는 ini의 표기 버전과 exe 리소스 버전(1.0.0.0)이 따로 관리돼 어긋났다. **배포 채널(종전 `· Beta`) 표기도 제거** — 개발·알파 서버를 운영하지 않아 값이 고정된 무의미한 표기였다. (it12 R4의 "BuildDate는 하단 표기에서 제외"는 그대로 유지되며, 빌드 시각은 진단 화면에서만 보여준다 — §17)
+- **근거**: `MainWindow.xaml`, `AppShellViewModel.cs`(`VersionText`), `AssemblyBuildInfoService.cs`, `Directory.Build.props`. 출처·폴백·배포 상세 [12](./12-exe-app-settings-and-config.md) §6.

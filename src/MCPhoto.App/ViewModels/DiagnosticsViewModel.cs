@@ -16,7 +16,7 @@ namespace MCPhoto.App.ViewModels;
 /// <summary>
 /// 진단/상태 화면 VM(관리자 트러블슈팅용). 모달 다이얼로그 전용 — 별도 AppState 미추가(회귀 표면 0). (it11 §3.14)
 /// 카메라(연결·목록)·ffmpeg(가용·경로)·서버 연결(백엔드 구성·버킷·주소·키 내장·로그인 계정) 헬스체크
-/// + 로그 폴더 경로·열기 + 개발자 문의(연락처·버전·빌드일·웹 배포일).
+/// + 로그 폴더 경로·열기 + 개발자 문의(연락처·버전·빌드 시각·웹 배포일).
 /// it15 §6.6: 레거시 서비스 계정 키 탐색 경로 섹션은 직결 경로 폐기로 삭제.
 /// UI 타입(Visibility/Brush) 미의존 — 상태는 bool/int/string, 색은 View의 DataTrigger가 담당(§1.3).
 /// 진단 화면은 라이브 프리뷰(StartAsync)를 켜지 않는다 → 카메라 점유 없음(열거만). (§3.14.4)
@@ -116,10 +116,13 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     /// <summary>바인딩용 개발자 메일 주소.</summary>
     public string DeveloperEmail => DeveloperEmailAddress;
 
-    /// <summary>앱 버전(bldinfo.ini Version). 파일·키 부재 시 "0.0.0".</summary>
+    /// <summary>앱 버전(어셈블리 버전 리소스, 예: "1.1.6"). 확인 불가 시 "0.0.0". (it18)</summary>
     public string AppVersion => _buildInfo.Version;
 
-    /// <summary>앱 빌드일(bldinfo.ini BuildDate). 값이 없으면 <see cref="Unknown"/>.</summary>
+    /// <summary>
+    /// 앱 빌드 시각(exe 최종 수정 시각, 예: "2026-07-30 16:42" — 로컬). 값이 없으면 <see cref="Unknown"/>.
+    /// it18: 종전 bldinfo.ini의 날짜 문자열(수동 관리)에서 exe 타임스탬프로 바꿔 시각까지 표기한다.
+    /// </summary>
     public string AppBuildDate =>
         string.IsNullOrWhiteSpace(_buildInfo.BuildDate) ? Unknown : _buildInfo.BuildDate;
 

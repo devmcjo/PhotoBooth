@@ -83,7 +83,8 @@ publish.bat  더블클릭    (또는)  powershell -ExecutionPolicy Bypass -File 
 |------|----------------|------|
 | `branding.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` | 앱 표시명 변경(`[Branding] AppName=...`), 없으면 "MC Photo". 샘플: `branding.ini.sample` |
 | `MCPhoto.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` → `%LocalAppData%\MCPhoto\` | 촬영·필터·QR·표시모드·카메라 등 앱 설정 |
-| `bldinfo.ini` | 실행 폴더 → `%ProgramData%\MCPhoto\` | 화면 표시용 빌드 정보(`Version`·`BuildDate`·`Site`), 없으면 `0.0.0` |
+
+> 버전 표기용 외부 파일은 없습니다. 앱 하단의 버전은 **exe의 어셈블리 버전 리소스**에서, 진단 화면의 빌드 시각은 **exe 파일 타임스탬프**에서 읽습니다. 버전을 올릴 때는 `Directory.Build.props`의 `<Version>` 한 줄만 수정하면 exe 파일 속성과 앱 표기가 함께 바뀝니다.
 
 앱 화면의 **설정**에서도 대부분 항목을 편집·저장할 수 있습니다.
 

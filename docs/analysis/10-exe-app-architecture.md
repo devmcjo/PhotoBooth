@@ -48,7 +48,7 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 - `tools/ffmpeg/ffmpeg.exe`가 존재하면 출력·publish에 복사(녹화·타임랩스 필수, `MCPhoto.App.csproj:28-48`). ffprobe는 미사용이라 제외.
 - 루트 `Frame/**`를 출력 `Frame/`으로 복사(번들 기본 프레임, `MCPhoto.App.csproj:50-55`).
 - `branding.ini.sample`을 실행 폴더에 동봉(고객이 `branding.ini`로 리네임해 앱 이름 변경, `MCPhoto.App.csproj`).
-- `bldinfo.ini`(버전·빌드일·사이트 표기)를 실행 폴더로 복사(`MCPhoto.App.csproj`, 상세는 [12 §6](./12-exe-app-settings-and-config.md)).
+- 버전·빌드 시각 표기는 **동봉 파일이 없다** — 어셈블리 버전 리소스(`Directory.Build.props`의 `<Version>`)와 exe 타임스탬프에서 읽는다(it18, 상세는 [12 §6](./12-exe-app-settings-and-config.md)).
 
 ---
 
@@ -83,7 +83,7 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 | 등록 | 수명 | 근거 |
 | --- | --- | --- |
 | `MainWindow` | Singleton | 셸 창(`ServiceRegistration.cs:32`) |
-| `IBrandingService`→`IniBrandingService`, `IBuildInfoService`→`IniBuildInfoService` | Singleton | 시작 1회 로드(`:35`, `:37`) |
+| `IBrandingService`→`IniBrandingService`, `IBuildInfoService`→`AssemblyBuildInfoService` | Singleton | 시작 1회 확정(브랜딩은 ini 로드, 빌드 정보는 exe 자신에서 — it18) |
 | `ICameraTestDialogService`, `IPinPromptDialogService`, `IDiagnosticsDialogService`, `ILogFolderService` | Singleton | 모달·유틸 서비스(`:40`, `:42`, `:49-50`) |
 | `IGoogleSignInService`→`GoogleSignInService` | Singleton | Google SSO(시스템 브라우저 + loopback + PKCE, `:46`) |
 | `ISettingsService`→`IniSettingsService` | Singleton | 설정 단일 소스. **백엔드 게이트 키 기본값은 exe 내장값 주입**(`:53-55`) |

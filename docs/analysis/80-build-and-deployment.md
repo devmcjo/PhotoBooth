@@ -3,8 +3,8 @@
 | 항목 | 내용 |
 |------|------|
 | 문서 | WPF 앱 빌드/게시(단일 파일 publish)·ffmpeg 번들·인스톨러 구성 분석 |
-| 범위 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`·`publish.bat`, `Directory.Build.props`, `installer/MCPhoto.iss`, `branding.ini.sample`·`bldinfo.ini`, **백엔드 게이트 키 exe 내장**. 백엔드 계약은 [30](./30-backend-firebase-integration.md), 웹·Functions 배포는 `web/deploy-web.bat` |
-| 최종 업데이트 | 2026-07-29 (it15 반영 — 참조 프로젝트 `MCPhoto.Firebase`→`MCPhoto.Http`, 게이트 키 내장 절차 추가, 서비스 계정 키 서술 정리) |
+| 범위 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`·`publish.bat`, `Directory.Build.props`(버전 원천), `installer/MCPhoto.iss`, `branding.ini.sample`, **백엔드 게이트 키 exe 내장**. 백엔드 계약은 [30](./30-backend-firebase-integration.md), 웹·Functions 배포는 `web/deploy-web.bat` |
+| 최종 업데이트 | 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
 | 관련 소스 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`, `publish.bat`, `Directory.Build.props`, `installer/MCPhoto.iss`, `src/MCPhoto.App/branding.ini.sample`, `tools/ffmpeg/ffmpeg.exe`, `publish/MCPhoto/`(산출물) |
 | 갱신 규칙 | csproj 의 Target·복사 항목, publish 스크립트(게이트 키 주입 포함), iss 파일이 바뀌면 표/근거(`파일:라인`) 갱신. ffmpeg 경로/번들 방식 변경은 [10번](./10-exe-app-architecture.md) §4.5와 동시 갱신 |
 
@@ -66,7 +66,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 | `-p:BackendApiKeyDefault=<키>` | 키를 찾았을 때만 추가(§2.1) | `publish.ps1:64-65` |
 
 - 출력은 항상 `publish\MCPhoto\MCPhoto.exe`(`publish.ps1:22,36`).
-- 산출 파일 목록(확인됨): `MCPhoto.exe`, `tools\ffmpeg\ffmpeg.exe`, `Frame\*`(png·slots), `branding.ini.sample`, `bldinfo.ini`.
+- 산출 파일 목록(확인됨): `MCPhoto.exe`, `tools\ffmpeg\ffmpeg.exe`, `Frame\*`(png·slots), `branding.ini.sample`. (it18: `bldinfo.ini` 제거 — 버전 정보는 exe 자신이 갖는다)
 
 ### 2.1 백엔드 게이트 키 exe 내장 (it15)
 
@@ -114,11 +114,11 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 |--------|------|------|------|
 | 기본 프레임 | `..\..\Frame\**\*.*`(리포 루트 `Frame/`) | 출력 `Frame\`(재귀 유지) | `MCPhoto.App.csproj:67-71` |
 | 브랜딩 샘플 | `branding.ini.sample` | 출력 루트 | `MCPhoto.App.csproj:76` |
-| 빌드 정보 | `bldinfo.ini` | 출력 루트 + publish 산출물(스크립트가 명시 복사) | `MCPhoto.App.csproj:82`, `publish.ps1:81-90` |
+| 빌드 정보 | **동봉 파일 없음** (it18) | — | `Directory.Build.props`(`<Version>`), `AssemblyBuildInfoService.cs` |
 
 - 프레임 복사는 프레임 소스 우선순위 ②(번들 기본 프레임)에 해당한다. publish 산출물 `Frame\`에 `jport-camp.png`·`jport-camp.slots`·테스트 프레임 등이 포함됨(확인됨).
 - `branding.ini.sample`(it9 C3): 고객이 `branding.ini`로 리네임해 앱 표시 이름을 변경한다. UTF-8 저장 필수, 적용 지점은 창 제목·홈 화면 타이틀·홈 소제목, 미존재/빈 값이면 기본 **"MC Photo" / "self custom photobooth"**. 샘플 내용은 `[Branding]`·`AppName`·`Subtitle` 3줄이다([12 §3](./12-exe-app-settings-and-config.md)).
-- `bldinfo.ini`: 앱 하단 버전 표기용(`[General]` `Version`·`BuildDate`·`Site`). 원본이 없으면 publish는 경고만 하고 진행하며 앱은 폴백 `0.0.0`을 표시한다([12 §6](./12-exe-app-settings-and-config.md)).
+- **버전 표기(it18)**: 동봉 파일이 없다. 앱 하단 버전은 **어셈블리 버전 리소스**에서, 진단 화면의 빌드 시각은 **exe `LastWriteTime`** 에서 읽는다. 릴리스 시 `Directory.Build.props`의 `<Version>` 한 줄만 올리면 exe 파일 속성의 버전과 앱 표기가 함께 바뀐다([12 §6](./12-exe-app-settings-and-config.md)).
 
 ---
 
@@ -131,7 +131,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 - 권장 사용: `publish.bat` 더블클릭. 또는 `powershell -ExecutionPolicy Bypass -File .\publish.ps1`.
 - **실행 중 잠금 경고**: `Get-Process MCPhoto`로 앱 실행을 감지하면(출력 exe 잠김) 게시를 중단하고 "Close the app, then run again." 경고 후 return 한다(`publish.ps1:38-43`).
-- 게시 후 `bldinfo.ini`를 명시 복사한다 — 단일 파일 publish가 csproj `None` 항목을 누락시킬 수 있기 때문(`publish.ps1:81-91`).
+- 게시 후 산출된 exe의 **버전 리소스와 빌드 시각을 콘솔에 출력**한다(it18 — 복사할 파일이 없어졌으므로 확인용 출력으로 대체).
 - 성공 시 산출물 파일별 크기(MB) 목록을 출력한다(`publish.ps1:93-95`).
 - **인코딩 주의(배치 스크립트 공통 규칙)**: `publish.bat`·`publish.ps1`·`web/deploy-web.bat` 모두 의도적으로 **ASCII(영문)로 유지**한다. 한국어 Windows 의 cmd/PowerShell 5.1 에서 CP949/UTF-8 mojibake 를 피하기 위함(`publish.bat:6`).
   - ⚠️ **단순 표시 문제가 아니라 실행 사고로 이어진다.** cmd 는 배치 파일의 읽기 위치를 **바이트 오프셋**으로 추적하는데, `chcp` 로 코드페이지가 바뀐 상태에서 파일에 멀티바이트 문자가 있으면 오프셋이 문자 중간에 떨어져 **줄의 나머지가 명령으로 실행**된다. `REM` 주석도 예외가 아니다.
@@ -161,7 +161,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 - `MCPhoto.exe`(앱 바이너리 — 백엔드 게이트 키 내장)
 - `tools\ffmpeg\ffmpeg.exe`(타임랩스용 번들)
 - `Frame\`(기본 프레임)
-- `branding.ini.sample`, `bldinfo.ini`
+- `branding.ini.sample`
 
 ### 6.2 자격증명 차단 (보안)
 
@@ -187,5 +187,5 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 - ffmpeg 를 쓰는 타임랩스·캡처 파이프라인: [10 · Exe 앱 아키텍처](./10-exe-app-architecture.md) §4.5·§4.8, 기능 관점은 [11](./11-exe-app-features.md).
 - 백엔드 게이트 키·인증 계약: [30 · 백엔드 API 연동](./30-backend-firebase-integration.md) §2.1·§3.
-- 앱 설정 파일(`MCPhoto.ini`·`branding.ini`·`bldinfo.ini`): [12 · 설정/구성](./12-exe-app-settings-and-config.md).
+- 앱 설정 파일(`MCPhoto.ini`·`branding.ini`)과 버전 표기: [12 · 설정/구성](./12-exe-app-settings-and-config.md).
 - 웹·Functions 배포는 WPF 빌드와 별개 파이프라인(`web/deploy-web.bat`): [20 · 프론트엔드](./20-frontend-web-download-page.md) §9.

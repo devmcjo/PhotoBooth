@@ -33,8 +33,9 @@ internal static class ServiceRegistration
 
         // it9 C3: 앱 이름 브랜딩(branding.ini). 시작 시 1회 로드, 폴백 "MC Photo".
         services.AddSingleton<IBrandingService, IniBrandingService>();
-        // 빌드 정보(bldinfo.ini): 버전·빌드일·사이트. 게스트 하단 상시 표기 + 설정 표기. 폴백 v0.0.0.
-        services.AddSingleton<IBuildInfoService, IniBuildInfoService>();
+        // it18: 빌드 정보는 실행 파일 자신에서 읽는다(어셈블리 버전 리소스 + exe 타임스탬프).
+        //        외부 파일 bldinfo.ini 폐기 — 리소스 버전과 표기 버전의 이중 관리를 없앴다. 폴백 v0.0.0.
+        services.AddSingleton<IBuildInfoService, AssemblyBuildInfoService>();
 
         // it9 C1: 카메라 테스트 모달 오픈(다이얼로그 서비스 — VM이 Window 미참조).
         services.AddSingleton<ICameraTestDialogService, CameraTestDialogService>();

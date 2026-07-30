@@ -134,7 +134,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 | 로그 파일 + 폴더 열기 | 전부 | ○ WIN(`explorer.exe`) | △ | △(공유 시트) | △ | △ | ✕(콘솔) |
 | 진단·상태 화면 | 전부 | ○ | ○ | ○ | ○ | ○ | ○ |
 | 앱 종료(관리자) | P4 | ○ WIN | △ | ✕(OS가 금지) | ✕ | △ | ✕ |
-| 버전 표기(`bldinfo` 외부 파일) | 전부 | ○ WIN | △ | ✕(번들 버전 사용) | ✕ | ✕ | ✕ |
+| 버전 표기(빌드 산출물 자신에서 읽기) | 전부 | ○ | ○ | ○(번들 버전) | ○ | ○ | ○ |
 | 브랜딩(앱 이름·소제목 외부 파일) | 전부 | ○ WIN | △ | △(원격 구성 권장) | △ | △ | △ |
 | 단일 실행파일 배포·인스톨러 | — | ○ WIN | ✕(`.app`/notarize) | ✕(스토어) | ✕ | ✕ | ✕ |
 
@@ -153,7 +153,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 | OpenCV DirectShow `VideoCapture(index)` + WMI FriendlyName | 카메라 프리뷰·스틸·장치 선택 | [14 §2](./14-media-pipeline-spec.md) |
 | `WindowStyle`/`WindowState`/`WindowBounds` 표시 모드 정책 | 키오스크 몰입 모드 진입·이탈 | [11 §16](./11-exe-app-features.md) |
 | `HttpListener` loopback + 시스템 기본 브라우저 | Google 인가 코드 수신 | [61 §3](./61-auth-platform-integration.md) |
-| `branding.ini` / `bldinfo.ini` 외부 파일 | 고객사별 앱 이름·버전 표기 | [12 §3·§6](./12-exe-app-settings-and-config.md) |
+| `branding.ini` 외부 파일 | 고객사별 앱 이름 표기 | [12 §3](./12-exe-app-settings-and-config.md) |
 | `publish.ps1` 단일 EXE + Inno Setup | 배포 | [80](./80-build-and-deployment.md) |
 | 실행 폴더 `Frame\` 단일 디렉터리 + 접두 규칙 | 로컬 프레임 저장·공용/개인 구분 | [41 §3](./41-local-data-and-file-formats.md) |
 

@@ -76,10 +76,7 @@
     <None Include="branding.ini.sample" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- 빌드 정보(bldinfo.ini): 버전·빌드일·사이트. 실행 폴더에 동봉 → 앱이 읽어 UI 버전 표기.
-       publish에도 포함(publish.ps1이 단일 파일 산출물에 명시 복사). -->
-  <ItemGroup>
-    <None Include="bldinfo.ini" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+  <!-- it18: bldinfo.ini 동봉 제거. 버전은 어셈블리 버전 리소스(Directory.Build.props의 Version),
+       빌드 시각은 exe 타임스탬프에서 읽는다 → 산출물에 동봉할 파일이 없다. -->
 
 </Project>

@@ -55,7 +55,6 @@ result/
 *.log
 *.ini
 !appsettings.ini.sample
-!bldinfo.ini
 
 # 수동 테스트용 스크래치 이미지(프레임·스크린샷 등, 재생성 가능)
 TEMP/

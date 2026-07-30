@@ -3,14 +3,14 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 12-exe-app-settings-and-config.md |
-| 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성, 브랜딩(branding.ini), 빌드 정보(bldinfo.ini), 표시 모드 즉시 적용, 창 위치 저장 |
+| 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성, 브랜딩(branding.ini), 빌드 정보(어셈블리 버전 리소스 + exe 타임스탬프), 표시 모드 즉시 적용, 창 위치 저장 |
 | 최종 업데이트 | 2026-07-29 (it15·it16 반영 — 백엔드/SSO 설정 키 추가, 브랜딩 기본값·샘플 정정) |
-| 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.Core/Build/**`, `src/MCPhoto.App/branding.ini.sample`, `src/MCPhoto.App/bldinfo.ini`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
+| 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.Core/Build/**`, `src/MCPhoto.App/branding.ini.sample`, `Directory.Build.props`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
 | 갱신 규칙 | `AppSettings` 필드 추가/기본값/Clamp 변경, INI 매핑(`IniSettingsService`) 변경, 폴백 경로(`SettingsPathResolver`) 변경, 브랜딩 로직/기본값 변경 시 이 문서를 갱신한다. |
 
 관련 문서: [10 아키텍처](./10-exe-app-architecture.md) · [11 기능 상세](./11-exe-app-features.md) · 인덱스 [README](./README.md)
 
-> ⚠️ **이 문서는 Windows 데스크톱 구현 참조다.** INI 파일 형식·3단 경로 폴백(`실행경로 → %ProgramData% → %LocalAppData%`)·`branding.ini`·`bldinfo.ini`·표시 모드/창 기하는 **Windows 고유 구현**이며 이식 대상이 아니다.
+> ⚠️ **이 문서는 Windows 데스크톱 구현 참조다.** INI 파일 형식·3단 경로 폴백(`실행경로 → %ProgramData% → %LocalAppData%`)·`branding.ini`·어셈블리 버전 리소스·표시 모드/창 기하는 **Windows 고유 구현**이며 이식 대상이 아니다.
 >
 > **다른 플랫폼 클라이언트를 만든다면 [41 · 로컬 데이터·파일 포맷 규격](./41-local-data-and-file-formats.md)이 진실원이다** — 설정 **키 이름·기본값·범위·보정 규칙**은 계약이지만 **저장 형식·위치는 플랫폼 자유**다. 41번에 플랫폼별 저장 위치 대응표와 프레임 `.slots` 파일 포맷이 있다.
 
@@ -178,15 +178,16 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
 
 ---
 
-## 6. 빌드 정보(bldinfo.ini) — 앱 버전 표기
+## 6. 빌드 정보 — 앱 버전 표기 (it18: 외부 파일 폐기)
 
-- 정의: `IBuildInfoService`(프로퍼티 `Version`·`BuildDate`·`Site` + `DisplayText`) · `IniBuildInfoService`(`IniBuildInfoService.cs`). DI Singleton(`ServiceRegistration.cs:37`), 시작 1회 로드. **버전을 소스코드에 하드코딩하지 않기 위한 외부 파일**(brandbranding과 동일 패턴).
-- **파일**: `bldinfo.ini`, 섹션 `[General]`, 키 `Version`(예 `1.0.0`) · `BuildDate`(예 `2026-07-23`) · `Site`(예 `Beta`).
-- **탐색 경로 순서**(`Candidates`): ① 실행 경로 `{AppContext.BaseDirectory}\bldinfo.ini` → ② `%ProgramData%\MCPhoto\bldinfo.ini`. 존재하는 첫 파일 사용.
-- **폴백**: 파일/키 부재·손상 → `Version="0.0.0"`, `BuildDate`·`Site` 빈 문자열. 크래시 금지. UTF-8 명시 읽기, `IniFile` 파서 재사용(`;`/`#` 주석 무시).
-- **표기**: `DisplayText`(예 `v1.0.0 · Beta`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭). (it12 R4: `BuildDate`는 표기에서 제외 — 업데이트 지연 시 오래된 앱으로 보일 위험. 프로퍼티·ini 키·로드 로직은 유지)
-- **배포**: 실행 폴더 동봉(`MCPhoto.App.csproj:82`의 `None CopyToOutputDirectory`) + `publish.ps1`이 publish 산출물에 명시 복사(`publish.ps1:81-90` — 원본 부재 시 경고만 하고 계속, 앱은 폴백 버전 표시). `.gitignore`는 `*.ini` 무시 + `!bldinfo.ini` 예외로 추적(`.gitignore:58`). **버전 값은 배포 시 사용자가 직접 관리**한다(현재 값: `1.1.3` / `Beta`).
-- 근거: `IBuildInfoService.cs`, `IniBuildInfoService.cs`, `MainWindow.xaml`, `AppShellViewModel.cs`, `publish.ps1`, `bldinfo.ini`.
+- 정의: `IBuildInfoService`(프로퍼티 `Version`·`BuildDate` + `DisplayText`) · `AssemblyBuildInfoService`(`AssemblyBuildInfoService.cs`). DI Singleton(`ServiceRegistration.cs`), 시작 1회 확정 후 불변. **값은 실행 파일 자신에서 나온다 — 외부 파일 없음.**
+- **버전 출처**: 엔트리 어셈블리의 `AssemblyName.Version` 앞 3자리(`ToString(3)`). 원천은 `Directory.Build.props`의 `<Version>`이며 `AssemblyVersion`·`FileVersion`이 `$(Version).0`으로 파생된다 → **exe 파일 속성의 버전 리소스와 앱 표기가 항상 일치**한다. 릴리스 시 `<Version>` 한 줄만 올린다(현재 `1.1.6` → 리소스 `1.1.6.0`).
+- **빌드 시각 출처**: exe 파일의 `LastWriteTime`을 `yyyy-MM-dd HH:mm`(로컬)으로. 경로는 `Environment.ProcessPath`다 — `Assembly.Location`은 **단일 파일 퍼블리시에서 빈 문자열**이라 쓸 수 없다. `CreationTime`을 쓰지 않는 이유: 설치·복사 시점으로 덮어써져 "설치 시각"이 된다. `LastWriteTime`은 Inno Setup이 원본 시각을 보존하므로 배포 후에도 빌드 시각으로 남는다.
+- **폴백**: 버전 확인 불가 → `"0.0.0"`. exe 경로 부재·읽기 실패 → `BuildDate` 빈 문자열. 어떤 경우에도 크래시 없음(예외는 삼켜 로그).
+- **표기**: `DisplayText`(예 `v1.1.6`)를 **앱 하단 우측에 로그인 여부와 무관하게 상시** 노출(`MainWindow.xaml`의 흐린 캡션 + `AppShellViewModel.VersionText`, 클릭 비간섭). 진단 화면 "개발자 문의" 카드는 `Version`과 `BuildDate`(시각 포함)를 함께 보여준다([11 §17](./11-exe-app-features.md)).
+- **배포**: 동봉할 파일이 없다. `publish.ps1`은 복사 대신 산출된 exe의 버전 리소스·타임스탬프를 콘솔에 출력해 무엇이 나갔는지 확인만 시켜 준다.
+- **폐기 이력(it18)**: 종전에는 `bldinfo.ini`(`[General]` `Version`·`BuildDate`·`Site`)를 실행 경로 → `%ProgramData%\MCPhoto` 순으로 찾아 읽었다. 제거 이유 — ① 산출물의 ini를 따로 교체해야 해서 **exe 리소스 버전(1.0.0.0)과 표기 버전이 어긋나는 이중 관리**였고, ② `Site`(배포 채널)는 개발·알파 서버를 운영하지 않는 이 프로젝트에서 값이 `Beta`로 고정된 무의미한 표기였고, ③ 빌드일은 사람이 손으로 갱신해야 해서 실제 빌드 시점과 어긋날 수 있었다. `IniBuildInfoService`·`bldinfo.ini`·`Site` 프로퍼티·`.gitignore`의 `!bldinfo.ini` 예외·`publish.ps1`의 복사 단계가 모두 삭제됐다.
+- 근거: `IBuildInfoService.cs`, `AssemblyBuildInfoService.cs`, `Directory.Build.props`, `MainWindow.xaml`, `AppShellViewModel.cs`, `DiagnosticsViewModel.cs`, `publish.ps1`.
 
 ---
 

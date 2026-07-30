@@ -123,7 +123,7 @@ Windows 구현이 4계층으로 검증했고, 그 경계를 그대로 쓴다. **
 | 인가 코드 획득 (`IGoogleSignInService`) | 플랫폼별 OAuth UI → code 반환 | 취소·타임아웃 = null |
 | QR 생성 (`IQrService`) | URL → 이미지 | — |
 | 설정 저장소 (`ISettingsService`) | 로드·저장(**성공 여부 반환**) | 실패 = false |
-| 브랜딩 (`IBrandingService`) · 빌드 정보 (`IBuildInfoService`) | 표시명·버전 | 부재 = 기본값 |
+| 브랜딩 (`IBrandingService`) · 빌드 정보 (`IBuildInfoService`) | 표시명·버전 | 부재 = 기본값. 빌드 정보는 외부 파일이 아니라 **빌드 산출물 자신**(버전 리소스·타임스탬프)에서 읽는다(it18) |
 | 로그 (`ILogFolderService`) | 로그 위치 노출·열기/공유 | 실패해도 크래시 금지 |
 | 세션 작업 공간 | 세션 폴더 생성·정리·시작 시 잔재 정리 | 개별 실패 무시 |
 | 표시 모드/창(데스크톱) | 전체화면·창 기하 적용 | — |
