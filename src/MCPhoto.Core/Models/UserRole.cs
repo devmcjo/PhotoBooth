@@ -93,10 +93,12 @@ public static class UserRoleExtensions
         => actingRole.CreatableRoles().Contains(role);
 
     /// <summary>
-    /// 위계 랭크(관리 판정 기준). 서수(enum 값)와 분리해 명시 — 역할 추가 시 여기만 갱신(서수 재배치 안전, it13 §3.2).
+    /// 위계 랭크(관리 판정·표시 정렬 기준). 서수(enum 값)와 분리해 명시 — 역할 추가 시 여기만 갱신(서수 재배치 안전, it13 §3.2).
     /// 위계: TempUser &lt; User &lt; AdvancedUser &lt; Manager &lt; Admin. 서버 MANAGE_RANK와 동일(it16 §5.1).
+    /// ⚠️ 권한 판정에 이 값을 직접 부등식으로 쓰지 않는다 — 관리 가능 여부는 <see cref="CanManage"/>,
+    ///    프레임 저작은 <see cref="CanWriteFrames"/>다. 여기서 공개하는 목적은 **목록 정렬**(사용자 관리 화면)이다.
     /// </summary>
-    private static int ManageRank(UserRole role) => role switch
+    public static int HierarchyRank(this UserRole role) => role switch
     {
         UserRole.TempUser => 0,
         UserRole.User => 1,
@@ -105,6 +107,9 @@ public static class UserRoleExtensions
         UserRole.Admin => 4,
         _ => 0
     };
+
+    /// <summary>위계 랭크(내부 별칭 — 기존 관리 판정 표현 유지).</summary>
+    private static int ManageRank(UserRole role) => role.HierarchyRank();
 
     /// <summary>
     /// actingRole이 targetRole 계정을 관리(삭제·PIN 재설정 등)할 수 있는지: **자신과 같거나 낮은 위계만**.

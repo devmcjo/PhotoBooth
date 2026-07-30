@@ -32,6 +32,7 @@
         <conv:FrameDeleteVisibilityConverter x:Key="FrameDeleteVis" />
         <conv:RoleActionVisibilityConverter x:Key="RoleActionVis" />
         <conv:RoleLabelConverter x:Key="RoleLabel" />
+        <conv:RoleBrushConverter x:Key="RoleBrush" />
         <conv:FilePathToImageConverter x:Key="FilePathToImage" />
 
         <!-- VM → View DataTemplate 매핑(상태머신 화면 스왑) -->

@@ -83,6 +83,104 @@ public class UserMgmtViewModelTests
 
     private static UserRowViewModel Row(UserMgmtViewModel vm, string id) => vm.Rows.First(r => r.User.Id == id);
 
+    // ── 목록 정렬(관리 편의): 역할 위계 내림차순 → 같은 역할은 가입 시각 오름차순 ──
+
+    [Fact]
+    public async Task Rows_Sorted_By_Role_Rank_Desc_Then_CreatedAt_Asc()
+    {
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        // 서버 응답 순서를 의도적으로 뒤섞어 넣는다(GetAllAsync는 정렬을 보장하지 않는다).
+        var list = new[]
+        {
+            new User { Id = "u_new",  Role = UserRole.User,         CreatedAt = t.AddDays(9) },
+            new User { Id = "admin",  Role = UserRole.Admin,        CreatedAt = t.AddDays(5) },
+            new User { Id = "t1",     Role = UserRole.TempUser,     CreatedAt = t.AddDays(1) },
+            new User { Id = "u_old",  Role = UserRole.User,         CreatedAt = t.AddDays(2) },
+            new User { Id = "adv",    Role = UserRole.AdvancedUser, CreatedAt = t.AddDays(7) },
+            new User { Id = "mgr",    Role = UserRole.Manager,      CreatedAt = t.AddDays(3) },
+        };
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        Assert.Equal(
+            new[] { "admin", "mgr", "adv", "u_old", "u_new", "t1" },
+            vm.Rows.Select(r => r.User.Id).ToArray());
+    }
+
+    /// <summary>같은 역할 안에서는 가입이 늦은 계정이 아래로 온다(가입 시각 오름차순).</summary>
+    [Fact]
+    public async Task Same_Role_Rows_Put_Recent_Signup_Below()
+    {
+        var t = new DateTime(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc);
+        var list = new[]
+        {
+            new User { Id = "third",  Role = UserRole.User, CreatedAt = t.AddHours(6) },
+            new User { Id = "first",  Role = UserRole.User, CreatedAt = t },
+            new User { Id = "second", Role = UserRole.User, CreatedAt = t.AddHours(3) },
+        };
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        Assert.Equal(new[] { "first", "second", "third" }, vm.Rows.Select(r => r.User.Id).ToArray());
+    }
+
+    /// <summary>가입 일시는 로컬 시간으로 표시한다(서버 createdAt은 UTC).</summary>
+    [Fact]
+    public async Task CreatedAt_Text_Uses_Local_Time()
+    {
+        var utc = new DateTime(2026, 5, 20, 23, 30, 0, DateTimeKind.Utc);
+        var list = new[] { new User { Id = "u1", Role = UserRole.User, CreatedAt = utc } };
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        var local = utc.ToLocalTime();
+        Assert.Equal(local.ToString("yyyy-MM-dd"), Row(vm, "u1").CreatedDateText);
+        Assert.Equal(local.ToString("HH:mm"), Row(vm, "u1").CreatedTimeText);
+    }
+
+    /// <summary>역할별 인원 요약은 위계 높은 역할부터 나열하고, 0명 역할은 싣지 않는다.</summary>
+    [Fact]
+    public async Task SummaryText_Lists_Roles_High_To_Low()
+    {
+        var list = new[]
+        {
+            new User { Id = "admin", Role = UserRole.Admin },
+            new User { Id = "u1", Role = UserRole.User },
+            new User { Id = "u2", Role = UserRole.User },
+            new User { Id = "t1", Role = UserRole.TempUser },
+        };
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        Assert.Equal("총 4명 · 관리자 1 · 사용자 2 · 임시 유저 1", vm.SummaryText);
+        Assert.DoesNotContain("매니저", vm.SummaryText);   // 0명 역할은 생략
+        Assert.False(vm.IsEmpty);
+    }
+
+    [Fact]
+    public async Task Empty_List_Sets_IsEmpty_And_Clears_Summary()
+    {
+        var (vm, _) = await MakeVmAsync(UserRole.Admin, "admin", Array.Empty<User>());
+
+        Assert.True(vm.IsEmpty);
+        Assert.Equal(string.Empty, vm.SummaryText);
+    }
+
+    /// <summary>실패 안내는 오류 색으로, 성공 안내는 성공 색으로(StatusIsError). 초록 오류 메시지 방지.</summary>
+    [Fact]
+    public async Task StatusIsError_Flags_Failure_But_Not_Success()
+    {
+        var list = new[] { new User { Id = "u1", Role = UserRole.User } };
+        var (vm, accounts) = await MakeVmAsync(UserRole.Admin, "admin", list);
+
+        var row = Row(vm, "u1");
+        row.SelectedRole = UserRole.Manager;
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
+        Assert.False(vm.StatusIsError);   // 성공
+
+        accounts.SetRoleThrows = new UnauthorizedAccessException("forbidden");
+        row = Row(vm, "u1");
+        row.SelectedRole = UserRole.TempUser;
+        await vm.ApplyRoleChangeCommand.ExecuteAsync(row);
+        Assert.True(vm.StatusIsError);    // 403
+    }
+
     // ── 행별 지정 가능 역할(콤보 옵션) 필터 ──
 
     [Fact]

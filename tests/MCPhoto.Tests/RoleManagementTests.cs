@@ -243,6 +243,21 @@ public class RoleManagementTests
         Assert.Equal(Visibility.Collapsed, r);
     }
 
+    /// <summary>
+    /// 자기 계정 행(3번째 값 isSelf=true)은 관리 액션을 노출하지 않는다 — 위계상 관리 가능(admin↔admin)해도 마찬가지.
+    /// 자기 계정 삭제는 명령이 거부하므로 버튼을 보일 이유가 없다(사용자 관리 목록 UX).
+    /// </summary>
+    [Theory]
+    [InlineData(true, Visibility.Collapsed)]
+    [InlineData(false, Visibility.Visible)]
+    public void RoleActionVis_Self_Row_Hidden(bool isSelf, Visibility expected)
+    {
+        var conv = new RoleActionVisibilityConverter();
+        var r = conv.Convert(new object[] { UserRole.Admin, UserRole.Admin, isSelf },
+            typeof(Visibility), "Manage", CultureInfo.InvariantCulture);
+        Assert.Equal(expected, r);
+    }
+
     private static void AssertVis(UserRole actor, UserRole target, string mode, bool visible)
     {
         var conv = new RoleActionVisibilityConverter();

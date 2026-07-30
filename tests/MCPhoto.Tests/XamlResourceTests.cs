@@ -185,28 +185,45 @@ public class XamlResourceTests
         throw new DirectoryNotFoundException("src/MCPhoto.App/Views 를 찾지 못함");
     }
 
+    /// <summary>
+    /// App.xaml에 정의된 리소스 키(공용 컨버터·브랜딩 문자열). 테마 딕셔너리 **밖**이라 이 검증 대상이 아니다.
+    /// 하드코딩 목록이 아니라 App.xaml에서 직접 읽는다 — 컨버터가 추가될 때 화이트리스트를 잊어 테스트가
+    /// 엉뚱하게 깨지던 문제를 없앤다.
+    /// </summary>
+    private static HashSet<string> LoadAppResourceKeys()
+    {
+        var appDir = Directory.GetParent(FindAppViewsDir())!.FullName;   // …/src/MCPhoto.App
+        var text = File.ReadAllText(Path.Combine(appDir, "App.xaml"));
+        return Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+    }
+
+    /// <summary>
+    /// XAML 텍스트에서 "테마에 있어야 하는" StaticResource 키만 추출.
+    /// 제외: 파일이 자체 정의한 키(x:Key), App.xaml 키, 그리고 `{StaticResource {x:Type Foo}}`처럼
+    /// 중첩 마크업 확장으로 지정한 암묵 스타일 키(정규식이 `{x:Type Foo`로 캡처하는 형태 — 이름 키가 아니다).
+    /// </summary>
+    private static string[] ThemeKeysReferencedBy(string text)
+    {
+        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+        var appKeys = LoadAppResourceKeys();
+
+        return Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(k => k.Length > 0
+                        && !k.StartsWith("{x:Type", StringComparison.Ordinal)
+                        && !localKeys.Contains(k)
+                        && !appKeys.Contains(k))
+            .Distinct()
+            .ToArray();
+    }
+
     [Fact]
     public void DiagnosticsWindow_StaticResource_Keys_Resolve_In_Theme()
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "DiagnosticsWindow.xaml"));
-
-        // 자체 정의 리소스(HealthValue 등 Window.Resources)는 제외하고 테마 참조만 검증.
-        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
-            .Select(m => m.Groups[1].Value).ToHashSet();
-
-        // App.xaml에 정의된 공용 컨버터 키(테마 딕셔너리 밖)는 이 검증 대상이 아님.
-        var appKeys = new HashSet<string>
-        {
-            "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
-            "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
-            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "FilePathToImage",
-        };
-
-        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
-            .Select(m => m.Groups[1].Value.Trim())
-            .Where(k => k.Length > 0 && !localKeys.Contains(k) && !appKeys.Contains(k))
-            .Distinct()
-            .ToArray();
+        var referenced = ThemeKeysReferencedBy(text);
 
         RunSta(() =>
         {
@@ -234,24 +251,7 @@ public class XamlResourceTests
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
-
-        // 자체 정의 리소스(UserControl.Resources)는 제외.
-        var localKeys = Regex.Matches(text, @"x:Key=""([^""]+)""")
-            .Select(m => m.Groups[1].Value).ToHashSet();
-
-        // App.xaml에 정의된 공용 컨버터 키(테마 딕셔너리 밖)는 검증 대상이 아님.
-        var appKeys = new HashSet<string>
-        {
-            "BoolToVis", "InverseBoolToVis", "InverseBool", "BoolToBrush", "NullToVis",
-            "BoolToNoticeBrush", "CameraStateToVis", "SlotAspectLabel", "AspectRatioToHeight",
-            "StartsWithToVis", "AllTrueToVis", "FrameDeleteVis", "RoleActionVis", "RoleLabel", "FilePathToImage",
-        };
-
-        var referenced = Regex.Matches(text, @"\{StaticResource\s+([^\}]+?)\s*\}")
-            .Select(m => m.Groups[1].Value.Trim())
-            .Where(k => k.Length > 0 && !localKeys.Contains(k) && !appKeys.Contains(k))
-            .Distinct()
-            .ToArray();
+        var referenced = ThemeKeysReferencedBy(text);
 
         RunSta(() =>
         {

@@ -136,6 +136,53 @@ public sealed class RoleLabelConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// UserRole → 배지 색(사용자 관리 목록). ConverterParameter로 어느 색인지 지정:
+///   "Bg"=배지 배경, "Fg"=배지 글자, "Strip"=행 좌측 위계 스트립.
+/// 색은 **power 계정에만** 쓴다(관리자=로즈, 매니저=민트). 비power(고급 유저·사용자·임시 유저)는 같은
+/// 중립 배경에 글자 명도만 달리한다 — 위계는 좌측 스트립 명도로 읽는다.
+/// ⚠️ 앰버(Warning)는 이 화면에서 "PIN 미설정" 전용이다. 역할 배지에 쓰면 같은 행에 뜻이 다른 앰버가
+///    두 개 생겨 색의 의미가 무너진다(팔레트가 로즈·민트·앰버 3색이라 5역할을 색으로 다 못 가른다).
+/// 테마 토큰만 참조 — 팔레트 교체 시 자동 추종(하드코딩 없음).
+/// </summary>
+public sealed class RoleBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var role = value is UserRole r ? r : UserRole.User;
+        var slot = parameter?.ToString() ?? "Bg";
+        var key = slot switch
+        {
+            "Strip" => role switch
+            {
+                UserRole.Admin => "Brush.Accent",
+                UserRole.Manager => "Brush.Accent2",
+                UserRole.AdvancedUser => "Brush.Text.Tertiary",
+                UserRole.User => "Brush.Divider",
+                _ => "Brush.Bg.Elevated"          // 임시 유저: 존재감 최소
+            },
+            "Fg" => role switch
+            {
+                UserRole.Admin => "Brush.Accent.Text",
+                UserRole.Manager => "Brush.Accent2.Text",
+                UserRole.AdvancedUser => "Brush.Text.Primary",
+                UserRole.User => "Brush.Text.Secondary",
+                _ => "Brush.Text.Muted"
+            },
+            _ => role switch                      // "Bg"
+            {
+                UserRole.Admin => "Brush.Accent.Soft",
+                UserRole.Manager => "Brush.Accent2.Soft",
+                _ => "Brush.Surface.Alt"          // 비power 3역할 공통(글자 명도로 구분)
+            }
+        };
+        return Application.Current?.TryFindResource(key) as Brush ?? Brushes.Transparent;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>SlotAspect → 표시 라벨("4:3"/"3:4"/"1:1"). 종횡비 ComboBox 항목 표시. (it4 §3 B4)</summary>
 public sealed class SlotAspectLabelConverter : IValueConverter
 {
@@ -206,8 +253,10 @@ public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
 }
 
 /// <summary>
-/// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole)], parameter="Manage".
+/// 사용자 관리 액션 노출 판정. values=[actorRole(UserRole), targetRole(UserRole), isSelf(bool, 선택)], parameter="Manage".
 /// - Manage(삭제 등 관리 액션): 대상이 행위자와 **같거나 낮은 역할**일 때만 노출(manager는 admin 관리 불가).
+/// - isSelf=true(자기 계정 행)면 무조건 미노출 — 자기 계정 삭제는 명령이 어차피 거부하므로 버튼을 보일 이유가 없다.
+///   세 번째 값은 선택이며(생략 시 자기 계정 판정 없음) 기존 2값 호출과 호환된다.
 /// 값이 비었거나 형식이 다르면 안전하게 Collapsed. (권한 게이트 — UI 노출; 명령에도 동일 가드 존재)
 /// </summary>
 public sealed class RoleActionVisibilityConverter : IMultiValueConverter
@@ -216,6 +265,7 @@ public sealed class RoleActionVisibilityConverter : IMultiValueConverter
     {
         if (values.Length < 2 || values[0] is not UserRole actor || values[1] is not UserRole target)
             return Visibility.Collapsed;
+        if (values.Length > 2 && values[2] is true) return Visibility.Collapsed;   // 자기 계정 행
         // 삭제·pw초기화(Manage): 대상이 행위자와 같거나 낮은 역할일 때만 노출.
         return actor.CanManage(target) ? Visibility.Visible : Visibility.Collapsed;
     }
