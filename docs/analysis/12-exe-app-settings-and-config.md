@@ -153,10 +153,10 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
   1. 실행 경로 `{AppContext.BaseDirectory}\branding.ini`
   2. `%ProgramData%\MCPhoto\branding.ini`
   존재하는 첫 파일 사용.
-- **폴백**: 파일 부재 / 빈 값 / 손상·예외 → 기본값 **AppName="MC Photo"**(`DefaultAppName`) · **Subtitle="self custom photobooth"**(`DefaultSubtitle`). 두 키는 독립 폴백(한 키만 비어도 그 키만 기본값). 어떤 실패에도 크래시 금지.
+- **폴백**: 파일 부재 / 빈 값 / 손상·예외 → 기본값 **AppName="MCPhoto"**(`DefaultAppName`) · **Subtitle="self custom photobooth"**(`DefaultSubtitle`). 두 키는 독립 폴백(한 키만 비어도 그 키만 기본값). 어떤 실패에도 크래시 금지.
 - **인코딩**: UTF-8 명시 읽기(`File.ReadAllText(resolved, Encoding.UTF8)`, `:32`) — 한글 이름·메모장 인코딩 편차 대비.
 - **로딩 시점·적용**: `App.OnStartup`이 `AppName`→`Resources["Branding.AppName"]`, `Subtitle`→`Resources["Branding.Subtitle"]`에 주입(창 생성 **전**, `App.xaml.cs`) → `App.xaml` 기본값을 덮어씀 → `DynamicResource`로 창 제목(`MainWindow.xaml`)·홈 타이틀(`HomeView.xaml`, `Branding.AppName`)·홈 소제목(`HomeView.xaml`, `Branding.Subtitle`)에 반영. 변경은 앱 재시작 필요(읽기 전용).
-- **동봉 샘플**: `branding.ini.sample`(빌드 시 실행 폴더 복사, `MCPhoto.App.csproj:76`). 현재 내용은 3줄뿐이다 — `[Branding]` / `AppName=MC Photo` / `Subtitle=(prototype)`. 고객은 이 파일을 `branding.ini`로 리네임해 값만 바꾸면 된다.
+- **동봉 샘플**: `branding.ini.sample`(빌드 시 실행 폴더 복사, `MCPhoto.App.csproj:76`). 현재 내용은 3줄뿐이다 — `[Branding]` / `AppName=MCPhoto` / `Subtitle=(prototype)`. 고객은 이 파일을 `branding.ini`로 리네임해 값만 바꾸면 된다.
 
 ---
 

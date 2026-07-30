@@ -118,7 +118,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 | 빌드 정보 | **동봉 파일 없음** (it18) | — | `Directory.Build.props`(`<Version>`), `AssemblyBuildInfoService.cs` |
 
 - 프레임 복사는 프레임 소스 우선순위 ②(번들 기본 프레임)에 해당한다. publish 산출물 `Frame\`에 `jport-camp.png`·`jport-camp.slots`·테스트 프레임 등이 포함됨(확인됨).
-- `branding.ini.sample`(it9 C3): 고객이 `branding.ini`로 리네임해 앱 표시 이름을 변경한다. UTF-8 저장 필수, 적용 지점은 창 제목·홈 화면 타이틀·홈 소제목, 미존재/빈 값이면 기본 **"MC Photo" / "self custom photobooth"**. 샘플 내용은 `[Branding]`·`AppName`·`Subtitle` 3줄이다([12 §3](./12-exe-app-settings-and-config.md)).
+- `branding.ini.sample`(it9 C3): 고객이 `branding.ini`로 리네임해 앱 표시 이름을 변경한다. UTF-8 저장 필수, 적용 지점은 창 제목·홈 화면 타이틀·홈 소제목, 미존재/빈 값이면 기본 **"MCPhoto" / "self custom photobooth"**. 샘플 내용은 `[Branding]`·`AppName`·`Subtitle` 3줄이다([12 §3](./12-exe-app-settings-and-config.md)).
 - **버전 표기(it18)**: 동봉 파일이 없다. 앱 하단 버전은 **어셈블리 버전 리소스**에서, 진단 화면의 빌드 시각은 **exe `LastWriteTime`** 에서 읽는다. 릴리스 시 `Directory.Build.props`의 `<Version>` 한 줄만 올리면 exe 파일 속성의 버전과 앱 표기가 함께 바뀐다([12 §6](./12-exe-app-settings-and-config.md)).
 
 ---

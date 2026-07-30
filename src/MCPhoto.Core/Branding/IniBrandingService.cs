@@ -6,13 +6,13 @@ namespace MCPhoto.Core.Branding;
 
 /// <summary>
 /// branding.ini 기반 브랜딩 로더. 실행경로\branding.ini 1순위, 없으면 %ProgramData%\MCPhoto\branding.ini. (it9 §4 C3)
-/// 읽기 전용(고객이 편집). 파일 부재/빈 값/손상 시 기본값 "MC Photo"로 폴백.
+/// 읽기 전용(고객이 편집). 파일 부재/빈 값/손상 시 기본값 "MCPhoto"로 폴백.
 /// 한글 AppName 대비 UTF-8 명시 읽기(메모장 저장 인코딩 편차 대비). INI 파서는 기존 IniFile 재사용.
 /// </summary>
 public sealed class IniBrandingService : IBrandingService
 {
     /// <summary>브랜딩 기본 표시명(설정 부재 시).</summary>
-    public const string DefaultAppName = "MC Photo";
+    public const string DefaultAppName = "MCPhoto";
     /// <summary>홈 소제목 기본값(설정 부재 시).</summary>
     public const string DefaultSubtitle = "self custom photobooth";
 
