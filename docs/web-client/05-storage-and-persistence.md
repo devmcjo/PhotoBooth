@@ -84,6 +84,10 @@ load():
   2. 알 수 없는 키는 그대로 보존, 누락 키는 기본값 채움
   3. clamp() 적용 (domain/settings/appSettings.ts — Windows AppSettings.Clamp 이식)
   4. QR 정규화 (analysis/41 §2.4)
+  5. 접속 구성 4키(`BackendBaseUrl`·`HostingBaseUrl`·`StorageBucket`·`GoogleClientId`)는
+     **저장값이 빈 문자열이면 빌드 주입값으로 대체**한다
+     (Windows의 "코드 내장 기본값" 대응. 빈 값이 직렬화·영속되면 재배포로 값을 바꿀 수 없고,
+      `GoogleClientId: ""` 저장 한 번에 로그인 버튼이 영구히 사라진다 — [01 §4.1](./01-tech-stack-and-structure.md))
 save(values) -> boolean:
   1. clamp() → QR 정규화
   2. 게스트 제한 키는 기록에서 제외 (§2.4)
@@ -154,7 +158,7 @@ OPFS/
 | 사실 | 결과 |
 |------|------|
 | `FileSystemFileHandle.createSyncAccessHandle()`은 **전용 Worker(DedicatedWorkerGlobalScope)에서만** 호출할 수 있다(전 브라우저 공통 — 메인 스레드 블로킹 방지) | 메인 스레드에서는 이 API를 쓸 수 없다 |
-| **Safari/WebKit은 `createWritable()`(`FileSystemWritableFileStream`)을 지원하지 않는다** | Safari에서 OPFS에 쓰는 방법은 **Worker + `createSyncAccessHandle` 하나뿐**이다 |
+| **Safari 17~18.x에는 `createWritable()`(`FileSystemWritableFileStream`)이 없다**(최신 Safari에서 Baseline 2025로 추가 — 이 설계의 지원 하한 17 기준으로는 없다고 간주하고 기능 감지로 판정) | 지원 하한 기기의 Safari에서 OPFS에 쓰는 방법은 **Worker + `createSyncAccessHandle` 하나뿐**이다 |
 | ⇒ | **모든 OPFS 쓰기(컷 JPEG·final·timelapse·프레임 PNG·결과물)를 하나의 `opfsWriter` Worker 경계 뒤로 모은다.** 메인 스레드에서 `createWritable()`을 먼저 시도하는 구조로 만들면 **iOS/iPadOS에서 전 저장 경로가 실패**한다(M6-W 파손 → E8 실패) |
 
 | 규칙 | 내용 |
@@ -362,7 +366,7 @@ if (navigator.storage?.persist) {
 
 | 데이터 | 호환 방식 |
 |--------|-----------|
-| 설정 | JSON 내보내기 → (수동) INI로 옮기려면 키 이름이 같으므로 1:1 대응 가능. **자동 변환 도구는 범위 밖** |
+| 설정 | JSON 내보내기 → (수동) INI로 옮기려면 키 이름이 같으므로 1:1 대응 가능(**예외: `CameraDevice`** — 웹은 `deviceId` 문자열, Windows는 인덱스라 이 키만 이식 불가·상대 기본값으로 재선택). **자동 변환 도구는 범위 밖** |
 | 프레임 | **zip 번들이 Windows `Frame\` 폴더 규칙과 동일**하므로 풀어 넣으면 그대로 인식된다(§4.6) |
 | 결과물 | 파일명·폴더명 규칙 동일(`mcphoto_YYMMDD_HHMM/final.jpg`) |
 | 서버 데이터(계정·공용 프레임·결과 세션) | **완전 공유**(같은 백엔드) |

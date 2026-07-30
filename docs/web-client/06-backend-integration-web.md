@@ -75,6 +75,14 @@ adapters/http/
 | `POST /uploads/prepare` | apiKey + optionalBearer | `Qr` |
 | `POST /uploads/commit` | apiKey + optionalBearer | `Qr` |
 
+### 2.0 PIN 3종의 요청 본문 (`analysis/31 §4.5` — 생략하면 401이 난다)
+
+| 경로 | 본문 | 규칙 |
+|------|------|------|
+| `POST /accounts/me/pin/verify` | `{ "pin": "1234" }` | 불일치 401 / **PIN 미설정은 409**(최초 설정 플로우로) |
+| `PUT /accounts/me/pin` | `{ "newPin": "5678", "currentPin": "1234" }` | **기존 PIN 보유 시 `currentPin` 필수** — 누락·불일치면 401 "현재 PIN이 올바르지 않습니다." 최초 설정(미보유)일 때만 생략 가능. **verify를 먼저 통과했더라도 `currentPin` 없는 PUT은 401이다**(별개 검증) |
+| `PUT /accounts/{id}/pin` | `{ "newPin": "0000" }` | 타 계정 재설정(power + 엄격히 낮은 위계). 자기 자신은 400 |
+
 ### 2.1 `GET /health`의 해석 주의
 
 ```jsonc

@@ -53,6 +53,9 @@
         &scope=openid%20email%20profile
         &code_challenge={challenge}&code_challenge_method=S256
         &state={state}&nonce={nonce}
+        &prompt=select_account        ← 공용 키오스크 필수. 전용 브라우저 프로필에 Google 세션이
+                                        남으면 이 파라미터 없이는 손님이 원탭으로 직전(운영자) 계정에
+                                        로그인된다(자격증명 입력 없이 QR 한도·프레임 권한 획득)
  4. Google 인증 → /oauth2callback?code=…&state=…  로 복귀
  5. 콜백 처리:
       a. sessionStorage에서 값 복원 (없으면 → 오류 화면 + 홈)
@@ -167,6 +170,7 @@ export async function createPkce() {
 
 ```ts
 // authStore 초기화 시 1회 — "로그아웃 버튼"이 아니라 "사용자가 null이 되는 통지"에 건다
+// ⚠️ 셀렉터 구독은 sessionStore가 subscribeWithSelector 미들웨어로 생성됐을 때만 동작한다([02 §5.1]).
 sessionStore.subscribe((s) => s.currentUser, (user) => {
   if (user === null) { token = null; logger.info("JWT 폐기(세션 사용자 null)"); }
 });
@@ -233,7 +237,7 @@ sessionStore.subscribe((s) => s.currentUser, (user) => {
 | 설정 화면 접근 | ○(무가드) | △(PIN) | △ | △ | △ | △ |
 | 설정 항목 편집 | △(일부 제한) | △(QR 한도 시 추가 제한) | ○ | ○ | ○ | ○ |
 
-> ⚠️ **`analysis/60 §2`와의 표기 차이(문서 버그 보고 대상)**: `analysis/60 §2`는 "촬영(프레임 선택→촬영→결과→**QR**)"을 게스트 ○ 한 행으로 묶어 두었으나, 실제 구현은 `QrEffectivePolicy.IsQrEnabled`로 **게스트의 QR을 차단**한다(`src/MCPhoto.App/ViewModels/ResultViewModel.cs:149`, `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`). 진실원 우선순위(실제 소스 > analysis)에 따라 **위 표가 맞고 `analysis/60 §2`의 행 분리가 필요**하다. `analysis/13 §4.7`의 "QR 전송 설정 on?"도 effective 값임을 명시해야 한다. 웹 클라이언트는 소스 동작을 따른다.
+> ℹ️ **analysis 정정 반영 완료(2026-07-30)**: 종전에 `analysis/60 §2`가 QR을 게스트 ○ 한 행으로 묶어 두었던 표기는 소스(`QrEffectivePolicy.IsQrEnabled`, 호출부 `ResultViewModel.Next`) 기준으로 **행 분리 정정됐고**, `analysis/13 §4.7`도 effective 판정 의사코드로, `analysis/61 §1`도 게스트 능력 서술로 함께 정정됐다. 위 표와 세 문서는 현재 일치한다.
 
 ### 5.3 3중 방어 구현 패턴 (M10)
 

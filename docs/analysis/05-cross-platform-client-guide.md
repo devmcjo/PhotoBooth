@@ -194,7 +194,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 |-----------|---------------|-------|------------|---------|-----|
 | 프리뷰 프레임 스트림(BGR/RGB 버퍼 접근) | OpenCV `VideoCapture`(DSHOW) | AVFoundation `AVCaptureVideoDataOutput` | 동일 | CameraX `ImageAnalysis` / Camera2 | `getUserMedia` + `<video>`→Canvas |
 | 스틸 캡처(프리뷰와 동일 가공) | 프리뷰 버퍼 복제 | `AVCapturePhotoOutput` 또는 프리뷰 프레임 복제 | 동일 | `ImageCapture` 또는 프레임 복제 | Canvas `drawImage` |
-| 좌우반전(거울) | `Cv2.Flip(FlipMode.Y)` | `CIImage` 변환 / Metal | 동일 | Matrix / GL | CSS `transform: scaleX(-1)` + Canvas 반영 |
+| 좌우반전(거울) | `Cv2.Flip(FlipMode.Y)` | `CIImage` 변환 / Metal | 동일 | Matrix / GL | **Canvas 픽셀 파이프라인에서 반전**(⚠️ CSS `scaleX(-1)` 단독은 WYSIWYG 파손 — 웹 확정 설계 WM1이 금지, [`docs/web-client/04 §4`](../web-client/04-media-pipeline-web.md)) |
 | 중앙 크롭(목표 종횡비) | `CropCalculator` + ROI | `CIImage.cropped` | 동일 | `Bitmap` crop | Canvas 소스 사각형 |
 | 세션 동영상 녹화(H.264 무음 mp4) | ffmpeg stdin rawvideo | `AVAssetWriter` | 동일 | `MediaRecorder` / `MediaCodec` | `MediaRecorder`(webm→변환 필요) |
 | 타임랩스 배속(setpts 등가) | ffmpeg `setpts` | `AVMutableComposition.scaleTimeRange` | 동일 | `MediaCodec` 재타임스탬프 / mp4parser | ✕ — 미제공 또는 서버 처리 검토 |

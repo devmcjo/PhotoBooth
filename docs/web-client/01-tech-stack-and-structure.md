@@ -17,7 +17,7 @@
 | UI | **React 18** | 13화면 × 상태·권한 분기가 많다. 컴포넌트 단위 테스트·조건부 렌더 가드(M10)에 유리 |
 | 빌드 | **Vite 5** | 정적 산출물만 필요(서버 런타임 없음). Hosting에 그대로 올린다 |
 | 상태 | **Zustand** (스토어 4개: shell / session / settings / auth) | 전역 싱글턴 상태 + 구독이 필요(세션 변경 통지 → 토큰 폐기 M1). Context보다 구독 제어가 명확 |
-| 라우팅 | **화면 상태는 URL이 아니다.** 라우터는 3경로만(`/` 앱, `/oauth2callback`, `/health-check`) | 키오스크에서 뒤로가기·URL 조작으로 상태를 깨면 안 된다([02 §3](./02-app-shell-and-navigation.md)) |
+| 라우팅 | **화면 상태는 URL이 아니다.** 라우터는 2경로만(`/` 앱, `/oauth2callback`) | 키오스크에서 뒤로가기·URL 조작으로 상태를 깨면 안 된다([02 §3](./02-app-shell-and-navigation.md)) |
 | 스타일 | **CSS Modules + CSS 변수 팔레트** | 터치 타깃·다크모드·접근성을 토큰으로 관리. 런타임 CSS-in-JS는 CSP `unsafe-inline` 유발 가능성 때문에 피한다 |
 | 테스트 | **Vitest**(단위·도메인) + **Playwright**(E2E) + **자체 골든 이미지 비교** | [10](./10-testing-and-acceptance.md) |
 | 패키지 매니저 | **npm**(저장소 기존 관행: `web/`·`web/functions`가 npm) | 일관성 |
@@ -81,6 +81,7 @@ src/adapters/     플랫폼 어댑터 — 카메라 · 인코더 · 합성 · �
 | `frames/frameEditPolicy.ts` | `src/MCPhoto.Core/Frames/FrameEditPolicy.cs` | `analysis/13 §6.1` | `FrameEditPolicyTests.cs` |
 | `frames/frameNaming.ts` | `src/MCPhoto.Core/Frames/FrameNaming.cs` | `analysis/13 §6.4` | `FrameNamingTests.cs` |
 | `frames/slotAspect.ts` | `src/MCPhoto.Core/Frames/SlotAspect.cs` | `analysis/14 §1.1` | — |
+| `capture/slotPlacement.ts`(**합성용** 클램프·소스 크롭 — 편집기용 `slotLayout`과 **식이 다르다**) | `src/MCPhoto.Core/Capture/SlotPlacement.cs` | `analysis/14 §5.1·§5.2` | `CompositionTests.cs` |
 | `frames/slotsFile.ts` (`.slots` 파서·직렬화) | `src/MCPhoto.Core/Frames/LocalFrameStore.cs`(포맷 부분) | `analysis/41 §3.3` | `LocalFrameStoreTests.cs` |
 | `settings/appSettings.ts`(기본값·clamp) | `src/MCPhoto.Core/Settings/AppSettings.cs` | `analysis/41 §2.1` | `SettingsTests.cs` |
 | `settings/cutCountPolicy.ts`(자동 컷 수 해석, it17) | `src/MCPhoto.Core/Settings/CutCountPolicy.cs` | `analysis/41 §2.7` | `CutCountPolicyTests.cs` |
@@ -148,6 +149,7 @@ webclient/
 │  │  │  ├─ compositor.ts           # 합성(analysis/14 §5)
 │  │  │  └─ filters/                # grayscale/brightness/beauty(WebGL2)
 │  │  ├─ storage/
+│  │  │  ├─ opfsWriter.worker.ts    # ★ 모든 OPFS 쓰기의 단일 경계(05 §3.1 — Safari 대응)
 │  │  │  ├─ settingsRepo.ts         # localStorage
 │  │  │  ├─ frameStore.ts           # IndexedDB + OPFS
 │  │  │  ├─ sessionWorkspace.ts     # OPFS sessions/{id}/
@@ -198,7 +200,7 @@ webclient/
 규칙(`docs/analysis/41 §2.1` 계약):
 
 - `HostingBaseUrl`은 **트레일링 슬래시 제거**, `BackendBaseUrl`은 **트레일링 슬래시 부여**. 방향이 반대다 — **같은 정규화 함수를 쓰지 말 것**.
-- 설정 화면에 값이 있으면 **설정값이 우선**한다(빌드 주입은 기본값).
+- 설정에 **비어 있지 않은** 값이 있으면 그 값이 우선한다(빌드 주입은 기본값). **빈 문자열은 빌드 주입값으로 폴백**한다([05 §2.2](./05-storage-and-persistence.md) — 빈 값 영속로 인한 재배포 무효·로그인 버튼 소실 방지).
 - `BackendApiKey`는 **설정에 저장하지 않는다**(`analysis/41 §2.5`). 진단 화면에는 "설정됨/미설정"만 표시.
 - `GoogleClientId`가 비면 **로그인 버튼을 통째로 숨긴다**(`analysis/61 §8`).
 - `env.ts`가 시작 시 값을 검증하고, 필수값(게이트 키)이 없으면 **로그 경고 + 진단 화면에 미설정 표시**(크래시 금지).
@@ -364,7 +366,7 @@ OAuth 리디렉트 URI는 **개발용도 Google Console에 등록**해야 한다
 | 목적 | 후보 | 주의 |
 |------|------|------|
 | UI | `react`, `react-dom` | — |
-| 상태 | `zustand` | `persist` 미들웨어를 **authStore에 쓰지 않는다**(M2) |
+| 상태 | `zustand` | `persist` 미들웨어를 **authStore에 쓰지 않는다**(M2). `sessionStore`는 **`subscribeWithSelector` 미들웨어 필수** — 없으면 M1 토큰 폐기 구독(`subscribe(selector, listener)`)이 조용히 무시된다([02 §5.1](./02-app-shell-and-navigation.md)) |
 | IndexedDB | `idb` (얇은 래퍼) | 없어도 무방. 스키마 버전 관리만 하면 됨 |
 | QR 생성 | `qrcode`(canvas/PNG 출력) | Windows는 QRCoder **`ECCLevel.Q`**(기본값이 아니라 명시 지정 — `src/MCPhoto.Core/Upload/QrService.cs`, `analysis/30 §3`). **오류정정 레벨은 Q로 맞춘다**([03 §9](./03-screens-spec.md)) |
 | MP4 muxing | `mp4-muxer` 또는 동급 순수 JS muxer | **버전 핀 고정 필수.** WebCodecs 경로에서만 사용 |
@@ -378,7 +380,7 @@ OAuth 리디렉트 URI는 **개발용도 Google Console에 등록**해야 한다
 
 | 규약 | 내용 |
 |------|------|
-| 정수 나눗셈 | 규격이 정수 나눗셈인 곳은 **`Math.floor`**, 반올림인 곳은 **`Math.round`** 를 명시한다. JS `/`를 그대로 쓰면 Windows와 픽셀이 어긋난다([04 §9](./04-media-pipeline-web.md) 대응표 필수 참조) |
+| 정수 나눗셈·반올림 | 규격이 정수 나눗셈인 곳은 **`Math.floor`**, 반올림인 곳은 **`roundHalfToEven`**(자체 유틸 — C# `Math.Round`의 은행가 반올림 대응. **JS `Math.round` 직접 사용 금지**)를 명시한다. JS `/`를 그대로 쓰면 Windows와 픽셀이 어긋난다([04 §9](./04-media-pipeline-web.md) 대응표 필수 참조) |
 | 시각 | 도메인에는 `now: number`를 주입한다. `Date.now()` 직접 호출은 어댑터·셸에서만 |
 | 난수 | `crypto.randomUUID()`는 어댑터에서만. 도메인은 생성기 함수를 주입받는다 |
 | 로그 | `logger.info/warn/error(msg, ctx?)`만 사용. `console.*` 직접 호출 금지(로그 스토어를 우회한다) |

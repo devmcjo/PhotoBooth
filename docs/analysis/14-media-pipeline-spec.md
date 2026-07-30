@@ -390,7 +390,7 @@ expectedOutputSeconds = sessionSeconds / N
 |--------|------|
 | macOS / iOS / iPadOS | `AVMutableComposition` + `scaleTimeRange`(구간 스케일) → `AVAssetExportSession` |
 | Android | `MediaCodec` 재인코딩 시 타임스탬프 재계산, 또는 프레임 샘플링으로 근사 |
-| 웹 | 배속 변환 수단이 사실상 없다 → **타임랩스 미제공으로 축소**하거나 서버 변환 도입([05 §9 B6](./05-cross-platform-client-guide.md)) |
+| 웹 | ~~배속 변환 수단이 사실상 없다 → 타임랩스 미제공으로 축소하거나 서버 변환 도입~~ **⚠️ 2026-07-30 대체**: 웹 확정 설계는 **촬영 중 OPFS 스풀(≤15fps) → 종료 시 실경과 선별 → WebCodecs H.264/mp4 직접 인코딩**이다(서버 변환 불요, [`docs/web-client/04 §7`](../web-client/04-media-pipeline-web.md)). 미지원 브라우저만 `timelapseUrl=null` 축소 |
 
 **타임랩스를 제공하지 않을 때의 계약**: `timelapseUrl`을 null로 두고 commit하면 된다. 서버·웹 모두 null을 "전송 옵션 꺼짐"으로 정상 처리한다. 단 사진도 없으면 최소 1개 불변식 위반이므로 400이다([31 §5.3](./31-backend-api-reference.md)).
 
@@ -401,7 +401,7 @@ expectedOutputSeconds = sessionSeconds / N
 | 산출물 | 파일명 | 포맷 | 비고 |
 |--------|--------|------|------|
 | 최종 합성 이미지 | `final.{jpg\|png}` | 설정 `outputFormat` | 해상도 = 프레임 원본 |
-| 세션 녹화본 | `session.mp4` | H.264 무음 | **업로드하지 않는다**(타임랩스 원본) |
+| 세션 녹화본 | `session.mp4` | H.264 무음 | **업로드하지 않는다**(타임랩스 원본). ⚠️ **웹 클라이언트는 이 산출물을 만들지 않는다**(스풀 방식 — [`docs/web-client/12 §C2`](../web-client/12-web-vs-windows-differences.md)) |
 | 타임랩스 | `timelapse.mp4` | H.264 무음 | 업로드 대상 |
 
 - 세션 작업 폴더 구조와 정리 규칙은 [41 §4](./41-local-data-and-file-formats.md).

@@ -72,6 +72,7 @@ npx firebase target:apply hosting default mcphoto-955fb
    - `http://localhost:5173` (개발)
 5. **Authorized redirect URIs** — **완전 일치**해야 한다
    - `https://mcphoto-955fb-kiosk.web.app/oauth2callback`
+   - `https://mcphoto-955fb-kiosk.firebaseapp.com/oauth2callback` (Hosting 두 번째 기본 도메인 — 누락 시 이 도메인 접속 기기에서 로그인 실패)
    - `http://localhost:5173/oauth2callback` (개발)
    - (Hosting preview channel을 쓸 경우 그 도메인도 추가 — 채널 URL은 매번 달라지므로 **고정 채널명**을 쓴다: `firebase hosting:channel:deploy dev --expires 30d` → `https://mcphoto-955fb-kiosk--dev-<hash>.web.app`. 해시가 붙어 고정이 어려우므로 **개발은 localhost, 실기기 검증은 운영 사이트 또는 커스텀 도메인**을 쓰는 편이 낫다)
 6. 발급된 **client_id**를 `VITE_GOOGLE_CLIENT_ID`로, **client_secret**을 서버 시크릿에 등록(§4.2).
@@ -214,6 +215,7 @@ npx firebase deploy --only functions   # 시크릿 변경은 재배포가 필요
   {
     "origin": [
       "https://mcphoto-955fb-kiosk.web.app",
+      "https://mcphoto-955fb-kiosk.firebaseapp.com",
       "http://localhost:5173"
     ],
     "method": ["GET", "HEAD", "PUT", "OPTIONS"],

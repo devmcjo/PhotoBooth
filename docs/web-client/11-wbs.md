@@ -25,10 +25,10 @@
 - **VF-8** Windows 순수 로직이 파일 단위로 분리돼 있고 대응 테스트가 존재한다(경로는 [01 §2.2](./01-tech-stack-and-structure.md) 표). → **도메인 이식과 벡터 추출이 가능하다.**
 - **VF-9** 설정 키·기본값·범위·`.slots` 포맷·결과물 파일명은 `docs/analysis/41`에 전수 문서화돼 있다.
 - **VF-10** Windows 앱에는 배포용 번들 프레임 PNG가 커밋돼 있지 않다(`Example/`의 예시 이미지만 존재). → **번들 프레임 자산은 새로 준비하거나 코드 생성 fallback으로 시작**해야 한다.
-- **VF-11** **게스트(미로그인)에게는 QR이 제공되지 않는다.** `ResultViewModel.Next`가 `QrEffectivePolicy.IsQrEnabled(raw, isLoggedIn, isTempUserBlocked)`로 판정하고 미로그인이면 `Qr`을 건너뛰고 `Done`으로 간다. → **Step 11의 종단(폰 스캔) 검증은 로그인 상태에서만 가능**하며, Step 11 자체는 effective QR 목으로 검증한다. (근거: 소스 `src/MCPhoto.App/ViewModels/ResultViewModel.cs:149`, `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`, `design/wpf-it13-temp-user-role-design.md §7.1b`. ⚠️ `docs/analysis/60 §2`는 이 분기를 한 행으로 뭉쳐 두어 정정이 필요하다 — [07 §5.2](./07-auth-and-permissions-web.md) 주석)
+- **VF-11** **게스트(미로그인)에게는 QR이 제공되지 않는다.** `ResultViewModel.Next`가 `QrEffectivePolicy.IsQrEnabled(raw, isLoggedIn, isTempUserBlocked)`로 판정하고 미로그인이면 `Qr`을 건너뛰고 `Done`으로 간다. → **Step 11의 종단(폰 스캔) 검증은 로그인 상태에서만 가능**하며, Step 11 자체는 effective QR 목으로 검증한다. (근거: 소스 `src/MCPhoto.App/ViewModels/ResultViewModel.cs:149`, `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`, `design/wpf-it13-temp-user-role-design.md §7.1b`. `docs/analysis/60 §2`·`13 §4.7`·`61 §1`의 대응 정정은 **반영 완료**(2026-07-30))
 - **VF-12** 컷 수 해석 지점은 **`FrameSelect` [다음]** 1곳이다(`FrameSelectViewModel.cs:210` → `CaptureSession.Begin` → `CutCountPolicy.Resolve`). 세션이 `CutCount`·`IsAutoCutCount`를 보유하고 `GuideViewModel`이 설정이 아니라 **세션에서 읽는다**(`GuideViewModel.cs:27·30`). → 전체 재촬영으로 `Guide`에 재진입해도 재해석하지 않는다.
 - **VF-13** Windows QR은 **QRCoder `ECCLevel.Q` + 기본 모듈 20px**이다(`src/MCPhoto.Core/Upload/QrService.cs`, `analysis/30 §3`). → 웹도 **ECC Q**로 맞춘다([03 §9](./03-screens-spec.md)).
-- **VF-14** `createSyncAccessHandle()`은 **전용 Worker 전용** API이고, **Safari는 `createWritable()`을 지원하지 않는다.** → **모든 OPFS 쓰기를 Worker 경계 뒤로 모아야** iOS/iPadOS에서 저장이 성립한다([05 §3.1](./05-storage-and-persistence.md)).
+- **VF-14** `createSyncAccessHandle()`은 **전용 Worker 전용** API이고, **Safari 17~18.x에는 `createWritable()`이 없다**(최신 Safari에서 Baseline 2025로 추가 — 지원 하한 17 기준으로는 없다고 간주, 기능 감지로 판정). → **모든 OPFS 쓰기를 Worker 경계 뒤로 모아야** iOS/iPadOS에서 저장이 성립한다([05 §3.1](./05-storage-and-persistence.md)).
 - **VF-15** `MediaRecorder`·`HTMLCanvasElement.captureStream()`은 **Worker에 없다**(Window 전용, `OffscreenCanvas`에 `captureStream` 없음). → **타임랩스 경로 A는 메인 스레드 전용**이며 경로 B(WebCodecs, Worker 가능)를 1순위로 두는 근거가 된다([04 §7.3a](./04-media-pipeline-web.md)).
 
 ## 미검증 가정 (open assumptions)
@@ -60,7 +60,7 @@ Step 1 (스캐폴드 + 배포)  ───┤                                    
    ├─ Step 4 (앱 셸 + 라우팅 + UI 기본)  ← Step 2                            │
    └─ Step 5 (HTTP 클라이언트)                                              │
 Step 4+5 → Step 6 (카메라 파이프라인 + 카메라 테스트)                        │
-Step 6   → Step 7 (촬영 + 컷 선택)                                          │
+Step 6   → Step 7 (촬영 + 컷 선택 + 최소 FrameSelect·fallback 프레임)        │
 Step 7   → Step 8 (합성 + 필터 + 골든)                                       │
 Step 6   → Step 9 (타임랩스 인코더)            ← Step 7과 병렬 가능           │
 Step 3+8 → Step 10 (결과물 로컬 보관 M6-W)                                   │
@@ -107,7 +107,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **구현 내용**:
   - Vite React-TS 템플릿 기반. `tsconfig`는 `strict: true` + path alias(`@domain/*`·`@adapters/*`·`@shell/*`·`@screens/*`·`@ui/*`).
   - `vite.config.ts`의 `build.outDir = "../web/kiosk"`, `emptyOutDir: true`.
-  - `env.ts`: `VITE_*` 6개를 읽고 정규화(`HostingBaseUrl` 트레일링 `/` **제거**, `BackendBaseUrl` **부여**). 게이트 키 부재는 경고 로그만(크래시 금지).
+  - `env.ts`: `VITE_*` 7개를 읽고 정규화(`HostingBaseUrl` 트레일링 `/` **제거**, `BackendBaseUrl` **부여**). 게이트 키 부재는 경고 로그만(크래시 금지).
   - `index.html`: viewport(`user-scalable=no`) + 테마 색 + 앱 마운트 지점.
   - `firebase.json`에 [01 §5.1](./01-tech-stack-and-structure.md)의 `kiosk` 블록 추가(**기존 default 블록 무변경**).
   - 화면에는 버전 캡션 **`v{version}`** 만 표시하는 최소 앱. **배포 채널(`Site`)·빌드 시각은 캡션에 넣지 않는다**(it18 — [01 §4.1](./01-tech-stack-and-structure.md), [05 §8.2](./05-storage-and-persistence.md)).
@@ -152,7 +152,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 ## Step 3: 저장 계층 + 부트스트랩
 
 - **Context Brief**: 설정(localStorage)·세션 작업 공간(OPFS)·로그(IndexedDB)를 만들고, 규격 순서대로 앱을 부팅한다. 특히 **앱 시작 시 OPFS `sessions/` 잔재 일괄 삭제**는 규격이며 빠지면 임시 파일이 무한 누적된다. 스키마·규칙은 **[05 · 저장·영속](./05-storage-and-persistence.md)**, 부트스트랩 순서는 **[01 §4.2](./01-tech-stack-and-structure.md)**.
-- **대상 파일**: `src/adapters/storage/{settingsRepo,sessionWorkspace,logStore}.ts`, `src/adapters/platform/persistStorage.ts`, `src/shell/settingsStore.ts`, `src/main.tsx`(부트스트랩), `tests/unit/storage/*.test.ts`
+- **대상 파일**: `src/adapters/storage/opfsWriter.worker.ts`(**모든 OPFS 쓰기의 단일 경계 — [05 §3.1](./05-storage-and-persistence.md)**), `src/adapters/storage/{settingsRepo,sessionWorkspace,logStore}.ts`, `src/adapters/platform/persistStorage.ts`, `src/shell/settingsStore.ts`, `src/main.tsx`(부트스트랩), `tests/unit/storage/*.test.ts`
 - **선행 조건**: Step 1, Step 2(설정 clamp·QR 정규화 도메인 함수)
 - **구현 내용**:
   - `settingsRepo`: [05 §2.1](./05-storage-and-persistence.md) 스키마. 로드 시 파싱 실패·부재 → 기본값 + 경고 로그, **clamp + QR 정규화** 적용. 저장은 **boolean 반환**(성공 오인 금지). `BackendApiKey`는 저장하지 않는다.
@@ -241,7 +241,8 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 ## Step 7: 촬영 시퀀스 + 컷 선택
 
 - **Context Brief**: N컷 연속 촬영(카운트다운·플래시 120ms·셔터음·간격 300ms)과 컷 선택을 구현한다. 진입 절차 순서가 규격이며, **탭 hidden 시 취소**(WM4)가 필수다. 규격은 **[03 §6·§7](./03-screens-spec.md)**, 타이밍은 `docs/analysis/13 §13`.
-- **대상 파일**: `src/screens/capture/*`, `src/screens/cutSelect/*`, `src/screens/guide/*`, `src/screens/home/*`, `src/adapters/platform/shutterSound.ts`, `src/ui/views/{CaptureView,CutSelectView,GuideView,HomeView}.tsx`
+- **⚠️ 프레임 공급(선순환 해소)**: 촬영에는 프레임(슬롯·대표 종횡비)이 필요한데 카탈로그·`FrameSelect` 본편은 Step 14다. 이 Step에서 **최소 `FrameSelect`** 를 함께 만든다 — 목록 = **코드 생성 fallback 프레임 1개**(`analysis/14 §4.7`: 1200×1600, 2×2 슬롯 4개) + 선택 → 세션 고정 → **`cutCountPolicy.resolve` 해석 배선(`isAutoCutCount` 포함)**. 서버 카탈로그·캐시·권한 UI·삭제는 Step 14가 이 화면을 확장한다. 이로써 Step 7~11이 Step 14 없이 완주 가능하다.
+- **대상 파일**: `src/screens/frameSelect/*`(최소판), `src/adapters/frames/fallbackFrame.ts`, `src/screens/capture/*`, `src/screens/cutSelect/*`, `src/screens/guide/*`, `src/screens/home/*`, `src/adapters/platform/shutterSound.ts`, `src/ui/views/{FrameSelectView,CaptureView,CutSelectView,GuideView,HomeView}.tsx`
 - **선행 조건**: Step 6
 - **구현 내용**:
   - `Home`·`Guide` 화면(브랜딩·설정값 표시·첫 제스처 전체화면/오디오/WakeLock).
@@ -270,7 +271,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - 골든 이미지: Windows 앱으로 기준 4장 생성 → `docs/spec-vectors/golden/`에 커밋 → `pixelmatch` 비교 테스트.
 - **검증 명령**: `npx vitest run tests/golden` · 브라우저에서 필터 4종 전환 · `performance.now()` 로그로 합성 시간 확인
 - **완료 기준**:
-  - [관측] 4개 필터 골든 비교가 [10 §4.2](./10-testing-and-acceptance.md) 허용 오차 내로 통과하고 **슬롯 위치 오차가 0px**이다. 서버 프레임으로 합성할 때 `convertToBlob`이 **예외 없이** 성공한다(OA-2 검증). 합성 시간이 1.2초 이내.
+  - [관측] 4개 필터 골든 비교가 [10 §4.2](./10-testing-and-acceptance.md) 허용 오차 내로 통과하고 **슬롯 위치 오차가 0px**이다. **OA-2 검증(어댑터 수준 — FrameSelect 본편 불요)**: `GET /frames/default`(웹 게이트 키)에서 `imageUrl` 1건을 받아 CORS-clean 로드 → 합성 → `convertToBlob`이 **예외 없이** 성공한다. 합성 시간이 1.2초 이내.
   - [non-goal] `ctx.filter`·CSS `filter`로 흑백을 만들지 않는다(grep 확인). 타임랩스·저장·업로드 **없음**.
   - [trigger] 재합성은 필터 변경·진입에만. 프레임은 변경할 수 없다(M11).
 - **롤백**: `src/adapters/compose`·`Result` 화면 삭제.
@@ -285,13 +286,13 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **선행 조건**: Step 6(가공 프레임 스트림)
 - **구현 내용**:
   - 경로 판정: `VideoEncoder.isConfigSupported("avc1.42001E")` → `MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")` → 미지원. **결과를 로그·진단에 기록**.
-  - 샘플링: `stride = max(1, round(expectedSec*30/375))`, 375 도달 시 균등 다운샘플, 30프레임 미만이면 `null`.
+  - **스풀 + 종료 시 선별**([04 §7.2](./04-media-pipeline-web.md)): 촬영 중 OPFS `sessions/{id}/tl/`에 ≤15fps JPEG 스풀(상한 900장, 도달 시 절반 솎아내기) → 종료 시 실경과로 `computeSpeedFactor` → 균등 선별 → 인코딩. 선별 30장 미만이면 `null`.
   - WebCodecs 경로: `timestamp = i * 33333μs`, 비트레이트 [04 §7.4](./04-media-pipeline-web.md) 표, JS MP4 muxer로 `Blob(video/mp4)`.
   - 백프레셔: `encodeQueueSize > 8`이면 드롭.
   - 실패·부재는 **예외가 아니라 `null`** + 경고 로그. 정지는 타임아웃 후 강제 종료.
 - **검증 명령**: `npx vitest run tests/unit/encode` · 브라우저에서 결과 mp4를 `<video>`로 재생 · `ffprobe`로 코덱·길이 확인(개발 PC)
 - **완료 기준**:
-  - [관측] 6컷 세션(약 38초 예상)에서 **10~15초 길이의 재생 가능한 mp4**가 생성되고 컨테이너가 정상 종료된다(모바일·데스크톱 양쪽에서 재생). 오디오 트랙이 없다. 진단에 선택된 경로가 표시된다.
+  - [관측] 6컷 세션(약 38초)에서 **10~15초 길이의 재생 가능한 mp4**가 생성되고 컨테이너가 정상 종료된다(모바일·데스크톱 양쪽에서 재생). **[바로 촬영]을 매 컷 눌러 세션을 ~5초로 줄여도** 원속(~5초) 타임랩스가 생성된다(`null`로 떨어지지 않는다 — 실경과 선별 검증). 오디오 트랙이 없다. 진단에 선택된 경로가 표시된다.
   - [non-goal] `session.mp4`를 만들지 않는다. 인코더 미지원 브라우저에서 **촬영이 정상 완주**하고 타임랩스만 `null`이 된다. 인코딩 실패가 촬영을 중단시키지 않는다.
   - [trigger] 수집은 촬영 시퀀스 시작~종료 사이에만. `stride` 프레임마다만 인코딩한다.
 - **롤백**: `src/adapters/encode` 삭제(타임랩스 미제공 상태로 동작).
@@ -302,7 +303,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 ## Step 10: 결과물 로컬 보관 (M6-W)
 
 - **Context Brief**: **업로드 이전에** 결과물을 기기에 남긴다. OPFS 기록이 필수 계층이고, 데스크톱 Chromium은 운영자가 선택한 실제 폴더에도 쓴다. 이 Step이 불변식 M6-W의 본체다. 규격은 **[05 §5](./05-storage-and-persistence.md)**.
-- **대상 파일**: `src/adapters/storage/resultSaver.ts`, `src/adapters/storage/dirHandleRepo.ts`, `src/screens/result/next.ts`([다음] 처리), `src/screens/settings/resultsPanel.tsx`, `tests/unit/storage/resultSaver.test.ts`
+- **대상 파일**: `src/adapters/storage/resultSaver.ts`(opfsWriter 경유), `src/adapters/storage/dirHandleRepo.ts`, `src/screens/result/next.ts`([다음] 처리), `src/screens/settings/resultsPanel.tsx`, `tests/unit/storage/resultSaver.test.ts`
 - **선행 조건**: Step 3, Step 8, (Step 9 있으면 타임랩스 포함)
 - **구현 내용**:
   - `resultSaver.save()`: 폴더명 `mcphoto_YYMMDD_HHMM`(충돌 시 `-2`…), `final.{ext}` + `timelapse.mp4`. **OPFS 기록 → 폴더 핸들 있으면 폴더에도 기록** → 결과 반환(성공/실패).
@@ -385,7 +386,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 ## Step 14: 프레임 저장소 + 프레임 선택 화면
 
 - **Context Brief**: 프레임 카탈로그(로컬 캐시 → 서버 → 번들 → fallback 4단 우선순위 + **이름 dedup**)와 프레임 선택 화면을 만든다. 서버 프레임 이미지는 **CORS-clean 로드 후 OPFS 캐시**가 필수다(WM2). 규격은 **[05 §4](./05-storage-and-persistence.md)**, **[03 §4](./03-screens-spec.md)**.
-- **대상 파일**: `src/adapters/storage/frameStore.ts`, `src/adapters/frames/frameCatalog.ts`, `src/screens/frameSelect/*`, `src/ui/views/FrameSelectView.tsx`, `webclient/public/frames/*`
+- **대상 파일**: `src/adapters/storage/frameStore.ts`(opfsWriter 경유), `src/adapters/frames/frameCatalog.ts`, `src/screens/frameSelect/*`, `src/ui/views/FrameSelectView.tsx`, `webclient/public/frames/*`
 - **선행 조건**: Step 3, Step 5, Step 12(본인 프레임 로드), Step 0-5
 - **구현 내용**:
   - `frameStore`: IndexedDB 메타([05 §4.2](./05-storage-and-persistence.md) 스키마) + OPFS PNG. 저장·조회·삭제(실제 부재 확인)·10개 상한.
@@ -433,7 +434,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **구현 내용**:
   - `Account`: 모드 2종. 내 정보(읽기 전용, 로그인 방식 라벨·"알 수 없음" 폴백) + PIN 변경. Admin 모드는 사용자 관리 진입(power) · 전역 한도(admin) · **[키오스크 종료]**(앱 종료 대체).
   - `UserMgmt`: 목록(실패 시 오류 표시, 빈 목록 폴백 금지) · 삭제(동급 허용) · **PIN 재설정(동급 차단)** · 역할 콤보(`assignableRoles`, 자기 행 미노출). 좁은 화면은 카드 리스트.
-  - 진단 모달: [03 §15.2](./03-screens-spec.md)의 5섹션 + `/health`·`/frames/default` 두 프로브. **게이트 키 값 미표시**.
+  - 진단 모달: [03 §15.2](./03-screens-spec.md)의 **6섹션**(카메라·인코더·서버·로그/저장소·개발자 문의·앱) + `/health`·`/frames/default` 두 프로브. **게이트 키 값 미표시**.
   - PWA: manifest + SW precache(앱 셸·번들 프레임·셔터음), **`skipWaiting` 미사용**, 업데이트 대기 표시 + [지금 적용].
   - 내보내기/가져오기: 설정 JSON · 프레임 zip(Windows `Frame\` 규칙) · 로그 `.log`.
 - **검증 명령**: `npx playwright test e2e/role-matrix.spec.ts`(E18) · Lighthouse PWA 확인 · 오프라인에서 앱 로드 확인 · 프레임 zip을 Windows `Frame\`에 풀어 인식 확인
@@ -448,16 +449,16 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 
 ## Step 17: E2E · 실기기 검증 · 수락 ★ 마일스톤 B
 
-- **Context Brief**: [10 §5](./10-testing-and-acceptance.md)의 E1~E22를 자동화하고, [10 §6](./10-testing-and-acceptance.md) 매트릭스의 실기기에서 수동 체크리스트를 수행한다. 마지막으로 [10 §8](./10-testing-and-acceptance.md) 수락 체크리스트를 채운다.
+- **Context Brief**: [10 §5](./10-testing-and-acceptance.md)의 **E1~E24 전부(E1b·E3b 포함)** 를 자동화하고, [10 §6](./10-testing-and-acceptance.md) 매트릭스의 실기기에서 수동 체크리스트를 수행한다. 마지막으로 [10 §8](./10-testing-and-acceptance.md) 수락 체크리스트를 채운다.
 - **대상 파일**: `webclient/tests/e2e/**`, `webclient/playwright.config.ts`, `docs/web-client/10-testing-and-acceptance.md`(성능 결과 기록), `docs/web-client/12-web-vs-windows-differences.md`(차이 최종 확인)
 - **선행 조건**: Step 1~16 전부
 - **구현 내용**:
-  - Playwright: Chromium(fake device) + WebKit. E1~E22 시나리오 구현. CI에서 실행 가능하게(헤드리스).
+  - Playwright: Chromium(fake device) + WebKit. E1~E24(E1b·E3b 포함) 시나리오 구현. CI에서 실행 가능하게(헤드리스).
   - 실기기: Windows Chrome · Android 태블릿 Chrome · iPadOS Safari **최소 3대**에서 [10 §6.3](./10-testing-and-acceptance.md) 체크리스트 수행 및 성능 수치 기록(OA-3·OA-4·OA-6·OA-7 검증).
   - 미등재 동작 차이가 발견되면 [12](./12-web-vs-windows-differences.md)에 행을 추가한다.
 - **검증 명령**: `npx playwright test` · 실기기 체크리스트 · `npx vitest run --coverage`
 - **완료 기준**:
-  - [관측] E1~E22가 전부 통과하고, 실기기 3대에서 10컷 세션이 완주하며 성능 예산을 만족한다. [10 §8](./10-testing-and-acceptance.md) 수락 체크리스트가 전부 체크된다.
+  - [관측] E1~E24(E1b·E3b 포함)가 전부 통과하고, 실기기 3대에서 10컷 세션이 완주하며 성능 예산을 만족한다. [10 §8](./10-testing-and-acceptance.md) 수락 체크리스트가 전부 체크된다.
   - [non-goal] **[12 차이 보고서에 등재되지 않은 동작 차이가 0건**이다. Windows 앱·서버·P1 페이지에 회귀가 없다(Windows 테스트 + 서버 테스트 통과 확인).
   - [trigger] 출시 판정은 이 Step 완료 시에만.
 - **롤백**: 해당 없음(검증 단계). 실패 항목은 원인 Step으로 되돌려 수정한다.

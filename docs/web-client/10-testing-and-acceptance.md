@@ -32,7 +32,8 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 |-----------|--------------|-------------|
 | `stateMachine.test.ts` | `AppStateTests.cs`, `AppShellOverlayReturnTests.cs` | 전이표 전수 · 오버레이 항상 허용 · `from == to` 거부 · 불법 전이 거부 · **`isOverlayScreen` 13값 전수 분류 + 오버레이 간 전환 시 복귀 지점 미저장(it19)** |
 | `idleCountdown.test.ts` | `IdleCountdownTests.cs` | 120초 판정 · 10초 카운트다운 · 활동 무시 |
-| `centerCrop.test.ts` | `CropCalculatorTests.cs` | 넓은/좁은 원본 · 정사각 · `targetAspect<=0` · **정수 나눗셈 경계** |
+| `centerCrop.test.ts` | `CropCalculatorTests.cs` | 넓은/좁은 원본 · 정사각 · `targetAspect<=0` · **정수 나눗셈 경계** · **반올림 중간값(.5) 케이스**(은행가 반올림 — `roundHalfToEven` 검증) |
+| `mathCompat.test.ts` | (C# `Math.Round` 의미론) | `roundHalfToEven`: `66.5→66`·`67.5→68`·`-1.5→-2`·`-0.5→0` — JS `Math.round`와 갈라지는 값 전수 |
 | `previewReadiness.test.ts` | `PreviewReadinessTests.cs` | 3조건 각각 미달 · 전이 1회만 · 타임아웃 |
 | `captureSession.test.ts` | `CaptureSessionTests.cs` | `begin()`이 `cutCountPolicy.resolve`로 실효 컷 수를 산출하고 **`isAutoCutCount`를 함께 기록** · 토글·번호 재계산 · 슬롯 초과 거부 · 전체 재촬영 카운터 · **재촬영이 `cutCount`를 재해석하지 않음**(it17) |
 | `slotLayout.test.ts` | `SlotLayoutTests.cs` | `autoArrange` 1~6개 · 세로 스트립(aspect<0.6) · `scaleSlots` 원본 기준 · 클램프 · 겹침 판정 |
@@ -70,9 +71,9 @@ docs/spec-vectors/*.json      ← 플랫폼 중립 (입력 → 기대 출력)
 
 | 파일 | 내용 | 추출원 |
 |------|------|--------|
-| `center-crop.json` | `{srcW, srcH, targetAspect} → {x,y,w,h}` 30+ 케이스 | `CropCalculatorTests.cs` |
+| `center-crop.json` | `{srcW, srcH, targetAspect} → {x,y,w,h}` 30+ 케이스. **반올림 중간값(.5) 케이스 필수**(은행가 반올림 검증) | `CropCalculatorTests.cs` |
 | `auto-arrange.json` | `{slotCount, frameW, frameH, targetAspect} → Slot[]` | `SlotLayoutTests.cs` |
-| `scale-slots.json` | `{baseSlots, factor, frameW, frameH} → Slot[]` | 동상 |
+| `scale-slots.json` | `{baseSlots, factor, frameW, frameH} → Slot[]`. **중간값(.5) 케이스 필수**(`cx - newW/2`가 .5로 떨어지는 입력 포함) | 동상 |
 | `clamp-slot.json` | 편집기용·합성용 **두 식 각각** | 동상 + `CompositionTests.cs` |
 | `overlap.json` | 겹침·경계 접촉 케이스 | `SlotLayoutTests.cs` |
 | `editor-transform.json` | `{canvasW,canvasH,frameW,frameH} → {scale,originX,originY}` + 왕복 | `EditorTransformTests.cs` |
@@ -151,10 +152,10 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 | E18 | 역할 매트릭스 | manager 로그인 시 다른 manager 행에 [PIN] 없음·[삭제] 있음 | — |
 | E19 | 탭 hidden 취소 | 촬영 중 `visibilitychange(hidden)` → 홈 복귀, 부분 컷 없음 | **WM4** |
 | E20 | 오프라인 촬영 | 네트워크 차단 → 프레임 목록 폴백 + 촬영·로컬 저장 성공 + (로그인 상태였다면) QR 실패 우아 처리 | — |
-| E23 | **게스트 QR 게이트** | 게스트 상태에서 `Result` [다음] → **`Qr`을 건너뛰고 `Done`**, `/uploads/*` 요청 0건. 설정의 `EnableQrDelivery` 값이 **변경되지 않는다** | — |
-| E24 | **TempUser 한도 초과 게이트** | `qr-usage`를 초과 상태로 목 → `Result` [다음] → `Done`(QR 미진입), `EnableQrDelivery` 불변. 한도 해제 후에는 다시 `Qr`로 진입 | — |
 | E21 | 새로고침 | 촬영 중 새로고침 → 홈에서 시작 + 세션 잔재 정리됨 | — |
 | E22 | 문구 카탈로그 | 주요 문구가 `analysis/13 §14`와 문자열 일치 | — |
+| E23 | **게스트 QR 게이트** | 게스트 상태에서 `Result` [다음] → **`Qr`을 건너뛰고 `Done`**, `/uploads/*` 요청 0건. 설정의 `EnableQrDelivery` 값이 **변경되지 않는다** | — |
+| E24 | **TempUser 한도 초과 게이트** | `qr-usage`를 초과 상태로 목 → `Result` [다음] → `Done`(QR 미진입), `EnableQrDelivery` 불변. 한도 해제 후에는 다시 `Qr`로 진입 | — |
 
 ---
 

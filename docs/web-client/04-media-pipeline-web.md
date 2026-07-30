@@ -25,8 +25,8 @@
                               │  가공된 프레임 1장(공유)
         ┌─────────────────────┼──────────────────────┬──────────────┐
         ▼                     ▼                      ▼              ▼
-   프리뷰 렌더           스틸 캡처 요청           타임랩스 샘플러      fps 계산
- (canvas transferToImage) (구조 복제 → JPEG)     (간격마다 encode)
+   프리뷰 렌더           스틸 캡처 요청           타임랩스 스풀러      fps 계산
+ (canvas transferToImage) (구조 복제 → JPEG)     (간격마다 OPFS 기록)
 ```
 
 **규격(`analysis/14 §2.2`)을 그대로 지킨다**: 가공은 프레임당 1회, 세 소비자가 결과를 공유한다. 소비자별로 따로 가공하면 성능 손실 + 프리뷰와 저장물 불일치가 생긴다(WM1).
@@ -38,7 +38,7 @@
 | 프레임 획득 | OpenCV `VideoCapture`(DirectShow) 전용 스레드 | `getUserMedia` + `requestVideoFrameCallback` |
 | 가공 위치 | 전용 백그라운드 스레드 | **Worker + OffscreenCanvas**(메인 스레드 아님) |
 | 세션 녹화 | ffmpeg에 rawvideo 파이프(`session.mp4`) | **하지 않는다** — 타임랩스를 직접 인코딩(WD2) |
-| 타임랩스 | `session.mp4` → `setpts` 배속 재인코딩 | **촬영 중 프레임 샘플링 → 30fps mp4 직접 인코딩** |
+| 타임랩스 | `session.mp4` → `setpts` 배속 재인코딩 | **촬영 중 OPFS 스풀(≤15fps) → 종료 시 실경과 기반 선별 → 30fps 타임라인 mp4 인코딩**(§7.2) |
 | 합성·필터 | OpenCV | Canvas 2D + WebGL2 |
 | 산출물 | `session.mp4` + `timelapse.mp4` + `final.{ext}` | `timelapse.mp4` + `final.{ext}` (`session.mp4` 없음) |
 
@@ -267,39 +267,50 @@ compose(frame, cuts[], filter, outFormat):
 
 | | Windows | 웹 |
 |---|---------|-----|
-| 1단계 | 세션 전체를 30fps로 `session.mp4` 녹화 | **없음** |
-| 2단계 | `computeSpeedFactor(sessionSeconds)`로 배속 산출 | **동일 함수로 목표 길이 산출** |
-| 3단계 | ffmpeg `setpts`로 재인코딩 | **촬영 중 샘플링한 프레임을 30fps로 직접 인코딩** |
+| 1단계 | 세션 전체를 30fps로 `session.mp4` 녹화 | **없음** — 가공 프레임을 **OPFS에 스풀**(≤15fps JPEG, 인코딩 없음) |
+| 2단계 | `computeSpeedFactor(sessionSeconds)`로 배속 산출 | **동일 함수를 종료 시점에 "실제" 경과로 적용**(예상값 아님 — §7.2) |
+| 3단계 | ffmpeg `setpts`로 재인코딩 | **종료 시 스풀에서 균등 선별 → 30fps 타임라인 mp4 인코딩** |
 | 산출물 | `timelapse.mp4`(H.264 무음) | **동일**(`timelapse.mp4`, H.264 무음) |
 
 **업로드 계약은 완전히 동일하다**: `results/{sessionId}/timelapse.mp4`, `contentType: video/mp4`, `ext: mp4`. 서버는 이 파일이 어떻게 만들어졌는지 알 필요가 없다.
 
-### 7.2 목표 길이와 샘플링 간격
+### 7.2 스풀(촬영 중) + 선별·인코딩(종료 시) — 실경과 기반
 
-목표는 `analysis/14 §7.2`와 같다: **결과 길이 10~15초(중앙값 12.5초)**.
+**촬영 중에는 인코딩하지 않는다.** 가공 프레임을 OPFS에 스풀만 하고, 촬영 종료 시([다음] 처리 1단계 "타임랩스 생성") **실제 세션 길이**로 선별·인코딩한다.
+
+> **왜 고정 stride 실시간 인코딩이 아닌가**: stride를 예상 길이로 고정하면 손님이 [바로 촬영]을 매 컷 써서 세션이 예상의 1/5 이하로 줄었을 때 수집이 30프레임 하한에 미달해 **타임랩스가 통째로 사라진다.** Windows는 실제 녹화 길이로 배속을 계산하므로(≤15초면 N=1 원속) 같은 상황에서 정상 산출한다 — 스풀 방식이 그 동등성을 복원한다.
 
 ```
-목표 출력 프레임 수 TARGET_FRAMES = 12.5초 × 30fps = 375
-예상 세션 길이(진입 시 계산):
-  expectedSec ≈ N × (countdownSec + 0.12 + 0.30)      # N = 실제 촬영 컷 수
-샘플링 간격(가공 프레임 기준):
-  stride = max(1, round(expectedSec × 30 / TARGET_FRAMES))
+수집(촬영 중 — 가공 Worker):
+  spoolInterval = 1/15 초                       # 수집 상한 15fps. JPEG(quality 0.8)로
+  가공 프레임을 spoolInterval마다 OPFS sessions/{id}/tl/{n}.jpg 에 기록(opfsWriter 경유)
+  스풀 상한 900장 — 도달 시 홀수 항 파일 삭제(절반 솎아내기) + spoolInterval 2배(반복 가능)
+
+선별·인코딩(종료 시 — Result [다음] 1단계, Worker):
+  actualSec    = 실제 촬영 경과(performance.now 델타)
+  N            = computeSpeedFactor(actualSec)   # Windows FfmpegArgs와 동일 함수(도메인 이식)
+  outputSec    = actualSec / N                   # ≤15초 세션이면 N=1 → 원속(Windows 동일)
+  targetFrames = round(outputSec × 30)
+  frames       = 스풀에서 균등 선별 min(targetFrames, 스풀 수)
+  타임스탬프   = 출력 길이에 균등 배치(프레임 duration = outputSec / frames.length)
+                 → 스풀이 부족하면 duration이 길어질 뿐 길이는 유지(실효 소스 fps ≤ 15)
+  frames.length < 30 → null (1초 미만 영상 무의미)
 ```
 
 | 규칙 | 내용 |
 |------|------|
-| 적응 보정 | 실제 세션이 예상보다 길어지면(사용자가 [바로 촬영]을 안 쓰거나 지연 발생) 수집 프레임이 375를 넘는다 → **375에 도달하면 stride를 2배로 늘리고 이미 넣은 프레임을 2개마다 1개 버리는 방식으로 균등 다운샘플**(인코딩 전 큐 단계에서 수행) |
-| 하한 | 수집 프레임이 **30장(=1초) 미만**이면 타임랩스를 만들지 않고 `null`(너무 짧은 영상은 무의미) |
-| 출력 fps | **30fps 고정**(타임스탬프 `i × 1/30` 초) |
-| 세션 길이 측정 | `performance.now()` 기준 실경과. 진단·로그에 기록 |
-| 배속 함수 재사용 | `domain/capture/timelapseSpeed.ts`(Windows `FfmpegArgs.ComputeSpeedFactor` 이식)를 **stride 산출과 검증에 사용**해 두 클라이언트의 목표 길이 정책이 드리프트하지 않게 한다 |
+| 스풀 매체 | **OPFS**(메모리 아님 — WR8. 900장 × ~50KB ≈ 45MB, 세션 폴더와 함께 정리된다) |
+| 출력 타임라인 | 컨테이너 30fps 타임라인. 소스 프레임이 부족하면 프레임 duration 연장(**실효 fps ≤ 15** — [12 §C2](./12-web-vs-windows-differences.md) 등재) |
+| 세션 길이 측정 | `performance.now()` 실경과(§4.4 시퀀스 시작~마지막 컷). 진단·로그에 기록 |
+| 배속 함수 재사용 | `domain/capture/timelapseSpeed.ts`(Windows `FfmpegArgs.ComputeSpeedFactor` 이식)를 **종료 시점에 실경과로** 적용 — 두 클라이언트의 길이 정책 드리프트 방지 |
+| 인코딩 시점 | `Result` 진입 후 [다음] 1단계(기존 순서 그대로 — `analysis/13 §4.7`) |
 
 ### 7.3 인코더 경로 판정 (시작 시 1회, 결과를 진단에 표시)
 
 ```
 경로 B: WebCodecs + JS MP4 muxer                      ← 1순위
    조건: "VideoEncoder" in self && (await VideoEncoder.isConfigSupported({codec:"avc1.42001E", ...})).supported
-   방법: VideoFrame(가공 결과, timestamp=i*33333μs) → encode → muxer → Blob(video/mp4)
+   방법: 스풀 JPEG → createImageBitmap → VideoFrame(균등 타임스탬프·duration) → encode → muxer → Blob(video/mp4)
    장점: 타임스탬프·품질 제어 정확. **Worker 안에서 완결**(VideoEncoder는 Worker에 노출된다)
 경로 A: MediaRecorder(mp4)                            ← 2순위(예비)
    조건: MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")
@@ -313,7 +324,7 @@ compose(frame, cuts[], filter, outFormat):
 | 판정 순서 | **B → A → C**(권장) |
 |-----------|---------------------|
 | 이유 ① 정확도 | 경로 B가 **타임스탬프를 직접 지정**하므로 30fps 정확도와 목표 길이를 보장한다. A는 `requestFrame` 타이밍과 레코더 내부 프레임레이트 추정에 의존해 길이가 흔들린다 |
-| 이유 ② 구조 | B는 **가공 Worker 안에서 프레임을 그대로 인코딩**한다. A는 가공 결과를 메인 스레드 canvas로 되돌려야 하므로(§7.3a) 프리뷰와 경합하고 스레딩 규약([04 §10](#10-스레딩리소스-규약-analysis14-9))을 깬다 |
+| 이유 ② 구조 | B는 **Worker 안에서 완결**된다(스풀 읽기 → 인코딩 → muxing). A는 스풀 프레임을 메인 스레드 canvas에 재생하며 녹화해야 하므로(§7.3a) 스레딩 규약([04 §10](#10-스레딩리소스-규약-analysis14-9))의 예외가 된다 |
 | 이유 ③ 지원 범위 | [10 §6.1](./10-testing-and-acceptance.md)의 **최소 버전 전부에서 B가 가능**하다(§7.3b). A가 유일한 대안이 되는 구간(WebCodecs 없고 MediaRecorder mp4 있는 Safari 14.1~16.3)은 지원 매트릭스 밖이다 → **A는 사실상 예비 경로**이며, 판정 순서를 B 우선으로 두면 실기기에서 A 경로가 선택되는 일은 거의 없다 |
 
 #### 7.3a 경로 A의 구조적 제약 (구현 전 반드시 확인)
@@ -324,7 +335,7 @@ compose(frame, cuts[], filter, outFormat):
 | `captureStream()`은 **`HTMLCanvasElement`의 메서드**다. **`OffscreenCanvas`에는 없다** | 가공 Worker의 OffscreenCanvas를 바로 녹화할 수 없다. 경로 A를 쓰려면 가공 결과를 **메인 스레드의 `<canvas>`에 그린 뒤** 그 캔버스를 `captureStream`한다 |
 | 프리뷰를 `transferControlToOffscreen`으로 Worker에 넘겼다면 | 그 캔버스는 **메인에서 그릴 수 없다**(제어권이 이미 이전됨) → 경로 A용 캔버스를 **별도로** 두어야 한다 |
 
-→ 경로 A를 구현할 때는 `stride` 프레임마다 Worker가 `ImageBitmap`을 메인으로 보내고, 메인이 전용(화면 밖) 캔버스에 그린 뒤 `requestFrame()`을 호출한다. **경로 A는 [04 §10](#10-스레딩리소스-규약-analysis14-9) 표의 "타임랩스 인코딩 = Worker" 규약의 예외다.**
+→ 경로 A를 구현할 때는 **종료 시** 스풀 프레임을 메인 스레드 전용(화면 밖) 캔버스에 순차로 그리며 프레임마다 `requestFrame()`을 호출한다(재생-녹화 방식). **경로 A는 [04 §10](#10-스레딩리소스-규약-analysis14-9) 표의 "타임랩스 인코딩 = Worker" 규약의 예외다.**
 
 #### 7.3b 브라우저 지원 현실 (2026-07 기준 — 과신 금지)
 
@@ -405,19 +416,21 @@ WebCodecs·MediaRecorder에는 CRF가 없으므로 해상도별 비트레이트�
 
 `analysis/14`의 의사코드는 **C#의 정수 나눗셈**을 전제한다. JS `/`는 실수 나눗셈이므로 **아래 표대로 명시 변환**해야 Windows와 픽셀이 일치한다.
 
+> ⚠️ **반올림도 다르다 — `Math.round`를 그대로 쓰면 안 된다.** 규격의 `round(...)`는 C# `Math.Round(double)`이고 기본이 **은행가 반올림(half-to-even)** 이다(`Math.Round(66.5)=66`, `Math.Round(-1.5)=-2`). JS `Math.round`는 half-up(+∞ 방향)이라 `Math.round(66.5)=67`, `Math.round(-1.5)=-1`로 어긋난다. 중간값(.5)은 실제로 발생한다 — `scaleSlots`의 `cx - newW/2`, 3:4 크롭의 `srcH×0.75` 등. **`domain/mathCompat.ts`에 `roundHalfToEven(x)`를 두고 아래 표의 모든 반올림 셀에 그것만 쓴다.** 슬롯 위치 "0px 오차" 계약([10 §4.2](./10-testing-and-acceptance.md))이 이 함수에 걸려 있다.
+
 | 규격 위치 | 규격 식 | JS 구현 |
 |-----------|---------|---------|
-| `14 §3` centerCrop | `cropW = round(srcH * targetAspect)` | `Math.round(srcH * targetAspect)` |
+| `14 §3` centerCrop | `cropW = round(srcH * targetAspect)` | `roundHalfToEven(srcH * targetAspect)` |
 | `14 §3` | `x = (srcW - cropW) / 2` (정수 나눗셈) | **`Math.floor((srcW - cropW) / 2)`** |
 | `14 §4.1` autoArrange | `marginX = max(20, frameW / 20)` (정수) | **`Math.max(20, Math.floor(frameW / 20))`** |
 | `14 §4.1` | `gapX = max(12, frameW / 40)` | **`Math.max(12, Math.floor(frameW / 40))`** |
 | `14 §4.1` | `cellW = (frameW - marginX*2 - gapX*(cols-1)) / cols` | **`Math.floor(...)`** |
 | `14 §4.1` | `r = i / cols` (정수 나눗셈) | **`Math.floor(i / cols)`** |
-| `14 §4.1` fitInCell | `w = round(h * targetAspect)` | `Math.round(...)` |
+| `14 §4.1` fitInCell | `w = round(h * targetAspect)` | `roundHalfToEven(...)` |
 | `14 §4.1` fitInCell | `offX = (cellW - w) / 2` (정수) | **`Math.floor(...)`** |
-| `14 §4.2` scaleSlots | `newW = max(1, round(s.width * factor))` | `Math.max(1, Math.round(...))` |
+| `14 §4.2` scaleSlots | `newW = max(1, round(s.width * factor))` | `Math.max(1, roundHalfToEven(...))` |
 | `14 §4.2` | `cx = s.x + s.width / 2.0` (**부동소수**) | `s.x + s.width / 2` — **floor 금지** |
-| `14 §4.2` | `newX = round(cx - newW / 2.0)` | `Math.round(cx - newW / 2)` |
+| `14 §4.2` | `newX = round(cx - newW / 2.0)` | `roundHalfToEven(cx - newW / 2)` — **.5가 흔한 지점**(cx·newW/2 각각 .5 가능) |
 | `14 §4.5` compute | `scale = min(canvasW/frameW, canvasH/frameH)` (**부동소수**) | 그대로 |
 | `14 §4.7` fallback 프레임 | `cellW = (1200 - 80*2 - 60) / 2` | `Math.floor(...)` = 490 |
 | `14 §4.7` | `top = (1600 - (cellH*2 + gap)) / 2` | `Math.floor(...)` |
@@ -451,7 +464,7 @@ WebCodecs·MediaRecorder에는 CRF가 없으므로 해상도별 비트레이트�
 - [ ] **CSS로 반전하지 않는다**(WM1)
 - [ ] 스틸 캡처가 버퍼를 **복제**한다(다음 프레임에 덮이지 않는다)
 - [ ] Ready 게이트 3조건 + 8초 타임아웃이 있다
-- [ ] `centerCrop`이 §9 표대로 **`Math.floor`/`Math.round`** 를 쓴다
+- [ ] `centerCrop`이 §9 표대로 **`Math.floor`/`roundHalfToEven`** 을 쓴다(JS `Math.round` 직접 사용 금지 — 은행가 반올림)
 - [ ] `autoArrange`·`fitInCell`의 정수 나눗셈이 §9 표와 일치한다
 - [ ] 슬롯 스케일이 **원본 기준**으로 계산된다
 - [ ] 편집기 표시·드래그·클램프가 **하나의 좌표 변환**을 공유한다

@@ -165,19 +165,28 @@ export function canTransition(from: Screen, to: Screen): boolean {
 
 | 홀더 | 내용 | 수명 | 파일 |
 |------|------|------|------|
-| **세션 컨텍스트** | `currentUser`(도메인 계정) — **화면·권한 판정의 유일한 근거** + 촬영 세션 데이터 | 앱 사용 동안 | `shell/sessionStore.ts` |
+| **세션 컨텍스트** | `currentUser`(도메인 계정 — **`POST /auth/google` 응답의 `user` DTO 전체를 보관**. 별도 내 정보 조회 API가 없어(`analysis/31 §10`) 계정 화면 표시값의 유일한 출처다) — **화면·권한 판정의 유일한 근거** + 촬영 세션 데이터 | 앱 사용 동안 | `shell/sessionStore.ts` |
 | **토큰 홀더** | JWT 문자열 | 페이지 수명, **메모리 전용** | `shell/authStore.ts` |
 
 ### 5.1 M1 배선 (가장 중요한 배선)
 
 ```ts
 // shell/sessionStore.ts — currentUser 변경 진입점은 login / logout / resetUserForTest 3개뿐
+// ⚠️ 셀렉터 구독은 subscribeWithSelector 미들웨어가 있어야만 동작한다.
+//    미들웨어 없이 subscribe(selector, listener)를 쓰면 Zustand가 두 번째 인자를 "조용히 무시"해
+//    토큰 폐기가 한 번도 실행되지 않는다 — M1이 소리 없이 깨진다.
+export const sessionStore = createStore(subscribeWithSelector((set) => ({ currentUser: null, ... })));
+
 // shell/authStore.ts (초기화 시 1회)
 sessionStore.subscribe(
   (s) => s.currentUser,
   (user) => { if (user === null) authStore.clearToken(); }   // ← 여기 한 곳이 전부를 덮는다
 );
+// 미들웨어를 쓰지 않는다면 반드시 prev 비교 형태로:
+// sessionStore.subscribe((s, prev) => { if (s.currentUser === null && prev.currentUser !== null) authStore.clearToken(); });
 ```
+
+- **배선이 실제로 동작하는지 단위 테스트로 고정한다**: `logout()` 호출 → `authStore` 토큰이 null (구독 자체가 끊긴 회귀를 잡는 유일한 방법이다).
 
 | 규칙 | 이유 |
 |------|------|
@@ -195,6 +204,7 @@ sessionStore.subscribe(
 | **유휴 타임아웃 만료** | **유지(로그아웃 금지)** | 폐기 |
 | 유휴 경고에서 "메인 화면으로" | 유지 | 폐기 |
 | 전역 예외 복구 | 유지 | 폐기 |
+| **JWT 만료 감지(Bearer 필수 호출 401 — 웹 고유)** | **해제 + JWT 폐기**([07 §4.3](./07-auth-and-permissions-web.md)) | **유지**(화면 유지 — 게스트로 계속) |
 | **페이지 새로고침·탭 종료(웹 고유)** | **해제**(메모리 소실 — M2의 결과) | 폐기 |
 
 ---
