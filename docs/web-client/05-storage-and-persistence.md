@@ -416,7 +416,7 @@ if (navigator.storage?.persist) {
 ### 8.1 `/branding.json`
 
 ```jsonc
-{ "AppName": "MC Photo", "Subtitle": "self custom photobooth" }
+{ "AppName": "MCPhoto", "Subtitle": "self custom photobooth" }
 ```
 
 | 항목 | 규격 |
@@ -424,7 +424,7 @@ if (navigator.storage?.persist) {
 | 위치 | Hosting 루트(`webclient/public/branding.json`) — **운영자가 파일만 교체**하면 재빌드 없이 바뀐다 |
 | 로드 시점 | **첫 화면 렌더 전**(부트스트랩 3단계), 타임아웃 **800ms** |
 | 캐시 | `Cache-Control: no-cache`(§01 §5.1) |
-| 폴백 | 부재·실패·빈 값 → `AppName = "MC Photo"`, `Subtitle = "self custom photobooth"`. **두 값은 독립적으로 폴백** |
+| 폴백 | 부재·실패·빈 값 → `AppName = "MCPhoto"`(원격 이름 통일 커밋 6274cdd 반영), `Subtitle = "self custom photobooth"`. **두 값은 독립적으로 폴백** |
 | 실패 처리 | 어떤 실패에도 크래시 금지 |
 | 적용 지점 | 문서 `<title>`, 홈 타이틀, 홈 소제목 |
 | 인코딩 | UTF-8(한글 이름 대응) |

@@ -64,7 +64,7 @@ interface ScreenLogic {
 
 ```
 ┌──────────────────────────────────────────────┐
-│ [로그인]          MC Photo         [⚙]       │  ← 홈 버튼 숨김
+│ [로그인]          MCPhoto          [⚙]       │  ← 홈 버튼 숨김
 │                                              │
 │              {브랜딩 앱 이름}                 │  ← branding.json AppName
 │           {브랜딩 소제목}                     │  ← branding.json Subtitle
@@ -80,7 +80,7 @@ interface ScreenLogic {
 |------|------|
 | [촬영하기] | **프레임 선택으로 직행**(로그인 화면을 강제로 거치지 않는다 = 게스트 직행) |
 | 세션 초기화 | 촬영 데이터만 초기화하고 **로그인은 보존**한다 |
-| 타이틀·소제목 | 브랜딩 값(`analysis/41 §6`). 폴백 `MC Photo` / `self custom photobooth` |
+| 타이틀·소제목 | 브랜딩 값(`analysis/41 §6`). 폴백 `MCPhoto` / `self custom photobooth`(2026-07-30 원격 이름 통일 반영 — `analysis/41 §6`) |
 | 유휴 감시 | 없음 |
 | **웹 추가** | 화면 아무 곳이나 첫 포인터 이벤트에서 **전체화면 + AudioContext unlock + Wake Lock** 시도(1회, 실패 무시) |
 | **웹 추가** | 카메라 권한이 아직 `prompt` 상태면 하단에 중립 안내: *"촬영을 시작하면 카메라 사용 권한을 묻습니다."*(권한 요청은 여기서 하지 않는다 — `Capture` 진입 시) |

@@ -356,6 +356,7 @@ compose(frame, cuts[], filter, outFormat):
 
 | 항목 | 규격 |
 |------|------|
+| **짝수 해상도 강제** | 인코딩 입력 크기 = `trunc(w/2)*2 × trunc(h/2)*2`(홀수 변은 1px 잘라낸다). **yuv420p(4:2:0)는 양변이 짝수여야 인코더가 열린다** — Windows에서 실제 발생한 결함이다(`FfmpegArgs.EvenDimensionCrop`, 커밋 fb3e99d: 1443×1080 크롭에서 libx264가 개시 거부 → 타임랩스 전체 실패. 프레임 종횡비에 따라 중앙 크롭 결과가 임의의 홀수가 된다). WebCodecs `VideoEncoder`도 H.264+4:2:0에서 같은 제약이 있으므로 **config의 width/height와 인코딩 직전 프레임 크기를 짝수로 클램프**한다. 스풀·프리뷰·스틸은 가공 해상도 그대로 둔다(Windows와 동일 — 출력 인코딩 단계에서만 처리해 WYSIWYG 무영향) |
 | 코덱 문자열 | `avc1.42001E`(Baseline L3.0) 우선, 실패 시 `avc1.42E01E` → `avc1.4D001E`(Main) 순으로 시도 |
 | 인코더 설정 | `{ codec, width, height, framerate: 30, bitrate: 하단 표, latencyMode: "quality", avc: { format: "avc" } }` |
 | muxer | 순수 JS MP4 muxer(버전 핀 고정). **`moov` atom이 완성된 정상 종료를 보장**해야 한다(`analysis/14 §7.1`) |
