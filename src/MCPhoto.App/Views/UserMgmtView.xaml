@@ -160,7 +160,9 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Background="{StaticResource Brush.Bg}" Margin="40,80,40,20">
+    <!-- 하단 여백 40: 셸(MainWindow)이 우하단에 상시 그리는 버전·배포사이트 표기(하단 10 + 캡션 13pt ≈ 28px)를
+         우측 정렬된 "뒤로" 버튼이 침범하지 않도록 비워 둔다. -->
+    <Grid Background="{StaticResource Brush.Bg}" Margin="40,80,40,40">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
