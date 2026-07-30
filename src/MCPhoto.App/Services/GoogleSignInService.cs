@@ -174,7 +174,7 @@ public sealed class GoogleSignInService : IGoogleSignInService
             : "로그인이 취소되었습니다. 이 창을 닫고 앱으로 돌아가세요.";
         var html =
             "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">" +
-            "<title>MC포토</title></head>" +
+            "<title>MCPhoto</title></head>" +
             "<body style=\"font-family:sans-serif;text-align:center;padding:48px;\">" +
             $"<h2>{message}</h2></body></html>";
 

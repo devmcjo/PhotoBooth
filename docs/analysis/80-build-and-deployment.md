@@ -23,7 +23,8 @@
 | 앱 프로젝트 | `src/MCPhoto.App/MCPhoto.App.csproj`(WinExe, WPF) | `MCPhoto.App.csproj:4-7` |
 | TargetFramework | `net8.0-windows` | `MCPhoto.App.csproj:5` |
 | AssemblyName | `MCPhoto`(→ `MCPhoto.exe`) | `MCPhoto.App.csproj:8` |
-| 공통 속성 | `LangVersion 12.0`, `Nullable enable`, `ImplicitUsings enable`, `Deterministic true`, 회사=MCPhoto/제품=MC포토/`ko-KR` | `Directory.Build.props:4-17` |
+| 공통 속성 | `LangVersion 12.0`, `Nullable enable`, `ImplicitUsings enable`, `Deterministic true`, 회사=MCPhoto/**제품=MCPhoto**/`ko-KR` | `Directory.Build.props` |
+| 버전 | `<Version>`이 원천 → `AssemblyVersion`·`FileVersion` = `$(Version).0`. `IncludeSourceRevisionInInformationalVersion=false`로 제품 버전에 git 해시가 붙지 않게 한다 | `Directory.Build.props` |
 | 매니페스트 | `app.manifest` | `MCPhoto.App.csproj:7` |
 | 참조 프로젝트 | `MCPhoto.Core`, `MCPhoto.Capture`, **`MCPhoto.Http`** | `MCPhoto.App.csproj:23-26` |
 | 조건부 어셈블리 속성 | `BackendApiKeyDefault`가 주어지면 `AssemblyMetadata("MCPhoto.BackendApiKey")`로 바이너리에 박힘(§2.1) | `MCPhoto.App.csproj:36-43` |
@@ -146,7 +147,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 | 항목 | 값 | 근거 |
 |------|-----|------|
-| AppName / Version / Publisher | MC포토 / 1.0.0 / MCPhoto | `MCPhoto.iss:9-11,19-21` |
+| AppName / Version / Publisher | MCPhoto / 1.0.0 / MCPhoto | `MCPhoto.iss:9-12,19-22` |
 | 설치 경로 | `{autopf}\MCPhoto`(Program Files) | `MCPhoto.iss:22` |
 | 산출물 파일명 | `MCPhoto-Setup-1.0.0` | `MCPhoto.iss:29` |
 | 압축 | lzma2 + SolidCompression | `MCPhoto.iss:26-27` |

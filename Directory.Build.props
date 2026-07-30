@@ -16,7 +16,7 @@
     <NeutralLanguage>ko-KR</NeutralLanguage>
     <!-- ── 버전 (it18) ──
          릴리스 시 여기 Version 한 줄만 올린다. AssemblyVersion/FileVersion은 파생되므로
-         exe 리소스(파일 속성 > 자세히의 파일 버전·제품 버전)도 함께 1.1.6.0으로 맞춰진다.
+         exe 리소스(파일 속성 > 자세히의 파일 버전·제품 버전)도 함께 맞춰진다.
          앱이 표기하는 버전은 이 값을 어셈블리에서 읽는다(AssemblyBuildInfoService) — 외부 파일 없음.
          종전 bldinfo.ini 방식은 폐기: 산출물 파일을 따로 교체해야 하고 리소스 버전(1.0.0.0)과
          표기 버전이 어긋나는 이중 관리였다. -->
@@ -25,7 +25,7 @@
     <FileVersion>$(Version).0</FileVersion>
     <!-- 제품 버전(AssemblyInformationalVersion)에 git 커밋 해시가 붙지 않게 한다.
          .NET SDK는 기본적으로 "+{SourceRevisionId}"를 덧붙여 파일 속성의 제품 버전이
-         "1.1.6+c4469825f411..."처럼 보인다 — 운영자가 읽는 값이라 해시를 뺀다. -->
+         "1.1.7+c4469825f411..."처럼 보인다 — 운영자가 읽는 값이라 해시를 뺀다. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <!-- 결정적 빌드 -->
     <Deterministic>true</Deterministic>
