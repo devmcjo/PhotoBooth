@@ -12,6 +12,12 @@
 
 > 각 기능은 **목적 / 사용자 흐름 / 관련 화면·VM·서비스 / 핵심 규칙·옵션 / 근거 파일** 순으로 기술한다.
 
+> ⚠️ **이 문서는 Windows 데스크톱 구현 참조다.** 화면·ViewModel·XAML 파일명은 현재 구현의 것이다.
+>
+> **다른 플랫폼 클라이언트를 만든다면 [13 · 클라이언트 동작 규격](./13-client-behavior-spec.md)이 진실원이다** — 같은 내용을 플랫폼 중립 어휘로, 타이밍 상수·검증 규칙·사용자 문구 카탈로그와 함께 정리해 두었다. 이 문서에서 얻을 것은 **엣지 케이스와 과거 결함 수정 이력**(왜 그렇게 되어 있는지)이다.
+>
+> 이 문서에서 **Windows 전용이라 이식 대상이 아닌 절**: §11(설정 INI 경로) · §16(표시 모드·창 기하) · §17의 로그 폴더 열기 · §18(외부 파일 버전 표기) · §15(외부 파일 브랜딩). 대응 규격은 [41](./41-local-data-and-file-formats.md)에 목적 단위로 있다.
+
 ---
 
 ## 1. 홈 · 촬영 시작
@@ -250,8 +256,8 @@
   - ⚠️ **계정 생성 UI는 it15에서 폐지**됐다(팝오버 "계정 생성" 항목·`AccountMode.AccountCreate`·`CreateAccount` 모두 제거). 신규 계정은 Google SSO 최초 로그인 시 서버가 `temp_user`로 자동 생성한다. 순수 규칙 `CreatableRoles`/`CanCreate`는 남아 있으나 프로덕션 호출자가 없다([60 §1.5](./60-auth-accounts-and-roles.md#15-계정-생성-위계-게이트-it15-이후-비활성)).
   - TempUser QR 한도(시간·횟수) 편집은 **admin 전용**(`CanEditTempUserLimits`, `:87`) + 서버 `requireAdmin`(it13).
   - 사용자 관리(`UserMgmtViewModel`): 목록 로드, 삭제(cascade=프레임 문서+Storage; 자기 계정 삭제 방지), **타 계정 PIN 재설정**(관리자가 새 4자리 PIN을 2회 입력 — 고정값 아님), **역할 변경 콤보**. 뒤로=관리자 도구(Account) 복귀.
-    - **관리 액션은 행위자와 같거나 낮은 위계에만 노출**(`UserRole.CanManage`·`RoleActionVis` — 예: manager는 admin 삭제/PIN 재설정 불가). UI 미노출 + 명령 가드 + 서버 최종 강제(403 우아 처리).
-    - **PIN 재설정은 it16부터 파워 전용**: `CanResetPin = !isSelf && IsPower() && CanManage(target)`(`:52`)이고 커맨드 가드도 동일(`:141`), 서버 `PUT /accounts/:id/pin`에 `requirePower()`가 추가됐다. 종전에는 `CanManage`만 요구해 비power가 같은 위계의 남의 PIN을 재설정할 수 있었다.
+    - **삭제는 행위자와 같거나 낮은 위계에만 노출**(`UserRole.CanManage`·`RoleActionVis` — 예: manager는 admin 삭제 불가). UI 미노출 + 명령 가드 + 서버 최종 강제(403 우아 처리).
+    - **PIN 재설정은 파워 전용 + 엄격히 낮은 위계**: `CanResetPin = !isSelf && actorRole.CanResetPin(target)`(`:70`, 커맨드 가드 `:204`) = `IsPower() && ManageRank(target) < ManageRank(actor)`. 즉 **매니저는 다른 매니저의 PIN을 재설정할 수 없고 관리자만 가능**하다(동급 차단). 서버 `PUT /accounts/:id/pin`은 `requirePower()` + `canResetPin`으로 동일 판정(위반 403). `CanManage`(삭제와 공유)는 동급 허용 그대로다.
     - **역할 변경(it13 도입 · it16 완화)**: 콤보 옵션은 `RoleChangePolicy.AssignableRoles(actor, current)`가 필터한다 — **admin**은 admin 제외 전부, **manager**는 하위 3역할 대역(임시 유저·사용자·**고급 유저**) 안에서 자유 지정(승격 포함). admin 지정은 누구도 불가(최종 1인), admin 대상 변경도 불가. 자기 계정 행은 콤보 미노출. 전수 표는 [60 §1.4](./60-auth-accounts-and-roles.md#14-역할-지정변경-매트릭스).
 - **근거**: `AccountViewModel.cs`, `UserMgmtViewModel.cs`, `UserRole.cs`, `RoleChangePolicy.cs`, `MainWindow.xaml:53-75`. 역할·권한 상세는 [60](./60-auth-accounts-and-roles.md).
 

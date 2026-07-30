@@ -4,11 +4,13 @@
 |------|-----|
 | 문서 | MC포토 시스템 전체 개요·아키텍처(진입 문서) |
 | 범위 | 4계층(Exe 앱 / 백엔드 API / 웹 / Firebase 인프라) 조감, 컴포넌트 맵, end-to-end 데이터 흐름, 문서 지도 |
-| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — `MCPhoto.Firebase` 폐지 → 백엔드 API 경유 구조로 갱신) |
+| 최종 업데이트 | 2026-07-30 (멀티플랫폼 클라이언트 문서 계층 반영 — §5 문서 지도 갱신) |
 | 관련 소스 | 저장소 전역(`src/`, `web/`, `docs/`) |
 | 갱신 규칙 | 컴포넌트/흐름/스택이 바뀌면 이 문서와 해당 세부 문서를 함께 갱신 |
 
 > 이 문서는 **지도**입니다. 세부는 각 영역 문서를 참조하세요(맨 아래 [문서 지도](#5-문서-지도)).
+>
+> 🆕 **iOS·iPadOS·Android·macOS·웹 클라이언트를 새로 만든다면** 이 문서로 전체 그림을 잡은 뒤 **[05 · 멀티플랫폼 클라이언트 개발 가이드](./05-cross-platform-client-guide.md)** 로 이동하세요. 아래 §2·§4의 "Exe 앱"은 **현재 유일한 클라이언트 구현(Windows 데스크톱)** 을 뜻하며, 시스템이 요구하는 것은 그 특정 기술 스택이 아니라 §6의 불변식과 백엔드 계약입니다.
 
 ---
 
@@ -96,20 +98,38 @@ flowchart TD
 
 ## 5. 문서 지도
 
+**진입 · 플랫폼 중립 규격** (새 클라이언트의 진실원)
+
 | # | 문서 | 내용 |
 |---|------|------|
 | 00 | (이 문서) | 전체 개요·아키텍처·데이터 흐름 |
-| 10 | [exe-app-architecture](./10-exe-app-architecture.md) | WPF 구조·MVVM·DI·상태머신·캡처 파이프라인 |
-| 11 | [exe-app-features](./11-exe-app-features.md) | 기능 상세(촬영·프레임·필터·QR·타임랩스·유휴 등) |
-| 12 | [exe-app-settings-and-config](./12-exe-app-settings-and-config.md) | 설정(AppSettings/INI)·기본값·브랜딩 |
-| 20 | [frontend-web-download-page](./20-frontend-web-download-page.md) | 웹 다운로드 페이지·만료 판정 |
-| 30 | [backend-firebase-integration](./30-backend-firebase-integration.md) | 백엔드 API 연동(인증·업로드 3단계·프레임/계정·TempUser 한도) |
+| **05** | [cross-platform-client-guide](./05-cross-platform-client-guide.md) | 멀티플랫폼 진입 — 용어·프로파일·지원 매트릭스·불변식·서버 블로커 |
+| **13** | [client-behavior-spec](./13-client-behavior-spec.md) | 화면·상태 전이·흐름·타이밍 상수·검증·사용자 문구 |
+| **14** | [media-pipeline-spec](./14-media-pipeline-spec.md) | 카메라·크롭·슬롯 기하·합성·필터·녹화/타임랩스 알고리즘 |
+| **31** | [backend-api-reference](./31-backend-api-reference.md) | 전 엔드포인트 요청/응답·상태코드·에러 코드·입력 검증 |
+| **41** | [local-data-and-file-formats](./41-local-data-and-file-formats.md) | 설정 키·프레임 파일 포맷·세션 작업 공간·플랫폼별 저장 위치 |
+| **61** | [auth-platform-integration](./61-auth-platform-integration.md) | 플랫폼별 OAuth·JWT 규약·PIN 게이트 |
+
+**공통 규격**
+
+| # | 문서 | 내용 |
+|---|------|------|
+| 30 | [backend-firebase-integration](./30-backend-firebase-integration.md) | 백엔드 연동 설계 의도(인증 모델·업로드 3단계·한도·미도달 정책) |
 | 40 | [database-firestore-and-storage-schema](./40-database-firestore-and-storage-schema.md) | Firestore/Storage 스키마·경로·보안규칙 |
 | 50 | [infra-gcp-lifecycle-and-ttl](./50-infra-gcp-lifecycle-and-ttl.md) | GCP 보관/만료(Lifecycle·TTL)·비용 |
-| 60 | [auth-accounts-and-roles](./60-auth-accounts-and-roles.md) | 로그인·계정·역할 권한 매트릭스 |
-| 70 | [logging-and-troubleshooting](./70-logging-and-troubleshooting.md) | 로그 위치·증상별 진단 가이드 |
-| 80 | [build-and-deployment](./80-build-and-deployment.md) | 빌드·단일 EXE 배포·ffmpeg 번들 |
+| 60 | [auth-accounts-and-roles](./60-auth-accounts-and-roles.md) | 역할 위계·권한 매트릭스 |
 | 90 | [roadmap-and-future-work](./90-roadmap-and-future-work.md) | 알려진 이슈·개선 예정·비범위 |
+
+**구현 참조** (특정 클라이언트 — 예시·근거·이력)
+
+| # | 문서 | 대상 | 내용 |
+|---|------|------|------|
+| 10 | [exe-app-architecture](./10-exe-app-architecture.md) | Windows 전용 | 솔루션 구조·MVVM·DI·상태머신·캡처 파이프라인 |
+| 11 | [exe-app-features](./11-exe-app-features.md) | Windows 전용 | 기능 상세(촬영·프레임·필터·QR·타임랩스·유휴 등) |
+| 12 | [exe-app-settings-and-config](./12-exe-app-settings-and-config.md) | Windows 전용 | 설정 INI·기본값·브랜딩·표시 모드 |
+| 20 | [frontend-web-download-page](./20-frontend-web-download-page.md) | 웹(소비자) | 다운로드 페이지·만료 판정 |
+| 70 | [logging-and-troubleshooting](./70-logging-and-troubleshooting.md) | Windows 전용 | 로그 위치·증상별 진단 가이드 |
+| 80 | [build-and-deployment](./80-build-and-deployment.md) | Windows 전용 | 빌드·단일 EXE 배포·ffmpeg 번들 |
 
 ## 6. 핵심 원칙(불변식) 요약
 

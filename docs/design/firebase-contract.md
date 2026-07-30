@@ -68,10 +68,13 @@
 > - **계정 라우트 게이트**: `PATCH /accounts/:id/role` = `requirePower()` + `canSetRole(actor, current, target)`
 >   (manager는 하위 3역할 대역 `temp_user`·`user`·`advanced_user` 안에서 자유 지정, manager·admin 지정은 admin 전용,
 >   admin 대상 변경·admin 지정은 누구도 불가). `DELETE /accounts/:id` = `requirePower()` + `canManage`.
->   **`PUT /accounts/:id/pin`(타 계정 PIN 재설정)에 `requirePower()`가 추가됐다** — 종전에는 로그인 + `canManage`(같은 위계 허용)만
->   요구해 비power가 같은 위계의 남의 PIN을 재설정할 수 있었다. 판정식 = `isPower(actor) && canManage(actor.role, targetRole)
->   && actor.id !== targetId`(자기 자신 대상은 계속 **400** — 본인은 `PUT /accounts/me/pin`). 비power는 **403**.
->   `canManage` 자체의 의미는 **불변**이다(`deleteAccount`와 공유되므로 좁히면 admin↔admin 삭제가 회귀).
+>   **`PUT /accounts/:id/pin`(타 계정 PIN 재설정)은 `requirePower()` + `canResetPin`이다** — 판정식 =
+>   `canResetPin(actor.role, targetRole) && actor.id !== targetId`이고 `canResetPin`은 **`isPower(actor) &&
+>   MANAGE_RANK[target] < MANAGE_RANK[actor]`**(엄격 부등호 = **동급 차단**). 즉 manager는 다른 manager의 PIN을
+>   재설정할 수 없고 **매니저 PIN은 admin만** 재설정한다(admin↔admin도 차단). 비power·동급·상위 대상은 **403**,
+>   자기 자신 대상은 계속 **400**(본인은 `PUT /accounts/me/pin`).
+>   `canManage` 자체의 의미는 **불변**이다(`deleteAccount`와 공유되므로 좁히면 admin↔admin·manager↔manager 삭제가 회귀)
+>   → 삭제는 동급 허용, PIN 재설정만 동급 차단인 비대칭이 의도된 현재 상태다.
 > - 미지원 `role` 문자열은 `parseRole`이 `user`로 폴백한다(it16 이후 `user`는 프레임 쓰기 권한이 없어 fail-closed 방향).
 > - 상세: 설계 `docs/design/wpf-it16-advanced-user-role-design.md` §3·§5, 역할 전수 표 `docs/analysis/60-auth-accounts-and-roles.md` §1.4.
 

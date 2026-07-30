@@ -10,6 +10,10 @@
 
 관련 문서: [11 기능 상세](./11-exe-app-features.md) · [12 설정/구성/브랜딩](./12-exe-app-settings-and-config.md) · 인덱스 [README](./README.md)
 
+> ⚠️ **이 문서는 Windows 데스크톱 구현 참조다.** WPF·.NET·OpenCvSharp·ffmpeg·`%ProgramData%` 같은 어휘는 **현재 구현의 선택**이며 시스템 규격이 아니다.
+>
+> **다른 플랫폼 클라이언트를 만든다면**: 진입은 [05 · 멀티플랫폼 가이드](./05-cross-platform-client-guide.md), 화면·상태 규격은 [13](./13-client-behavior-spec.md), 캡처·합성 알고리즘은 [14](./14-media-pipeline-spec.md), 로컬 저장 규약은 [41](./41-local-data-and-file-formats.md)이 진실원이다. 이 문서에서 얻을 것은 **계층 분리·DI·스레딩·리소스 해제의 검증된 구조**이며, 그 구조 자체는 어느 플랫폼에서도 유효하다.
+
 ---
 
 ## 1. 솔루션·프로젝트 구성과 의존 방향

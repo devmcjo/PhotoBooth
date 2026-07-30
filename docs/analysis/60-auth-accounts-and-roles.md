@@ -10,6 +10,8 @@
 
 관련 문서: [10 Exe 앱 아키텍처](./10-exe-app-architecture.md) · [30 Firebase 연동](./30-backend-firebase-integration.md) · [40 Firestore/Storage 스키마](./40-database-firestore-and-storage-schema.md) · [70 로깅/이슈 진단](./70-logging-and-troubleshooting.md) · 인덱스 [README](./README.md)
 
+> 🆕 **역할·권한 규칙(§1·§2)은 플랫폼 무관 공통 규격이므로 모든 클라이언트가 이 문서를 따른다.** 반면 §3의 로그인 **구현 방식**(loopback + 시스템 브라우저)은 데스크톱 전용이다 — iOS·iPadOS·Android·웹의 OAuth 흐름과 그에 필요한 **서버 확장**은 **[61 · 플랫폼별 인증 통합](./61-auth-platform-integration.md)** 에 있다. §3.4 PIN 게이트의 플랫폼 중립 규격도 61 §7에 정리돼 있다.
+
 > ⚠️ 자격증명(it15 갱신, 사실): **비밀번호 개념은 폐지됐다.** 자격증명은 ① Google SSO(신원 — 서버가 id_token 검증) + ② `pinHash`(설정·계정 관리 진입 게이트, bcrypt 4자리 PIN) 두 가지뿐이며 `users` 문서의 `password`·`emailVerified` 필드는 삭제됐다(설계 `docs/design/wpf-it15-google-only-auth-design.md` §5.3). it15 이전의 "평문 비밀번호 저장·비교"는 **이력**이다. "웹 접근 전면 차단"이 여전히 `users` 컬렉션의 방어선이다([40 §5.1](./40-database-firestore-and-storage-schema.md#51-firestore-webfirestorerules)).
 
 > ✅ 문서 동기화 상태(2026-07-29): **§1~§5 전부 it16 기준 최신**이다. §3~§5는 이날 it13~it16(Google SSO 단일 경로·진입 PIN·백엔드 프록시 경유 계정 CRUD·`advanced_user`)에 맞춰 **전면 재작성**됐다. 종전의 id/pw 로그인 흐름·`ChangePasswordAsync`·시드 계정 비밀번호·"SSO 미지원" 서술은 **이력**이며 아래 각 절에 "~에서 폐지"로 남겨 두었다.
@@ -55,7 +57,7 @@ public static bool IsPower(this UserRole role) => role is UserRole.Manager or Us
 - 상단 바 파워 여부: `AppShellViewModel.IsPower` → 팝오버의 "관리자 도구" 노출 제어(`src/MCPhoto.App/MainWindow.xaml:65-69`).
 - 계정 페이지 파워 판정: `AccountViewModel.IsPower`(`src/MCPhoto.App/ViewModels/AccountViewModel.cs:90`), 사용자 관리 진입 가드(`:222`).
 - 프레임 화면 파워 판정: `FrameSelectViewModel.IsPower`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:82`) → "서버에서도 제거" 옵션 노출·유효(`:123`), DB 공용 프레임 편집·삭제 허용(`FrameEditPolicy`).
-- 사용자 관리 액션 게이트: PIN 재설정(`UserMgmtViewModel.cs:52`, `:141`) — it16에서 `IsPower()` 항이 추가됐다([1.4](#14-역할-지정변경-매트릭스)).
+- 사용자 관리 액션 게이트: PIN 재설정은 `IsPower()`를 **직접 부르지 않고** `CanResetPin()`(power 항 포함)에 위임한다(`UserMgmtViewModel.cs:70`, `:204`) — [1.3.1](#131-canresetpin--pin-재설정-전용-판정-엄격히-낮은-위계).
 
 ### 1.2 `CanWriteFrames()` — 프레임 저작 권한 축 (it16 신규)
 
@@ -82,9 +84,22 @@ public static bool CanWriteFrames(this UserRole role)
 
 ### 1.3 `CanManage()` — 관리 위계 판정
 
-`CanManage(actingRole, targetRole)`는 **자신과 같거나 낮은 위계**만 관리(삭제·PIN 재설정)할 수 있다는 규칙이며, 서수가 아닌 명시 랭크 `ManageRank`로 판정한다(`src/MCPhoto.Core/Models/UserRole.cs:99-116`). 예) manager는 admin을 관리할 수 없고, admin은 다른 admin도 관리할 수 있다.
+`CanManage(actingRole, targetRole)`는 **자신과 같거나 낮은 위계**만 관리(삭제 등)할 수 있다는 규칙이며, 서수가 아닌 명시 랭크 `ManageRank`로 판정한다(`src/MCPhoto.Core/Models/UserRole.cs:120-121`). 예) manager는 admin을 관리할 수 없고, admin은 다른 admin도 관리할 수 있다.
 
-> ⚠️ **이 판정만으로는 비power도 통과한다.** 같은 위계를 허용하므로 `temp_user`가 다른 `temp_user`를 "관리 가능"으로 계산한다. 따라서 관리 액션 게이트는 **`IsPower()`와 함께** 써야 한다. it16에서 PIN 재설정 경로(클라 `UserMgmtViewModel`, 서버 `PUT /accounts/:id/pin`)에 이 `IsPower()` 항을 보강했다([1.4](#14-역할-지정변경-매트릭스)). `CanManage`/`canManage` 자체의 의미는 **변경하지 않았다** — 계정 삭제(`deleteAccount`)와 공유되므로 "엄격히 높은 위계"로 좁히면 admin↔admin·manager↔manager 삭제가 회귀한다.
+> ⚠️ **이 판정만으로는 비power도 통과한다.** 같은 위계를 허용하므로 `temp_user`가 다른 `temp_user`를 "관리 가능"으로 계산한다. 따라서 관리 액션 게이트는 **`IsPower()`와 함께** 써야 한다(삭제) 또는 **`CanResetPin()`에 위임**한다(PIN 재설정 — power 항 포함, [1.3.1](#131-canresetpin--pin-재설정-전용-판정-엄격히-낮은-위계)). `CanManage`/`canManage` 자체의 의미는 **변경하지 않았다** — 계정 삭제(`deleteAccount`)와 공유되므로 "엄격히 높은 위계"로 좁히면 admin↔admin·manager↔manager 삭제가 회귀한다.
+
+#### 1.3.1 `CanResetPin()` — PIN 재설정 전용 판정 (엄격히 낮은 위계)
+
+타 계정 PIN 재설정(E3)만 **`CanManage`보다 한 칸 좁은** 별도 축을 쓴다(`src/MCPhoto.Core/Models/UserRole.cs:135-136` ↔ 서버 `web/functions/src/domain/roles.ts:128`, 1:1 대칭):
+
+```
+CanResetPin(acting, target) = IsPower(acting) && ManageRank(target) < ManageRank(acting)
+```
+
+- **동급 차단**이 핵심이다: `manager → manager` **×**(매니저 PIN은 **admin만** 재설정), `admin → admin` **×**(admin은 최종 1인이라 실사용 도달 없음). `admin → manager` ○, `manager → advanced_user/user/temp_user` ○.
+- 근거: PIN은 설정·계정 관리 진입의 **유일한 자격증명**이므로, 동급 계정이 서로의 진입 자격을 갈아치울 수 있는 것은 과대 권한이다. 종전 판정 `IsPower() && CanManage(target)`은 `CanManage`가 동급을 허용해 매니저가 다른 매니저의 PIN을 바꿀 수 있었다.
+- **`CanManage`는 좁히지 않았다**(삭제와 공유 — 좁히면 admin↔admin·manager↔manager 삭제가 회귀). 따라서 **매니저는 다른 매니저를 삭제할 수는 있으나 PIN은 재설정할 수 없다**는 비대칭이 남아 있다([5](#5-향후-개선-여지현재-비범위) 참조).
+- 회귀 가드: `tests/MCPhoto.Tests/RoleManagementTests.cs`(`CanResetPin_Requires_Power_And_Strictly_Lower` + `CanManage_Still_Allows_Same_Rank_For_Delete`), `tests/MCPhoto.Tests/UserMgmtViewModelTests.cs`(동급 매니저 행 미노출·커맨드 차단), `web/functions/src/__tests__/roles.test.ts`·`accounts.test.ts`(동급 403).
 
 ### 1.4 역할 지정·변경 매트릭스
 
@@ -166,7 +181,7 @@ public static bool CanWriteFrames(this UserRole role)
 | 관리자 도구(사용자 관리 진입) | × | × | × | **×** | ○ | ○ | 팝오버 "관리자 도구"는 `IsPower`에서만 노출(`MainWindow.xaml:65-69`); `OpenUserManagement`도 `IsPower` 가드(`ViewModels/AccountViewModel.cs:222`). **A는 계정 관리 권한 없음** |
 | 사용자 목록 조회 | × | × | × | × | ○ | ○ | 사용자 관리 진입 자체가 파워 전용(위 항목); `GetAllAsync`는 "power 전용" |
 | 사용자 삭제(cascade) | × | × | × | × | ○ | ○ | `UserMgmtViewModel.DeleteUser`(`:108-127`); 자기 계정 삭제 방지 + **자기와 같거나 낮은 위계만**(`ActorRole.CanManage(target)` — manager는 admin 삭제 불가). UI 미노출(`RoleActionVis`) + 명령 가드 + 서버 `requirePower` |
-| 타 계정 PIN 재설정 | × | × | × | **×** | ○ | ○ | **it16 강화**: `IsPower() && CanManage(target)`(`UserMgmtViewModel.cs:52`, `:141`) + 서버 `PUT /accounts/:id/pin`에 `requirePower()` 추가 → 비power **403**. 종전에는 비power가 같은 위계의 남의 PIN을 재설정할 수 있었다([1.4](#14-역할-지정변경-매트릭스)) |
+| 타 계정 PIN 재설정 | × | × | × | **×** | △ | ○ | `CanResetPin(target)` = power + **엄격히 낮은 위계**(`UserMgmtViewModel.cs:70`, `:204`) + 서버 `PUT /accounts/:id/pin`(`requirePower` + `canResetPin`). **M은 T·U·A만**(다른 M의 PIN은 재설정 불가 — **매니저 PIN은 D 전용**), **D는 M 이하 전부**(다른 D는 불가). [1.3.1](#131-canresetpin--pin-재설정-전용-판정-엄격히-낮은-위계) |
 | 본인 PIN 변경 | × | ○ | ○ | ○ | ○ | ○ | `AccountViewModel.ChangePin` → `PUT /accounts/me/pin`. 자기 자신을 `:id` 경로로 부르면 400 |
 | 역할 지정·변경 | × | × | × | × | △ | △ | 매트릭스는 [1.4](#14-역할-지정변경-매트릭스). **M**은 하위 3역할 대역(T·U·**A**) 안에서 자유 지정(승격 포함), **D**는 admin 제외 전부. 콤보 필터(`RoleChangePolicy.AssignableRoles`) + 커맨드 게이트(`UserMgmtViewModel.cs:173`) + 서버 `canSetRole` 최종 강제 |
 | TempUser QR 한도(시간·횟수) 변경 | × | × | × | × | × | ○ | `CanEditTempUserLimits => Role == UserRole.Admin`(`ViewModels/AccountViewModel.cs:87`) + 서버 `requireAdmin`·범위 검증(it13) |
@@ -175,7 +190,7 @@ public static bool CanWriteFrames(this UserRole role)
 | 설정 항목 편집 | △ | △ | ○ | ○ | ○ | ○ | 게스트는 일부 항목(거울모드·재촬영·필터·QR 전송·Firebase 항목) 편집 불가(it12 R1). **T**는 QR 한도 초과 시 QR 관련 편집만 차단(`CanEditQr = IsLoggedIn && !IsTempUserBlocked`, `ViewModels/SettingsViewModel.cs:78`). **A는 이 축에서 U와 동일** |
 
 주의(사실/가정 구분):
-- **사용자 관리 액션의 역할 위계**(사실): 삭제·PIN 재설정은 **행위자와 같거나 낮은 위계**의 계정에만 노출·허용된다(`UserRole.CanManage`, `RoleActionVisibilityConverter`). 예) manager는 admin 계정을 삭제/PIN 재설정할 수 없다. PIN 재설정은 it16부터 **여기에 `IsPower()`가 더해진다**([1.3](#13-canmanage--관리-위계-판정)). UI 미노출과 VM 명령 가드로 이중 방어하고 서버가 최종 강제한다.
+- **사용자 관리 액션의 역할 위계**(사실): **삭제**는 행위자와 **같거나 낮은** 위계의 계정에만 노출·허용된다(`UserRole.CanManage`, `RoleActionVisibilityConverter` + `IsPower`). **PIN 재설정만 한 칸 좁다** — power + **엄격히 낮은** 위계(`UserRole.CanResetPin`)라서 매니저는 다른 매니저의 PIN을 재설정할 수 없다(관리자 전용, [1.3.1](#131-canresetpin--pin-재설정-전용-판정-엄격히-낮은-위계)). 두 액션 모두 manager는 admin 대상 불가. UI 미노출과 VM 명령 가드로 이중 방어하고 서버가 최종 강제한다.
 - **프레임 권한은 `IsPower`가 아니라 `CanWriteFrames` 축**(사실, it16): 고급 유저는 프레임을 만들 수 있지만 계정 관리·공용 DB 등록은 못 한다. 두 축을 혼용하면 조용한 권한 오판이 된다([1.2](#12-canwriteframes--프레임-저작-권한-축-it16-신규)).
 - **프레임 권한을 잃은 계정의 기존 프레임은 읽기 전용으로 남는다**(사실, it16 E4): 목록 노출·촬영 사용은 유지하고 편집·삭제 UI만 사라진다. 파일 삭제·소유권 이전·마이그레이션은 **하지 않는다**.
 - **설정 페이지는 역할 게이트가 없다**(사실): `OpenSettings`에 역할 검사는 없고 **로그인 사용자에 대한 PIN 게이트**만 있다(it14·it15). 게스트는 여전히 무가드이며, 계정·관리자 기능은 `Account`/`UserMgmt`로 분리돼 있으므로 앱 설정 자체는 키오스크 운영자가 접근하는 열린 화면이라는 것이 코드상 현재 상태다.
@@ -337,7 +352,7 @@ public static bool CanWriteFrames(this UserRole role)
 | `SetRoleAsync(id, role)` | `PATCH /accounts/{id}/role` | `requirePower` + `canSetRole` 매트릭스 | 상동 | `:105-118`; `routes/accounts.ts:110-122` |
 | `VerifyPinAsync(id, pin)` | `POST /accounts/me/pin/verify` | `requireBearer`(본인 `principal.id` 고정) | 401→`false`, 409(PIN 미설정)·네트워크→**예외 전파**(fail-open 금지) | `:122-143`; `routes/accounts.ts:54-69` |
 | `SetOwnPinAsync(id, currentPin?, newPin)` | `PUT /accounts/me/pin` | `requireBearer`(본인). 기존 PIN 있으면 `currentPin` 확인 | 401(현재 PIN 불일치)·404→`InvalidOperationException`, 400→`ArgumentException` | `:145-162`; `routes/accounts.ts:73-91` |
-| `ResetPinAsync(targetId, newPin)` | `PUT /accounts/{id}/pin` | **`requirePower`(it16 추가)** + `canManage`, 자기 자신은 400 | 403→`UnauthorizedAccessException` | `:164-179`; `routes/accounts.ts:131-148` |
+| `ResetPinAsync(targetId, newPin)` | `PUT /accounts/{id}/pin` | `requirePower` + **`canResetPin`(엄격히 낮은 위계 — 동급 403)**, 자기 자신은 400 | 403→`UnauthorizedAccessException` | `:164-179`; `routes/accounts.ts:131-151` |
 
 - **없는 메서드**(전부 it15 폐지): `LoginAsync`·`VerifyPasswordAsync`·`RegisterAsync`·`CreateAsync`·`ChangePasswordAsync`·`EnsureSeedAccountAsync`와 이메일 인증/재설정 계열. 서버 라우트도 함께 사라졌다(`routes/accounts.ts:5`, `routes/auth.ts:4-6`).
 - `me/pin*` 라우트는 파라미터 라우트(`/:id/pin`)보다 **먼저** 등록해 `"me"`가 `:id`로 잡히지 않게 한다(`routes/accounts.ts:50`).
@@ -388,11 +403,12 @@ UI 안내: `UserMgmtViewModel.DeleteUser`는 자기 계정 삭제를 막고(`src
 | 항목 | 현재 상태(사실) | 개선 여지 |
 | --- | --- | --- |
 | PIN 서버 측 시도 제한 | 서버 잠금 **없음**(`services/accounts.ts:86` 주석 — 계정 단위 잠금은 타인 락아웃=DoS 도입). 완화는 클라 2건(5회 실패 시 창 닫힘 + 1.5초 쿨다운)뿐이며 앱을 다시 열면 카운터가 초기화된다 | 4자리 = 10,000 조합. 물리 접근자의 반복 시도는 여전히 가능 → IP/계정 단위 rate limit(Cloud Armor 등) 검토([it15 설계 §5.6](../design/wpf-it15-google-only-auth-design.md) R1) |
-| admin PIN 분실 시 앱 내 복구 경로 | **없음**. 자기 자신 대상 PIN 재설정은 서버가 400으로 거부하고(`routes/accounts.ts:141-143`), 타 계정 재설정(E3)은 `canManage`상 admin을 대상으로 삼을 수 없다 | 현재 유일한 복구는 CLI: `node web/functions/scripts/migrate-google-only-accounts.mjs --clear-pin <id> --apply`(firebase-admin 자격으로 해당 계정의 `pinHash` 필드를 지운다). 앱 내 복구(예: 두 번째 admin 승인)는 미구현 |
+| admin PIN 분실 시 앱 내 복구 경로 | **없음**. 자기 자신 대상 PIN 재설정은 서버가 400으로 거부하고, 타 계정 재설정(E3)은 `canResetPin`상 admin을 대상으로 삼을 수 없다(상위도 **동급도** 불가 — 두 번째 admin이 있어도 서로 복구해 줄 수 없다) | 현재 유일한 복구는 CLI: `node web/functions/scripts/migrate-google-only-accounts.mjs --clear-pin <id> --apply`(firebase-admin 자격으로 해당 계정의 `pinHash` 필드를 지운다). 앱 내 복구(예: 두 번째 admin 승인)는 미구현 |
 | ~~로그아웃 시 JWT 미소거~~ | **해소(2026-07-29)**: `BackendSessionSynchronizer`가 `CurrentUserChanged` 구독으로 게스트 전환 시 토큰을 폐기한다([3.5](#35-로그아웃--세션-유지-규칙중요)) | — |
+| 삭제·PIN 재설정 위계 비대칭 | **삭제는 동급 허용**(`canManage` — manager가 다른 manager 계정을 삭제할 수 있다), **PIN 재설정만 동급 차단**(`canResetPin`). PIN 축만 좁힌 것은 `canManage`가 `deleteAccount`와 공유되기 때문이다([1.3.1](#131-canresetpin--pin-재설정-전용-판정-엄격히-낮은-위계)) | (가정) 동급 삭제도 과대 권한일 수 있다 → 삭제에 `canDeleteAccount`(엄격히 낮은 위계) 축을 도입하는 안. 착수 전 확인 필요: 마지막 admin 자기 삭제·매니저 정리 동선에 영향 |
 | 세션 만료 | 유휴는 홈 복귀만, 로그인은 앱 수명 동안 유지(`AppShellViewModel.cs:354`). 서버 JWT는 기본 8시간 만료(`web/functions/src/config.ts:78`)이나 클라에 **갱신·만료 감지 경로가 없다** | (가정) 만료 후 첫 계정 조작이 401로 실패할 때 "다시 로그인" 유도 UX 부재. 파워 계정 자동 로그아웃 정책도 없음 |
 | 설정 페이지 역할 게이트 | 역할 검사 없음 — 로그인 사용자는 PIN, 게스트는 무가드(`AppShellViewModel.cs:376-384`) | (가정) 운영자 전용 게이트 검토 여지. 키오스크 운영 동선상 현행 유지가 기본 |
-| 인증 수단 확장 | `authMethod`는 `"google"` 고정. 클라 `ParseAuthMethod`는 그 외 값을 `Unknown`으로 떨어뜨린다(`User.cs:39-40`) | Kakao·Apple 추가 시 enum 값 + 매핑 1줄 + 서버 provider 검증이 필요. 웹·Android 확장은 OAuth 클라이언트 유형이 별도([90 §7](./90-roadmap-and-future-work.md#7-향후-플랫폼-확장--웹--android-추후-논의)) |
+| 인증 수단 확장 | `authMethod`는 `"google"` 고정. 클라 `ParseAuthMethod`는 그 외 값을 `Unknown`으로 떨어뜨린다(`User.cs:39-40`) | Kakao·Apple 추가 시 enum 값 + 매핑 1줄 + 서버 provider 검증이 필요. iOS·Android·웹 확장은 OAuth 클라이언트 유형이 별도이며 **서버 확장 3건(리디렉트 허용 목록·audience 목록·client_secret 조건부)이 선행**돼야 한다([61 §4](./61-auth-platform-integration.md), 블로커 목록 [90 §7.2](./90-roadmap-and-future-work.md)) |
 | ~~비밀번호 해싱~~ | **소멸(it15)**: 비밀번호 인증이 폐지돼 저장할 비밀번호가 없다. 남은 자격증명 `pinHash`는 bcrypt(`web/functions/src/domain/password.ts`) | — |
 | ~~SSO / 외부 인증 미지원~~ | **해결(it15)**: Google SSO가 **유일한** 로그인 수단이다([3.3](#33-로그인-실행--google-sso-단일-경로)) | 추가 IdP는 위 "인증 수단 확장" 항목 |
 | ~~로그인 시도 제한(id/pw 브루트포스)~~ | **소멸(it15)**: id/pw 로그인 경로가 없다. Google이 인증 시도를 책임진다 | 게이트 브루트포스는 위 "PIN 서버 측 시도 제한" 항목으로 대체 |

@@ -1,17 +1,18 @@
 ---
 name: it16-permission-axes
-description: it16 권한 축 3개(IsPower·CanWriteFrames·CanManage)의 역할 분리 — 혼용 금지 규칙과 CanDelete가 소유자를 안 보는 이유
+description: 권한 축 4개(IsPower·CanWriteFrames·CanManage·CanResetPin)의 역할 분리 — 혼용 금지 규칙, PIN 재설정만 동급 차단인 이유, CanDelete가 소유자를 안 보는 이유
 metadata:
   type: project
 ---
 
-it16부터 MCPhoto 클라이언트에는 **서로 대체 불가능한 권한 축 3개**가 있다. 하나로 합치려는 시도를 하지 말 것.
+MCPhoto 클라이언트에는 **서로 대체 불가능한 권한 축 4개**가 있다. 하나로 합치려는 시도를 하지 말 것.
 
 | 축 | 정의 | 통과 역할 | 용도 |
 |---|---|---|---|
 | `IsPower()` | 계정 관리 + 공용 DB 프레임 관리 | Manager, Admin | 사용자 관리 화면, DB 프레임 쓰기, "서버에서도 제거" |
 | `CanWriteFrames()` | 프레임 **저작**(생성·편집·삭제) | AdvancedUser, Manager, Admin | 프레임 만들기/선택 편집/삭제 ✕ 노출, `Save()` 가드 |
-| `CanManage(target)` | 대상이 자신과 **같거나 낮은** 위계 | 전 역할(위계 비교) | 관리 액션의 **보조** 조건 |
+| `CanManage(target)` | 대상이 자신과 **같거나 낮은** 위계 | 전 역할(위계 비교) | **삭제**의 보조 조건(`IsPower`와 2항) |
+| `CanResetPin(target)` | `IsPower()` + 대상이 **엄격히 낮은** 위계 | Manager, Admin(대상 제한) | **타 계정 PIN 재설정 단독 게이트** |
 
 **Why:**
 - `AdvancedUser`는 `CanWriteFrames=true`인데 `IsPower=false`다. 둘을 섞으면 고급 유저가 계정 관리·공용 DB
@@ -19,10 +20,13 @@ it16부터 MCPhoto 클라이언트에는 **서로 대체 불가능한 권한 축
   훗날 관리 위계에 역할이 끼어들 때 저작 권한이 조용히 따라 움직인다(명시 열거 유지).
 - `CanManage` **단독으로 관리 게이트를 만들면 구멍이 난다.** it15까지 `CanResetPin = !isSelf && CanManage(...)`
   였고, 같은 위계를 허용하므로 `user`가 다른 `user`의 PIN을, `temp_user`가 다른 `temp_user`의 PIN을
-  재설정할 수 있었다. it16에서 `IsPower()` 항을 추가해 막았다. 관리 액션 게이트는 항상
-  **`IsPower() && CanManage(target)`** 2항이다(서버 `requirePower + canManage`와 대칭).
-- `canManage`의 의미를 "엄격히 높은 위계"로 좁히는 안은 채택하지 않았다 — 계정 삭제와 공유되므로
-  admin↔admin·manager↔manager 삭제가 회귀한다.
+  재설정할 수 있었다. it16에서 `IsPower()` 항을 추가했고(서버 `requirePower`와 대칭), **2026-07-30에
+  동급까지 차단**했다 — `UserRoleExtensions.CanResetPin`(↔ 서버 `domain/roles.ts canResetPin`) 하나로
+  판정하며 매니저는 다른 매니저의 PIN을 재설정할 수 없다(**매니저 PIN은 admin 전용**, admin↔admin도 차단).
+  PIN은 설정·계정 관리 진입의 **유일한 자격증명**이라 동급 상호 재설정이 과대 권한이기 때문이다.
+- `canManage`의 의미 자체는 **여전히 좁히지 않는다** — 계정 삭제(`deleteAccount`)와 공유되므로
+  admin↔admin·manager↔manager 삭제가 회귀한다. PIN만 별도 축(`CanResetPin`)으로 분리한 이유가 이것이다.
+  결과로 **삭제는 동급 허용, PIN 재설정은 동급 차단**인 비대칭이 남아 있다(의도된 현재 상태).
 
 **How to apply:**
 - `FrameEditPolicy.CanDelete(frame, role)`는 **소유자(userId)를 보지 않는다.** power가 fork·저장한 공용 로컬

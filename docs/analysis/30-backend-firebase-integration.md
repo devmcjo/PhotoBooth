@@ -11,6 +11,8 @@
 > 표기 규칙: 근거는 `파일:라인`. **가정**으로 표시한 항목은 소스에서 직접 확인되지 않은 추정.
 >
 > ⚠️ 파일명 `30-backend-firebase-integration.md`는 타 문서 링크 보존을 위해 유지한다. 내용의 기준은 "Admin SDK 직결"이 아니라 **백엔드 API 경유**다.
+>
+> 🆕 **새 클라이언트를 구현한다면 [31 · 백엔드 API 참조](./31-backend-api-reference.md)를 보라.** 이 문서는 **설계 의도와 실패 정책**(왜 선택적 Bearer인가, 왜 한도는 서버가 진실원인가, 미도달 시 무엇이 fail-open/fail-closed인가)을 다루고, 31번이 **요청/응답 JSON·헤더·상태코드·검증 규칙**을 전수로 다룬다. 둘은 보완 관계이며 §4의 엔드포인트 카탈로그는 31번 §4의 요약이다.
 
 ---
 
@@ -139,7 +141,7 @@ Http 구현 4종(`HttpFirebaseClient`·`HttpFrameRepository`·`HttpAccountServic
 | `GET /accounts/me/qr-usage` | Bearer | `routes/accounts.ts:43` | `HttpQrUsageService.GetStatusAsync`(`:29`) |
 | `POST /accounts/me/pin/verify` | Bearer(본인) | `routes/accounts.ts:54` | `VerifyPinAsync`(`:122`) |
 | `PUT /accounts/me/pin` | Bearer(본인) | `routes/accounts.ts:73` | `SetOwnPinAsync`(`:145`) |
-| `PUT /accounts/{id}/pin` | Bearer + 파워(+`canManage`) | `routes/accounts.ts:131` | `ResetPinAsync`(`:164`) |
+| `PUT /accounts/{id}/pin` | Bearer + 파워(+`canResetPin` — 엄격히 낮은 위계) | `routes/accounts.ts:131` | `ResetPinAsync`(`:164`) |
 | `GET /config/temp-user-limits` | Bearer | `routes/config.ts:27` | `GetLimitsAsync`(`:28`) |
 | `PATCH /config/temp-user-limits` | Bearer + admin | `routes/config.ts:35` | `SetLimitsAsync`(`:42`) |
 | `GET /frames/default` | API키(게스트 가능) | `routes/frames.ts:32` | `GetDefaultFramesAsync`(`:41`) |
@@ -252,7 +254,7 @@ Http 구현 4종(`HttpFirebaseClient`·`HttpFrameRepository`·`HttpAccountServic
 | `SetRoleAsync(id, role)` | `PATCH /accounts/{id}/role` | `actingRole`은 서버가 JWT에서 도출(클라 전달값 무시) | `HttpAccountService.cs:105-118` |
 | `VerifyPinAsync` | `POST /accounts/me/pin/verify` | 401 → `false`(불일치). 409(PIN 미설정)·기타는 예외 전파 → 게이트는 **fail-closed** | `HttpAccountService.cs:122-143` |
 | `SetOwnPinAsync` | `PUT /accounts/me/pin` | 기존 PIN 있으면 `currentPin` 필수, 최초 설정이면 생략 | `HttpAccountService.cs:145-162` |
-| `ResetPinAsync(targetId, newPin)` | `PUT /accounts/{id}/pin` | 파워 + `canManage` 필요. 본인 대상은 400 | `HttpAccountService.cs:164-179`, `routes/accounts.ts:126-143` |
+| `ResetPinAsync(targetId, newPin)` | `PUT /accounts/{id}/pin` | 파워 + `canResetPin`(대상이 **엄격히 낮은 위계**, 동급 403 — 매니저 PIN은 admin 전용) 필요. 본인 대상은 400 | `HttpAccountService.cs:164-179`, `routes/accounts.ts:124-151` |
 
 - Google 로그인은 서버가 code를 교환하고 id_token을 검증한 뒤, 검증된 email로 계정을 **자동 생성(temp_user)/매핑**한다(`routes/auth.ts:86-95`). 검증 실패 사유는 로그에만 남기고 401로 일반화한다(계정 열거 방지).
 - 자격증명 계약에 **비밀번호는 존재하지 않는다**(`HttpAccountService.cs:181`). 권한 매트릭스·PIN 게이트 흐름은 [60번](./60-auth-accounts-and-roles.md)이 단일 진실이다.

@@ -56,7 +56,7 @@
   (기존 문서는 전부 기존 4값 중 하나이고 그 의미가 바뀌지 않는다. `user`가 프레임 저작 권한을 잃는 것은 **클라 정책 변경**이며 문서 값 변경이 아니다).
 - **`role` 쓰기 게이트**: `PATCH /accounts/:id/role`은 `requirePower()` + `canSetRole(actor, current, target)` 매트릭스를 통과해야 한다
   (manager는 하위 3역할 대역 `temp_user`·`user`·`advanced_user` 안에서 자유 지정, manager·admin 지정은 admin 전용, admin 대상·admin 지정은 누구도 불가).
-  `PUT /accounts/:id/pin`(타 계정 PIN 재설정)도 it16부터 **`requirePower()`** 를 요구한다(비power 403).
+  `PUT /accounts/:id/pin`(타 계정 PIN 재설정)은 **`requirePower()` + `canResetPin`**(대상이 **엄격히 낮은 위계** — 동급 403, 매니저 PIN은 admin 전용)을 요구한다.
   전수 표는 [60 §1.4](./60-auth-accounts-and-roles.md#14-역할-지정변경-매트릭스).
 - **미지원 `role` 값**: `parseRole`/`ParseRole`이 `user`로 폴백한다. it16 이후 `user`는 프레임 쓰기 권한이 없어 **fail-closed 방향**이다.
 - **클라 응답(`UserResponse`)**: `{id, role, createdAt(ISO8601), email, authMethod, hasPin}`.
@@ -242,7 +242,9 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 
 ## 관련 문서
 
+- [31 · 백엔드 API 참조](./31-backend-api-reference.md) — 이 스키마가 **와이어에서 어떤 JSON으로 보이는지**(요청/응답 전수). 새 클라이언트는 문서 스키마가 아니라 와이어 계약을 구현한다
 - [30 · 백엔드 API 연동](./30-backend-firebase-integration.md) — 인증 게이트·업로드 3단계·프레임/계정 흐름·미도달 시 동작
 - [60 · 인증·계정·역할](./60-auth-accounts-and-roles.md) — `users.role` 위계·권한 매트릭스·PIN 게이트
 - [50 · 인프라 보관/만료](./50-infra-gcp-lifecycle-and-ttl.md) — Lifecycle·TTL 적용 절차
+- [41 · 로컬 데이터·파일 포맷](./41-local-data-and-file-formats.md) — 클라이언트 로컬 저장(프레임 `.slots` 등). **이 문서 범위 밖이었던 로컬 스키마**가 여기 있다
 - 인덱스: [README](./README.md)

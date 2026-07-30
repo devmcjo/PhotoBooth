@@ -26,6 +26,7 @@
 | 프레임 편집 fork 시 옛 이름 파일 잔존 | 고급 유저가 자기 로컬 프레임 **이름을 바꿔 저장**하면 `SaveLocal`이 새 파일명으로만 쓰기 때문에 옛 `{계정}_{옛이름}.png`/`.slots`가 남는다(it15 이전부터의 기존 동작, 범위 밖으로 유지) | `Core/Frames/LocalFrameStore.cs` | 대기: 이름 변경 시 옛 파일 정리 여부 결정 필요(삭제 vs 유지) |
 | ~~설정 저장 시 창모드 창이 옛 위치·크기로 점프~~ | 창모드에서 설정을 저장하면 창이 ini에 남아 있던 과거 `WindowBounds`로 점프하고, 최대화 상태로 저장하면 `WindowState=Normal` 강제로 원복됐다. 원인은 `ApplyDisplaySettings`가 ① 시작 복원과 ② 런타임 모드 변경을 겸하면서 **동일 모드 저장에도 기하를 재적용**한 것(`WindowBounds`는 창 닫을 때만 갱신됐다) | `App/MainWindow.xaml.cs`, `App/ViewModels/SettingsViewModel.cs`, `Core/Settings/DisplayApplyPolicy.cs` | **수정 완료(it16, 2026-07-29)**: 순수 정책 `DisplayApplyPolicy` 신설 + `_appliedMode` 도입으로 **모드가 실제로 바뀔 때만** 창에 손댄다(동일 모드 저장은 완전 무동작). 저장 직전 현재 창 기하를 캡처해 `WindowBounds`를 신선하게 유지한다. 전체화면 ↔ 창모드 즉시 전환(it9 후속)은 유지. 상세 [11 §16](./11-exe-app-features.md#16-표시-모드전체화면창모드) |
 | ~~`PUT /accounts/:id/pin` power 게이트 누락~~ | 타 계정 PIN 재설정 라우트가 로그인 + `canManage`(같은 위계 허용)만 요구해 **`temp_user`가 다른 `temp_user`의 PIN을 재설정**할 수 있었다. 형제 라우트(`DELETE /accounts/:id`·`PATCH /accounts/:id/role`)에는 있던 `requirePower()`가 PIN에만 빠져 있었고, it15로 신규 SSO 계정이 전원 `temp_user`가 되며 모집단이 커졌다 | `web/functions/src/routes/accounts.ts`, `App/ViewModels/UserMgmtViewModel.cs` | **수정 완료(it16, 2026-07-29)**: 라우트에 `requirePower()` 추가(비power 403) + 클라 `CanResetPin`·커맨드 가드에 `IsPower()` 항 추가. `canManage` 자체는 **무변경**(`deleteAccount`와 공유 — 좁히면 admin↔admin 삭제가 회귀). 본인 PIN 변경(`PUT /accounts/me/pin`)은 영향 없음 |
+| ~~매니저가 다른 매니저의 PIN을 재설정할 수 있었다~~ | PIN 재설정 판정이 `IsPower() && CanManage(target)`이고 `CanManage`가 **동급을 허용**하므로 manager가 다른 manager(및 admin이 다른 admin)의 진입 PIN을 갈아치울 수 있었다. PIN은 설정·계정 관리 진입의 **유일한 자격증명**이라 동급 상호 재설정은 과대 권한이다 | `Core/Models/UserRole.cs`, `App/ViewModels/UserMgmtViewModel.cs`, `web/functions/src/domain/roles.ts`, `web/functions/src/services/accounts.ts` | **수정 완료(2026-07-30)**: PIN 전용 판정축 신설 — `CanResetPin(acting, target) = IsPower(acting) && ManageRank(target) < ManageRank(acting)`(클라) ↔ `canResetPin`(서버, `resetOtherPin`이 `canManage` 대신 호출). **매니저 PIN은 admin만** 재설정 가능하고 admin↔admin도 차단된다. `canManage`는 **무변경**(`deleteAccount`와 공유) → 삭제는 동급 허용이 남는 비대칭이며 [60 §5](./60-auth-accounts-and-roles.md#5-향후-개선-여지현재-비범위)에 후속 후보로 기록. 상세 [60 §1.3.1](./60-auth-accounts-and-roles.md#131-canresetpin--pin-재설정-전용-판정-엄격히-낮은-위계) |
 | power가 fork 저장한 공용 로컬 프레임을 다시 편집할 수 없다 | 공용 스코프 저장분은 `UserId=null`로 로드되어 `FrameEditPolicy.CanEdit`의 `UserLocal → IsOwnedLocal` 판정에서 탈락한다. it15부터의 성질이며 it16 범위(역할 재배분)와 무관해 손대지 않았다 | `Core/Frames/FrameEditPolicy.cs`, `Core/Frames/LocalFrameStore.cs` | 대기: `DbDefault`처럼 power 우회를 둘지, 공용 로컬분에 소유자 메타를 남길지 결정 필요 |
 | 공용 로컬 프레임 삭제가 소유자·power로 제한되지 않음 | `FrameEditPolicy.CanDelete`는 **소유자를 보지 않는다** — 프레임 쓰기 권한(고급 유저 이상)이면 다른 power가 fork 저장한 공용 로컬 프레임의 파일을 지울 수 있다(서버 문서는 불변). it15에서도 `user`가 가능했던 **기존 성질**이며, it16은 "고급 유저 = it15 user 권한 전체"를 확정했으므로 좁히지 않았다 | `Core/Frames/FrameEditPolicy.cs` | 대기: 좁히려면 공용 로컬 저장분에 소유자 식별 수단이 먼저 필요(위 항목과 한 덩어리) |
 | `CreatableRoles`/`canCreate` 데드코드 | it15의 계정 생성 폐지로 프로덕션 호출자가 0(테스트만 참조). it16에서 목록만 새 역할 매트릭스와 맞춰 드리프트를 막았다 | `Core/Models/UserRole.cs`, `web/functions/src/domain/roles.ts` | 대기: 제거 시 관련 테스트까지 연쇄 — 계정 생성 재도입 가능성 판단 후 결정 |
@@ -101,13 +102,67 @@
  - 적당한 위치가 있다면 작성하면 좋겠어. (예를들면 현재 버전을 작성하는 곳을 앱 하단으로 지정했는데, 제거하고, 별도로 설정 안에 "버전 확인"과 같은 버튼을 만들고 모달을 띄울 때, 개발자 문의 라는 공간을 만들어도 될 것 같아.)
  - 내 개발자 이메일은 devmcjo@gmail.com 이니까 이부분도 참고해서 만들어주면 좋을 것 같아.
 
-## 7. 향후 플랫폼 확장 — 웹 · Android (추후 논의)
+## 7. 향후 플랫폼 확장 — iOS · iPadOS · Android · macOS · 웹
 
-> 2026-07-27 사용자 확정: **웹·Android 버전도 추후 개발 예정.** 지금은 기록만; 착수 시 재논의.
+> 2026-07-27 사용자 확정: **웹·Android 버전도 추후 개발 예정.**
+> 2026-07-30: **iOS·iPadOS·macOS 포함으로 범위 확대 + 문서 계층 정비 완료.** 착수 전 §7.2 블로커 해소 필요.
 
-- 현재 Google SSO OAuth 클라이언트는 **Desktop app 유형 1개**(WPF 키오스크용, client_id `712395684881-l66o...apps.googleusercontent.com`, loopback+PKCE)뿐이다.
-- 웹/Android는 **각각 별도 OAuth 클라이언트 유형**이 필요하다(공유 불가):
-  - **웹**: "웹 애플리케이션" 유형 — 정확한 리디렉션 URI 등록 필요. 브라우저는 client_secret 은닉 불가라 PKCE/서버 교환 설계 필요.
-  - **Android**: "Android" 유형 — 패키지명 + SHA-1 지문 등록.
-- 백엔드(`/auth/google` code 교환·verifyIdToken)는 **audience(client_id) 다중 허용**으로 확장하면 재사용 가능(현재는 단일 `GOOGLE_OAUTH_CLIENT_ID`). 착수 시 config를 client_id 목록으로 일반화 검토.
-- 동의 화면·이메일 인증·계정/역할 백엔드는 플랫폼 공통(재사용). UI/OAuth 리디렉션만 플랫폼별.
+### 7.1 문서 준비 상태 (2026-07-30 완료)
+
+멀티플랫폼 클라이언트 개발용 **플랫폼 중립 규격 문서 6종**을 신설했다. 착수 시 이 문서들이 진실원이다.
+
+| 문서 | 내용 |
+|------|------|
+| [05 · 멀티플랫폼 가이드](./05-cross-platform-client-guide.md) | 진입·용어 사전·프로파일(P1~P4)·기능×플랫폼 지원 매트릭스·**Windows 전용 항목**·불변식 16개·**서버 블로커 8건** |
+| [13 · 클라이언트 동작 규격](./13-client-behavior-spec.md) | 화면·상태 전이·흐름·타이밍 상수·검증·사용자 문구 |
+| [14 · 미디어 파이프라인 규격](./14-media-pipeline-spec.md) | 카메라·크롭·슬롯 기하·합성·필터·녹화/타임랩스 |
+| [31 · 백엔드 API 참조](./31-backend-api-reference.md) | 전 엔드포인트 와이어 계약 |
+| [41 · 로컬 데이터·파일 포맷](./41-local-data-and-file-formats.md) | 설정 키·프레임 `.slots`·세션 공간·플랫폼별 위치 |
+| [61 · 플랫폼별 인증 통합](./61-auth-platform-integration.md) | OAuth 플랫폼별 흐름·서버 확장 설계 제안·JWT·PIN |
+
+설계 관점(계층 분리·권장 스택·마일스톤)은 [`docs/design/multiplatform-client-architecture.md`](../design/multiplatform-client-architecture.md).
+
+### 7.2 착수 블로커 — 서버·인프라 변경 (전부 미착수)
+
+| # | 항목 | 상태 |
+|---|------|------|
+| **B1** | `/auth/google`의 `redirectUri`가 **http loopback만** 허용 → 커스텀 스킴·https 리디렉트 400 거부 | **대기** — 허용 목록 방식으로 확장([61 §4.1](./61-auth-platform-integration.md)) |
+| **B2** | audience가 단일 `GOOGLE_OAUTH_CLIENT_ID` 고정 | **대기** — client_id 목록으로 일반화([61 §4.2](./61-auth-platform-integration.md)) |
+| **B3** | code 교환에 client_secret을 **항상** 사용 → iOS/Android 유형 클라이언트(secret 없음)는 교환 실패 | **대기** — 유형별 조건부 분기([61 §4.3](./61-auth-platform-integration.md)) |
+| **B4** | 배포 게이트 키를 브라우저에 두면 **완전 공개** | **대기** — 웹용 별도 키 + 사용처 제한, 또는 웹은 게이트 키 불요 경로만 사용 |
+| **B5** | 브라우저에서 서명 URL PUT 시 **Storage 버킷 CORS** 미구성 | **대기** — `PUT`·`Content-Type`·`x-goog-meta-firebaseStorageDownloadTokens` 허용 필요 |
+| **B6** | 타임랩스 배속 변환이 클라이언트 책임 → 웹은 수단 없음 | **대기** — "타임랩스 미제공"으로 축소 vs 서버 변환 도입 결정 |
+| **B7** | 최소 지원 버전·강제 업데이트 신호 없음(`/health`는 `status`·`time`·`deployedAt`만) | **대기** — 스토어 배포 시 필요 |
+| **B8** | `authMethod`가 `"google"` 고정. iOS는 **Sign in with Apple 병행 요구** 가능 | **대기** — enum 확장 + 서버 provider 검증 + 동일 인물 계정 통합 정책 결정 |
+
+### 7.2.1 웹 클라이언트 범위 판정 (2026-07-30 — 결정 대기)
+
+웹은 다른 플랫폼과 달리 **계약·불변식을 만족할 수 없는 항목**이 있어 범위를 별도로 판정했다. 기능별 사실은 [05 §7.4](./05-cross-platform-client-guide.md), 판단 근거는 [`design/multiplatform-client-architecture.md` §4.3](../design/multiplatform-client-architecture.md).
+
+| 프로파일 | 제안 | 막히는 이유 |
+|----------|------|-------------|
+| P1 소비자 | **지원**(현행) | — |
+| P4 운영 | **지원 — 웹 주력 권장** | — (게이트 키도 불필요) |
+| P3 공용 프레임 저작(power) | **지원** | — (진실원이 서버) |
+| P3 개인 프레임 저작 | **제외** | 브라우저 저장소 영속 보장 불가(WebKit 약 7일 무상호작용 삭제) + **웹에 그 프레임의 소비자가 없다**(동기화 없음, 촬영은 키오스크에서) |
+| **P2 촬영** | **제외 권장** | ① 타임랩스: 서버가 `mp4`/`video/mp4`만 허용하는데 `MediaRecorder` 산출을 보장할 수 없다 → 400 ② **불변식 M6 위반**: 로컬 저장을 업로드 이전에 완료할 수 없다 → 업로드 실패 시 **손님 사진 유실** ③ Fullscreen API는 ESC 탈출을 막을 수 없어 **무인 키오스크가 성립하지 않는다** |
+
+**결정 대기 항목**
+
+| # | 결정 | 상태 |
+|---|------|------|
+| **D4** | 웹 P2 촬영을 지원할 것인가(지원 시 **M6 포기를 명시 결정**해야 함) | **대기** — 미지원 권장 |
+| **D7** | 개인 프레임을 서버 저장으로 승격할 것인가 | **대기** — 서버 인프라는 이미 대부분 존재(`userId` 파라미터·10개 제한·경로 분기·cascade). 막고 있는 것은 `POST /frames`의 `userId=null, isDefault=true` 하드코딩과 `requirePower()` 게이트뿐. 도입하면 §1의 "공용 로컬 프레임 소유자 메타 부재" 2건도 함께 해소된다. `it8 A2` 정책 변경이므로 사용자 결정 필요 |
+| — | 웹 P3 공용 프레임 저장에 필요한 **Storage 버킷 CORS**(B5) | **대기** — 웹 P3 착수 전 선행 |
+
+### 7.3 재사용 가능한 것 (확장 불필요)
+
+- 계정·역할·권한 백엔드(`/accounts`·`/config`), 업로드 3단계(`/uploads`), 프레임 조회·생성(`/frames`), Firestore/Storage 스키마, 보안 규칙, 보관·만료 인프라는 **플랫폼 공통**이다.
+- CORS는 이미 `origin: true`로 열려 있어 브라우저 클라이언트가 API를 호출할 수 있다.
+- 서버 게이트 키는 CSV로 **다수 키를 지원**하므로 플랫폼별 키 발급이 가능하다.
+
+### 7.4 OAuth 클라이언트 현황
+
+- 현재 등록된 것은 **Desktop app 유형 1개**(Windows 키오스크용, client_id `712395684881-l66o...apps.googleusercontent.com`, loopback + PKCE)뿐이다.
+- 필요한 추가 유형(**공유 불가**): **iOS**(번들 ID) · **Android**(패키지명 + SHA-1 지문 — 디버그·릴리스·Play 앱 서명 각각) · **Web application**(정확한 리디렉션 URI 등록).
+- 동의 화면·계정/역할 백엔드는 플랫폼 공통(재사용). UI와 OAuth 리디렉션만 플랫폼별이다.

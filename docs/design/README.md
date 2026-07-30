@@ -1,0 +1,77 @@
+# MC포토 설계 문서 (docs/design)
+
+기능·구조 결정의 **근거와 대안 검토 과정**을 남긴 설계 문서 모음입니다. "현재 무엇이 어떻게 동작하는가"는 [`docs/analysis`](../analysis/README.md)가 진실원이고, 이 폴더는 **"왜 그렇게 결정했는가"** 를 남깁니다.
+
+| 항목 | 값 |
+|------|-----|
+| 최종 업데이트 | 2026-07-30 (인덱스 신설 + 멀티플랫폼 클라이언트 아키텍처 설계 추가) |
+| 갱신 규칙 | 새 설계 문서를 추가하면 이 인덱스의 해당 절에 등재한다. 이터레이션이 완료돼 내용이 `docs/analysis`에 흡수되면 §4로 옮긴다 |
+
+---
+
+## 0. 어느 문서를 봐야 하나
+
+| 하려는 일 | 읽을 문서 |
+|-----------|-----------|
+| **다른 플랫폼(iOS·iPadOS·Android·macOS·웹) 클라이언트를 만든다** | [멀티플랫폼 클라이언트 아키텍처](./multiplatform-client-architecture.md) → 그다음 [`docs/analysis/05`](../analysis/05-cross-platform-client-guide.md) |
+| 백엔드 API를 확장한다 | [백엔드 프록시 전환 설계](./wpf-backend-proxy-migration-design.md) + [`docs/analysis/31`](../analysis/31-backend-api-reference.md) |
+| 인증·계정 모델을 바꾼다 | [it15 Google 전용 인증](./wpf-it15-google-only-auth-design.md) · [Google SSO 설계](./wpf-google-sso-design.md) · [it14 PIN 게이트](./wpf-it14-settings-pin-gate-design.md) |
+| 역할·권한을 바꾼다 | [it16 고급 유저 역할](./wpf-it16-advanced-user-role-design.md) · [it13 임시 유저 역할](./wpf-it13-temp-user-role-design.md) |
+| 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
+| 웹 다운로드 페이지를 바꾼다 | [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
+| Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
+
+---
+
+## 1. 플랫폼 중립 · 멀티플랫폼
+
+| 문서 | 범위 | 내용 |
+|------|------|------|
+| [multiplatform-client-architecture](./multiplatform-client-architecture.md) | **전 플랫폼** | 공통 코어 / 플랫폼 어댑터 경계, 플랫폼별 권장 스택, 프로파일별 범위, 마일스톤, 검증 전략, 서버 확장 의존성 |
+
+## 2. 플랫폼 무관 계약 · 백엔드
+
+| 문서 | 범위 | 내용 |
+|------|------|------|
+| [firebase-contract](./firebase-contract.md) | **전 플랫폼** | 생산자↔소비자 인터페이스 계약: Firestore 스키마·Storage 경로·토큰 URL·다운로드 페이지 URL·보안 규칙 요구사항·TTL 의미론. **요금제 전제 포함** |
+| [wpf-backend-proxy-migration-design](./wpf-backend-proxy-migration-design.md) | **전 플랫폼**(서버측) | 클라이언트의 Admin SDK 직결을 폐지하고 백엔드 API 경유로 전환한 설계. 엔드포인트·게이트·업로드 3단계의 근거 |
+| [wpf-it13-temp-user-role-design](./wpf-it13-temp-user-role-design.md) | **전 플랫폼** | 임시 유저 역할 + 무료 사용 한도(시간·횟수). 과금 안전을 서버가 담보하는 이유, prepare 선검사 + commit 트랜잭션 |
+| [wpf-it16-advanced-user-role-design](./wpf-it16-advanced-user-role-design.md) | **전 플랫폼** | 고급 유저 역할 도입. 프레임 저작 권한 축(`CanWriteFrames`)을 관리 권한(`IsPower`)과 분리한 근거, 역할 변경 매트릭스 |
+| [wpf-it15-google-only-auth-design](./wpf-it15-google-only-auth-design.md) | **전 플랫폼**(서버측) · 데스크톱(클라측) | 비밀번호 폐지 + Google SSO 단일화. 서버 검증 절차·와이어 형식 동결·PIN 완화 정책의 근거 |
+| [wpf-it14-settings-pin-gate-design](./wpf-it14-settings-pin-gate-design.md) | **전 플랫폼** | 진입 PIN 게이트. fail-closed 규약, 서버 잠금을 채택하지 않은 이유(DoS) |
+
+## 3. 특정 클라이언트 설계
+
+### 3.1 웹 (소비자 클라이언트)
+
+| 문서 | 내용 |
+|------|------|
+| [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
+| [web-wbs](./web-wbs.md) | 웹 작업 분해 |
+
+### 3.2 Windows 데스크톱 (WPF)
+
+> ⚠️ 아래 문서의 WPF·XAML·OpenCvSharp·ffmpeg·INI 관련 서술은 **Windows 구현 전용**이다. 다른 플랫폼은 [`docs/analysis`](../analysis/README.md)의 플랫폼 중립 규격(05·13·14·31·41·61)을 따른다.
+
+| 문서 | 내용 |
+|------|------|
+| [wpf-architecture](./wpf-architecture.md) | 전체 아키텍처(계층·MVVM·DI·상태머신·캡처 파이프라인) |
+| [wpf-wbs](./wpf-wbs.md) | 초기 작업 분해 |
+| [wpf-google-sso-design](./wpf-google-sso-design.md) | 데스크톱 OAuth(loopback + PKCE + 시스템 브라우저) 상세 |
+| [wpf-it15-frame-ux-design](./wpf-it15-frame-ux-design.md) | 프레임 편집 로컬 전용 정책·사본 분기·기존 프레임 불러오기 |
+| [wpf-frame-edit-completion-design](./wpf-frame-edit-completion-design.md) | 프레임 편집기 슬롯 배치·좌표 변환 |
+| [wpf-auth-ux-and-account-rules-design](./wpf-auth-ux-and-account-rules-design.md) | 로그인 UX·계정 규칙(일부는 it15에서 폐지 — 이력) |
+| [wpf-it10-server-connectivity-design](./wpf-it10-server-connectivity-design.md) · [wpf-it10-wbs](./wpf-it10-wbs.md) | 서버 연결 상태 표시 |
+| [wpf-it11-deferred-features-design](./wpf-it11-deferred-features-design.md) · [wpf-it11-wbs](./wpf-it11-wbs.md) | 재촬영·진단 화면·카메라 이름·업로드 진행률. **컷별 재촬영은 미구현**(설계만 존재) |
+| [wpf-it12-design](./wpf-it12-design.md) · [wpf-it12-wbs](./wpf-it12-wbs.md) | 설정 편집 게이트·레이아웃·버전 표기 조정 |
+
+---
+
+## 4. 문서 유효성 주의
+
+| 주의 | 내용 |
+|------|------|
+| **폐기된 서술** | it15 이전 문서에는 **id/pw 로그인·비밀번호·시드 계정·서비스 계정 키·`MCPhoto.Firebase` 직결**이 남아 있다. 모두 **이력**이며 현행이 아니다 |
+| **미구현 설계** | [wpf-it11-deferred-features-design](./wpf-it11-deferred-features-design.md)의 **컷별 재촬영**은 설계만 있고 구현되지 않았다(UI 배치 결정 대기, [`analysis/90 §2`](../analysis/90-roadmap-and-future-work.md)) |
+| **결정 대기** | [`analysis/90 §1`](../analysis/90-roadmap-and-future-work.md)이 미해결 항목의 **단일 진실**이다. 설계 문서에 있는 아이디어가 확정을 뜻하지는 않는다 |
+| **진실원 우선순위** | 실제 소스 > `docs/analysis` > `docs/design`. 설계 문서와 현행 동작이 다르면 **소스가 사실**이고 analysis를 갱신한다 |

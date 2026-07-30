@@ -10,6 +10,10 @@
 
 관련 문서: [10 Exe 앱 아키텍처](./10-exe-app-architecture.md) · [30 백엔드 API 연동](./30-backend-firebase-integration.md) · [40 Firestore/Storage 스키마](./40-database-firestore-and-storage-schema.md) · [60 인증/계정/역할](./60-auth-accounts-and-roles.md) · 인덱스 [README](./README.md)
 
+> ⚠️ **로그 경로·로그 문자열·PowerShell 명령은 Windows 데스크톱 구현 전용이다.** 다른 플랫폼 클라이언트는 자기 로그 위치·문자열을 갖는다.
+>
+> **다른 플랫폼에서 재사용할 수 있는 부분**: §4의 **증상 → 원인 매핑 논리**(카메라 미준비 / 업로드 실패 / 인코더 부재 / 설정 저장 실패 / 프레임 삭제 실패 / 만료 미삭제)와 §6.3의 **상태코드별 의미**, §6.4의 **미도달 시 파급 표**는 플랫폼 무관하다. 로그 규격(레벨·롤링·금지 항목)은 [41 §8](./41-local-data-and-file-formats.md), 상태코드 계약은 [31 §3](./31-backend-api-reference.md).
+
 ---
 
 ## 1. 로그 파일 실제 위치 (제일 먼저 볼 것)

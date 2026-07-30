@@ -10,6 +10,10 @@
 
 관련 문서: [10 아키텍처](./10-exe-app-architecture.md) · [11 기능 상세](./11-exe-app-features.md) · 인덱스 [README](./README.md)
 
+> ⚠️ **이 문서는 Windows 데스크톱 구현 참조다.** INI 파일 형식·3단 경로 폴백(`실행경로 → %ProgramData% → %LocalAppData%`)·`branding.ini`·`bldinfo.ini`·표시 모드/창 기하는 **Windows 고유 구현**이며 이식 대상이 아니다.
+>
+> **다른 플랫폼 클라이언트를 만든다면 [41 · 로컬 데이터·파일 포맷 규격](./41-local-data-and-file-formats.md)이 진실원이다** — 설정 **키 이름·기본값·범위·보정 규칙**은 계약이지만 **저장 형식·위치는 플랫폼 자유**다. 41번에 플랫폼별 저장 위치 대응표와 프레임 `.slots` 파일 포맷이 있다.
+
 ---
 
 ## 1. AppSettings 전 항목
