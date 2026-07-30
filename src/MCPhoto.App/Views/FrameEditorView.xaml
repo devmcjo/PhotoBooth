@@ -25,7 +25,7 @@
                 Background="{StaticResource Brush.Warning.Surface}"
                 CornerRadius="{StaticResource Radius.M}"
                 Visibility="{Binding IsCreateMode, Converter={StaticResource InverseBoolToVis}}">
-            <TextBlock Text="이 프레임 편집은 해당 PC에서만 적용됩니다. 서버의 기본 프레임은 변경되지 않으며, 다른 PC에는 반영되지 않습니다."
+            <TextBlock Text="이 프레임 편집은 이 PC에만 적용되며, 서버와 다른 PC에는 반영되지 않습니다."
                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Warning}"
                        TextWrapping="Wrap" />
         </Border>
@@ -46,73 +46,87 @@
             </Grid>
         </Border>
 
-        <!-- 컨트롤 패널 -->
-        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,40,40">
-            <TextBlock Text="{Binding EditorTitle}" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
+        <!-- 컨트롤 패널: 설정 스크롤 영역 + 항상 보이는 하단 고정 저장/취소 바.
+             SettingsView의 sticky 하단 바(A4)와 동일 패턴 — 항목이 많아 세로 공간이 부족해도
+             저장/취소가 화면 밖으로 밀려나지 않게 스크롤 영역 밖에 고정한다. -->
+        <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,40,40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <Button Content="이미지 불러오기" Click="OnLoadImage"
-                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,8" />
-            <!-- it15 F2: 기존 프레임의 이미지·슬롯을 복사해 새 프레임을 만든다(생성 모드 전용 — F2-D6). -->
-            <Button Content="기존 프레임 불러오기" Command="{Binding OpenFramePickerCommand}"
-                    Visibility="{Binding IsCreateMode, Converter={StaticResource BoolToVis}}"
-                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,20" />
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,4,16">
+                    <TextBlock Text="{Binding EditorTitle}" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
 
-            <TextBlock Text="프레임 이름" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20" />
+                    <Button Content="이미지 불러오기" Click="OnLoadImage"
+                            Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,8" />
+                    <!-- it15 F2: 기존 프레임의 이미지·슬롯을 복사해 새 프레임을 만든다(생성 모드 전용 — F2-D6). -->
+                    <Button Content="기존 프레임 불러오기" Command="{Binding OpenFramePickerCommand}"
+                            Visibility="{Binding IsCreateMode, Converter={StaticResource BoolToVis}}"
+                            Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,20" />
 
-            <TextBlock Text="슬롯 개수" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <!-- 값 기반 바인딩(SelectedValue): 초기화 시 index 흔들림으로 인한 SlotCount clobber 차단(it7 B9). -->
-            <ComboBox ItemsSource="{Binding SlotCountOptions}" SelectedValue="{Binding SlotCount}"
-                      Margin="0,0,0,20">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding StringFormat={}{0}개}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                    <TextBlock Text="프레임 이름" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                    <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20" />
 
-            <TextBlock Text="슬롯 비율" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <ComboBox ItemsSource="{Binding AspectOptions}"
-                      SelectedItem="{Binding SlotAspect}"
-                      Margin="0,0,0,20">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Converter={StaticResource SlotAspectLabel}}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                    <TextBlock Text="슬롯 개수" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                    <!-- 값 기반 바인딩(SelectedValue): 초기화 시 index 흔들림으로 인한 SlotCount clobber 차단(it7 B9). -->
+                    <ComboBox ItemsSource="{Binding SlotCountOptions}" SelectedValue="{Binding SlotCount}"
+                              Margin="0,0,0,20">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StringFormat={}{0}개}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
 
-            <!-- 슬롯 크기 일괄 스케일(10~300%): 슬라이더 + 직접 입력(조절 편의). -->
-            <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="슬롯 크기" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBox Width="96" MinWidth="96" Height="36" Padding="8,0"
-                             VerticalContentAlignment="Center" TextAlignment="Right"
-                             Text="{Binding SlotScalePercent, StringFormat={}{0:0}, UpdateSourceTrigger=LostFocus}"
-                             AutomationProperties.Name="슬롯 크기 % 직접 입력" />
-                    <TextBlock Text="%" Style="{StaticResource Text.Body}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                    <TextBlock Text="슬롯 비율" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding AspectOptions}"
+                              SelectedItem="{Binding SlotAspect}"
+                              Margin="0,0,0,20">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Converter={StaticResource SlotAspectLabel}}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <!-- 슬롯 크기 일괄 스케일(10~300%): 슬라이더 + 직접 입력(조절 편의). -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="슬롯 크기" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBox Width="96" MinWidth="96" Height="36" Padding="8,0"
+                                     VerticalContentAlignment="Center" TextAlignment="Right"
+                                     Text="{Binding SlotScalePercent, StringFormat={}{0:0}, UpdateSourceTrigger=LostFocus}"
+                                     AutomationProperties.Name="슬롯 크기 % 직접 입력" />
+                            <TextBlock Text="%" Style="{StaticResource Text.Body}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                        </StackPanel>
+                    </Grid>
+                    <Slider Minimum="10" Maximum="300" Value="{Binding SlotScalePercent}"
+                            TickFrequency="10" IsSnapToTickEnabled="False"
+                            AutomationProperties.Name="슬롯 크기 배율" Margin="0,0,0,20" />
+
+                    <!-- it15 F1-D6: 이번 저장의 실제 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임). 배너=정책, 이 캡션=결과. -->
+                    <TextBlock Text="{Binding SaveScopeNotice}" Foreground="{StaticResource Brush.Text.Muted}"
+                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
+                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" />
                 </StackPanel>
-            </Grid>
-            <Slider Minimum="10" Maximum="300" Value="{Binding SlotScalePercent}"
-                    TickFrequency="10" IsSnapToTickEnabled="False"
-                    AutomationProperties.Name="슬롯 크기 배율" Margin="0,0,0,20" />
+            </ScrollViewer>
 
-            <!-- it15 F1-D6: 이번 저장의 실제 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임). 배너=정책, 이 캡션=결과. -->
-            <TextBlock Text="{Binding SaveScopeNotice}" Foreground="{StaticResource Brush.Text.Muted}"
-                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,8" />
-
-            <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
-                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,16" />
-
-            <Button Content="저장" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}"
-                    Style="{StaticResource Button.Primary}" HorizontalAlignment="Stretch" Margin="0,0,0,12" />
-            <Button Content="취소" Command="{Binding CancelCommand}"
-                    Style="{StaticResource Button.Ghost}" HorizontalAlignment="Center" />
-        </StackPanel>
+            <!-- 저장/취소: 스크롤 영역 밖에 고정 — 항목이 늘어나도 항상 클릭 가능. -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                <Button Content="저장" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}"
+                        Style="{StaticResource Button.Primary}" Margin="0,0,12,0" />
+                <Button Content="취소" Command="{Binding CancelCommand}"
+                        Style="{StaticResource Button.Ghost}" />
+            </StackPanel>
+        </Grid>
 
         <!-- it15 F2: 기존 프레임 선택 모달(오버레이 — 새 Window 아님, 삭제 확인 팝업과 동일 패턴).
              ⚠️ DataContext를 오버레이 전체에 걸지 말 것 — 확인/취소 커맨드는 편집기 VM에 있어서
