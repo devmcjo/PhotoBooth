@@ -264,7 +264,7 @@
                                                       IsChecked="{Binding EnableQrDelivery}" IsEnabled="{Binding CanEditQr}" />
                                     </StackPanel>
                                 </Grid>
-                                <!-- QR 하위 토글(사진/타임랩스): QR on일 때만 노출. 들여쓰기로 하위 계층 표현. (it7 F2) -->
+                                <!-- QR 하위 항목(사진/타임랩스 전송·보관 시간): QR on일 때만 노출. 들여쓰기로 하위 계층 표현. (it7 F2) -->
                                 <StackPanel Margin="20,0,0,0"
                                             Visibility="{Binding EnableQrDelivery, Converter={StaticResource BoolToVis}}">
                                     <Grid Style="{StaticResource SettingRow}">
@@ -283,6 +283,15 @@
                                         <TextBlock Grid.Column="0" Text="↳ 타임랩스 전송" Style="{StaticResource RowLabel}" />
                                         <ToggleButton Grid.Column="1" Style="{StaticResource Toggle}" HorizontalAlignment="Right" IsChecked="{Binding SendTimelapse}" />
                                     </Grid>
+                                    <!-- 보관 시간은 QR 다운로드 페이지의 유효 기간이므로 QR 전송 하위로 배치. 바인딩 경로 불변(위치만). -->
+                                    <Grid Style="{StaticResource SettingRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="↳ 보관 시간(1~72h)" Style="{StaticResource RowLabel}" />
+                                        <TextBox Grid.Column="1" HorizontalAlignment="Right" Width="140" Text="{Binding RetentionHours}" />
+                                    </Grid>
                                 </StackPanel>
                                 <Grid Style="{StaticResource SettingRow}">
                                     <Grid.ColumnDefinitions>
@@ -296,14 +305,6 @@
                                     <TextBlock Text="로컬 저장 경로" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
                                     <TextBox Text="{Binding LocalSavePath}" />
                                 </StackPanel>
-                                <Grid Style="{StaticResource SettingRow}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="보관 시간(1~72h)" Style="{StaticResource RowLabel}" />
-                                    <TextBox Grid.Column="1" HorizontalAlignment="Right" Width="140" Text="{Binding RetentionHours}" />
-                                </Grid>
                             </StackPanel>
 
                             <!-- 열 간격 -->
