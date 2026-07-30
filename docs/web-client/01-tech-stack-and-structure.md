@@ -83,6 +83,7 @@ src/adapters/     플랫폼 어댑터 — 카메라 · 인코더 · 합성 · �
 | `frames/slotAspect.ts` | `src/MCPhoto.Core/Frames/SlotAspect.cs` | `analysis/14 §1.1` | — |
 | `frames/slotsFile.ts` (`.slots` 파서·직렬화) | `src/MCPhoto.Core/Frames/LocalFrameStore.cs`(포맷 부분) | `analysis/41 §3.3` | `LocalFrameStoreTests.cs` |
 | `settings/appSettings.ts`(기본값·clamp) | `src/MCPhoto.Core/Settings/AppSettings.cs` | `analysis/41 §2.1` | `SettingsTests.cs` |
+| `settings/cutCountPolicy.ts`(자동 컷 수 해석, it17) | `src/MCPhoto.Core/Settings/CutCountPolicy.cs` | `analysis/41 §2.7` | `CutCountPolicyTests.cs` |
 | `settings/qrDeliveryPolicy.ts` | `src/MCPhoto.Core/Settings/QrDeliveryPolicy.cs` | `analysis/41 §2.4` | `QrDeliveryPolicyTests.cs`, `QrEffectivePolicyTests.cs` |
 | `roles/rolePolicy.ts`(`isPower`·`canWriteFrames`·`canManage`·`canResetPin`) | `src/MCPhoto.Core/Models/UserRole.cs` | `analysis/60 §1` | `RoleManagementTests.cs` |
 | `roles/roleChangePolicy.ts`(`assignableRoles`) | `src/MCPhoto.Core/Models/RoleChangePolicy.cs` | `analysis/60 §1.4` | `RoleManagementTests.cs`, `UserMgmtViewModelTests.cs` |
@@ -188,7 +189,10 @@ webclient/
 | `VITE_GOOGLE_CLIENT_ID` | `GoogleClientId` | (웹 전용 client_id) | 아니오 |
 | `VITE_HOSTING_BASE_URL` | `HostingBaseUrl` | `https://mcphoto-955fb.web.app` | 아니오 |
 | `VITE_STORAGE_BUCKET` | `StorageBucket` | `mcphoto-955fb.firebasestorage.app` | 아니오 |
-| `VITE_APP_VERSION` / `VITE_APP_SITE` | 버전 표기 | `0.0.0` / `Beta` | 아니오 |
+| `VITE_APP_VERSION` | 버전 표기(`v{version}`) | `0.0.0` | 아니오 |
+| `VITE_BUILD_DATE` | 빌드 시각(진단 화면 전용 — 하단 캡션에는 쓰지 않는다) | 빌드 시 주입 | 아니오 |
+
+> **it18 반영**: Windows가 배포 채널(`Site`) 표기를 폐기하고 버전을 빌드 산출물 자신(어셈블리 리소스)에서 읽는 방식으로 바꿨다(`analysis/41 §7`). 웹의 빌드 상수 방식은 이 방향과 일치하며, **`Site` 상수는 만들지 않는다**.
 
 규칙(`docs/analysis/41 §2.1` 계약):
 

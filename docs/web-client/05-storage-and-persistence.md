@@ -93,7 +93,8 @@ save(values) -> boolean:
 
 | 항목 | 값 |
 |------|-----|
-| clamp 규칙 | `CutCount`∈{6,8,10} 최근접 · `CountdownSec`∈{3,6,8,10} 최근접 · `RetakeLimit`∈{1,2,3} 최근접 · `RetentionHours` 1~72 · `HostingBaseUrl` 트레일링 `/` **제거** · `BackendBaseUrl` 트레일링 `/` **부여** |
+| clamp 규칙 | `CutCount`∈{6,8,10} 최근접 — **단 sentinel `0`(자동)은 보정 제외**(it17. 가드가 없으면 저장 왕복 1회에 "자동"이 6으로 덮여 소멸한다. `-1` 등 다른 이탈값은 종전대로 6) · `CountdownSec`∈{3,6,8,10} 최근접 · `RetakeLimit`∈{1,2,3} 최근접 · `RetentionHours` 1~72 · `HostingBaseUrl` 트레일링 `/` **제거** · `BackendBaseUrl` 트레일링 `/` **부여** |
+| 자동 컷 수 sentinel | `0`은 **허용 컷수 집합에 넣지 않는다**(넣으면 `CutCount=3` 오입력이 6이 아니라 0으로 보정된다 — 거리 동률 시 집합 첫 값 승리). 최근접 보정 **앞에 sentinel 가드**를 둔다(`analysis/41 §2.7`) |
 | ⚠️ 두 URL 정규화 | **방향이 반대다.** 같은 함수로 처리하지 말 것(`analysis/41 §2.1` 경고) |
 | 저장 실패 문구 | *"저장 위치에 쓸 수 없습니다."* (웹에서는 용량 초과·프라이빗 모드) |
 | 파서 내구성 | 손상 값·알 수 없는 키는 무시하고 계속(예외 금지) |
@@ -409,16 +410,17 @@ if (navigator.storage?.persist) {
 | 적용 지점 | 문서 `<title>`, 홈 타이틀, 홈 소제목 |
 | 인코딩 | UTF-8(한글 이름 대응) |
 
-### 8.2 버전 표기
+### 8.2 버전 표기 (it18 반영)
 
 | 항목 | 규격 |
 |------|------|
-| 값 | 빌드 상수 `VITE_APP_VERSION` / `VITE_APP_SITE` |
-| 표시 문자열 | `v{Version} · {Site}` (예 `v1.2.0 · Beta`) |
-| **BuildDate는 표기 제외** | 업데이트 지연 시 오래된 앱으로 보일 위험(`analysis/41 §7`) |
+| 값 | 빌드 상수 `VITE_APP_VERSION`(+`VITE_BUILD_DATE`는 진단 전용) |
+| 표시 문자열 | **`v{Version}`** (예 `v1.2.0`) — **배포 채널(`Site`) 표기는 폐기됐다**(it18: 운영 환경이 하나라 정보량 0. 환경이 늘면 그때 도입) |
+| **BuildDate는 하단 표기 제외** | 업데이트 지연 시 오래된 앱으로 보일 위험. **진단·개발자 문의 카드에서만** 노출(`analysis/41 §7`) |
 | 표시 위치 | 화면 하단 흐린 캡션, **로그인 무관 상시**, 클릭 비간섭 |
 | 폴백 | 값 부재 시 `v0.0.0` |
-| 진단 표시 | 버전 + Service Worker 상태 + 업데이트 대기 여부 |
+| 진단 표시 | 버전 · Build Date · Web Deploy Date(`/health deployedAt`) · Service Worker 상태 |
+| Windows 대응 | Windows도 it18부터 외부 파일(`bldinfo.ini`) 없이 **빌드 산출물 자신**(어셈블리 리소스)에서 읽는다 — 웹의 빌드 상수 방식과 방향이 같다 |
 
 ---
 

@@ -30,7 +30,7 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 
 | 웹 테스트 | Windows 대응 | 필수 케이스 |
 |-----------|--------------|-------------|
-| `stateMachine.test.ts` | `AppStateTests.cs` | 전이표 전수 · 오버레이 항상 허용 · `from == to` 거부 · 불법 전이 거부 |
+| `stateMachine.test.ts` | `AppStateTests.cs`, `AppShellOverlayReturnTests.cs` | 전이표 전수 · 오버레이 항상 허용 · `from == to` 거부 · 불법 전이 거부 · **`isOverlayScreen` 13값 전수 분류 + 오버레이 간 전환 시 복귀 지점 미저장(it19)** |
 | `idleCountdown.test.ts` | `IdleCountdownTests.cs` | 120초 판정 · 10초 카운트다운 · 활동 무시 |
 | `centerCrop.test.ts` | `CropCalculatorTests.cs` | 넓은/좁은 원본 · 정사각 · `targetAspect<=0` · **정수 나눗셈 경계** |
 | `previewReadiness.test.ts` | `PreviewReadinessTests.cs` | 3조건 각각 미달 · 전이 1회만 · 타임아웃 |
@@ -41,7 +41,8 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 | `frameEditPolicy.test.ts` | `FrameEditPolicyTests.cs` | 1차 게이트(쓰기 권한) · 출처별 편집/삭제 · **소유자 미검사 규칙** |
 | `frameNaming.test.ts` | `FrameNamingTests.cs` | 사본 이름 1~99 · base 되돌림 · 난수 폴백 · 빈 이름 |
 | `slotsFile.test.ts` | `LocalFrameStoreTests.cs` | 메타 대소문자 무시 · 손상 줄 무시 · `#dbid` 유무 · `#imagesize` 부재 |
-| `appSettings.test.ts` | `SettingsTests.cs` | 전 키 기본값 · 최근접 보정 · `RetentionHours` clamp · **두 URL 정규화 방향 반대** |
+| `appSettings.test.ts` | `SettingsTests.cs` | 전 키 기본값 · 최근접 보정 · **자동 sentinel `0` 보정 제외(왕복 보존) + `-1`은 6으로 보정** · `RetentionHours` clamp · **두 URL 정규화 방향 반대** |
+| `cutCountPolicy.test.ts` | `CutCountPolicyTests.cs` | `isAuto`(0만 자동, -1 아님) · `resolve` 자동/고정 각 케이스(슬롯 0~6, 7 산출 포함) · 슬롯 미확정(≤0) 폴백 |
 | `qrDeliveryPolicy.test.ts` | `QrDeliveryPolicyTests.cs`, `QrEffectivePolicyTests.cs` | 정규화 · 재활성 · 하위 값 보존 |
 | `rolePolicy.test.ts` | `RoleManagementTests.cs` | `isPower` · `canWriteFrames` · `canManage`(**동급 허용**) · `canResetPin`(**동급 차단**) · 알 수 없는 역할 → `user` |
 | `roleChangePolicy.test.ts` | `RoleManagementTests.cs` | `assignableRoles` 전수 매트릭스 · admin 지정 불가 · 순서 오름차순 |
@@ -78,7 +79,8 @@ docs/spec-vectors/*.json      ← 플랫폼 중립 (입력 → 기대 출력)
 | `copy-name.json` | `{원본이름, 기존이름목록} → 사본이름` | `FrameNamingTests.cs` |
 | `session-id.json` | `{now, uuid} → sessionId` + 경로·URL 조립 | `UploadContractTests.cs` |
 | `timelapse-speed.json` | `sessionSeconds → factor` | `FfmpegArgsTests.cs` |
-| `settings-clamp.json` | `{입력 설정} → {보정된 설정}` | `SettingsTests.cs` |
+| `settings-clamp.json` | `{입력 설정} → {보정된 설정}` (자동 sentinel 0 보존 케이스 포함) | `SettingsTests.cs` |
+| `cut-count.json` | `{configured, slotCount} → {resolved, isAuto}` | `CutCountPolicyTests.cs` |
 | `qr-normalize.json` | QR 토글 정규화·재활성 | `QrDeliveryPolicyTests.cs` |
 | `slots-file.json` | `.slots` 텍스트 → 파싱 결과(손상 줄 포함) | `LocalFrameStoreTests.cs` |
 
@@ -225,6 +227,7 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 ### P2 촬영
 - [ ] 프리뷰·스틸·타임랩스가 동일 가공(거울→중앙 크롭)을 거친다(WM1)
 - [ ] 카메라 Ready 게이트를 통과한 뒤에만 시퀀스가 시작된다
+- [ ] **자동 컷 수(it17)**: `CutCount=0`이 저장 왕복에 보존되고, 슬롯 5 프레임에서 7컷이 촬영되며 Guide에 "7 (자동)"이 표시된다
 - [ ] 세션 ID 형식이 정규식을 만족한다(M13)
 - [ ] 서명 PUT에 `requiredHeaders` 전부를 부착한다(M14)
 - [ ] **로컬 보관이 업로드 시도 이전에 끝난다**(M6-W — E8)

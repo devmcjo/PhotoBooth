@@ -126,15 +126,15 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **구현 내용**:
   - [01 §2.2](./01-tech-stack-and-structure.md) 표의 모든 모듈을 이식한다. **브라우저 API·`Date.now()`·`Math.random()`을 쓰지 않고 인자로 주입**받는다.
   - **[04 §9](./04-media-pipeline-web.md)의 정수 연산 대응표를 그대로 적용**한다(`Math.floor`/`Math.round` 명시).
-  - `docs/spec-vectors/`에 [10 §3.2](./10-testing-and-acceptance.md)의 13개 벡터 파일을 만든다(Windows 테스트에서 덤프 → 덤프 코드 제거 → 양쪽이 읽기).
+  - `docs/spec-vectors/`에 [10 §3.2](./10-testing-and-acceptance.md)의 14개 벡터 파일을 만든다(Windows 테스트에서 덤프 → 덤프 코드 제거 → 양쪽이 읽기).
   - Vitest로 [10 §2](./10-testing-and-acceptance.md) 표의 케이스 전부 작성.
   - `DisplayApplyPolicy`는 **이식하지 않는다**(창 개념 없음 — WD7).
 - **검증 명령**:
   - `cd webclient && npx vitest run --coverage`
   - `cd .. && dotnet test tests/MCPhoto.Tests` (벡터 전환 후 Windows 테스트가 여전히 통과)
-  - `node -e "const g=require('glob');console.log(g.sync('docs/spec-vectors/*.json').length)"` → 13
+  - `node -e "const g=require('glob');console.log(g.sync('docs/spec-vectors/*.json').length)"` → 14
 - **완료 기준**:
-  - [관측] `src/domain` 커버리지 **95% 이상**이고, 13개 벡터 파일을 웹·Windows 테스트가 **양쪽에서 읽어 통과**한다. `src/domain`의 어떤 파일도 브라우저·React·Node API를 import하지 않는다(import 검사 테스트로 고정).
+  - [관측] `src/domain` 커버리지 **95% 이상**이고, 14개 벡터 파일을 웹·Windows 테스트가 **양쪽에서 읽어 통과**한다. `src/domain`의 어떤 파일도 브라우저·React·Node API를 import하지 않는다(import 검사 테스트로 고정).
   - [non-goal] UI·어댑터·저장소 코드 **없음**. Windows 제품 코드는 **변경하지 않는다**(테스트 파일만 벡터 읽기로 전환).
   - [trigger] 벡터 불일치 시 **양쪽 테스트가 동시에 실패**해야 한다(한 벡터 값을 일부러 바꿔 확인).
 - **롤백**: `src/domain`·`tests` 삭제, Windows 테스트를 커밋 이전으로 revert.
@@ -396,6 +396,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 ## Step 15: 프레임 편집기 + 피커 + 삭제
 
 - **Context Brief**: 슬롯 배치 편집기를 만든다. **표시·드래그·클램프가 하나의 좌표 변환**을 써야 WYSIWYG가 성립한다(Step 2에서 이식한 `editorTransform`). 편집은 **로컬 전용**이며 `PUT /frames/{id}`를 호출하지 않는다. 규격은 **[03 §11](./03-screens-spec.md)**, 기하는 `docs/analysis/14 §4`.
+- **⚠️ 이연 컷라인(WD20)**: 일정 압박 시 이 Step을 둘로 쪼갠다 — **15a(v1.0 필수)** = 편집기 + power 공용 신규 등록(`POST /frames` + 이미지 PUT) + 삭제 / **15b(v1.1 이연 가능)** = advanced_user 개인 로컬 저장 · 카탈로그 프레임 fork 사본 저장 · 프레임 피커의 개인 프레임 후보 · Step 16의 프레임 zip 내보내기/가져오기(E2). 15b를 미룰 때는 [선택 편집]·비power 저장 버튼만 미노출하면 되고 권한 게이트 구조는 그대로다. **설계·문서는 둘 다 완성 상태를 유지한다**(이연은 구현 순서일 뿐).
 - **대상 파일**: `src/screens/frameEditor/*`, `src/screens/modals/framePicker/*`, `src/screens/modals/confirmDelete/*`, `src/ui/views/FrameEditorView.tsx`
 - **선행 조건**: Step 14, Step 2(slotLayout·editorTransform·frameNaming·frameEditPolicy)
 - **구현 내용**:

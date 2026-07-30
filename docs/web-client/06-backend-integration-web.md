@@ -261,7 +261,7 @@ img.src = imageUrl;
 
 | 규칙 | 내용 |
 |------|------|
-| 선행 조건 | **버킷 CORS에 이 오리진의 GET이 허용돼야 한다**([08 §5](./08-server-and-infra-prerequisites.md)) |
+| 선행 조건 | `firebasestorage.googleapis.com`은 **서비스 레벨 `ACAO: *`가 실측**되어(403 기준, `web/OPS-cors.md`) 버킷 CORS 없이도 될 가능성이 높다. 단 **200 응답 검증이 잔여**이며 버킷 CORS 구성의 GET이 안전망이다([08 §5](./08-server-and-infra-prerequisites.md)). **`crossOrigin="anonymous"` 지정 자체는 어떤 경우에도 생략 불가**(속성 없이 그리면 CORS 헤더가 있어도 canvas 오염) |
 | 캐시 | 받은 Blob을 **OPFS `frames/`에 저장**한다 → 이후는 same-origin이라 오염 문제가 없고 오프라인에서도 동작 |
 | CORS 실패 시 | 그 프레임을 **목록에서 제외하지 않고**, 썸네일은 `<img>`로 보여주되(오염은 canvas에만 영향) **합성 불가**로 판정해 선택 시 안내: *"이 프레임을 불러올 수 없습니다."* + 로그에 "프레임 이미지 CORS 실패" |
 | 이미지 없는 문서 | 서버는 문서를 먼저 만들고 이미지 PUT은 나중이라 **이미지 없는 문서가 존재할 수 있다**(`analysis/31 §4.10`) → 로드 실패를 **크래시 없이** 처리한다 |

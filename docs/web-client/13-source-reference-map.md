@@ -135,7 +135,8 @@
 | `Core/Models/RoleChangePolicy.cs` | 서버 `canSetRole`과 **1:1 대칭**. 순서(위계 오름차순)도 규격 |
 | `Core/Upload/UploadContract.cs` | 세션 ID·경로·토큰 URL·다운로드 페이지 URL·만료 계산 |
 | `Core/Upload/UploadService.cs` | 3단계 순서·최소 1개 불변식·진행률 합산 |
-| `Core/Settings/AppSettings.cs` | `Clamp()`·`NormalizeBackend()`·`NormalizeQr()`. **두 URL 정규화 방향이 반대** |
+| `Core/Settings/AppSettings.cs` | `Clamp()`·`NormalizeBackend()`·`NormalizeQr()`. **두 URL 정규화 방향이 반대** + **자동 sentinel(0) 보정 제외 가드**(it17) |
+| `Core/Settings/CutCountPolicy.cs` | 자동 컷 수 해석(it17): `IsAuto`(0만)·`Resolve`(자동 `max(6,슬롯+2)` / 고정 `max(설정,슬롯)`). 해석 지점은 `CaptureSession.Begin` 1곳 |
 | `Core/Settings/QrDeliveryPolicy.cs` | `Normalize`/`OnReEnabled` |
 | `Core/Capture/PreviewReadiness.cs` | Ready 3조건 + 1회 신호 |
 | `Core/Capture/FfmpegArgs.cs` | `ComputeSpeedFactor`만 이식(ffmpeg 인자는 무관) |
@@ -186,6 +187,7 @@
 | `web/firebase.json` | Hosting·규칙·Functions·Emulator 구성 | [01 §5.1](./01-tech-stack-and-structure.md) kiosk 블록 추가 |
 | `web/firestore.rules` · `web/storage.rules` | 보안 규칙(웹 SDK 경로 차단) | **변경 불필요**(앱은 SDK를 쓰지 않는다) |
 | `web/OPS-ttl.md` | GCS Lifecycle·Firestore TTL 운영 절차 | 만료 정책 이해 |
+| **`web/OPS-cors.md`** | 버킷 CORS **실측 판정**(다운로드 GET = 서비스 레벨 `ACAO:*`로 불필요 / **업로드 PUT = 필요**) + 컨틴전시 절차 | [08 §5](./08-server-and-infra-prerequisites.md)의 전제 |
 | `web/deploy-web.bat` | P1 배포 배치 | 참고(앱은 별 스크립트) |
 | `publish.ps1` · `installer/MCPhoto.iss` | Windows 배포 | 웹과 무관 |
 | `docs/templates/WBS_BLUEPRINT.md` | WBS 작성 형식 | [11](./11-wbs.md)이 준수 |

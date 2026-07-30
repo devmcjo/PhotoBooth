@@ -18,7 +18,7 @@
 | **P0-2** | 서버 `redirectUri` 검증 **허용 목록화** | B1 | 로그인 전부(현재 https는 400) | **P0** |
 | **P0-3** | 서버 audience **목록화** | B2 | 로그인 전부(웹 client_id 거부) | **P0** |
 | **P0-4** | **웹 전용 게이트 키** 발급 | B4 | 업로드·공용 프레임 조회·로그인 | **P0** |
-| **P0-5** | **Storage 버킷 CORS 구성** | B5 | ① 업로드 PUT ② **서버 프레임으로 합성**(canvas 오염) | **P0** |
+| **P0-5** | **Storage 버킷 CORS 구성** | B5 | **업로드 PUT**(실측상 필수 — `web/OPS-cors.md`). 프레임 GET 합성은 서비스 레벨 `ACAO:*`로 될 가능성이 높으나 200 검증 잔여(§5.1) | **P0** |
 | **P0-6** | Hosting 멀티사이트 타깃 `kiosk` 생성 | — | 배포 | **P0** |
 | P1-1 | 웹 게이트 키에 Origin 제한·rate limit | B4 후속 | (보안 강화) | P1 |
 | P1-2 | 번들 기본 프레임 자산 준비 | — | 오프라인 폴백 품질 | P1 |
@@ -189,14 +189,19 @@ npx firebase deploy --only functions   # 시크릿 변경은 재배포가 필요
 
 ## 5. P0-5 · Storage 버킷 CORS (B5) — 가장 흔한 실패 지점
 
-### 5.1 왜 필요한가 (두 가지 이유)
+> **선행 실측 문서**: [`web/OPS-cors.md`](../../web/OPS-cors.md)(2026-07-30, it17 다운로드 개선 작업에서 작성). 핵심 실측 2건 —
+> ① **다운로드 호스트 `firebasestorage.googleapis.com`은 서비스 레벨에서 `Access-Control-Allow-Origin: *`를 항상 반환**한다(버킷 CORS 구성과 무관. 단 **403 응답에서 관측했고 200 응답은 미확인** — OPS-cors §1.5).
+> ② **버킷 레벨 CORS는 현재 미설정**이며, 서명 PUT 호스트 `storage.googleapis.com`에는 Access-Control 헤더가 **전무**하다.
+> → 결론: **P1 다운로드(GET)에는 버킷 CORS가 불필요**했지만, **웹 앱의 서명 URL PUT에는 여전히 필수**다. OPS-cors §3도 "향후 필요 시점 = 업로드 PUT(B5)"로 같은 결론이다.
 
-| # | 용도 | 없으면 |
-|---|------|--------|
-| 1 | **서명 URL PUT**(`storage.googleapis.com`) — 커스텀 헤더 때문에 OPTIONS preflight 발생 | 업로드가 전부 실패(브라우저는 CORS 실패를 네트워크 오류로만 알려준다) |
-| 2 | **서버 프레임 이미지 GET**(`firebasestorage.googleapis.com`) — canvas에 그려 합성하므로 CORS-clean 로드가 필요 | 합성 시 **canvas 오염 → `convertToBlob` SecurityError → 결과물 생성 전면 실패** |
+### 5.1 무엇에 필요한가 (실측 반영)
 
-> ⚠️ **기존 문서(`analysis/05 §9 B5`)는 1번만 적고 있다.** 2번은 웹에서 촬영을 하게 되면서 새로 필요해진 요구다. 프레임을 서버에서 받아 합성하는 모든 경로가 여기에 걸린다.
+| # | 용도 | 호스트 | 버킷 CORS 필요? |
+|---|------|--------|-----------------|
+| 1 | **서명 URL PUT** — 커스텀 헤더(`x-goog-meta-…`) 때문에 OPTIONS preflight 발생 | `storage.googleapis.com` | **필수**(실측: 이 호스트는 Access-Control 헤더 전무). 없으면 업로드 전부 실패(브라우저는 네트워크 오류로만 보인다) |
+| 2 | **서버 프레임 이미지 GET** — canvas 합성용 CORS-clean 로드(WM2) | `firebasestorage.googleapis.com` | **불필요할 가능성이 높다**(서비스 레벨 `ACAO: *` 관측). 단 ⓐ `crossOrigin="anonymous"` 지정은 **여전히 필수**(속성 없이 그리면 CORS 헤더가 있어도 canvas가 오염된다) ⓑ 200 응답 검증이 잔여(§5.3 ②가 그 확정이다). 200에서 거부되면 아래 구성의 GET이 안전망 |
+
+> ⚠️ 기존 문서(`analysis/05 §9 B5`)는 1번만 적고 있었고, 2번은 웹 촬영 설계에서 추가로 식별한 뒤 **OPS-cors 실측으로 "필수 → 검증 항목"으로 완화**된 것이다. 구성에는 GET을 계속 포함한다(불확실성 ⓑ의 안전망 + 비용 0).
 
 ### 5.2 CORS 구성 파일
 
@@ -227,6 +232,9 @@ gcloud storage buckets update gs://mcphoto-955fb.firebasestorage.app --cors-file
 # 확인
 gcloud storage buckets describe gs://mcphoto-955fb.firebasestorage.app --format="default(cors_config)"
 ```
+
+- 구성 파일은 **`web/cors.json`으로 신설**하고 커밋한다. `web/OPS-cors.md`는 "GET용으로는 불필요해 구성 파일을 두지 않는다"고 결정했는데, **PUT용으로 필요해진 시점이 지금**이다 — 적용 후 OPS-cors.md의 결론 표("설정 불필요" → "PUT용 구성 적용됨")를 함께 갱신한다.
+- 이 PC에 `gcloud`가 없다는 실측 기록이 있다(OPS-cors §1) — 적용은 Cloud Shell 또는 gcloud 설치 후 수행한다.
 
 | 항목 | 주의 |
 |------|------|
