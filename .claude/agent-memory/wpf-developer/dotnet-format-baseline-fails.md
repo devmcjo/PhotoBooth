@@ -17,8 +17,11 @@ metadata:
 **How to apply:**
 - 진짜 게이트는 `dotnet build -c Release --no-incremental` **경고 0 / 오류 0**과 `dotnet test` 전량 통과다.
   이 둘로 nullable·분석기 경고가 이미 걸러진다.
-- build-verify Step 4에서 `dotnet format`을 돌렸다면 결과를 **WARN(기존 저장소 스타일)** 으로 보고하고,
-  지적 파일명을 변경 파일 목록과 교집합 내어 "내 변경이 새로 만든 위반이 0건"임을 근거로 제시한다.
+- build-verify Step 4에서 `dotnet format`을 돌렸다면 결과를 **WARN(기존 저장소 스타일)** 으로 보고한다.
 - 신규 파일은 주변 파일의 표기를 따른다 — `dotnet format`이 원하는 형태로 맞추면 오히려 관례에서 벗어난다.
+- ⚠️ 따라서 **"신규 위반 0건"을 목표로 삼지 말 것.** 관례(한 줄 초기화자)를 따른 신규 코드는 위반 수를
+  **정상적으로 증가시킨다**. it17 실측: `FrameSelectViewModelTests.cs`가 10건 → 12건(신규 헬퍼의 한 줄
+  초기화자 1개). 근거 제시 방법은 `git stash push -- <file>`로 HEAD 상태 카운트를 재고 **증가분이
+  주변 관례와 동일한 패턴에서만 나왔음**을 지적 라인 번호로 보이는 것이다.
 
 관련: [[encoding-verify-method]]

@@ -55,9 +55,9 @@ public class FrameSelectViewModelTests
         public object? GetService(Type serviceType) => null;
     }
 
-    private static AppShellViewModel MakeShell(SessionContext session)
+    private static AppShellViewModel MakeShell(SessionContext session, IniSettingsService? settings = null)
     {
-        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"fs_{Guid.NewGuid():N}.ini"));
+        settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"fs_{Guid.NewGuid():N}.ini"));
         settings.Load();
         return new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
     }
@@ -386,5 +386,58 @@ public class FrameSelectViewModelTests
 
         vm.SelectedFrame = new FrameTemplate { Id = "fallback", IsDefault = true };
         Assert.False(vm.CanEditSelected);
+    }
+
+    // ── it17: 자동 컷 수 엔드투엔드 배선(설정 → 프레임 선택 → 세션) ──
+
+    /// <summary>
+    /// 설계 §0.4 핵심 주장 고정: ini의 자동 sentinel(0)이 **호출측 무변경**으로 세션 실효값까지 전달된다.
+    /// `Next()`는 `Settings.Current.CutCount`를 그대로 `Begin`에 넘기고, 해석은 `Begin` 내부에서만 일어난다
+    /// — 슬롯 5개 프레임이면 5+2=7컷. 허용 집합({6,8,10})에 없는 7이 실효값 경로에서 정상 동작함도 함께 확인한다.
+    /// </summary>
+    [Fact]
+    public async Task Next_With_Auto_Setting_Resolves_Session_CutCount()
+    {
+        var iniPath = Path.Combine(Path.GetTempPath(), $"fs_{Guid.NewGuid():N}.ini");
+        File.WriteAllText(iniPath, "[MCPhoto]\nCutCount=0\n");
+        try
+        {
+            var settings = new IniSettingsService(iniPath: iniPath);
+            Assert.Equal(CutCountPolicy.AutoCutCount, settings.Load().CutCount); // Clamp 가드가 sentinel 보존
+
+            var session = new SessionContext();
+            session.Login(new User { Id = "u1", Role = UserRole.User });
+            var repo = new StubRepo();
+            var local = new StubLocalStore();
+            var shell = MakeShell(session, settings);
+            var vm = new FrameSelectViewModel(shell, new FrameCatalogService(repo, local), local, repo);
+            await vm.OnEnterAsync();
+
+            var frame = FiveSlotFrame();
+            vm.Frames.Add(frame);
+            vm.SelectedFrame = frame;
+
+            await vm.NextCommand.ExecuteAsync(null);
+
+            Assert.Same(frame, shell.Session.SelectedFrame);
+            Assert.Equal(7, shell.Session.Capture.CutCount);
+            Assert.True(shell.Session.Capture.IsAutoCutCount);
+        }
+        finally
+        {
+            if (File.Exists(iniPath)) File.Delete(iniPath);
+        }
+    }
+
+    private static FrameTemplate FiveSlotFrame()
+    {
+        var f = new FrameTemplate
+        {
+            Id = "local:u1_five", Name = "five", UserId = "u1",
+            ImageSize = new ImageSize { Width = 600, Height = 800 }
+        };
+        for (int i = 0; i < 5; i++)
+            f.Slots.Add(new Slot { Index = i, X = 0, Y = i * 150, Width = 100, Height = 133 });
+        return f;
     }
 }

@@ -24,7 +24,7 @@
 
 | 키(프로퍼티) | 타입 | 기본값 | 범위·Clamp | INI 키 | 영향 |
 | --- | --- | --- | --- | --- | --- |
-| `CutCount` | int | **6** | 허용 {6,8,10}; 벗어나면 가장 가까운 허용값(동률 시 첫 값)으로 보정 | `CutCount` | 촬영 컷 수(가이드/촬영) |
+| `CutCount` | int | **6** | 허용 {6,8,10} **또는 `0`=자동**; 벗어나면 가장 가까운 허용값(동률 시 첫 값)으로 보정. **`0`은 최근접 보정에서 제외**(sentinel 보존, it17) — `-1` 등 다른 값은 종전대로 6으로 보정 | `CutCount` | 촬영 컷 수의 **의도**. 실제 촬영 컷 수는 프레임 슬롯 수 확정 후 `CaptureSession.Begin`이 산출(§1.4) |
 | `CountdownSec` | int | **6** | 허용 {3,6,8,10}; 최근접 보정 | `CountdownSec` | 컷당 카운트다운 초 |
 | `MirrorMode` | bool | **true** | — | `MirrorMode` | 거울(좌우반전) 프리뷰=저장 WYSIWYG |
 | `FlashMode` | bool | **false** | — | `FlashMode` | 셔터 직전 하양 화면 플래시 |
@@ -52,7 +52,9 @@
 | `BackendApiKey` | string | **""** — 실제 기본값은 **exe 내장 키**(`AssemblyMetadata "MCPhoto.BackendApiKey"`)를 로드 시 주입 | 트림 | `BackendApiKey` | 배포 게이트 키(`X-MCPhoto-Client`). ⚠️ INI에 평문 — 유출 시 서버에서 해당 키만 폐기 |
 | `GoogleClientId` | string | 운영 프로젝트 Desktop 클라이언트 ID 내장 | 트림 | `GoogleClientId` | Google SSO authorize URL 조립. **빈 값이면 로그인 화면의 "Google로 로그인" 버튼을 숨김**(SSO opt-out) |
 
-보조 상수(`AppSettings.cs:36-42`): `AllowedCutCounts={6,8,10}`, `AllowedCountdownSecs={3,6,8,10}`, `AllowedRetakeLimits={1,2,3}`, `MinRetentionHours=1`, `MaxRetentionHours=72`, `MinSlots=1`, `MaxSlots=6`.
+보조 상수(`AppSettings.cs:38-44`): `AllowedCutCounts={6,8,10}`, `AllowedCountdownSecs={3,6,8,10}`, `AllowedRetakeLimits={1,2,3}`, `MinRetentionHours=1`, `MaxRetentionHours=72`, `MinSlots=1`, `MaxSlots=6`.
+
+자동 컷 수 상수(`CutCountPolicy.cs`, it17): `AutoCutCount=0`(sentinel), `AutoMinimum=6`, `AutoMargin=2`. ⚠️ `AutoCutCount`는 **`AllowedCutCounts`에 넣지 않는다** — 넣으면 `CutCount=3` 같은 오입력이 6이 아니라 0(자동)으로 보정된다(|3-0|=|3-6| 동률 → 첫 값 승리).
 
 > **it12 R1 — 로그인 전용 편집(게이트)**: 게스트(비로그인) 설정 화면에서 `MirrorMode`·`RetakeEnabled`·`RetakeLimit`·`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`·`EnableQrDelivery`(+`SendPhoto`/`SendTimelapse`)·`HostingBaseUrl`·`StorageBucket`는 OFF 표시·컨트롤 비활성 + "로그인 필요" 인라인 노티 상시 표시(R3, hover 툴팁에서 개정)이며 저장 시 미기록(ini 원값 보존=클로버 금지). 게이트는 `SettingsViewModel`(VM)에만 존재 — `AppSettings` 모델은 전 필드 항상 직렬화되고, 촬영/필터 런타임은 `Settings.Current`(ini=관리자값)대로 동작한다(편집 권한만 제한, 기능은 불변).
 
@@ -72,10 +74,28 @@
 
 ### 1.3 Clamp / QR 정규화 세부
 
-- `Clamp()`(`AppSettings.cs:157-180`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 **제거** → `NormalizeBackend()` → `NormalizeQr()`.
+- `Clamp()`(`AppSettings.cs:159-184`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 **제거** → `NormalizeBackend()` → `NormalizeQr()`.
+  - **it17**: CutCount 보정에는 자동 sentinel 가드가 **선행**한다 — `if (!CutCountPolicy.IsAuto(CutCount) && Array.IndexOf(...) < 0)`. `Clamp()`는 로드·저장 양쪽에서 불리므로(`IniSettingsService.Load()`/`Save()`) 가드가 없으면 `ClosestFrom(0,{6,8,10})`이 0을 6으로 덮어써 저장 왕복 1회에 "자동" 설정이 소멸한다.
 - `NormalizeBackend()`(`:187-199`): `BackendBaseUrl`·`BackendApiKey`·`GoogleClientId` 트림 + base URL이 **슬래시로 끝나도록 보정**(`HttpClient.BaseAddress`가 상대 경로를 안전히 결합하도록). ⚠️ `HostingBaseUrl`(슬래시 제거)과 방향이 반대다 — 용도가 다르다(URL 문자열 조립 vs HttpClient base). base URL이 비면 보정하지 않고 그대로 둔다(미구성은 런타임 호출 실패로 드러남).
 - `NormalizeQr()` = `QrDeliveryPolicy.Normalize`: `EnableQrDelivery && !SendPhoto && !SendTimelapse`이면 `EnableQrDelivery=false`(하위 토글 값은 보존). off→on 재활성 시 하위 둘 다 on 강제(`QrDeliveryPolicy.OnReEnabled`)는 UI(`SettingsViewModel`)에서 처리(`AppSettings`/`IniSettingsService` 자체엔 없음).
 - `Clone()`(`:162-189`): 편집 취소 대비 얕은 복제(WindowBounds는 새 인스턴스).
+
+### 1.4 촬영 컷 수 — 설정 의도 vs 실제 컷 수 (it17)
+
+`CutCount`는 **의도**만 담는다. 실제 촬영 컷 수는 프레임(=슬롯 수)이 확정된 뒤 산출된다.
+
+```
+AppSettings.CutCount        ← 의도  : 0(자동) | 6 | 8 | 10   (INI 왕복 대상)
+        │  FrameSelectViewModel.Next() → CaptureSession.Begin(frame, cutCount)
+        ▼  CutCountPolicy.Resolve(cutCount, frame.Slots.Count)   ← 유일한 해석 지점
+CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Capture가 읽음)
+```
+
+- 자동(`CutCount=0`): `실제 = max(6, 슬롯 수 + 2)` — 슬롯보다 2장 여유를 확보해 컷 선택의 여지를 남긴다.
+- 고정(`6`/`8`/`10`): `실제 = max(설정값, 슬롯 수)` — 종전 동작 그대로("컷 수 ≥ 슬롯 수" 불변).
+- 슬롯 1~4개에서는 최소 6이 이미 +2를 초과하므로 자동과 고정 6이 같다. 실질 차이는 **슬롯 5개(→7컷)·6개(→8컷)** 에서만 발생한다.
+- 실효값은 `AppSettings`를 거치지 않으므로 `AllowedCutCounts` 검사에 닿지 않는다 — 7컷이 정상 동작한다(촬영 루프·`WrapPanel` 컷 선택·합성은 모두 임의 정수 N을 견딘다).
+- 세션은 `CaptureSession.IsAutoCutCount`로 시작 시점의 의도를 기억한다(설정은 세션 도중 오버레이로 변경될 수 있으므로 다시 읽지 않는다). Guide 화면의 "(자동)" 배지가 이 값을 쓴다.
 
 > 정정 주의: Clamp에는 `Left`/`Top`(창 위치) 클램프가 **없다**. 창 위치는 `MainWindow.OnClosing`에서만 갱신되며, INI에는 NaN이어도 `WindowLeft`/`WindowTop` 키가 항상 기록된다(`IniSettingsService.cs:177-178`, `WindowBounds` 미저장이면 값이 NaN 문자열로 직렬화되고 재로드 시 다시 NaN 폴백).
 

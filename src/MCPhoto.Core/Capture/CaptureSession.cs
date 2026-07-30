@@ -1,4 +1,5 @@
 using MCPhoto.Core.Models;
+using MCPhoto.Core.Settings;
 
 namespace MCPhoto.Core.Capture;
 
@@ -15,8 +16,12 @@ public sealed class CaptureSession
     /// <summary>선택된 프레임(촬영 전 고정).</summary>
     public FrameTemplate? Frame { get; private set; }
 
-    /// <summary>촬영 컷 수(설정값).</summary>
+    /// <summary>촬영 컷 수(실효값 — <see cref="Begin"/>이 설정 의도를 해석한 결과). (it17)</summary>
     public int CutCount { get; private set; }
+
+    /// <summary>이 세션의 컷 수가 자동 모드로 산출됐는지(Guide 화면 "(자동)" 배지). 설정은 세션 중에도
+    /// 바뀔 수 있으므로 세션이 시작 시점의 의도를 기억한다(설계 §3.3). (it17)</summary>
+    public bool IsAutoCutCount { get; private set; }
 
     /// <summary>슬롯 수(= 선택해야 할 컷 수).</summary>
     public int SlotCount => Frame?.Slots.Count ?? 0;
@@ -36,7 +41,12 @@ public sealed class CaptureSession
     public void Begin(FrameTemplate frame, int cutCount)
     {
         Frame = frame;
-        CutCount = Math.Max(cutCount, frame.Slots.Count); // 컷수 ≥ 슬롯(항상 성립, VF-5)
+        // it17: cutCount는 "의도"(고정 6/8/10 또는 자동=CutCountPolicy.AutoCutCount).
+        //       슬롯 수가 확정된 이 지점이 유일한 해석 지점이다(설계 §0.4).
+        //       자동 = max(6, 슬롯+2) → 슬롯보다 여유분이 남아 컷 선택의 여지가 생긴다.
+        //       고정 = max(설정, 슬롯) → 컷수 ≥ 슬롯 불변 유지(VF-5, 종전 동작 그대로).
+        CutCount = CutCountPolicy.Resolve(cutCount, frame.Slots.Count);
+        IsAutoCutCount = CutCountPolicy.IsAuto(cutCount);
         _cuts.Clear();
         _selection.Clear();
     }
@@ -101,7 +111,9 @@ public sealed class CaptureSession
         Frame = null;
         _cuts.Clear();
         _selection.Clear();
+        // CutCount=0은 여기선 "세션 없음"이라는 뜻이며 자동 sentinel과 무관하다(설계 §4.1).
         CutCount = 0;
+        IsAutoCutCount = false;
         _fullRetakeCount = 0;
     }
 }

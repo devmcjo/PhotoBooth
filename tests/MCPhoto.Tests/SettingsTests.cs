@@ -367,4 +367,55 @@ public class SettingsTests : IDisposable
         Assert.DoesNotContain("UseBackend", written);            // 저장 시 자동 제거
         Assert.Contains("CutCount=10", written);
     }
+
+    // ── it17: 촬영 컷 수 자동 모드(sentinel 0). 실제 컷 수 산출은 CutCountPolicy/CaptureSession 담당 ──
+
+    /// <summary>
+    /// ★ 최상위 불변식(설계 §12 R-1): 자동 sentinel은 Clamp의 최근접 보정에서 제외된다.
+    /// 가드가 없으면 ClosestFrom(0, {6,8,10})이 0을 6으로 덮어써 "자동" 설정이 조용히 소멸한다.
+    /// </summary>
+    [Fact]
+    public void CutCount_Auto_Survives_Clamp()
+    {
+        var s = new AppSettings { CutCount = CutCountPolicy.AutoCutCount };
+        s.Clamp();
+        Assert.Equal(CutCountPolicy.AutoCutCount, s.CutCount);
+        Assert.DoesNotContain(s.CutCount, AppSettings.AllowedCutCounts); // 허용 집합 밖이지만 보존
+    }
+
+    [Fact]
+    public void CutCount_Auto_RoundTrips_Through_Ini()
+    {
+        // Clamp는 로드·저장 양쪽에서 호출된다 → sentinel이 왕복 1회로 소멸하지 않아야 한다.
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.CutCount = CutCountPolicy.AutoCutCount;
+        Assert.True(svc.Save());
+
+        Assert.Contains("CutCount=0", File.ReadAllText(_tempPath)); // ini에 sentinel 그대로 기록
+        Assert.Equal(CutCountPolicy.AutoCutCount, new IniSettingsService(iniPath: _tempPath).Load().CutCount);
+    }
+
+    [Fact]
+    public void CutCount_Negative_Snaps_To_Allowed()
+    {
+        // -1은 sentinel이 아니다(설계 §4.1) → 종전 규칙대로 6으로 보정(오타 방어).
+        var s = new AppSettings { CutCount = -1 };
+        s.Clamp();
+        Assert.Equal(6, s.CutCount);
+    }
+
+    [Theory]
+    [InlineData(6, 6)]
+    [InlineData(8, 8)]
+    [InlineData(10, 10)]
+    [InlineData(7, 6)]   // 기존 보정 동작 유지(VF-19와 동일 경로)
+    [InlineData(3, 6)]
+    public void CutCount_Legacy_Values_Unchanged(int stored, int expected)
+    {
+        // 가정 A-4: 기존 ini를 쓰는 운영 PC에서 이번 변경 후 동작이 종전과 100% 동일하다.
+        var s = new AppSettings { CutCount = stored };
+        s.Clamp();
+        Assert.Equal(expected, s.CutCount);
+    }
 }

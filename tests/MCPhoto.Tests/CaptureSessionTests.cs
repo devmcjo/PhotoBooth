@@ -1,5 +1,6 @@
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Models;
+using MCPhoto.Core.Settings;
 
 namespace MCPhoto.Tests;
 
@@ -195,5 +196,73 @@ public class CaptureSessionTests
         s.ResetForRetake();
         Assert.Empty(s.Cuts);
         Assert.Equal(0, s.FullRetakeCount); // 카운터 불변
+    }
+
+    // ── it17: 자동 컷 수 해석(Begin이 유일한 해석 지점 — 설계 §0.4) ──
+
+    [Fact]
+    public void Begin_Auto_Resolves_Slots_Plus_Two()
+    {
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(5), CutCountPolicy.AutoCutCount);
+        Assert.Equal(7, s.CutCount);        // 허용 집합({6,8,10})에 없는 7이 실효값으로 정상 동작
+        Assert.True(s.IsAutoCutCount);
+    }
+
+    [Fact]
+    public void Begin_Auto_Six_Slots_Gives_Eight()
+    {
+        // 피드백 시나리오: 슬롯 6개면 8장을 찍어 6칸을 고른다 → 버릴 2장이 생긴다(설계 §0.2).
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(6), CutCountPolicy.AutoCutCount);
+        Assert.Equal(8, s.CutCount);
+        Assert.Equal(6, s.SlotCount);
+    }
+
+    [Fact]
+    public void Begin_Auto_Respects_Minimum()
+    {
+        // 슬롯 3개면 3+2=5지만 최소 6이 우선.
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(3), CutCountPolicy.AutoCutCount);
+        Assert.Equal(6, s.CutCount);
+    }
+
+    [Fact]
+    public void Begin_Fixed_Sets_IsAuto_False()
+    {
+        // 고정 설정은 종전 동작 그대로 + 배지 미노출.
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(6), 6);
+        Assert.Equal(6, s.CutCount);
+        Assert.False(s.IsAutoCutCount);
+    }
+
+    [Fact]
+    public void FullRetake_Preserves_Resolved_CutCount()
+    {
+        // 재촬영은 컷·선택만 폐기 — 해석값 재계산 없음(VF-10).
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(5), CutCountPolicy.AutoCutCount);
+        for (int i = 0; i < 7; i++) s.AddCut(MakeStill());
+
+        s.BeginFullRetake();
+
+        Assert.Equal(7, s.CutCount);
+        Assert.True(s.IsAutoCutCount);
+        Assert.Empty(s.Cuts);
+    }
+
+    [Fact]
+    public void Discard_Resets_IsAutoCutCount()
+    {
+        var s = new CaptureSession();
+        s.Begin(MakeFrame(5), CutCountPolicy.AutoCutCount);
+        Assert.True(s.IsAutoCutCount);
+
+        s.Discard();
+
+        Assert.Equal(0, s.CutCount);        // "세션 없음"(자동 sentinel과 무관)
+        Assert.False(s.IsAutoCutCount);
     }
 }

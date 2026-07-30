@@ -107,14 +107,18 @@
 ### 5.1 가이드
 
 - **목적**: 촬영 직전 컷수·카운트다운·거울모드 안내.
-- **화면·VM**: `GuideView` · `GuideViewModel`(`GuideViewModel.cs`). 진입 시 설정에서 `CutCount`/`CountdownSec`/`SlotCount`/`MirrorMode` 표시(`:20-28`). [촬영 시작]→Capture, [취소]→홈.
+- **화면·VM**: `GuideView` · `GuideViewModel`(`GuideViewModel.cs`). 진입 시 `CutCount`(세션 실효값)/`CountdownSec`/`SlotCount`/`MirrorMode` 표시. [촬영 시작]→Capture, [취소]→홈.
+  - **it17**: `IsAutoCutCount`(= `Session.Capture.IsAutoCutCount`)가 true면 컷 수 옆에 **"(자동)" 배지**를 노출한다. 설정에 "6"이라 적힌 적이 없는데 8이 뜨는 이유를 알려 준다. 설정이 아니라 **세션**에서 읽는다 — 설정은 세션 도중 오버레이로 바뀔 수 있으므로 시작 시점의 의도가 기준이다.
 
 ### 5.2 촬영(N컷 연속)
 
 - **목적**: N컷을 컷당 카운트다운 후 자동 셔터로 연속 촬영하며 세션 전체를 녹화.
 - **화면·VM**: `CaptureView`(`CaptureView.xaml`) · `CaptureViewModel`. 서비스: `ICameraService`.
 - **핵심 규칙·옵션**:
-  - **컷수**: `Settings.CutCount`(6/8/10 중 하나, 기본 6). 실제 촬영 수 = `Capture.CutCount = max(설정컷, 슬롯수)`(`CaptureSession.Begin`, `CaptureSession.cs:35-41`).
+  - **컷수**: `Settings.CutCount`는 **의도**(자동=`0` 또는 고정 6/8/10, 기본 6). 실제 촬영 수 = `Capture.CutCount`로, `CaptureSession.Begin`이 `CutCountPolicy.Resolve`로 산출한다(유일한 해석 지점).
+    - 자동: `max(6, 슬롯수 + 2)` — 슬롯보다 2장 여유를 확보해 컷 선택의 여지를 남긴다(it17). 슬롯 6개면 8컷.
+    - 고정: `max(설정컷, 슬롯수)` — 종전 동작 그대로.
+    - 자동은 허용 집합에 없는 **7컷**도 만들 수 있다. 실효값은 `AppSettings`를 거치지 않으므로 `AllowedCutCounts` 검사에 닿지 않고, 촬영 루프(`for cut=1..TotalCuts`)·컷 선택(`WrapPanel`)·합성(선택분=슬롯수)은 모두 임의 정수 N을 견딘다.
   - **카메라 준비/Ready 게이트**(`OnEnterAsync`, `CaptureViewModel.cs:55-99`): `StartAsync(device, aspect, mirror)` → 실패 시 `CameraLoadState.Failed` + 안내. 성공 시 `WaitForStablePreviewAsync(8000ms)`로 안정 프리뷰(연속 8프레임+500ms+fps>0, `PreviewReadiness`) 대기 → 타임아웃 시 Failed(무한 로딩 방지). Ready 후에만 시퀀스 시작(로딩 오버레이는 `CaptureView.xaml:49-76`, 스피너).
   - **세션 폴더**: `sessions/{guid}` 생성, `session.mp4`·세션 시각 세팅(`:89-94`).
   - **컷당 카운트다운**: `CountdownAsync(CountdownSec)`(`:178-198`) — 1초 간격 감소.
@@ -218,7 +222,7 @@
 - **목적**: AppSettings 전 항목 편집(앱 설정만; 계정·관리자는 Account 페이지로 분리).
 - **화면·VM**: `SettingsView`(`SettingsView.xaml`) · `SettingsViewModel`. 서비스: `ISettingsService`, `ICameraService`, `ICameraTestDialogService`, `IDiagnosticsDialogService`(it11 #14).
 - **항목**(2열 그리드 + 그룹, `SettingsView.xaml`):
-  - 촬영: 컷 수(6/8/10), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시, **셔터음**, **재촬영 사용**(+on일 때 **횟수 제한 1~3**, it11 #13).
+  - 촬영: 컷 수(**자동**/6/8/10 — it17, "자동" 선택 시 콤보 아래에 `자동: 프레임 슬롯 수 + 2장 촬영(최소 6장)` 규칙 캡션. 설정 시점엔 프레임이 미선택이라 실제 숫자는 표기하지 않는다), 컷당 카운트다운(3/6/8/10), 거울모드, 플래시, **셔터음**, **재촬영 사용**(+on일 때 **횟수 제한 1~3**, it11 #13).
   - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트, **실제 장치명 표시** it11 #15), 표시 모드(전체화면/창모드).
   - 출력·전송: 출력 포맷(JPG/PNG), **QR 전송(+하위 사진/타임랩스 토글·보관 시간 1~72h)**, **로컬 저장**, 로컬 저장 경로. (it12 R2: QR 전송·로컬 저장을 장치·표시 → 출력·전송으로 이동. 보관 시간은 QR 다운로드 페이지의 유효 기간이라 QR 전송 하위로 이동)
   - 필터: 원본(고정 on·Disable), 흑백/밝게/뷰티 노출 토글.

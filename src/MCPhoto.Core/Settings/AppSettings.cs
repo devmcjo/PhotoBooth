@@ -33,6 +33,8 @@ public sealed class WindowBounds
 public sealed class AppSettings
 {
     // ── 허용 옵션 목록 (PRD §10 촬영 설정) ──
+    // it17: 자동 sentinel(CutCountPolicy.AutoCutCount=0)은 이 배열에 넣지 않는다
+    //       (넣으면 CutCount=3 오입력이 6이 아니라 0으로 보정됨 — 설계 §4.3).
     public static readonly int[] AllowedCutCounts = { 6, 8, 10 };
     public static readonly int[] AllowedCountdownSecs = { 3, 6, 8, 10 };
     public static readonly int[] AllowedRetakeLimits = { 1, 2, 3 };
@@ -42,7 +44,7 @@ public sealed class AppSettings
     public const int MaxSlots = 6;
 
     // ── 촬영 옵션 (PRD §F1) ──
-    /// <summary>촬영 컷 수. 기본 6, 옵션 6/8/10(최소 6).</summary>
+    /// <summary>촬영 컷 수. 기본 6, 옵션 6/8/10(최소 6) 또는 자동(<see cref="CutCountPolicy.AutoCutCount"/>=0 → 실제 컷 수는 CaptureSession.Begin이 산출). (it17)</summary>
     public int CutCount { get; set; } = 6;
 
     /// <summary>컷당 카운트다운 초. 기본 6, 옵션 3/6/8/10.</summary>
@@ -156,7 +158,9 @@ public sealed class AppSettings
     /// </summary>
     public void Clamp()
     {
-        if (Array.IndexOf(AllowedCutCounts, CutCount) < 0)
+        // it17: 자동(sentinel 0)은 최근접 보정 대상이 아니다. 가드가 없으면 ClosestFrom이 0을 6으로
+        //       덮어써 저장 왕복 한 번에 "자동" 설정이 소멸한다. -1 등 다른 값은 종전대로 보정된다.
+        if (!CutCountPolicy.IsAuto(CutCount) && Array.IndexOf(AllowedCutCounts, CutCount) < 0)
             CutCount = ClosestFrom(CutCount, AllowedCutCounts, 6);
 
         if (Array.IndexOf(AllowedCountdownSecs, CountdownSec) < 0)

@@ -30,7 +30,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private DispatcherTimer? _noticeTimer;
 
     // ── [앱 설정] 필드 (AppSettings 전 항목, it2 §4.2) ──
-    [ObservableProperty] private int _cutCount;
+    // it17: 컷 수는 "자동"(sentinel 0) 선택이 가능해 규칙 캡션 노출 조건이 함께 갱신되어야 한다.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAutoCutCount))]
+    private int _cutCount;
     [ObservableProperty] private int _countdownSec;
     [ObservableProperty] private bool _mirrorMode;
     [ObservableProperty] private bool _flashMode;
@@ -94,8 +97,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>카메라 열거 진행 중(로딩 표시·재열거 버튼 비활성).</summary>
     [ObservableProperty] private bool _isEnumeratingCameras;
 
-    /// <summary>컷수 옵션(세그먼트 바인딩).</summary>
-    public IReadOnlyList<int> CutCountOptions { get; } = AppSettings.AllowedCutCounts;
+    /// <summary>컷수 옵션(콤보 바인딩). "자동"(sentinel 0) 최상단 + 고정 6/8/10. (it17)</summary>
+    public IReadOnlyList<CutCountOption> CutCountOptions { get; } = BuildCutCountOptions();
+
+    /// <summary>자동 모드 선택 여부. 설정 화면의 규칙 캡션 노출 조건(실제 컷 수는 프레임 확정 후에만
+    /// 알 수 있어 여기선 숫자를 표시하지 않는다 — 설계 §6.2). (it17)</summary>
+    public bool IsAutoCutCount => CutCountPolicy.IsAuto(CutCount);
+
+    private static CutCountOption[] BuildCutCountOptions()
+    {
+        var list = new List<CutCountOption>(AppSettings.AllowedCutCounts.Length + 1)
+        {
+            new(CutCountPolicy.AutoCutCount, "자동")
+        };
+        foreach (var n in AppSettings.AllowedCutCounts)
+            list.Add(new CutCountOption(n, $"{n}컷"));
+        return list.ToArray();
+    }
+
     /// <summary>카운트다운 옵션.</summary>
     public IReadOnlyList<int> CountdownOptions { get; } = AppSettings.AllowedCountdownSecs;
     /// <summary>재촬영 횟수 제한 옵션(1~3). (it11 #13)</summary>
@@ -369,6 +388,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
 /// <summary>표시 모드 콤보 항목(값 + 한글 라벨). ToString=라벨(닫힌 박스 폴백 대비). (it9 후속)</summary>
 public sealed record DisplayModeOption(DisplayMode Value, string Label)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>촬영 컷 수 콤보 항목(값 + 한글 라벨). Value=0은 자동(CutCountPolicy.AutoCutCount).
+/// ToString=라벨(닫힌 박스 폴백 대비). (it17)</summary>
+public sealed record CutCountOption(int Value, string Label)
 {
     public override string ToString() => Label;
 }

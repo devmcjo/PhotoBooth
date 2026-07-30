@@ -248,6 +248,8 @@ public class XamlResourceTests
     [InlineData("UserMgmtView.xaml")]      // it13 §9.5: 역할 변경 콤보+Apply 재작업 StaticResource 회귀 안전망
     [InlineData("FrameEditorView.xaml")]   // it15 F1/F2: 안내 배너 + 저장 캡션 + 피커 오버레이(공유 카드 리소스)
     [InlineData("FrameSelectView.xaml")]   // it15 F2-D3: 카드 시각을 공유 리소스로 교체
+    [InlineData("SettingsView.xaml")]      // it17: 컷수 콤보 전환 + 자동 규칙 캡션(Text.Caption·Brush.Text.Muted)
+    [InlineData("GuideView.xaml")]         // it17: 컷수 옆 "(자동)" 배지
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));

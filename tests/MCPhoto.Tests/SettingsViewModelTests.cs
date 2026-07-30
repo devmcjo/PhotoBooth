@@ -293,6 +293,61 @@ public class SettingsViewModelTests
         Assert.True(r.PhotoPrinterEnabled);
     }
 
+    // ── it17: 촬영 컷 수 "자동" 콤보 옵션 ──
+
+    [Fact]
+    public void CutCountOptions_Auto_First_Then_Allowed()
+    {
+        var vm = MakeVm();
+
+        Assert.Equal(4, vm.CutCountOptions.Count);
+        Assert.Equal(CutCountPolicy.AutoCutCount, vm.CutCountOptions[0].Value);
+        Assert.Equal("자동", vm.CutCountOptions[0].Label);          // 최상단 = 신규 권장 항목(설계 §6.1)
+        Assert.Equal(new[] { 6, 8, 10 }, vm.CutCountOptions.Skip(1).Select(o => o.Value).ToArray());
+        Assert.Equal(new[] { "6컷", "8컷", "10컷" }, vm.CutCountOptions.Skip(1).Select(o => o.Label).ToArray());
+    }
+
+    [Fact]
+    public async Task IsAutoCutCount_Tracks_CutCount()
+    {
+        // [NotifyPropertyChangedFor] 배선 확인 — 캡션 노출이 콤보 선택 즉시 반영되어야 한다.
+        var vm = MakeVm();
+        await vm.OnEnterAsync();
+        Assert.False(vm.IsAutoCutCount);   // 기본 6
+
+        var notified = new List<string?>();
+        void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => notified.Add(e.PropertyName);
+        vm.PropertyChanged += OnChanged;
+        try
+        {
+            vm.CutCount = CutCountPolicy.AutoCutCount;
+            Assert.True(vm.IsAutoCutCount);
+            Assert.Contains(nameof(vm.IsAutoCutCount), notified);
+
+            notified.Clear();
+            vm.CutCount = 6;
+            Assert.False(vm.IsAutoCutCount);
+            Assert.Contains(nameof(vm.IsAutoCutCount), notified);
+        }
+        finally { vm.PropertyChanged -= OnChanged; }
+    }
+
+    [Fact]
+    public async Task Auto_CutCount_Saved_To_Ini()
+    {
+        // CutCount는 게이트 비대상(VF-14) → 게스트 VM에서도 저장된다. Clamp 가드가 sentinel을 살려둔다.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var vm = MakeVm(settings: settings);
+        await vm.OnEnterAsync();
+
+        vm.CutCount = CutCountPolicy.AutoCutCount;
+        vm.SaveSettingsCommand.Execute(null);
+
+        Assert.Equal(CutCountPolicy.AutoCutCount, settings.Current.CutCount);
+        Assert.Equal(CutCountPolicy.AutoCutCount, new IniSettingsService(iniPath: settings.IniPath).Load().CutCount);
+        Assert.True(vm.IsAutoCutCount);   // 저장 후 재로드(LoadSettings)에서도 자동 유지
+    }
+
     // ── it9 C1: 카메라 열거 ──
 
     [Fact]

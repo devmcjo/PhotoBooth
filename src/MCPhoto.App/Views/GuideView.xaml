@@ -16,6 +16,10 @@
                         <TextBlock Text="{Binding CutCount}" Style="{StaticResource Text.Body}"
                                    Foreground="{StaticResource Brush.Accent.Text}" FontWeight="Bold" />
                         <TextBlock Text=" 컷" Style="{StaticResource Text.Body}" />
+                        <!-- it17: 자동 모드로 산출된 컷 수임을 알린다(고정 설정이면 미노출). -->
+                        <TextBlock Text=" (자동)" Style="{StaticResource Text.Caption}"
+                                   Foreground="{StaticResource Brush.Text.Muted}" VerticalAlignment="Center"
+                                   Visibility="{Binding IsAutoCutCount, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </Grid>
                 <Grid Margin="0,0,0,12">
