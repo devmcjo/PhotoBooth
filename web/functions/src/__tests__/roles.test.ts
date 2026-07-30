@@ -1,6 +1,7 @@
 import {
   canCreate,
   canManage,
+  canResetPin,
   canSetRole,
   creatableRoles,
   isPower,
@@ -129,6 +130,35 @@ describe("roles — 역할 위계(C# UserRoleExtensions 이식 정합)", () => {
     expect(canManage("user", "advanced_user")).toBe(false);
     expect(canManage("manager", "advanced_user")).toBe(true);
     expect(canManage("admin", "advanced_user")).toBe(true);
+  });
+
+  test("canResetPin: power + 엄격히 낮은 위계만(동급 차단 — manager PIN은 admin 전용)", () => {
+    const rank: Record<UserRole, number> = {
+      temp_user: 0,
+      user: 1,
+      advanced_user: 2,
+      manager: 3,
+      admin: 4,
+    };
+    for (const acting of ALL_ROLES) {
+      for (const target of ALL_ROLES) {
+        const expected =
+          (acting === "manager" || acting === "admin") &&
+          rank[target] < rank[acting];
+        expect(canResetPin(acting, target)).toBe(expected);
+      }
+    }
+
+    // 요구사항 핵심 케이스 명시.
+    expect(canResetPin("manager", "manager")).toBe(false); // 동급 매니저 차단
+    expect(canResetPin("admin", "manager")).toBe(true); // 매니저 PIN의 유일한 경로
+    expect(canResetPin("admin", "admin")).toBe(false); // 동급 admin도 차단
+    expect(canResetPin("manager", "advanced_user")).toBe(true);
+    expect(canResetPin("advanced_user", "user")).toBe(false); // 비power 전원 차단
+
+    // canManage는 삭제와 공유되므로 동급 허용이 유지돼야 한다(좁히면 삭제가 회귀).
+    expect(canManage("manager", "manager")).toBe(true);
+    expect(canManage("admin", "admin")).toBe(true);
   });
 });
 

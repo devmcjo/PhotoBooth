@@ -300,7 +300,8 @@
                                         <!-- 관리 액션은 행위자와 같거나 낮은 역할에만 노출(예: manager는 admin 행에 미노출).
                                              삭제는 오른쪽 끝에 배치 — 옆 버튼과 오조작으로 뒤바뀌지 않게. -->
                                         <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-                                            <!-- it14/it15: PIN 재설정(CanManage + 타 계정에서만 노출). 소형 PIN 다이얼로그로 새 PIN 입력. -->
+                                            <!-- it14/it15: PIN 재설정(CanResetPin — power + 자기보다 낮은 위계 + 타 계정만 노출.
+                                                 동급은 미노출 → 매니저 행의 PIN 재설정은 관리자에게만 보인다). 소형 PIN 다이얼로그로 새 PIN 입력. -->
                                             <Button Content="PIN 재설정" Style="{StaticResource Cell.Button.Secondary}" Margin="0,0,8,0"
                                                     Visibility="{Binding CanResetPin, Converter={StaticResource BoolToVis}}"
                                                     Command="{Binding DataContext.ResetUserPinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

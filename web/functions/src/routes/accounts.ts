@@ -122,7 +122,9 @@ export function accountsRouter(): Router {
   );
 
   // PUT /accounts/{id}/pin  (파워, 위계) — {newPin} → 타 계정 PIN 재설정(E3).
-  //   canManage(actor.role, targetRole) 강제(위반 403). 자기 자신 대상은 400(본인은 E2 사용). → 204.
+  //   canResetPin(actor.role, targetRole) 강제(위반 403). 자기 자신 대상은 400(본인은 E2 사용). → 204.
+  //   ⚠️ 위계 판정은 형제 라우트(삭제·역할)의 canManage보다 **한 칸 좁다**: PIN 재설정만
+  //      "엄격히 낮은 위계"다(동급 차단 → manager PIN은 admin 전용, domain/roles.ts canResetPin).
   // it16 §3.5: 형제 라우트(DELETE /:id · PATCH /:id/role)에는 있던 power 게이트가 이 라우트에만
   //   빠져 있었다 → canManage는 "같은 위계"를 허용하므로 temp_user가 다른 temp_user의 PIN을 재설정할 수
   //   있었다(it15로 신규 SSO 계정이 전원 temp_user가 되며 모집단이 커졌다). power 게이트로 하위 대역

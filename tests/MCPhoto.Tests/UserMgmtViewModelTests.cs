@@ -364,19 +364,69 @@ public class UserMgmtViewModelTests
     }
 
     [Fact]
-    public async Task CanResetPin_Excludes_Self_But_Allows_Manageable()
+    public async Task CanResetPin_Excludes_Self_And_Same_Rank_But_Allows_Lower()
     {
         var list = new[]
         {
             new User { Id = "admin", Role = UserRole.Admin },   // 자기 계정 → 미노출
             new User { Id = "u1", Role = UserRole.User },
-            new User { Id = "otherAdmin", Role = UserRole.Admin }, // 타 admin: CanManage(admin,admin)=true → 노출
+            new User { Id = "m1", Role = UserRole.Manager },
+            new User { Id = "otherAdmin", Role = UserRole.Admin }, // 동급 → 미노출(CanResetPin은 엄격히 낮은 위계)
         };
         var (vm, _, _) = await MakePinVmAsync(UserRole.Admin, "admin", list);
 
         Assert.False(Row(vm, "admin").CanResetPin);        // 자기 계정(본인 PIN은 AccountView에서 변경)
-        Assert.True(Row(vm, "otherAdmin").CanResetPin);    // 타 admin은 관리 가능(위계 동일 → canManage true)
-        Assert.True(Row(vm, "u1").CanResetPin);            // 관리 가능한 하위
+        Assert.False(Row(vm, "otherAdmin").CanResetPin);   // 동급(admin↔admin) 차단
+        Assert.True(Row(vm, "m1").CanResetPin);            // 매니저 PIN은 관리자만 재설정
+        Assert.True(Row(vm, "u1").CanResetPin);            // 하위
+    }
+
+    /// <summary>
+    /// 매니저는 **다른 매니저의 PIN을 재설정할 수 없다**(동급 차단 — 매니저 PIN은 관리자 전용).
+    /// 종전 판정 `IsPower() && CanManage(target)`는 CanManage가 동급을 허용해 이 행에 버튼을 노출했다.
+    /// </summary>
+    [Fact]
+    public async Task CanResetPin_False_For_Same_Rank_Manager_Target()
+    {
+        var list = new[]
+        {
+            new User { Id = "mgr", Role = UserRole.Manager },   // 자기 계정
+            new User { Id = "m2", Role = UserRole.Manager },    // 동급 → 미노출
+            new User { Id = "a1", Role = UserRole.AdvancedUser },
+        };
+        var (vm, _, _) = await MakePinVmAsync(UserRole.Manager, "mgr", list);
+
+        Assert.False(Row(vm, "m2").CanResetPin);   // 동급 매니저
+        Assert.True(Row(vm, "a1").CanResetPin);    // 하위는 여전히 가능
+    }
+
+    /// <summary>동급 매니저 행은 UI 미노출이지만, 커맨드 직접 호출도 가드로 차단한다(이중 방어).</summary>
+    [Fact]
+    public async Task ResetUserPin_Blocked_For_Same_Rank_Manager_Target()
+    {
+        var list = new[] { new User { Id = "m2", Role = UserRole.Manager } };
+        var (vm, accounts, pin) = await MakePinVmAsync(UserRole.Manager, "mgr", list);
+        var row = Row(vm, "m2");
+
+        vm.ResetUserPinCommand.Execute(row);
+
+        Assert.False(pin.SetupCalled);
+        Assert.Null(accounts.ResetPinId);
+        Assert.Equal("동급·상위 역할 계정의 PIN은 재설정할 수 없습니다.", vm.StatusMessage);
+    }
+
+    /// <summary>관리자는 매니저 PIN을 재설정할 수 있다(요구사항의 유일한 허용 경로).</summary>
+    [Fact]
+    public async Task ResetUserPin_Admin_Can_Reset_Manager_Pin()
+    {
+        var list = new[] { new User { Id = "m1", Role = UserRole.Manager } };
+        var (vm, accounts, pin) = await MakePinVmAsync(UserRole.Admin, "admin", list);
+
+        vm.ResetUserPinCommand.Execute(Row(vm, "m1"));
+
+        Assert.True(pin.SetupCalled);
+        Assert.Equal("m1", accounts.ResetPinId);
+        Assert.Equal("9999", accounts.ResetPinValue);
     }
 
     [Fact]
@@ -429,7 +479,7 @@ public class UserMgmtViewModelTests
 
         Assert.False(pin.SetupCalled);
         Assert.Null(accounts.ResetPinId);
-        Assert.Equal("상위 역할 계정은 관리할 수 없습니다.", vm.StatusMessage);
+        Assert.Equal("동급·상위 역할 계정의 PIN은 재설정할 수 없습니다.", vm.StatusMessage);
     }
 
     // ── it15 §6.5 T7: PIN 설정 여부 열 ──
@@ -479,7 +529,7 @@ public class UserMgmtViewModelTests
     [Fact]
     public async Task ResetUserPin_Blocked_When_Target_Higher_Role()
     {
-        // manager가 admin PIN 재설정 시도 → CanManage 위반으로 차단(다이얼로그 미표시).
+        // manager가 admin PIN 재설정 시도 → CanResetPin 위반으로 차단(다이얼로그 미표시).
         var list = new[] { new User { Id = "admin", Role = UserRole.Admin } };
         var (vm, accounts, pin) = await MakePinVmAsync(UserRole.Manager, "mgr", list);
         var row = Row(vm, "admin");
@@ -488,6 +538,6 @@ public class UserMgmtViewModelTests
 
         Assert.False(pin.SetupCalled);
         Assert.Null(accounts.ResetPinId);
-        Assert.Equal("상위 역할 계정은 관리할 수 없습니다.", vm.StatusMessage);
+        Assert.Equal("동급·상위 역할 계정의 PIN은 재설정할 수 없습니다.", vm.StatusMessage);
     }
 }

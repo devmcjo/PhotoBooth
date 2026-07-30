@@ -119,4 +119,19 @@ public static class UserRoleExtensions
     /// </summary>
     public static bool CanManage(this UserRole actingRole, UserRole targetRole)
         => ManageRank(targetRole) <= ManageRank(actingRole);
+
+    /// <summary>
+    /// 타 계정 PIN 재설정 권한(E3). 관리 액션 중 **유일하게 "엄격히 낮은 위계"**만 허용한다:
+    /// power(<see cref="IsPower"/>) + 대상 위계가 자신보다 **낮을 때만**.
+    /// 예) admin→manager ○, manager→advanced_user ○, manager→manager ×(admin 전용), admin→admin ×.
+    /// <para>
+    /// 왜 <see cref="CanManage"/>가 아닌가: CanManage는 "같거나 낮은"이라 매니저가 다른 매니저의 PIN을
+    /// 재설정할 수 있었다. PIN은 설정·계정 관리 진입의 유일한 자격증명이므로 동급끼리 서로의 진입 자격을
+    /// 갈아치우는 것은 과대 권한이다 → **매니저 PIN은 관리자만** 재설정한다.
+    /// </para>
+    /// ⚠️ CanManage 자체를 좁히지 않는다 — 계정 삭제와 공유되므로 admin↔admin·manager↔manager 삭제가 회귀한다.
+    ///    서버 <c>domain/roles.ts canResetPin</c>과 1:1(대칭 유지).
+    /// </summary>
+    public static bool CanResetPin(this UserRole actingRole, UserRole targetRole)
+        => actingRole.IsPower() && ManageRank(targetRole) < ManageRank(actingRole);
 }

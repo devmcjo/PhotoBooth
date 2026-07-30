@@ -11,6 +11,7 @@ import { deriveAccountId } from "../domain/accountId";
 import { hashPassword, verifyHash } from "../domain/password";
 import {
   canManage,
+  canResetPin,
   canSetRole,
   parseRole,
   UserRole,
@@ -124,8 +125,12 @@ export async function setOwnPin(
 /**
  * 타 계정 PIN 재설정(E3, 권한 기반). 대상 현재 PIN 불요.
  *   - 대상 계정 없음 → 404.
- *   - canManage(actor.role, targetRole) 위반 → 403.
+ *   - canResetPin(actor.role, targetRole) 위반 → 403.
  * 자기 자신 대상 차단은 라우트에서(E2 사용 유도, 400). 근거: 설계 §4.4 resetOtherPin.
+ *
+ * ⚠️ 판정은 canManage가 아니라 **canResetPin**(엄격히 낮은 위계)이다 — manager가 다른 manager의
+ *    PIN을 재설정하던 과대 권한을 막는다(manager PIN은 admin 전용). 삭제와 공유되는 canManage로
+ *    되돌리지 말 것.
  */
 export async function resetOtherPin(
   targetId: string,
@@ -133,8 +138,10 @@ export async function resetOtherPin(
   actor: { id: string; role: UserRole }
 ): Promise<void> {
   const targetRole = await getRole(targetId); // 없으면 404
-  if (!canManage(actor.role, targetRole)) {
-    throw HttpError.forbidden("해당 계정의 PIN을 재설정할 권한이 없습니다.");
+  if (!canResetPin(actor.role, targetRole)) {
+    throw HttpError.forbidden(
+      "해당 계정의 PIN을 재설정할 권한이 없습니다(동급·상위 역할 대상 불가 — manager PIN은 admin 전용)."
+    );
   }
   await db()
     .collection(COLLECTION)

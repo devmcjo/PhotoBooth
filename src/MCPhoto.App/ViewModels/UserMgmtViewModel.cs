@@ -30,11 +30,13 @@ public sealed partial class UserRowViewModel : ObservableObject
     public bool CanChangeRole => AssignableRoles.Count > 0;
 
     /// <summary>
-    /// it14: PIN 재설정 UI 노출 여부: 자기 계정 아님 + actor가 대상을 관리 가능(CanManage).
+    /// it14: PIN 재설정 UI 노출 여부: 자기 계정 아님 + actor가 대상의 PIN을 재설정 가능.
     /// 자기 PIN은 계정 관리 화면에서 변경(서버도 자기 자신 E3는 400).
     /// it15: 백엔드 전용이 되어 isBackend 조건 삭제.
     /// it16 §3.5: **power 항 추가** — 서버가 `PUT /accounts/:id/pin`에 requirePower()를 붙였으므로 클라도 대칭.
     ///   CanManage만으로는 비power(temp_user·user·advanced_user)가 같은 위계의 남의 PIN을 만질 수 있었다.
+    /// 판정은 <see cref="UserRoleExtensions.CanResetPin"/>(power + **엄격히 낮은 위계**)로 위임한다 —
+    ///   동급 차단이므로 매니저는 다른 매니저의 PIN을 재설정할 수 없다(관리자 전용).
     /// </summary>
     public bool CanResetPin { get; }
 
@@ -65,7 +67,7 @@ public sealed partial class UserRowViewModel : ObservableObject
         // 자기 계정은 역할 변경 금지(대칭·안전) → 빈 목록으로 UI 미노출.
         AssignableRoles = isSelf ? Array.Empty<UserRole>() : RoleChangePolicy.AssignableRoles(actorRole, user.Role);
         _selectedRole = user.Role;
-        CanResetPin = !isSelf && actorRole.IsPower() && actorRole.CanManage(user.Role);   // it16 §3.5 power 게이트
+        CanResetPin = !isSelf && actorRole.CanResetPin(user.Role);   // power + 엄격히 낮은 위계(동급 차단)
     }
 }
 
@@ -189,7 +191,7 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
 
     /// <summary>
     /// 타 계정 PIN 재설정(it14 §6.2, 권한 기반). 소형 PIN 다이얼로그로 새 4자리 PIN을 입력(2회 확인) → ResetPinAsync.
-    /// IsPower + CanManage 클라 1차 가드(UI 미노출과 이중 방어) + 서버 requirePower + canManage 최종 강제(403 우아 처리).
+    /// CanResetPin 클라 1차 가드(UI 미노출과 이중 방어) + 서버 requirePower + canResetPin 최종 강제(403 우아 처리).
     /// 고정값(비번 "0000") 대신 입력값 사용 — PIN 자격성 유지(설계 O4).
     /// </summary>
     [RelayCommand]
@@ -197,11 +199,11 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     {
         if (row is null) return;
         var user = row.User;
-        // 권한 가드: power + 자기와 같거나 낮은 역할만(예: manager는 admin PIN 재설정 불가). UI 미노출과 이중 방어.
-        // it16 §3.5: IsPower() 항 추가(서버 requirePower와 대칭). 문구는 기존 것 재사용.
-        if (!ActorRole.IsPower() || !ActorRole.CanManage(user.Role))
+        // 권한 가드: power + 자기보다 **낮은** 역할만(동급 차단 — 매니저 PIN은 관리자 전용).
+        // UI 미노출과 이중 방어. 서버 canResetPin과 동일 판정(UserRoleExtensions.CanResetPin).
+        if (!ActorRole.CanResetPin(user.Role))
         {
-            SetStatus("상위 역할 계정은 관리할 수 없습니다.", isError: true);
+            SetStatus("동급·상위 역할 계정의 PIN은 재설정할 수 없습니다.", isError: true);
             return;
         }
         // fail-closed: PIN 다이얼로그 서비스가 없으면(레거시/DI 미구성) 재설정하지 않는다.

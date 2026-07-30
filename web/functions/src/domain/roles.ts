@@ -114,6 +114,23 @@ export function canManage(actingRole: UserRole, targetRole: UserRole): boolean {
 }
 
 /**
+ * 타 계정 PIN 재설정(E3) 권한 — 관리 액션 중 **유일하게 "엄격히 낮은 위계"**만 허용한다.
+ *
+ * 왜 canManage를 그대로 쓰지 않는가: canManage는 "같거나 낮은"이라 manager가 다른 manager의 PIN을
+ * 재설정할 수 있었다. PIN은 설정·계정 관리 진입의 **유일한 자격증명**이므로, 동급 계정이 서로의 진입
+ * 자격을 갈아치울 수 있는 것은 과대 권한이다 → **manager PIN은 admin만** 재설정한다.
+ * admin↔admin도 같은 이유로 차단한다(admin은 최종 1인 규칙이라 실사용 영향 없음).
+ *
+ * ⚠️ `canManage` 자체는 손대지 않는다 — `deleteAccount`와 공유되므로 좁히면
+ *    admin↔admin·manager↔manager 삭제가 회귀한다. PIN만 이 함수로 분리한다.
+ * power 항은 라우트 `requirePower()`와 대칭으로 유지(하위 대역 전원 차단).
+ */
+export function canResetPin(actorRole: UserRole, targetRole: UserRole): boolean {
+  if (!isPower(actorRole)) return false;
+  return MANAGE_RANK[targetRole] < MANAGE_RANK[actorRole]; // 엄격 부등호 — 동급 차단
+}
+
+/**
  * it16: manager가 자유 지정할 수 있는 하위 3역할 대역(설계 §3.3 규칙 4).
  * 이 대역 안에서는 승격·강등·no-op이 모두 허용된다(멱등 write).
  */

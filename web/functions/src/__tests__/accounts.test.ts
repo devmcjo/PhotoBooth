@@ -454,7 +454,7 @@ describe("it14 setOwnPin — 본인 PIN 설정/변경", () => {
 });
 
 // ── it14: resetOtherPin(E3) — 타 계정 재설정(권한 기반) ───────────────────────
-describe("it14 resetOtherPin — 타 계정 PIN 재설정(canManage)", () => {
+describe("it14 resetOtherPin — 타 계정 PIN 재설정(canResetPin: power + 엄격히 낮은 위계)", () => {
   const admin = { id: "root", role: "admin" as const };
   const manager = { id: "mgr", role: "manager" as const };
 
@@ -470,16 +470,29 @@ describe("it14 resetOtherPin — 타 계정 PIN 재설정(canManage)", () => {
     await expect(verifyPin("u2", "5678")).resolves.toEqual({ ok: true });
   });
 
-  test("manager가 admin PIN 재설정 거부(403, canManage 위반)", async () => {
+  test("manager가 admin PIN 재설정 거부(403, 상위 위계)", async () => {
     seedUser("a1", { role: "admin" });
     await expect(resetOtherPin("a1", "0134", manager)).rejects.toMatchObject({ status: 403 });
     expect(fake.peek("users", "a1")?.pinHash).toBeUndefined(); // 미변경
   });
 
-  test("manager가 manager PIN 재설정 성공(같은 위계 관리 가능)", async () => {
+  // 동급 차단(canResetPin): manager PIN은 admin 전용 — canManage(동급 허용)로 되돌리면 이 테스트가 잡는다.
+  test("manager가 다른 manager PIN 재설정 거부(403, 동급)", async () => {
     seedUser("m2", { role: "manager" });
-    await resetOtherPin("m2", "0134", manager);
-    await expect(verifyPin("m2", "0134")).resolves.toEqual({ ok: true });
+    await expect(resetOtherPin("m2", "0134", manager)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "m2")?.pinHash).toBeUndefined(); // 미변경
+  });
+
+  test("admin이 manager PIN 재설정 성공(매니저 PIN의 유일한 재설정 경로)", async () => {
+    seedUser("m3", { role: "manager" });
+    await resetOtherPin("m3", "0134", admin);
+    await expect(verifyPin("m3", "0134")).resolves.toEqual({ ok: true });
+  });
+
+  test("admin이 다른 admin PIN 재설정 거부(403, 동급)", async () => {
+    seedUser("a2", { role: "admin" });
+    await expect(resetOtherPin("a2", "0134", admin)).rejects.toMatchObject({ status: 403 });
+    expect(fake.peek("users", "a2")?.pinHash).toBeUndefined(); // 미변경
   });
 
   test("manager가 temp_user PIN 재설정 성공(it15 신규 계정 PIN 부여 동선)", async () => {

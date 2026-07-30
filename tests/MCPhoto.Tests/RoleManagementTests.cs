@@ -39,6 +39,41 @@ public class RoleManagementTests
     public void CanManage_Only_Equal_Or_Lower(UserRole actor, UserRole target, bool expected)
         => Assert.Equal(expected, actor.CanManage(target));
 
+    /// <summary>
+    /// PIN 재설정은 power + **엄격히 낮은 위계**만(동급 차단): 매니저 PIN은 관리자만 재설정한다.
+    /// CanManage(같거나 낮은)와 갈라지는 유일한 지점이 동급 행(admin↔admin·manager↔manager)이다.
+    /// </summary>
+    [Theory]
+    // admin actor: 하위 전원 ○, 동급 admin ×
+    [InlineData(UserRole.Admin, UserRole.Manager, true)]
+    [InlineData(UserRole.Admin, UserRole.AdvancedUser, true)]
+    [InlineData(UserRole.Admin, UserRole.User, true)]
+    [InlineData(UserRole.Admin, UserRole.TempUser, true)]
+    [InlineData(UserRole.Admin, UserRole.Admin, false)]         // 동급 차단(admin은 최종 1인 — 실사용 도달 없음)
+    // manager actor: 하위 대역 ○, 동급 manager ×(핵심 — 종전에는 CanManage로 통과했다), 상위 admin ×
+    [InlineData(UserRole.Manager, UserRole.AdvancedUser, true)]
+    [InlineData(UserRole.Manager, UserRole.User, true)]
+    [InlineData(UserRole.Manager, UserRole.TempUser, true)]
+    [InlineData(UserRole.Manager, UserRole.Manager, false)]      // 매니저 PIN은 admin 전용
+    [InlineData(UserRole.Manager, UserRole.Admin, false)]
+    // 비power actor: 위계와 무관하게 전부 ×(서버 requirePower와 대칭)
+    [InlineData(UserRole.AdvancedUser, UserRole.User, false)]
+    [InlineData(UserRole.AdvancedUser, UserRole.TempUser, false)]
+    [InlineData(UserRole.AdvancedUser, UserRole.AdvancedUser, false)]
+    [InlineData(UserRole.User, UserRole.TempUser, false)]
+    [InlineData(UserRole.User, UserRole.User, false)]
+    [InlineData(UserRole.TempUser, UserRole.TempUser, false)]
+    public void CanResetPin_Requires_Power_And_Strictly_Lower(UserRole actor, UserRole target, bool expected)
+        => Assert.Equal(expected, actor.CanResetPin(target));
+
+    /// <summary>CanManage는 삭제와 공유되므로 **좁히지 않았다**: 동급 관리 허용은 그대로여야 한다(회귀 가드).</summary>
+    [Fact]
+    public void CanManage_Still_Allows_Same_Rank_For_Delete()
+    {
+        Assert.True(UserRole.Admin.CanManage(UserRole.Admin));
+        Assert.True(UserRole.Manager.CanManage(UserRole.Manager));
+    }
+
     // ── it13: 역할 문자열 매핑 라운드트립 + 생성 권한 ──
 
     [Theory]
