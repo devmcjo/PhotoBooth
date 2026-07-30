@@ -77,4 +77,43 @@ public class FrameNamingTests
     [Fact]
     public void StripCopySuffix_Keeps_Original_When_Base_Would_Be_Empty()
         => Assert.Equal("사본", FrameNaming.StripCopySuffix("사본")); // 빈 이름을 만들지 않는다
+
+    // ── 저장 전 이름 안전성 선검증(LocalFrameStore.EnsureFileNameSafe와 동일 판정) ──
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void IsFileNameSafe_Rejects_Blank(string? name)
+        => Assert.False(FrameNaming.IsFileNameSafe(name));
+
+    [Theory]
+    [InlineData("a/b")]
+    [InlineData("a:b")]
+    [InlineData("a?b")]
+    [InlineData("a\\b")]
+    [InlineData("a*b")]
+    [InlineData("a\"b")]
+    [InlineData("a<b")]
+    [InlineData("a>b")]
+    [InlineData("a|b")]
+    public void IsFileNameSafe_Rejects_Invalid_FileName_Chars(string name)
+        => Assert.False(FrameNaming.IsFileNameSafe(name));
+
+    [Theory]
+    [InlineData("기본프레임")]
+    [InlineData("내_프레임")]      // '_'는 파일시스템 금지문자가 아니다(공용 목록 노출 문제는 별도 비차단 경고)
+    [InlineData("기본프레임 사본 2")]
+    [InlineData("my frame 2024")]
+    public void IsFileNameSafe_Accepts_Usable_Names(string name)
+        => Assert.True(FrameNaming.IsFileNameSafe(name));
+
+    [Fact]
+    public void IsFileNameSafe_Accepts_Every_NextCopyName_Result()
+    {
+        // 사본 이름은 항상 저장 가능해야 한다(선검증이 fork 정상 흐름을 막지 않는다는 보장).
+        Assert.True(FrameNaming.IsFileNameSafe(FrameNaming.NextCopyName("기본프레임", None)));
+        Assert.True(FrameNaming.IsFileNameSafe(
+            FrameNaming.NextCopyName("기본프레임", new[] { "기본프레임 사본" })));
+    }
 }

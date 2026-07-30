@@ -287,6 +287,41 @@ public class XamlResourceTests
     }
 
     /// <summary>
+    /// R2/§5.7 함정 회귀 방지: 서버 등록 확인 오버레이의 상태·커맨드는 **편집기 VM**이 갖는다.
+    /// 오버레이 어느 요소에든 DataContext를 걸면 그 서브트리의 커맨드 바인딩이 **예외 없이 조용히 실패**하고
+    /// (버튼만 비활성) 저장이 영구 대기 상태가 된다 — VM 단위 테스트로는 잡을 수 없어 소스 텍스트를 검사한다.
+    /// 허용되는 DataContext는 피커 목록 ListBox의 `{Binding Picker}` 단 하나다.
+    /// 함께 6개 바인딩 문자열의 존재를 고정해 XAML 쪽 바인딩 소실도 정적으로 검출한다.
+    /// </summary>
+    [Fact]
+    public void FrameEditor_Popup_Bindings_Resolve_On_Editor_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "FrameEditorView.xaml"));
+
+        var dataContexts = Regex.Matches(text, @"DataContext\s*=\s*""([^""]*)""")
+            .Select(m => m.Groups[1].Value)
+            .ToArray();
+
+        Assert.True(dataContexts.Length == 1,
+            "FrameEditorView.xaml 의 DataContext 는 피커 목록 ListBox 1곳뿐이어야 한다. 발견: "
+            + $"{dataContexts.Length}개 [{string.Join(" | ", dataContexts)}]. "
+            + "서버 등록 확인 오버레이(또는 다른 오버레이)에 DataContext 를 걸면 확인/취소 커맨드와 상태가 "
+            + "편집기 VM에 있어 바인딩이 조용히 실패한다(예외 없이 버튼만 비활성).");
+        Assert.Equal("{Binding Picker}", dataContexts[0]);
+
+        // 오버레이·캡션이 참조하는 편집기 VM 멤버가 XAML에서 사라지지 않았는지 고정.
+        foreach (var member in new[]
+                 {
+                     "IsServerRegisterConfirmVisible", "RegisterToServer",
+                     "ConfirmServerRegisterCommand", "CancelServerRegisterCommand",
+                     "PickedSourceNotice", "HasPickedSource",
+                 })
+        {
+            Assert.Contains(member, text);
+        }
+    }
+
+    /// <summary>
     /// it15 F2-D3: 프레임 카드 공유 리소스가 테마(Controls.xaml)에 있고 기대 타입으로 해석된다.
     /// FrameSelectView와 편집기 피커가 같은 시각을 쓰기 위한 전제 — 키가 사라지면 두 화면이 함께 깨진다.
     /// </summary>

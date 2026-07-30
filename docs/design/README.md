@@ -17,7 +17,7 @@
 | 백엔드 API를 확장한다 | [백엔드 프록시 전환 설계](./wpf-backend-proxy-migration-design.md) + [`docs/analysis/31`](../analysis/31-backend-api-reference.md) |
 | 인증·계정 모델을 바꾼다 | [it15 Google 전용 인증](./wpf-it15-google-only-auth-design.md) · [Google SSO 설계](./wpf-google-sso-design.md) · [it14 PIN 게이트](./wpf-it14-settings-pin-gate-design.md) |
 | 역할·권한을 바꾼다 | [it16 고급 유저 역할](./wpf-it16-advanced-user-role-design.md) · [it13 임시 유저 역할](./wpf-it13-temp-user-role-design.md) |
-| 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
+| 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 신규 생성·서버 등록 팝업](./wpf-frame-create-from-existing-and-server-register-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
 | 촬영 컷 수·슬롯 관계를 바꾼다 | [it17 컷 수 자동 모드](./wpf-it17-auto-cutcount-design.md) |
 | 웹 다운로드 페이지를 바꾼다 | [it17 자동 저장·공유](./web-it17-download-share-design.md) → [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
@@ -61,6 +61,7 @@
 | [wpf-wbs](./wpf-wbs.md) | 초기 작업 분해 |
 | [wpf-google-sso-design](./wpf-google-sso-design.md) | 데스크톱 OAuth(loopback + PKCE + 시스템 브라우저) 상세 |
 | [wpf-it15-frame-ux-design](./wpf-it15-frame-ux-design.md) | 프레임 편집 로컬 전용 정책·사본 분기·기존 프레임 불러오기 |
+| [wpf-frame-create-from-existing-and-server-register-design](./wpf-frame-create-from-existing-and-server-register-design.md) | 기존 프레임 불러오기를 **사본이 아닌 신규 생성**으로 재정의(이름은 사용자가 지정) + 파워 계정 저장 시 **서버 등록 확인 팝업**(체크 시에만 DB insert). 이름 충돌 차단으로 로컬 공용 프레임 덮어쓰기 방지 |
 | [wpf-frame-edit-completion-design](./wpf-frame-edit-completion-design.md) | 프레임 편집기 슬롯 배치·좌표 변환 |
 | [wpf-auth-ux-and-account-rules-design](./wpf-auth-ux-and-account-rules-design.md) | 로그인 UX·계정 규칙(일부는 it15에서 폐지 — 이력) |
 | [wpf-it10-server-connectivity-design](./wpf-it10-server-connectivity-design.md) · [wpf-it10-wbs](./wpf-it10-wbs.md) | 서버 연결 상태 표시 |
