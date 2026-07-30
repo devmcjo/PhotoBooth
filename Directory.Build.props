@@ -21,6 +21,10 @@
     <Version>1.1.6</Version>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
+    <!-- 제품 버전(AssemblyInformationalVersion)에 git 커밋 해시가 붙지 않게 한다.
+         .NET SDK는 기본적으로 "+{SourceRevisionId}"를 덧붙여 파일 속성의 제품 버전이
+         "1.1.6+c4469825f411..."처럼 보인다 — 운영자가 읽는 값이라 해시를 뺀다. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <!-- 결정적 빌드 -->
     <Deterministic>true</Deterministic>
   </PropertyGroup>
