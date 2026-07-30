@@ -18,20 +18,27 @@
 - **VF-1** 서버 CORS가 `cors({origin: true})`로 열려 있어 **브라우저에서 백엔드 API를 바로 호출할 수 있다.** (근거: `docs/analysis/31 §1`, 소스 `web/functions/src/app.ts`)
 - **VF-2** `/accounts`·`/config` 라우터는 `requireBearer`만 걸고 `requireApiKey`를 걸지 않는다 → **관리 API는 게이트 키 없이 JWT만으로 동작한다.** (근거: `docs/analysis/31 §4.0`)
 - **VF-3** `POST /auth/google`의 `redirectUri`는 **http loopback만** 통과한다(그 외 400). audience는 단일 `GOOGLE_OAUTH_CLIENT_ID` 고정. → **웹 로그인은 서버 확장(B1·B2) 선행 필수.** (근거: `docs/analysis/31 §4.2`, `61 §2`, 소스 `web/functions/src/domain/validation.ts`·`services/googleAuth.ts`)
-- **VF-4** 업로드는 `apiKey + optionalBearer` 게이트다 → **게스트(무토큰) 업로드가 가능**하며 로그인 없이 촬영 흐름 전체를 검증할 수 있다. (근거: `docs/analysis/31 §5.1`)
+- **VF-4** 업로드 라우터는 `apiKey + optionalBearer` 게이트다 → **서버는 무토큰(게스트) 업로드를 허용**하므로 로그인 없이 **업로드 3단계 자체**를 호출·검증할 수 있다. (근거: `docs/analysis/31 §5.1`, 소스 `web/functions/src/routes/uploads.ts`) ⚠️ **단 클라이언트는 게스트에게 업로드를 시작하지 않는다 — VF-11 참조.**
 - **VF-5** 업로드 파일 검증은 `final`→`jpg|png`/`image/*`, `timelapse`→**`mp4`+`video/mp4`만** 허용한다. (근거: `docs/analysis/31 §8`)
 - **VF-6** `timelapseUrl`을 null로 두고 commit하는 것은 **계약상 합법**이다(사진이 있으면 최소 1개 불변식 충족). (근거: `docs/analysis/14 §7.3`, `31 §5.3`)
 - **VF-7** 기존 P1 다운로드 페이지는 `web/public/`에 완성돼 있고 Firestore 단건 get만 한다. **웹 앱과 무관하게 계속 동작한다.** (근거: `docs/analysis/20`)
 - **VF-8** Windows 순수 로직이 파일 단위로 분리돼 있고 대응 테스트가 존재한다(경로는 [01 §2.2](./01-tech-stack-and-structure.md) 표). → **도메인 이식과 벡터 추출이 가능하다.**
 - **VF-9** 설정 키·기본값·범위·`.slots` 포맷·결과물 파일명은 `docs/analysis/41`에 전수 문서화돼 있다.
 - **VF-10** Windows 앱에는 배포용 번들 프레임 PNG가 커밋돼 있지 않다(`Example/`의 예시 이미지만 존재). → **번들 프레임 자산은 새로 준비하거나 코드 생성 fallback으로 시작**해야 한다.
+- **VF-11** **게스트(미로그인)에게는 QR이 제공되지 않는다.** `ResultViewModel.Next`가 `QrEffectivePolicy.IsQrEnabled(raw, isLoggedIn, isTempUserBlocked)`로 판정하고 미로그인이면 `Qr`을 건너뛰고 `Done`으로 간다. → **Step 11의 종단(폰 스캔) 검증은 로그인 상태에서만 가능**하며, Step 11 자체는 effective QR 목으로 검증한다. (근거: 소스 `src/MCPhoto.App/ViewModels/ResultViewModel.cs:149`, `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`, `design/wpf-it13-temp-user-role-design.md §7.1b`. ⚠️ `docs/analysis/60 §2`는 이 분기를 한 행으로 뭉쳐 두어 정정이 필요하다 — [07 §5.2](./07-auth-and-permissions-web.md) 주석)
+- **VF-12** 컷 수 해석 지점은 **`FrameSelect` [다음]** 1곳이다(`FrameSelectViewModel.cs:210` → `CaptureSession.Begin` → `CutCountPolicy.Resolve`). 세션이 `CutCount`·`IsAutoCutCount`를 보유하고 `GuideViewModel`이 설정이 아니라 **세션에서 읽는다**(`GuideViewModel.cs:27·30`). → 전체 재촬영으로 `Guide`에 재진입해도 재해석하지 않는다.
+- **VF-13** Windows QR은 **QRCoder `ECCLevel.Q` + 기본 모듈 20px**이다(`src/MCPhoto.Core/Upload/QrService.cs`, `analysis/30 §3`). → 웹도 **ECC Q**로 맞춘다([03 §9](./03-screens-spec.md)).
+- **VF-14** `createSyncAccessHandle()`은 **전용 Worker 전용** API이고, **Safari는 `createWritable()`을 지원하지 않는다.** → **모든 OPFS 쓰기를 Worker 경계 뒤로 모아야** iOS/iPadOS에서 저장이 성립한다([05 §3.1](./05-storage-and-persistence.md)).
+- **VF-15** `MediaRecorder`·`HTMLCanvasElement.captureStream()`은 **Worker에 없다**(Window 전용, `OffscreenCanvas`에 `captureStream` 없음). → **타임랩스 경로 A는 메인 스레드 전용**이며 경로 B(WebCodecs, Worker 가능)를 1순위로 두는 근거가 된다([04 §7.3a](./04-media-pipeline-web.md)).
 
 ## 미검증 가정 (open assumptions)
 
 - **OA-1** 버킷 CORS를 구성하면 **서명 URL PUT이 브라우저에서 성공**한다 → **검증: Step 0-5, Step 11**
 - **OA-2** 버킷 CORS 구성 후 `firebasestorage.googleapis.com`의 프레임 이미지를 **CORS-clean하게 로드해 canvas 합성이 가능**하다(오염 없음) → **검증: Step 0-5, Step 8**
-- **OA-3** 대상 브라우저에서 **H.264/mp4 인코딩이 가능**하다(WebCodecs `avc1` 또는 MediaRecorder mp4) → **검증: Step 9**
-- **OA-4** OPFS 쓰기가 대상 브라우저 전부(특히 iOS Safari 17)에서 동작하고 촬영 세션 용량을 감당한다 → **검증: Step 3, Step 10**
+- **OA-3** 대상 브라우저에서 **H.264/mp4 인코딩이 가능**하다(WebCodecs `avc1` 또는 MediaRecorder mp4). 지원 시점은 [04 §7.3b](./04-media-pipeline-web.md)에 정리했으나 **실기기의 `isConfigSupported` 결과가 진실원**이다 → **검증: Step 9, Step 17**
+- **OA-4** OPFS 쓰기가 대상 브라우저 전부(특히 iOS Safari 17)에서 **Worker + `createSyncAccessHandle` 경로로** 동작하고 촬영 세션 용량을 감당한다(VF-14) → **검증: Step 3, Step 10, Step 17**
+- **OA-9** iOS/iPadOS Safari 17에서 **Worker `OffscreenCanvas` 2D·WebGL2**가 실제로 동작해 §1 파이프라인 구조가 성립한다([04 §2.3.1](./04-media-pipeline-web.md)) → **검증: Step 6(2D), Step 8(WebGL2 뷰티), Step 17(실기기)**
+- **OA-10** `createImageBitmap` resize 옵션이 대상 브라우저에서 실효한다(미실효 시 폴백으로 성능 예산을 만족한다) → **검증: Step 8, Step 17**
 - **OA-5** 서버 확장(B1·B2) 후 **웹 리디렉트 로그인이 성공**한다 → **검증: Step 12**
 - **OA-6** iOS Safari에서 10컷(1080p) 세션이 탭 종료 없이 완주한다 → **검증: Step 17**
 - **OA-7** `Screen Wake Lock`이 대상 기기에서 동작한다(미동작 시 OS 설정으로 대체) → **검증: Step 17**
@@ -79,7 +86,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **선행 조건**: 없음
 - **구현 내용**: [08](./08-server-and-infra-prerequisites.md) §2~§6의 P0-1 ~ P0-6. **0-5(CORS)와 0-6(Hosting)을 먼저** 처리하면 Step 11까지 진행할 수 있다.
 - **검증 명령**:
-  - `gcloud storage buckets describe gs://mcphoto-955fb.firebasestorage.app --format="default(cors_config)"`
+  - `gcloud storage buckets describe gs://mcphoto-955fb.firebasestorage.app --format="default(cors_config)"` — ⚠️ **이 PC에 `gcloud`가 설치돼 있지 않다는 실측 기록**이 있다(`web/OPS-cors.md §1`). 미설치면 **Cloud Shell**에서 실행하거나 gcloud를 설치한 뒤 수행한다
   - `cd web/functions && npm test` (서버 회귀 — 데스크톱 loopback 통과 + 허용 목록 밖 거부)
   - `curl -s -o /dev/null -w "%{http_code}" -H "X-MCPhoto-Client: <web-key>" https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api/frames/default` → **200**
   - `curl … -H "X-MCPhoto-Client: bogus" …/frames/default` → **401**
@@ -103,14 +110,14 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - `env.ts`: `VITE_*` 6개를 읽고 정규화(`HostingBaseUrl` 트레일링 `/` **제거**, `BackendBaseUrl` **부여**). 게이트 키 부재는 경고 로그만(크래시 금지).
   - `index.html`: viewport(`user-scalable=no`) + 테마 색 + 앱 마운트 지점.
   - `firebase.json`에 [01 §5.1](./01-tech-stack-and-structure.md)의 `kiosk` 블록 추가(**기존 default 블록 무변경**).
-  - 화면에는 버전 캡션(`v{version} · {site}`)만 표시하는 최소 앱.
+  - 화면에는 버전 캡션 **`v{version}`** 만 표시하는 최소 앱. **배포 채널(`Site`)·빌드 시각은 캡션에 넣지 않는다**(it18 — [01 §4.1](./01-tech-stack-and-structure.md), [05 §8.2](./05-storage-and-persistence.md)).
 - **검증 명령**:
   - `cd webclient && npm ci && npx tsc --noEmit && npm run build`
   - `cd ../web && npx firebase deploy --only hosting:kiosk`
   - `curl -sI https://mcphoto-955fb-kiosk.web.app/ | grep -i "content-security-policy"`
   - `curl -sI https://mcphoto-955fb.web.app/ | head -1` (P1 무변경 확인)
 - **완료 기준**:
-  - [관측] kiosk 사이트가 버전 캡션을 표시하고, 응답에 CSP·`nosniff` 헤더가 있으며 브라우저 콘솔에 **CSP 위반이 0건**이다. `tsc --noEmit`이 통과한다.
+  - [관측] kiosk 사이트가 버전 캡션 `v{version}`을 표시하고(채널·빌드 시각 문자열이 **없다**), 응답에 CSP·`nosniff` 헤더가 있으며 브라우저 콘솔에 **CSP 위반이 0건**이다. `tsc --noEmit`이 통과한다.
   - [non-goal] 앱 로직·라우팅·상태 관리 **없음**. **P1 사이트는 변경되지 않는다**(배포 대상이 `hosting:kiosk`뿐).
   - [trigger] 빌드는 `npm run build`에서만, 배포는 `--only hosting:kiosk`에서만 일어난다.
 - **롤백**: `webclient/` 삭제 + `firebase.json`의 kiosk 블록 제거(그린필드라 이전 상태 = 없음).
@@ -132,7 +139,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **검증 명령**:
   - `cd webclient && npx vitest run --coverage`
   - `cd .. && dotnet test tests/MCPhoto.Tests` (벡터 전환 후 Windows 테스트가 여전히 통과)
-  - `node -e "const g=require('glob');console.log(g.sync('docs/spec-vectors/*.json').length)"` → 14
+  - `node -e "console.log(require('fs').readdirSync('docs/spec-vectors').filter(f=>f.endsWith('.json')).length)"` → 14 (의존성 없이 실행 가능)
 - **완료 기준**:
   - [관측] `src/domain` 커버리지 **95% 이상**이고, 14개 벡터 파일을 웹·Windows 테스트가 **양쪽에서 읽어 통과**한다. `src/domain`의 어떤 파일도 브라우저·React·Node API를 import하지 않는다(import 검사 테스트로 고정).
   - [non-goal] UI·어댑터·저장소 코드 **없음**. Windows 제품 코드는 **변경하지 않는다**(테스트 파일만 벡터 읽기로 전환).
@@ -244,7 +251,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **검증 명령**: `npx vitest run tests/unit/screens` · Playwright(fake device)로 6컷 완주 · 탭 전환 취소 확인
 - **완료 기준**:
   - [관측] 6컷 세션이 카운트다운·플래시·300ms 간격을 지키며 완주하고 OPFS에 `cut1..6.jpg`가 생긴다. [바로 촬영]이 남은 카운트다운을 건너뛴다. 슬롯 4개 프레임에서 4개 선택 시에만 [다음]이 활성된다.
-  - [non-goal] 합성·업로드 **없음**. 촬영 중 탭을 숨기면 **홈으로 복귀하고 부분 컷이 남지 않는다**(OPFS 세션 폴더 삭제 확인 — WM4). 재촬영 상한 초과 시 버튼 비활성 + 커맨드 거부.
+  - [non-goal] 합성·업로드 **없음**. 촬영 중 탭을 숨기면 **홈으로 복귀하고 부분 컷이 남지 않는다**(OPFS 세션 폴더 삭제 확인 — WM4). 재촬영 상한 초과 시 버튼 비활성 + 커맨드 거부. **컷 수 N을 하드코딩하지 않는다**(it17 — 컷 루프와 `CutSelect` 그리드가 7·9 같은 임의 N을 수용하고, 그리드 열 수가 CSS `auto-fill`/wrap이다).
   - [trigger] 시퀀스는 **Ready 이후에만** 시작. 플래시는 설정 on일 때만, 셔터음도 설정 on일 때만.
 - **롤백**: 해당 화면 파일 삭제(더미 화면으로 복귀).
 - [ ] 완료
@@ -315,20 +322,21 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 
 ## Step 11: 업로드 3단계 + QR + 완료 ★ 마일스톤 A
 
-- **Context Brief**: prepare → 서명 PUT(XHR 진행률) → commit을 수행하고 QR을 표시한다. **QR은 성공 후에만**(M5), `requiredHeaders`는 **전부 부착**(M14). 여기까지 완성되면 **로그인 없이 게스트 촬영 전 흐름이 실제로 동작**한다. 규격은 **[06 §4](./06-backend-integration-web.md)**, 화면은 **[03 §9·§10](./03-screens-spec.md)**.
+- **Context Brief**: prepare → 서명 PUT(XHR 진행률) → commit을 수행하고 QR을 표시한다. **QR은 성공 후에만**(M5), `requiredHeaders`는 **전부 부착**(M14). 여기까지 완성되면 **촬영→합성→로컬 보관→업로드→QR 경로가 실제로 동작**한다. 규격은 **[06 §4](./06-backend-integration-web.md)**, 화면은 **[03 §9·§10](./03-screens-spec.md)**.
+- **⚠️ 게스트는 `Qr`에 도달하지 않는다**: effective QR 판정(`qrEffectivePolicy` — 미로그인 → off)에 따라 게스트는 `Result → Done`으로 끝난다([03 §8.1](./03-screens-spec.md), Windows와 동일). 따라서 이 Step에서 **화면 흐름을 통한 종단 검증(폰 QR 스캔)은 로그인이 필요하고, 로그인은 Step 12 + 서버 선행(0-1~0-4)에 달려 있다.** 이 Step에서는 ① 업로드 게이트웨이·QR 렌더·`Done`을 구현하고 ② 검증은 **`qrEffectivePolicy`를 목으로 `true` 고정**(또는 Playwright에서 세션 사용자 주입)해 수행한다. **제품 코드에 게이트 우회 플래그를 남기지 않는다**(테스트 목 한정). 로그인 후 실기기 종단 검증은 Step 12·Step 17에서 한다.
 - **대상 파일**: `src/adapters/http/uploadGateway.ts`(PUT 추가), `src/adapters/qr/qrService.ts`, `src/screens/qr/*`, `src/screens/done/*`, `src/ui/views/{QrView,DoneView}.tsx`
 - **선행 조건**: Step 5, Step 10, **Step 0-5(CORS — OA-1)**
 - **구현 내용**:
   - prepare(파일당 1회) → **XHR PUT**(`requiredHeaders` 순회 부착, 인증 헤더 미부착, 진행률) → commit(prepare의 `downloadUrl` 그대로).
   - 전송 대상 확정(설정 토글 + 파일 존재). 둘 다 없으면 **업로드 시도 없이** "전송할 결과물이 없습니다."
-  - 성공: QR(모듈 12px·ECC M·흰 배경) + "{N}시간 후 자동 삭제" 고지. 실패: QR 숨김 + [06/03]의 사유별 문구 + [완료]/[재시도](**새 세션 ID로 전 과정**).
+  - 성공: QR(**ECC Q** — Windows `QrService.cs`와 일치 · 여백 4모듈 · 흰 배경 고정 · 모듈 픽셀은 화면에 맞춤) + "{N}시간 후 자동 삭제" 고지. 실패: QR 숨김 + [06/03]의 사유별 문구 + [완료]/[재시도](**새 세션 ID로 전 과정**).
   - [기기에 저장] 버튼(다운로드 내보내기).
   - `Done`: 6초 후 자동 홈(실경과 기반).
-- **검증 명령**: 브라우저 실행 → 촬영 완주 → Network에서 `OPTIONS 204 → PUT 200` 확인 → 폰으로 QR 스캔 → P1 페이지에서 다운로드 · `npx playwright test e2e/guest-flow.spec.ts`
+- **검증 명령**: 브라우저 실행(effective QR 목 `true`) → 촬영 완주 → Network에서 `OPTIONS 204 → PUT 200` 확인 → 폰으로 QR 스캔 → P1 페이지에서 다운로드 · `npx playwright test e2e/upload-qr.spec.ts` · `npx playwright test e2e/guest-flow.spec.ts`(게스트는 `Done`으로 끝나는 것을 확인)
 - **완료 기준**:
-  - [관측] 게스트로 촬영을 완주하면 QR이 뜨고 **폰으로 스캔해 사진(및 타임랩스)을 다운로드**할 수 있다. prepare 요청에 `Authorization` 헤더가 **없다**. PUT 헤더가 `requiredHeaders`와 정확히 일치한다. 진행률이 0→100으로 증가한다.
-  - [non-goal] 업로드 실패 시 **QR이 뜨지 않고** [완료]로 진행 가능하며 결과물이 로컬에 남아 있다. 같은 세션 ID로 재commit하지 않는다. 로그에 서명 URL·토큰이 없다.
-  - [trigger] QR 렌더는 commit 성공 후에만. 업로드는 전송 대상이 1개 이상일 때만.
+  - [관측] effective QR이 `true`인 상태로 촬영을 완주하면 QR이 뜨고 **폰으로 스캔해 사진(및 타임랩스)을 다운로드**할 수 있다. PUT 헤더가 `requiredHeaders`와 정확히 일치한다. 진행률이 0→100으로 증가한다. 무토큰(게스트) 요청 경로에서 prepare에 `Authorization` 헤더가 **없다**.
+  - [non-goal] **게스트로 촬영하면 `Qr`을 건너뛰고 `Done`으로 가며 업로드 요청이 0건**이다(Network 확인). 업로드 실패 시 **QR이 뜨지 않고** [완료]로 진행 가능하며 결과물이 로컬에 남아 있다. 같은 세션 ID로 재commit하지 않는다. 로그에 서명 URL·토큰이 없다. **제품 코드에 QR 게이트 우회 경로가 없다**(grep 확인).
+  - [trigger] QR 렌더는 commit 성공 후에만. 업로드는 **effective QR on** + 전송 대상이 1개 이상일 때만.
 - **롤백**: `Qr`·`Done` 화면과 PUT 코드 제거(결과 화면에서 종료).
 - [ ] 완료
 
@@ -382,12 +390,14 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **구현 내용**:
   - `frameStore`: IndexedDB 메타([05 §4.2](./05-storage-and-persistence.md) 스키마) + OPFS PNG. 저장·조회·삭제(실제 부재 확인)·10개 상한.
   - `frameCatalog`: 4단 우선순위 + **이름 기준 dedup**, 서버 미도달 시 ②만 건너뛴다. 번들 `.slots` 없으면 2×2 자동, 최종 fallback은 코드 생성(1200×1600).
-  - 프레임 선택 화면: 썸네일 그리드(축소 비트맵), 첫 항목 자동 선택, 권한 플래그 2축, [다음]에서 프레임 고정 + `max(설정컷, 슬롯수)`, 카드 ✕ 노출 규칙.
+  - 프레임 선택 화면: 썸네일 그리드(축소 비트맵), 첫 항목 자동 선택, 권한 플래그 2축, 카드 ✕ 노출 규칙.
+  - [다음]에서 프레임 고정 + **컷 수 해석 1회**(it17): `cutCountPolicy.resolve(configuredCutCount, slotCount)` — 자동(`0`)이면 `max(6, 슬롯+2)`, 고정이면 `max(설정, 슬롯)`. 세션에 **`cutCount`와 `isAutoCutCount`를 함께** 기록한다(Guide의 "(자동)" 배지 근거). **이 화면이 유일한 해석 지점**이며 `Guide`·`Capture`·전체 재촬영에서 재해석하지 않는다.
 - **검증 명령**: `npx vitest run tests/unit/frames` · 오프라인 모드에서 목록 확인 · 서버 프레임으로 합성 성공 확인
 - **완료 기준**:
   - [관측] 온라인에서 서버 공용 프레임이 목록에 나타나고 OPFS에 캐시된다. **두 번째 진입에서 재다운로드하지 않는다**(이름 dedup — Network 확인). 오프라인에서도 목록이 비지 않는다. 선택한 프레임으로 합성이 성공한다.
+  - [관측·it17] `CutCount=0`(자동)으로 저장한 뒤 **슬롯 5개** 프레임을 고르고 [다음]을 누르면 세션의 `cutCount`가 **7**, `isAutoCutCount`가 `true`이며 `Guide`에 "7 (자동)"이 표시된다.
   - [non-goal] 편집·삭제 UI는 권한 없는 역할에서 **렌더되지 않는다**. `user`·`temp_user`의 기존 프레임이 **목록에서 사라지지 않는다**. `frames/` 캐시가 세션 잔재 정리에 삭제되지 않는다.
-  - [trigger] 서버 조회는 화면 진입 시 1회. 프레임 고정은 [다음]에만.
+  - [trigger] 서버 조회는 화면 진입 시 1회. 프레임 고정과 **컷 수 해석은 [다음]에만**(설정 화면에서 컷 수를 바꿔도 진행 중 세션의 값은 변하지 않는다).
 - **롤백**: `frameStore`·`frameCatalog` 제거 → fallback 프레임만으로 동작.
 - [ ] 완료
 
@@ -459,5 +469,5 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 
 | 마일스톤 | 완료 Step | 그 시점에 가능한 것 | 선행 서버 작업 |
 |----------|-----------|---------------------|----------------|
-| **A. 게스트 촬영 완주** | Step 11 | 촬영 → 합성 → 필터 → 타임랩스 → 로컬 보관 → 업로드 → QR → 폰 다운로드 | **0-5·0-6만** |
+| **A. 촬영·업로드 경로 완주** | Step 11 | 촬영 → 합성 → 필터 → 타임랩스 → 로컬 보관 → 업로드 → QR → 폰 다운로드. **게스트 흐름은 `Done`까지**(QR은 로그인 전제 — effective QR 목으로 검증) | **0-5·0-6만** |
 | **B. 전 기능 출시** | Step 17 | 로그인·프레임 저작·설정·계정·사용자 관리 포함 전부 | 0-1 ~ 0-6 |

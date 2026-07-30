@@ -93,6 +93,24 @@ const constraints: MediaStreamConstraints = {
 | **모든 플랫폼** | **HTTPS(또는 localhost) 필수** — 보안 컨텍스트가 아니면 `mediaDevices`가 `undefined`다 |
 | 권한 상태 | `navigator.permissions.query({name:"camera"})`는 지원이 고르지 않다 → **지원 시에만** 진단 표시에 사용하고, 로직은 `getUserMedia` 결과로 판정 |
 
+#### 2.3.1 파이프라인이 의존하는 API의 iOS/iPadOS Safari 가용 시점 (지원 하한 근거)
+
+[10 §6.1](./10-testing-and-acceptance.md)이 **Safari 17+**를 최소로 잡은 근거다. 각 항목은 **런타임 기능 감지**로 확인하고, 표는 기기 선정용이다.
+
+| API | 파이프라인에서의 역할 | Safari 가용 | 없을 때의 폴백 |
+|-----|----------------------|-------------|----------------|
+| `getUserMedia` + `playsinline` | 카메라 획득 | 오래전부터 ○ | 없음(앱 사용 불가) |
+| `requestVideoFrameCallback` | 프레임 도착 통지 | **15.4+** | `requestAnimationFrame` + `video.currentTime` 중복 스킵(§2.4) |
+| `OffscreenCanvas`(**2D**) | Worker 가공 캔버스 | **16.4+** | ⚠️ 폴백 없음 → **메인 스레드 `<canvas>`에서 가공**(성능 예산 재측정 필요). 16.4 미만은 지원 대상 밖 |
+| `transferControlToOffscreen` | 프리뷰 zero-copy 렌더 | 16.4+ | Worker → `transferToImageBitmap` → 메인 `drawImage`(§4.2의 기본 경로) |
+| `OffscreenCanvas.getContext("webgl2")` | **뷰티 필터 Worker 경로** | **17+**(16.4는 2D만 — `getContext("webgl")`이 `null`) | `ImageData` CPU 폴백(§6.2) 또는 메인 스레드 WebGL2 |
+| `createImageBitmap(video)` / `(blob)` | Worker 프레임 전달·합성 입력 | 15+ ○ | 없음(필수) |
+| `createImageBitmap` **resize 옵션** | 썸네일·슬롯 축소 | **오래 미지원**(WebKit 이력) | **필수 폴백**: 작은 캔버스에 `drawImage` 또는 절반씩 단계 축소(§5.2) |
+| `VideoFrame`(WebCodecs) | zero-copy 프레임 전달 | 16.4+ | `createImageBitmap(video)`(§2.4의 폴백 경로) |
+| `VideoEncoder`(WebCodecs) | 타임랩스 경로 B | 16.4+ | 경로 A(MediaRecorder mp4) → 경로 C(§7.3b) |
+
+> **`OffscreenCanvas` 2D가 없으면 §1의 구조가 성립하지 않는다.** 기능 감지에서 실패하면 "가공을 메인 스레드에서 수행"으로 축소하되, 그 경로는 성능 예산([04 §8](#8-성능메모리-예산))을 만족하지 못할 수 있으므로 **진단에 "저성능 모드"로 표시**하고 실기기 검증 결과로 지원 여부를 판정한다.
+
 ### 2.4 프레임 획득 루프
 
 ```ts
@@ -192,7 +210,7 @@ compose(frame, cuts[], filter, outFormat):
 |--------------|------|
 | 출력 캔버스 | `OffscreenCanvas(frameW, frameH)` (Worker에서 수행 — 메인 스레드 블로킹 금지) |
 | 프레임 이미지 | 번들 프레임은 same-origin, **서버 프레임은 `crossOrigin="anonymous"` fetch 후 `createImageBitmap`**(WM2). 오염되면 `convertToBlob`이 예외 |
-| 축소 보간 | `createImageBitmap(src, {resizeWidth, resizeHeight, resizeQuality: "high"})` — 축소에 강하다. **미지원·품질 미달 시 2단 폴백**: 절반씩 반복 축소(mipmap 방식) 후 `drawImage` |
+| 축소 보간 | `createImageBitmap(src, {resizeWidth, resizeHeight, resizeQuality: "high"})` — 축소에 강하다. **미지원·품질 미달 시 2단 폴백**: 절반씩 반복 축소(mipmap 방식) 후 `drawImage`. ⚠️ **resize 옵션은 WebKit에서 오래 미지원이었고, 미지원 시 옵션이 조용히 무시된다**(예외가 아니다) → **결과 `ImageBitmap`의 `width`가 요청한 `resizeWidth`와 같은지 1회 확인해 경로를 결정**하고 그 판정을 캐시한다 |
 | `imageSmoothingQuality` | `drawImage` 사용 경로에서는 `ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"` |
 | 덮어쓰기 | `ctx.globalCompositeOperation = "source-over"` 기본값 + 슬롯 영역을 먼저 `clearRect`하지 않는다(불투명 이미지를 덮으므로 동일 결과) |
 | 출력 인코딩 | JPG: `convertToBlob({type:"image/jpeg", quality:0.95})` / PNG: `{type:"image/png"}` |
@@ -233,6 +251,7 @@ compose(frame, cuts[], filter, outFormat):
 | 색 공간 | **sRGB 값 그대로**(선형화하지 않는다). OpenCV가 8bit 값에 직접 연산하므로 선형화하면 결과가 달라진다 |
 | σ 스케일 | 셰이더에서 0~1 정규화 값을 쓰면 σColor를 **40/255**로 환산한다 |
 | WebGL2 미지원 | `ImageData` CPU 폴백(느리지만 정확). 1080×1440 기준 예산 초과 시 **반해상도 계산 후 업샘플** 허용 |
+| **Worker 안의 WebGL2** | `OffscreenCanvas.getContext("webgl2")`는 **Safari 17+**에서만 된다(16.4는 2D만). 기능 감지 후 ① Worker WebGL2 → ② 메인 스레드 WebGL2(가공 결과를 옮겨 처리) → ③ `ImageData` CPU 순으로 폴백한다 |
 | 허용 오차 | 골든 이미지 비교에서 **평균 절대 오차 ≤ 3/255, 최대 차이 ≤ 12/255**([10 §4](./10-testing-and-acceptance.md)) |
 | 파라미터 의도 | 픽셀 동일성이 불가하면 **"과하지 않은 소프트닝 60% 블렌드 + 미세 밝기 상승"** 의도를 유지한다(`analysis/14 §6` 주석) |
 
@@ -278,21 +297,54 @@ compose(frame, cuts[], filter, outFormat):
 ### 7.3 인코더 경로 판정 (시작 시 1회, 결과를 진단에 표시)
 
 ```
-경로 A: MediaRecorder(mp4)
-   조건: MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")
-   방법: 가공 canvas.captureStream(0) + track.requestFrame() 을 stride마다 호출
-   장점: 구현 단순, muxing 불필요
-경로 B: WebCodecs + JS MP4 muxer
-   조건: "VideoEncoder" in window && await VideoEncoder.isConfigSupported({codec:"avc1.42001E", ...}).supported
+경로 B: WebCodecs + JS MP4 muxer                      ← 1순위
+   조건: "VideoEncoder" in self && (await VideoEncoder.isConfigSupported({codec:"avc1.42001E", ...})).supported
    방법: VideoFrame(가공 결과, timestamp=i*33333μs) → encode → muxer → Blob(video/mp4)
-   장점: 타임스탬프·품질 제어 정확
+   장점: 타임스탬프·품질 제어 정확. **Worker 안에서 완결**(VideoEncoder는 Worker에 노출된다)
+경로 A: MediaRecorder(mp4)                            ← 2순위(예비)
+   조건: MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")
+   방법: 메인 스레드의 HTMLCanvasElement.captureStream(0) + track.requestFrame() 을 stride마다 호출
+   제약: ⚠️ MediaRecorder·captureStream은 **Worker에 없다**(§7.3a)
+   장점: muxing 불필요
 경로 C: 미지원
    → 타임랩스 미제공(timelapseUrl = null). 계약상 합법(analysis/14 §7.3)
 ```
 
 | 판정 순서 | **B → A → C**(권장) |
 |-----------|---------------------|
-| 이유 | 경로 B가 **타임스탬프를 직접 지정**하므로 30fps 정확도와 목표 길이를 보장한다. A는 `requestFrame` 타이밍에 의존해 길이가 흔들릴 수 있다 |
+| 이유 ① 정확도 | 경로 B가 **타임스탬프를 직접 지정**하므로 30fps 정확도와 목표 길이를 보장한다. A는 `requestFrame` 타이밍과 레코더 내부 프레임레이트 추정에 의존해 길이가 흔들린다 |
+| 이유 ② 구조 | B는 **가공 Worker 안에서 프레임을 그대로 인코딩**한다. A는 가공 결과를 메인 스레드 canvas로 되돌려야 하므로(§7.3a) 프리뷰와 경합하고 스레딩 규약([04 §10](#10-스레딩리소스-규약-analysis14-9))을 깬다 |
+| 이유 ③ 지원 범위 | [10 §6.1](./10-testing-and-acceptance.md)의 **최소 버전 전부에서 B가 가능**하다(§7.3b). A가 유일한 대안이 되는 구간(WebCodecs 없고 MediaRecorder mp4 있는 Safari 14.1~16.3)은 지원 매트릭스 밖이다 → **A는 사실상 예비 경로**이며, 판정 순서를 B 우선으로 두면 실기기에서 A 경로가 선택되는 일은 거의 없다 |
+
+#### 7.3a 경로 A의 구조적 제약 (구현 전 반드시 확인)
+
+| 사실 | 결과 |
+|------|------|
+| `MediaRecorder`는 **Window 전용 인터페이스**다(Worker 전역에 없다) | 경로 A는 **메인 스레드에서만** 돌 수 있다 |
+| `captureStream()`은 **`HTMLCanvasElement`의 메서드**다. **`OffscreenCanvas`에는 없다** | 가공 Worker의 OffscreenCanvas를 바로 녹화할 수 없다. 경로 A를 쓰려면 가공 결과를 **메인 스레드의 `<canvas>`에 그린 뒤** 그 캔버스를 `captureStream`한다 |
+| 프리뷰를 `transferControlToOffscreen`으로 Worker에 넘겼다면 | 그 캔버스는 **메인에서 그릴 수 없다**(제어권이 이미 이전됨) → 경로 A용 캔버스를 **별도로** 두어야 한다 |
+
+→ 경로 A를 구현할 때는 `stride` 프레임마다 Worker가 `ImageBitmap`을 메인으로 보내고, 메인이 전용(화면 밖) 캔버스에 그린 뒤 `requestFrame()`을 호출한다. **경로 A는 [04 §10](#10-스레딩리소스-규약-analysis14-9) 표의 "타임랩스 인코딩 = Worker" 규약의 예외다.**
+
+#### 7.3b 브라우저 지원 현실 (2026-07 기준 — 과신 금지)
+
+| 기능 | Chrome/Edge | Safari(macOS·iOS·iPadOS) | Firefox |
+|------|-------------|--------------------------|---------|
+| WebCodecs `VideoEncoder`(경로 B) | 94+ ○ | **16.4+ ○** — WebCodecs의 **video 인터페이스**(`VideoEncoder`/`VideoDecoder`/`VideoFrame`)가 16.4에 도입됐다(audio 인터페이스는 한참 뒤). H.264 인코딩은 VideoToolbox 기반 | 133+ △ — **플랫폼 H.264 인코더 유무에 의존**. `isConfigSupported`로만 판정한다 |
+| `avc1` 인코딩 실제 가용성 | ○(하드웨어 또는 SW 폴백) | ○ | △ |
+| MediaRecorder `video/mp4;codecs=avc1`(경로 A) | 130+ ○(그 이전은 webm만) | **14.1+ / iOS 14.5+ ○**(Safari는 오래전부터 mp4가 기본 컨테이너) | **✕**(`isTypeSupported` false) |
+| 결론 | B 사용 | B 사용(16.4+) | B가 되면 사용, 아니면 **경로 C** |
+
+| 규칙 | 내용 |
+|------|------|
+| **버전 문자열로 판정하지 않는다** | 반드시 `VideoEncoder.isConfigSupported()` / `MediaRecorder.isTypeSupported()` **런타임 기능 감지**로만 판정한다. 위 표는 기기 선정·예상용이다 |
+| `isConfigSupported`는 **비동기** | `await` 하고 `.supported === true`를 확인한다. 지원 여부와 별개로 `config`(해상도·비트레이트)에 따라 거절될 수 있으므로 **실제 사용할 config로 질의**한다 |
+| Firefox가 C로 떨어질 수 있다 | 지원 등급 C(검증만)와 일치한다. 타임랩스 미제공은 계약상 합법이다 |
+
+#### 7.3c 경로 B 인코더 설정·출력 규격
+
+| 항목 | 규격 |
+|------|------|
 | 코덱 문자열 | `avc1.42001E`(Baseline L3.0) 우선, 실패 시 `avc1.42E01E` → `avc1.4D001E`(Main) 순으로 시도 |
 | 인코더 설정 | `{ codec, width, height, framerate: 30, bitrate: 하단 표, latencyMode: "quality", avc: { format: "avc" } }` |
 | muxer | 순수 JS MP4 muxer(버전 핀 고정). **`moov` atom이 완성된 정상 종료를 보장**해야 한다(`analysis/14 §7.1`) |
@@ -381,7 +433,7 @@ WebCodecs·MediaRecorder에는 CRF가 없으므로 해상도별 비트레이트�
 | 프레임 획득 | 메인 스레드의 `rVFC` 콜백(가벼운 전달만) | 루프 취소 플래그 |
 | 프레임 가공·분기 | **Worker 1개**(`frameProcessor.worker.ts`) | 정지 메시지 후 `terminate()`(타임아웃 300ms) |
 | 프리뷰 렌더 | Worker의 OffscreenCanvas(권장) 또는 메인 canvas | 화면 이탈 시 구독 해제 |
-| 타임랩스 인코딩 | **Worker**(가공 Worker와 동일 또는 별도) | `flush()` → `close()`, 실패 시 강제 종료 |
+| 타임랩스 인코딩 | **Worker**(가공 Worker와 동일 또는 별도) — **경로 B에 한정**. 경로 A(`MediaRecorder`)는 Window 전용이라 **메인 스레드**에서 돌고 전용 `<canvas>`가 필요하다(§7.3a) | `flush()` → `close()`, 실패 시 강제 종료. 경로 A는 `recorder.stop()` + `dataavailable` 대기 |
 | 합성·필터 | **Worker**(UI 블로킹 금지) | 중간 버퍼 즉시 해제 |
 | 런타임 설정(거울·종횡비·stride) | Worker에 메시지로 전달 | — |
 | 스틸/인코딩 상태 전이 | Worker 내부 단일 스레드라 락 불필요 | — |
@@ -409,7 +461,10 @@ WebCodecs·MediaRecorder에는 CRF가 없으므로 해상도별 비트레이트�
 - [ ] 밝게가 `alpha=1.1, beta=20`이다
 - [ ] 뷰티가 파라미터 의도를 유지하고 허용 오차 내다
 - [ ] 타임랩스가 **H.264 / mp4 / 무음 / 30fps**이고 목표 길이 10~15초다
+- [ ] 인코더 경로를 **런타임 기능 감지**(`isConfigSupported`/`isTypeSupported`)로만 판정한다(버전 문자열·UA 판정 금지)
 - [ ] 인코더 부재·실패가 예외가 아니라 `null`/스킵으로 처리된다
+- [ ] `createImageBitmap` resize 옵션의 **실효 여부를 결과 크기로 검증**하고 폴백을 둔다(§5.2)
+- [ ] `OffscreenCanvas` 2D·WebGL2 부재 경로에 폴백이 있다(§2.3.1·§6.2)
 - [ ] 서버 프레임 이미지를 **CORS-clean**하게 로드한다(WM2)
 - [ ] 모든 `VideoFrame`/`ImageBitmap`이 `close()`된다
 - [ ] 화면 이탈 시 시퀀스 취소 → 인코더 정지 → 카메라 정지 순서를 지킨다

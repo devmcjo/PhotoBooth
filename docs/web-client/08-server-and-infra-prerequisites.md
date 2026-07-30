@@ -28,12 +28,14 @@
 ### 1.1 선행 작업 없이 진행 가능한 범위 (중요)
 
 ```
-P0-5(CORS) + P0-6(Hosting) 만 완료  →  게스트 촬영 전 흐름 + 업로드 + QR 까지 구현·검증 가능
-                                        (프레임 선택·촬영·컷 선택·합성·필터·타임랩스·업로드 3단계·QR)
+P0-5(CORS) + P0-6(Hosting) 만 완료  →  촬영 전 흐름 + 업로드 3단계 + QR 을 구현·검증 가능
+                                        (프레임 선택·촬영·컷 선택·합성·필터·타임랩스·로컬 보관·업로드·QR)
 P0-1~4 추가 완료                    →  로그인 · 프레임 저작 · 계정 · 사용자 관리 · PIN
 ```
 
 WBS는 이 순서로 짜여 있다([11](./11-wbs.md)). **P0-1~4를 기다리며 손을 놓을 필요가 없다.**
+
+> ⚠️ **업로드·QR의 "제품 동작" 검증에는 로그인이 필요하다.** 서버는 게스트(무토큰) 업로드를 허용하지만(`optionalBearer`), **클라이언트 정책상 게스트는 `Qr`에 도달하지 않는다**(effective QR off → `Result → Done`, [03 §8.1](./03-screens-spec.md)). 따라서 P0-5·P0-6만으로 검증할 수 있는 것은 **업로드 3단계·QR 렌더 경로 자체**(무토큰으로 prepare/PUT/commit이 CORS를 통과하고 QR이 그려지는지 — 개발 중 임시로 판정을 우회해 확인)이며, **화면 흐름을 통한 종단 검증은 P0-1~4 완료 후 로그인 상태에서** 수행한다([11 Step 11·12](./11-wbs.md)).
 
 ---
 
@@ -121,7 +123,7 @@ export function validateRedirectUri(raw: string, allowlist: string[]): string {
 
 ### 4.2 P0-3 · audience 목록화 (B2)
 
-**현재 상태**: `web/functions/src/services/googleAuth.ts`의 `assertPayloadAndExtractEmail`이 `payload.aud !== cfg.clientId`면 거부하고, code 교환도 단일 client_id/secret을 쓴다. SSO 활성 판정은 `GOOGLE_OAUTH_CLIENT_ID` 단일 값의 존재 여부다(`config.ts`).
+**현재 상태**: `web/functions/src/services/googleAuth.ts`의 `assertPayloadAndExtractEmail`이 `payload.aud !== cfg.clientId`면 거부하고(`verifyIdToken`의 `audience`도 단일 `cfg.clientId`), code 교환도 단일 client_id/secret을 쓴다. SSO 활성 판정(`googleOAuthEnabled`)은 **`GOOGLE_OAUTH_CLIENT_ID`와 `GOOGLE_OAUTH_CLIENT_SECRET`이 둘 다 비어 있지 않은지**이며, id만 있고 secret이 없으면 **`loadConfig()`가 예외로 조기 실패**한다(`config.ts` — 오구성 배포 방지). 목록화 시 이 조기 실패 규칙도 "선택된 `clientKind`의 secret이 없으면 실패"로 함께 옮겨야 한다.
 
 **변경 방향**
 
@@ -148,7 +150,9 @@ export function validateRedirectUri(raw: string, allowlist: string[]): string {
 - **목록 밖 `aud`가 401로 거부된다**
 - `clientKind: "web"`이 웹 secret으로 교환을 시도한다
 - `clientKind` 미지정이 desktop 구성으로 동작한다(하위 호환)
+- **`clientKind`가 화이트리스트 밖 문자열이면 400**(임의 값으로 구성을 고르지 못하게)
 - `email_verified: false`가 여전히 거부된다
+- **선택된 `clientKind`의 secret이 미설정이면 조기 실패**(현행 `config.ts`의 `hasId && !hasSecret` 가드와 동일한 성질 유지)
 
 ### 4.3 P0-4 · 웹 전용 게이트 키 (B4)
 
@@ -234,6 +238,7 @@ gcloud storage buckets describe gs://mcphoto-955fb.firebasestorage.app --format=
 ```
 
 - 구성 파일은 **`web/cors.json`으로 신설**하고 커밋한다. `web/OPS-cors.md`는 "GET용으로는 불필요해 구성 파일을 두지 않는다"고 결정했는데, **PUT용으로 필요해진 시점이 지금**이다 — 적용 후 OPS-cors.md의 결론 표("설정 불필요" → "PUT용 구성 적용됨")를 함께 갱신한다.
+- ⚠️ `--cors-file`은 **기존 구성을 병합하지 않고 전체 교체**한다(`web/OPS-cors.md §3`). 현재 버킷 CORS는 비어 있으므로 지울 것이 없지만, 이후 규칙을 추가할 때는 **파일에 기존 규칙 객체를 함께 담아** 적용한다.
 - 이 PC에 `gcloud`가 없다는 실측 기록이 있다(OPS-cors §1) — 적용은 Cloud Shell 또는 gcloud 설치 후 수행한다.
 
 | 항목 | 주의 |

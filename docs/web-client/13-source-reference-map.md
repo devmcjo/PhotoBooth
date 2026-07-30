@@ -138,6 +138,7 @@
 | `Core/Settings/AppSettings.cs` | `Clamp()`·`NormalizeBackend()`·`NormalizeQr()`. **두 URL 정규화 방향이 반대** + **자동 sentinel(0) 보정 제외 가드**(it17) |
 | `Core/Settings/CutCountPolicy.cs` | 자동 컷 수 해석(it17): `IsAuto`(0만)·`Resolve`(자동 `max(6,슬롯+2)` / 고정 `max(설정,슬롯)`). 해석 지점은 `CaptureSession.Begin` 1곳 |
 | `Core/Settings/QrDeliveryPolicy.cs` | `Normalize`/`OnReEnabled` |
+| `Core/Settings/QrEffectivePolicy.cs` | **런타임 QR on/off 단일 지점.** 미로그인 → false, TempUser 한도 초과 → false, 그 외 raw. **raw 설정을 절대 write하지 않는다.** 호출부는 `ResultViewModel.Next`(`:149`) 1곳 |
 | `Core/Capture/PreviewReadiness.cs` | Ready 3조건 + 1회 신호 |
 | `Core/Capture/FfmpegArgs.cs` | `ComputeSpeedFactor`만 이식(ffmpeg 인자는 무관) |
 | `Core/Navigation/SessionStateMachine.cs` | 전이표·판정 순서 |
@@ -235,6 +236,7 @@
 | 3 | 웹에 Firebase SDK를 넣어야 하나? | **아니다.** 앱은 백엔드 API + 서명 URL만 쓴다. Firestore·Storage SDK를 넣으면 계약 위반. **P1 페이지만** SDK를 쓴다 |
 | 4 | 게이트 키가 없으면 아무것도 안 되나? | 관리 API(`/accounts`·`/config`)는 **Bearer만** 필요하다. 게이트 키가 필요한 것은 `/auth/google`·`/frames/default`·`/uploads/*` |
 | 5 | 403이면 권한 문제인가? | **`error.code`를 봐야 한다.** `TEMP_USER_*`는 권한이 아니라 **무료 한도** 문제이고 문구가 다르다 |
+| 6 | 서버가 게스트 업로드를 허용하니 게스트도 QR을 받나? | **아니다.** 서버 게이트(`optionalBearer`)와 **클라이언트 정책**은 별개다. `QrEffectivePolicy`가 미로그인이면 QR을 끄므로 **게스트는 `Result → Done`** 으로 끝난다([03 §8.1](./03-screens-spec.md)) |
 
 ---
 
@@ -243,7 +245,7 @@
 | # | 문서 | 한 줄 |
 |---|------|-------|
 | — | [README](./README.md) | 진입·읽는 순서 |
-| 00 | [범위와 결정](./00-scope-and-decisions.md) | 무엇을 만들고 무엇을 빼는가 · WD1~WD18 · 불변식 |
+| 00 | [범위와 결정](./00-scope-and-decisions.md) | 무엇을 만들고 무엇을 빼는가 · WD1~WD20 · 불변식 |
 | 01 | [기술 스택과 구조](./01-tech-stack-and-structure.md) | 스택·폴더·CSP·배포 |
 | 02 | [앱 셸과 내비게이션](./02-app-shell-and-navigation.md) | 상태머신·세션·유휴·전체화면 |
 | 03 | [화면별 상세 명세](./03-screens-spec.md) | 13화면 + 6모달 |

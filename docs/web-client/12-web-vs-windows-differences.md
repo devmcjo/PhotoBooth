@@ -42,6 +42,7 @@
 | 프레임 | 4단 목록 우선순위 · 이름 dedup · 출처 분류(`local:`/`bundle:`/`fallback`/서버 id) · 편집·삭제 권한 매트릭스 · 사본 이름 규칙 · `_` 금지 · 10개 상한 · `.slots` 포맷 · **편집은 로컬 전용(서버 미호출)** |
 | 업로드 | 3단계 순서 · 세션 ID 형식 · 경로·URL 조립 · `requiredHeaders` 전부 부착 · 최소 1개 불변식 · 재시도는 새 세션 ID |
 | 권한 | 역할 5종 위계 · `isPower`/`canWriteFrames`/`canManage`/`canResetPin` · 역할 변경 매트릭스 · 3중 방어 · PIN 게이트 fail-closed · 한도 조회 fail-open |
+| QR 게이트 | **effective QR 판정**(`qrEffectivePolicy`: 게스트 → off, TempUser 한도 초과 → off, 그 외 raw 설정) · **게스트는 `Qr` 화면에 도달하지 않고 `Result → Done`** · 저장된 `EnableQrDelivery` 값은 어떤 경우에도 write하지 않는다(런타임 오버라이드만) |
 | 문구 | `docs/analysis/13 §14` 카탈로그 전체 |
 | 불변식 | M1~M16 (M6만 웹 정의 확장 → C1) |
 
@@ -59,7 +60,7 @@
 | B6 | 설정 저장 | INI + 실행경로→ProgramData→LocalAppData **3단 폴백** | localStorage 단일 위치 | 유지 성질은 "쓰기 실패를 사용자에게 알린다" — 폴백은 Windows 전용 개념 |
 | B7 | 로컬 프레임 저장 | `Frame\{이름}.png` + `.slots`, **파일명 접두**로 공용/개인 구분 | IndexedDB 메타(`scope`·`ownerId`) + OPFS PNG | `analysis/41 §3.2`가 명시 허용한 대체. 의미(공용=전원/개인=본인)와 `_` 금지는 유지 |
 | B8 | 세션 임시 폴더 | `%ProgramData%\MCPhoto\sessions\{guid}` | OPFS `sessions/{sessionId}/` | 시작 시 잔재 일괄 정리 규격 동일 |
-| B9 | QR 생성 | QRCoder | JS QR 라이브러리(ECC M·12px 모듈) | 인코딩 문자열 동일(다운로드 페이지 URL 전체) |
+| B9 | QR 생성 | QRCoder `PngByteQRCode`, **ECC Q**, 기본 모듈 20px(`QrService.cs`) | JS QR 라이브러리, **ECC Q**(동일), 모듈 픽셀은 화면 크기에 맞춤 | 인코딩 문자열 동일(다운로드 페이지 URL 전체) + ECC 레벨 동일. 모듈 픽셀 크기는 계약이 아니다 |
 | B10 | 업로드 진행률 | HTTP 스트림 래핑 | **XHR `upload.onprogress`**(`fetch`는 업로드 진행률 미제공) | 단계 라벨·합산 로직 동일(순서 비의존) |
 | B11 | OAuth 인가 코드 수신 | loopback `HttpListener` + 시스템 브라우저 | **같은 브라우저 리디렉트** `/oauth2callback` | PKCE·state·nonce·3분 타임아웃 동일. 서버 확장 필요([08 §4](./08-server-and-infra-prerequisites.md)) |
 | B12 | 브랜딩·버전 | 브랜딩 = `branding.ini` 외부 파일 · 버전 = **어셈블리 리소스 + exe LastWriteTime**(it18에서 `bldinfo.ini` 폐기) | 브랜딩 = `/branding.json` fetch · 버전 = 빌드 상수 | 표시 항목(`v{Version}`, 채널 없음)·폴백값·"첫 렌더 전 주입" 규격 동일. "빌드 산출물 자신이 버전의 유일한 출처"라는 방향도 일치 |
@@ -212,7 +213,7 @@ Windows에는 없던 요구다. 상세는 [08](./08-server-and-infra-prerequisit
 | # | 변경 | 왜 |
 |---|------|-----|
 | G1 | `redirectUri` 허용 목록화(B1) | 웹은 https 리디렉트를 쓴다(현재 loopback만 허용) |
-| G2 | audience 목록화(B2) | 웹 전용 OAuth 클라이언트 id가 별도다 |
+| G2 | audience 목록화(B2) + 요청 본문에 **`clientKind`** 추가 | 웹 전용 OAuth 클라이언트 id/secret이 별도다. **웹은 `clientKind:"web"`을 보내고 Windows는 미지정(=desktop)으로 무변경 통과**한다([07 §2.2](./07-auth-and-permissions-web.md)) |
 | G3 | 웹 전용 게이트 키 발급(B4) | 브라우저에 키가 공개되므로 분리·폐기 가능성 확보 |
 | G4 | **Storage 버킷 CORS**(B5) | ① 서명 URL PUT ② **서버 프레임 이미지로 합성**(canvas 오염 방지 — 기존 문서에 없던 새 요구) |
 | G5 | Hosting 멀티사이트 | P1 페이지와 CSP·캐시를 분리하기 위함 |

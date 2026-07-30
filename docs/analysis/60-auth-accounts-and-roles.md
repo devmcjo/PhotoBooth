@@ -170,7 +170,8 @@ CanResetPin(acting, target) = IsPower(acting) && ManageRank(target) < ManageRank
 
 | 기능 / 화면 | 게스트 | T | U | **A** | M | D | 근거 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 촬영(프레임 선택→촬영→결과→QR) | ○ | ○ | ○ | ○ | ○ | ○ | 촬영 흐름은 로그인 요구 없음. 홈→프레임 선택 전이에 계정 조건 없음(`src/MCPhoto.Core/Navigation/SessionStateMachine.cs`); "게스트 직행" 설계(it2) |
+| 촬영 흐름(프레임 선택→촬영→결과→로컬 저장) | ○ | ○ | ○ | ○ | ○ | ○ | 촬영 흐름은 로그인 요구 없음. 홈→프레임 선택 전이에 계정 조건 없음(`src/MCPhoto.Core/Navigation/SessionStateMachine.cs`); "게스트 직행" 설계(it2) |
+| **QR 전송·업로드(effective QR)** | **×** | △(한도 내) | ○ | ○ | ○ | ○ | `QrEffectivePolicy.IsQrEnabled`(it13 §7.1b) — **미로그인 → false(Result→Done 직행)**, TempUser 한도 초과 → false, 그 외 raw 설정 그대로. 호출부 `ResultViewModel.Next`. 서버 업로드 게이트(`optionalBearer`)는 무토큰을 허용하지만 클라이언트가 시작하지 않는다(2026-07-30 행 분리 정정) |
 | 기본(공용) 프레임 사용 | ○ | ○ | ○ | ○ | ○ | ○ | `FrameSelectViewModel.OnEnterAsync`가 항상 기본 프레임 로드 |
 | 커스텀(본인) 프레임 사용 | × | ○ | ○ | ○ | ○ | ○ | 로그인 사용자만 본인 프레임 추가 로드(`GetUserFramesAsync(user.Id)`). **it16 E4**: 프레임 권한을 잃은 T·U의 기존 프레임도 **목록에 그대로 노출되고 촬영에 쓸 수 있다**(편집·삭제만 불가) |
 | 프레임 생성(편집기 진입) | × | × | × | **○** | ○ | ○ | `CanCreateFrame = Role.CanWriteFrames()`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:80`) + `CreateFrame` 커맨드 가드(`:218`) + XAML `Visibility`(`Views/FrameSelectView.xaml:88`). A는 개인 로컬만, M·D는 신규 생성분을 공용 DB에 등록 |

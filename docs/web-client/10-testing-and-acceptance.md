@@ -34,7 +34,7 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 | `idleCountdown.test.ts` | `IdleCountdownTests.cs` | 120초 판정 · 10초 카운트다운 · 활동 무시 |
 | `centerCrop.test.ts` | `CropCalculatorTests.cs` | 넓은/좁은 원본 · 정사각 · `targetAspect<=0` · **정수 나눗셈 경계** |
 | `previewReadiness.test.ts` | `PreviewReadinessTests.cs` | 3조건 각각 미달 · 전이 1회만 · 타임아웃 |
-| `captureSession.test.ts` | `CaptureSessionTests.cs` | `max(설정컷, 슬롯수)` · 토글·번호 재계산 · 슬롯 초과 거부 · 전체 재촬영 카운터 |
+| `captureSession.test.ts` | `CaptureSessionTests.cs` | `begin()`이 `cutCountPolicy.resolve`로 실효 컷 수를 산출하고 **`isAutoCutCount`를 함께 기록** · 토글·번호 재계산 · 슬롯 초과 거부 · 전체 재촬영 카운터 · **재촬영이 `cutCount`를 재해석하지 않음**(it17) |
 | `slotLayout.test.ts` | `SlotLayoutTests.cs` | `autoArrange` 1~6개 · 세로 스트립(aspect<0.6) · `scaleSlots` 원본 기준 · 클램프 · 겹침 판정 |
 | `editorTransform.test.ts` | `EditorTransformTests.cs` | 레터박스 원점 · 왕복 변환 · `scale<=0` 방어 |
 | `frameOrigin.test.ts` | `FrameOriginTests.cs` | `local:`·`bundle:`·`fallback`·빈 id·서버 id 분류 |
@@ -43,7 +43,8 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 | `slotsFile.test.ts` | `LocalFrameStoreTests.cs` | 메타 대소문자 무시 · 손상 줄 무시 · `#dbid` 유무 · `#imagesize` 부재 |
 | `appSettings.test.ts` | `SettingsTests.cs` | 전 키 기본값 · 최근접 보정 · **자동 sentinel `0` 보정 제외(왕복 보존) + `-1`은 6으로 보정** · `RetentionHours` clamp · **두 URL 정규화 방향 반대** |
 | `cutCountPolicy.test.ts` | `CutCountPolicyTests.cs` | `isAuto`(0만 자동, -1 아님) · `resolve` 자동/고정 각 케이스(슬롯 0~6, 7 산출 포함) · 슬롯 미확정(≤0) 폴백 |
-| `qrDeliveryPolicy.test.ts` | `QrDeliveryPolicyTests.cs`, `QrEffectivePolicyTests.cs` | 정규화 · 재활성 · 하위 값 보존 |
+| `qrDeliveryPolicy.test.ts` | `QrDeliveryPolicyTests.cs` | 정규화 · 재활성 · 하위 값 보존 |
+| `qrEffectivePolicy.test.ts` | `QrEffectivePolicyTests.cs` | 진리표: **미로그인 → false(raw 무관)** · TempUser 한도 초과 → false · 정상 TempUser·`user` 이상 → raw 그대로 · **raw=true·초과 시 effective=false지만 입력 raw는 불변**(오버라이드 확인) |
 | `rolePolicy.test.ts` | `RoleManagementTests.cs` | `isPower` · `canWriteFrames` · `canManage`(**동급 허용**) · `canResetPin`(**동급 차단**) · 알 수 없는 역할 → `user` |
 | `roleChangePolicy.test.ts` | `RoleManagementTests.cs` | `assignableRoles` 전수 매트릭스 · admin 지정 불가 · 순서 오름차순 |
 | `uploadContract.test.ts` | `UploadContractTests.cs` | 세션 ID 정규식 · 경로 조립 · 토큰 URL 인코딩(`%2F`) · 다운로드 페이지 URL · 만료 계산 |
@@ -128,9 +129,11 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 
 | # | 시나리오 | 검증 포인트 | 불변식 |
 |---|----------|-------------|:------:|
-| E1 | 게스트 촬영 완주 | 홈 → 프레임 → 가이드 → 촬영(6컷) → 컷선택 → 결과 → QR → 완료 → 홈 | — |
+| E1 | 게스트 촬영 완주 | 홈 → 프레임 → 가이드 → 촬영(6컷) → 컷선택 → 결과 → **`Done`(QR 건너뜀) → 홈**. 업로드 요청 **0건** | — |
+| E1b | 로그인 촬영 완주 | 같은 흐름에서 `Result` → **`Qr`** → 업로드 성공 → QR 표시 → 완료 → 홈 | — |
 | E2 | 업로드 3단계 | prepare/PUT/commit 요청 순서·헤더·본문. **`requiredHeaders` 전부 부착** | M14 |
-| E3 | **로그아웃 후 게스트 업로드** | 로그인 → 로그아웃 → 촬영 → prepare 요청에 **`Authorization` 헤더 없음** | **M1** |
+| E3 | **로그아웃 후 업로드에 토큰이 붙지 않음** | 로그인 → 로그아웃 → 촬영 → prepare 요청에 **`Authorization` 헤더 없음**. ⚠️ 게스트는 정상 흐름에서 `Qr`에 도달하지 않으므로(effective QR off), **`qrEffectivePolicy`를 목으로 `true` 고정해 업로드를 실제로 실행**시켜 헤더를 관측한다. 보조로 `authStore` 단위 테스트(세션 null → 토큰 null)를 함께 둔다 | **M1** |
+| E3b | **재로그인 후 토큰 교체** | A로 로그인 → 로그아웃 → B로 로그인 → 업로드 prepare의 Bearer가 **B의 토큰**이다(A의 잔존 토큰이 아니다) | **M1** |
 | E4 | JWT 미저장 | 로그인 후 `localStorage`·`sessionStorage`·`indexedDB`·쿠키에 토큰 문자열 부재 | **M2** |
 | E5 | 유휴 타임아웃 | 촬영 중 무동작 → 경고 → 카운트다운 → 홈. **로그인 유지** | M3 |
 | E6 | 저장 실패 표시 | 저장소 쓰기 실패를 목으로 유발 → **실패 토스트 표시** | M4 |
@@ -147,7 +150,9 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 | E17 | PIN 401 오해 방지 | PIN 1회 오입력이 **로그아웃을 유발하지 않음** | — |
 | E18 | 역할 매트릭스 | manager 로그인 시 다른 manager 행에 [PIN] 없음·[삭제] 있음 | — |
 | E19 | 탭 hidden 취소 | 촬영 중 `visibilitychange(hidden)` → 홈 복귀, 부분 컷 없음 | **WM4** |
-| E20 | 오프라인 촬영 | 네트워크 차단 → 프레임 목록 폴백 + 촬영·로컬 저장 성공 + QR 실패 우아 처리 | — |
+| E20 | 오프라인 촬영 | 네트워크 차단 → 프레임 목록 폴백 + 촬영·로컬 저장 성공 + (로그인 상태였다면) QR 실패 우아 처리 | — |
+| E23 | **게스트 QR 게이트** | 게스트 상태에서 `Result` [다음] → **`Qr`을 건너뛰고 `Done`**, `/uploads/*` 요청 0건. 설정의 `EnableQrDelivery` 값이 **변경되지 않는다** | — |
+| E24 | **TempUser 한도 초과 게이트** | `qr-usage`를 초과 상태로 목 → `Result` [다음] → `Done`(QR 미진입), `EnableQrDelivery` 불변. 한도 해제 후에는 다시 `Qr`로 진입 | — |
 | E21 | 새로고침 | 촬영 중 새로고침 → 홈에서 시작 + 세션 잔재 정리됨 | — |
 | E22 | 문구 카탈로그 | 주요 문구가 `analysis/13 §14`와 문자열 일치 | — |
 
@@ -165,8 +170,11 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 | Android 12+ (태블릿) | Chrome | 111+ | **A(주력)** | ○ |
 | iPadOS 17+ | Safari | 17+ | **A(주력)** | ○(WebCodecs) |
 | iOS 17+ (폰) | Safari | 17+ | B(폼팩터 비권장) | ○ |
-| Windows/macOS | Firefox | 130+ | C(검증만) | △(WebCodecs 130+) |
+| Windows/macOS | Firefox | 133+ | C(검증만) | △ — `VideoEncoder`는 133+이지만 **H.264 인코딩 가용성이 플랫폼 의존**이고 `MediaRecorder`는 mp4를 지원하지 않는다 → **경로 C(미제공)로 떨어질 수 있다**([04 §7.3b](./04-media-pipeline-web.md)) |
 | 그 외·구버전 | — | — | **미지원** | ✕ |
+
+> **Safari 최소 버전을 17로 잡은 근거**: WebCodecs `VideoEncoder`(타임랩스)와 `OffscreenCanvas` 2D는 **16.4**에서 되지만, **`OffscreenCanvas.getContext("webgl2")`(Worker 뷰티 필터)가 17부터** 동작한다([04 §2.3.1](./04-media-pipeline-web.md)). 16.4~16.6에서도 CPU 폴백으로 동작할 수는 있으나 성능 예산을 보장하지 않으므로 지원 목표에서 제외한다.
+> **모든 판정은 런타임 기능 감지로 한다** — 위 표의 버전은 기기 선정·기대치 설정용이며 UA·버전 문자열로 분기하지 않는다(§6.2).
 
 | 등급 | 의미 |
 |------|------|
@@ -179,8 +187,11 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 | 기능 | 판정 방법 | 미지원 시 |
 |------|-----------|-----------|
 | 카메라 | `navigator.mediaDevices?.getUserMedia` | 앱 사용 불가 → 진입 시 안내 |
-| OPFS | `navigator.storage?.getDirectory` | **결과물 보관·세션 작업이 불가** → 촬영 시작 전 경고(업로드만 가능) |
-| 타임랩스 | `VideoEncoder.isConfigSupported` → `MediaRecorder.isTypeSupported` | 타임랩스 미제공(정상 축소) |
+| OPFS | `navigator.storage?.getDirectory` **+ Worker에서 `createSyncAccessHandle`(또는 `createWritable`) 실제 성공 여부**([05 §3.1](./05-storage-and-persistence.md)) | **결과물 보관·세션 작업이 불가** → 촬영 시작 전 경고(업로드만 가능) |
+| 타임랩스 | `await VideoEncoder.isConfigSupported(실사용 config)` → `MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")` | 타임랩스 미제공(정상 축소) |
+| Worker 가공 | `typeof OffscreenCanvas !== "undefined"` + Worker에서 `getContext("2d")` 성공 | 메인 스레드 가공(저성능 모드 표시) |
+| Worker WebGL2(뷰티) | Worker에서 `getContext("webgl2")` 성공 | 메인 WebGL2 → `ImageData` CPU 폴백 |
+| 비트맵 축소 | `createImageBitmap(…,{resizeWidth})` 결과의 `width`가 요청값과 일치하는지 | 캔버스 `drawImage` 단계 축소 |
 | 폴더 저장 | `window.showDirectoryPicker` | 버튼 미노출 + 안내 |
 | Wake Lock | `navigator.wakeLock` | OS 설정 안내 |
 | 저장소 영속 | `navigator.storage?.persist` | 진단에 "미지원" 표시 + PWA 설치 권장 |
@@ -232,7 +243,8 @@ Windows(OpenCV libjpeg)와 브라우저 JPEG 인코더는 **바이트가 다르�
 - [ ] 서명 PUT에 `requiredHeaders` 전부를 부착한다(M14)
 - [ ] **로컬 보관이 업로드 시도 이전에 끝난다**(M6-W — E8)
 - [ ] 업로드 성공 후에만 QR을 노출한다(M5)
-- [ ] TempUser 한도 초과를 사유별 문구로 안내한다
+- [ ] **게스트는 `Qr`에 도달하지 않고 `Done`으로 끝난다**(업로드 요청 0건 — E23) 그리고 그 과정에서 `EnableQrDelivery` 값이 변경되지 않는다
+- [ ] TempUser 한도 초과 시 QR에 진입하지 않고(E24), 진입한 뒤 서버가 거부한 경우 사유별 문구로 안내한다
 - [ ] 유휴 타임아웃이 로그아웃하지 않는다(M3)
 - [ ] 탭 hidden에서 촬영이 안전하게 취소된다(WM4)
 - [ ] 타임랩스가 mp4/H.264/무음/10~15초이거나, 미지원 시 `null`로 정상 축소된다

@@ -21,7 +21,9 @@
 
 - **비밀번호 개념은 존재하지 않는다.** 회원가입·이메일 인증·비밀번호 재설정 UI를 만들지 않는다.
 - 신규 계정은 **SSO 최초 로그인 시 서버가 자동 생성**하고 역할은 항상 `temp_user`다.
-- **게스트(비로그인)는 촬영·로컬 저장·업로드·QR을 전부 쓸 수 있다.** 로그인이 필요한 것은 커스텀 프레임·계정·관리 기능이다.
+- **게스트(비로그인)는 촬영·합성·필터·로컬 저장까지 전부 쓸 수 있다.** 로그인이 필요한 것은 **QR 전송**·커스텀 프레임·계정·관리 기능이다.
+  - ⚠️ **게스트에게는 QR이 제공되지 않는다**(Windows와 동일): `QrEffectivePolicy.IsQrEnabled`가 미로그인이면 `false`를 돌려주므로 `Result → Done`으로 끝난다([03 §8.1](./03-screens-spec.md)). 서버는 게스트 업로드를 허용하지만(`optionalBearer`) **클라이언트가 업로드 자체를 시작하지 않는다** — QR은 계정 단위 과금·한도(TempUser)의 대상이기 때문이다.
+  - 이 판정은 `domain/settings/qrEffectivePolicy.ts` **단일 지점**에서만 한다. 화면에서 `isLoggedIn`으로 QR을 직접 분기하지 않는다(TempUser 한도 분기가 빠진다).
 
 ---
 
@@ -57,7 +59,10 @@
       b. state 대조 (불일치 → "Google 로그인이 취소되었습니다." + 홈)
       c. error 파라미터 있으면 → 취소로 처리
       d. startedAt이 3분 초과면 → 취소로 처리 (Windows 타임아웃과 동일)
-      e. POST /auth/google { code, codeVerifier, redirectUri, nonce }
+      e. POST /auth/google { code, codeVerifier, redirectUri, nonce, clientKind: "web" }
+           ↑ clientKind는 서버 확장 B2가 도입하는 필드다. **웹은 반드시 "web"을 보낸다** —
+             미지정은 "desktop"(하위 호환)이라 서버가 데스크톱 client_id/secret으로 code를
+             교환해 실패한다([08 §4.2](./08-server-and-infra-prerequisites.md)).
       f. 성공 → 토큰을 메모리에 보관 + 세션 사용자 설정
       g. sessionStorage 값 즉시 삭제
       h. history.replaceState로 URL의 code·state 제거          ← 흔적·재사용 방지
@@ -173,8 +178,8 @@ sessionStore.subscribe((s) => s.currentUser, (user) => {
 
 | 상황 | 처리 |
 |------|------|
-| Bearer 필수 호출이 401 | 토큰 폐기 + 세션 사용자 해제 + 토스트 *"세션이 만료되었습니다. 다시 로그인해 주세요."* → 현재 화면 유지(촬영 중이면 촬영 계속 — 게스트로 진행) |
-| 진행 중이던 업로드 | 게스트로 재시도 가능(선택적 Bearer) |
+| Bearer 필수 호출이 401 | 토큰 폐기 + 세션 사용자 해제 + 토스트 *"세션이 만료되었습니다. 다시 로그인해 주세요."* → 현재 화면 유지(촬영 중이면 **촬영·합성·로컬 보관은 계속**되고, 게스트가 되었으므로 `Result` 이후 **QR 없이 `Done`** 으로 끝난다) |
+| 진행 중이던 업로드 | **재시도할 수 없다.** 세션 사용자가 해제되면 effective QR이 off가 되므로 재시도 버튼을 노출하지 않고, *"세션이 만료되었습니다. 다시 로그인해 주세요."* 안내 + **결과물이 로컬에 남아 있음**을 알린다. 서버 계약상 무토큰 업로드는 가능하지만 **클라이언트 정책(게스트 QR 차단)을 우회하지 않는다** |
 | PIN 검증의 401 | **만료가 아니라 PIN 불일치**다 — 세션을 건드리지 않는다(§6) |
 
 > 두 401을 구분하지 않으면 PIN을 한 번 틀렸을 때 로그아웃되는 회귀가 생긴다. **PIN 검증 호출만 401을 "불일치"로 해석**한다.
@@ -214,7 +219,8 @@ sessionStore.subscribe((s) => s.currentUser, (user) => {
 
 | 기능 | 게스트 | T | U | **A** | M | D |
 |------|:------:|:-:|:-:|:-----:|:-:|:-:|
-| 촬영 전 흐름(프레임 선택→QR) | ○ | ○ | ○ | ○ | ○ | ○ |
+| 촬영 흐름(프레임 선택→촬영→결과→로컬 저장) | ○ | ○ | ○ | ○ | ○ | ○ |
+| **QR 전송·업로드**(effective QR) | **✕** | △(한도 내) | ○ | ○ | ○ | ○ |
 | 공용 프레임 사용 | ○ | ○ | ○ | ○ | ○ | ○ |
 | 본인 커스텀 프레임 사용 | ✕ | ○ | ○ | ○ | ○ | ○ |
 | 프레임 생성·편집·로컬 삭제 | ✕ | ✕ | ✕ | **○** | ○ | ○ |
@@ -226,6 +232,8 @@ sessionStore.subscribe((s) => s.currentUser, (user) => {
 | 전역 TempUser 한도 편집 | ✕ | ✕ | ✕ | ✕ | ✕ | ○ |
 | 설정 화면 접근 | ○(무가드) | △(PIN) | △ | △ | △ | △ |
 | 설정 항목 편집 | △(일부 제한) | △(QR 한도 시 추가 제한) | ○ | ○ | ○ | ○ |
+
+> ⚠️ **`analysis/60 §2`와의 표기 차이(문서 버그 보고 대상)**: `analysis/60 §2`는 "촬영(프레임 선택→촬영→결과→**QR**)"을 게스트 ○ 한 행으로 묶어 두었으나, 실제 구현은 `QrEffectivePolicy.IsQrEnabled`로 **게스트의 QR을 차단**한다(`src/MCPhoto.App/ViewModels/ResultViewModel.cs:149`, `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`). 진실원 우선순위(실제 소스 > analysis)에 따라 **위 표가 맞고 `analysis/60 §2`의 행 분리가 필요**하다. `analysis/13 §4.7`의 "QR 전송 설정 on?"도 effective 값임을 명시해야 한다. 웹 클라이언트는 소스 동작을 따른다.
 
 ### 5.3 3중 방어 구현 패턴 (M10)
 
@@ -333,16 +341,19 @@ ensurePinGate(user):
 - [ ] PKCE(S256)를 쓰고 `code_verifier`가 43~128자·문자 집합을 만족한다
 - [ ] `state`를 콜백에서 **반드시 대조**한다
 - [ ] `nonce`를 생성해 서버로 보낸다
+- [ ] `POST /auth/google` 본문에 **`clientKind: "web"`** 이 포함된다(누락 시 서버가 desktop 구성으로 처리해 실패)
 - [ ] 인가 UI가 **전체 페이지 리디렉트**다(팝업·iframe 아님)
 - [ ] code·verifier·state·nonce·토큰이 **로그에 남지 않는다**
 - [ ] 콜백 처리 후 `sessionStorage` 임시 값이 **즉시 삭제**되고 URL에서 code·state가 제거된다
 - [ ] JWT를 **메모리에만** 보관한다(코드 검색으로 저장소 접근 0 확인 — M2)
 - [ ] 세션 사용자가 null이 되는 **모든 경로**에서 토큰이 폐기된다(M1)
-- [ ] 로그아웃 직후 게스트 업로드에 `Authorization`이 붙지 않음을 **실제로 확인**했다
+- [ ] 로그아웃 직후 업로드 요청에 `Authorization`이 붙지 않음을 **실제로 확인**했다([10 §5](./10-testing-and-acceptance.md) E3 — effective QR 목으로 업로드를 실행시켜 관측)
 - [ ] 유휴 타임아웃이 로그아웃하지 않는다(M3)
 - [ ] 401(자격 실패) / 501(미구성) / 400(리디렉트 거부) / 네트워크를 **서로 다른 문구**로 안내한다
 - [ ] **PIN 검증의 401을 세션 만료로 처리하지 않는다**
 - [ ] 로그인 실패·미구성 상태에서도 게스트 흐름으로 복귀할 수 있다
+- [ ] **게스트로 촬영을 완주하면 `Qr`을 건너뛰고 `Done`으로 간다**(업로드 요청 0건 — Network으로 확인)
+- [ ] effective QR 판정이 `qrEffectivePolicy` **한 곳**에만 있다(화면에서 `isLoggedIn` 직접 분기 없음)
 - [ ] PIN 게이트가 fail-closed이고 네트워크 오류를 실패 횟수로 세지 않는다
 - [ ] PIN 5회/1.5초 + **기기 단위 5분 잠금**이 구현됐다(계정 단위 아님)
 - [ ] PIN 미설정 시 최초 설정 플로우로 유도한다(409 처리)

@@ -157,7 +157,7 @@ interface ScreenLogic {
 | [선택 편집] | `canEdit(frame, role, userId)` 통과 시만 노출 |
 | 유휴 감시 | **○** |
 | **웹 차이** | 서버 프레임 이미지는 **`crossOrigin="anonymous"`로 로드**하고 **OPFS에 캐시**한다(WM2 — 합성 시 canvas 오염 방지) |
-| **웹 차이** | 썸네일은 `createImageBitmap` + `resizeWidth`로 축소해 메모리를 아낀다(원본 1200×1600을 그대로 여러 장 들고 있지 않는다) |
+| **웹 차이** | 썸네일은 `createImageBitmap` + `resizeWidth`로 축소해 메모리를 아낀다(원본 1200×1600을 그대로 여러 장 들고 있지 않는다). **resize 옵션은 Safari에서 오래 미지원이었으므로 기능 감지 + 폴백**(작은 캔버스에 `drawImage`)이 필수다 — 옵션이 무시되면 원본 크기 비트맵이 그대로 만들어져 메모리 절감이 사라진다([04 §5.2](./04-media-pipeline-web.md)) |
 
 **완료 기준**: 목록에 공용 프레임이 최소 1개 보이고(오프라인 포함), 첫 항목이 자동 선택되며, [다음] 후 `Guide`에서 슬롯 수가 반영된다. 서버 미도달 시에도 목록이 비지 않는다.
 
@@ -267,7 +267,7 @@ interface ScreenLogic {
 | 토글 | 선택된 컷 재탭 → 해제. 아니면 추가. **슬롯 수 초과 불가** |
 | 선택 번호 | 선택 순서를 표시하고 **해제 시 이후 번호를 재계산** |
 | [다음] 활성 | `선택 수 == 슬롯 수`(정확히) |
-| **[재촬영]**(전체) | `RetakeEnabled` on일 때만 **버튼 노출**. `전체재촬영횟수 < RetakeLimit`(1~3)일 때만 활성. 클릭 시 **컷·선택 폐기 + 카운터 증가, 프레임 유지** → `Guide` |
+| **[재촬영]**(전체) | `RetakeEnabled` on일 때만 **버튼 노출**. `전체재촬영횟수 < RetakeLimit`(1~3)일 때만 활성. 클릭 시 **컷·선택 폐기 + 카운터 증가, 프레임 유지** → `Guide`. **컷 수를 재해석하지 않는다**(it17 — 해석 지점은 `FrameSelect` [다음] 1곳. 재촬영으로 `Guide`에 재진입해도 세션의 `cutCount`·`isAutoCutCount`는 그대로다) |
 | 컷별 재촬영 | **미구현**(Windows도 미구현 — `analysis/90 §2`). 웹도 만들지 않는다 |
 | 유휴 감시 | **○** |
 | 그리드 레이아웃 | **열 수를 하드코딩하지 않는다**(it17 — 자동 컷 수로 7·9 같은 값이 올 수 있다). CSS `auto-fill`/flex-wrap로 임의 N을 수용 |
@@ -308,9 +308,15 @@ interface ScreenLogic {
      2-a. OPFS 결과 폴더에 final·timelapse 기록      ← 반드시 여기서 완료 (M6-W)
      2-b. 폴더 핸들이 있으면 그 폴더에도 기록          (데스크톱 Chromium)
      실패 시 → 실패 토스트 + 로그(크래시 금지)
-3. QR 전송 설정 on?  →  Qr 화면
-   off?               →  Done 화면
+3. effective QR 판정  →  on 이면 Qr 화면 / off 이면 Done 화면
+     qrEffectivePolicy.isQrEnabled(rawEnableQr, isLoggedIn, isTempUserBlocked)
+       ① 게스트(미로그인)          → false   (Qr을 건너뛰고 Done)
+       ② TempUser이고 한도 초과    → false
+       ③ 그 외                     → 설정 EnableQrDelivery 그대로
 ```
+
+| ⚠️ **게스트는 `Qr` 화면에 도달하지 않는다** | Windows도 같다(`QrEffectivePolicy.IsQrEnabled` — 미로그인이면 `Result → Done`). QR은 계정 단위 과금·한도의 대상이므로 로그인이 전제다. **설정의 `EnableQrDelivery`(ini/localStorage) 값은 어떤 경우에도 쓰지 않는다** — 런타임 오버라이드일 뿐이며 한도가 풀리면 즉시 원복된다 |
+|---|---|
 
 | **웹 차이** | 내용 |
 |-------------|------|
@@ -339,6 +345,8 @@ interface ScreenLogic {
 
 ### 9.1 진입 절차
 
+**진입 전제**: `Result`의 effective QR 판정이 `true`인 경우에만 도달한다(§8.1) → **로그인 상태이고 TempUser 한도 초과가 아니다**. 이 화면 안에서 로그인 여부를 다시 분기하지 않는다.
+
 ```
 1. 전송 대상 확정: (SendPhoto && 사진 존재) / (SendTimelapse && 타임랩스 존재)
      둘 다 없으면 → "전송할 결과물이 없습니다." 안내로 종료 (업로드 시도 안 함 — M7)
@@ -354,7 +362,7 @@ interface ScreenLogic {
 | [재시도] | 진행률·상태를 0에서 재시작. **새 세션 ID로 전 과정 재실행**(동일 세션 재commit은 409) |
 | 흐름 차단 금지 | 실패해도 [완료]로 진행 가능. 결과물은 이미 로컬(OPFS)에 있다 |
 | 유휴 감시 | **○** |
-| QR 렌더 | 모듈 픽셀 12px 상당 · 오류정정 레벨 **M** · 여백(quiet zone) 4모듈 · 배경 흰색 고정(다크모드에서도 반전 금지 — 스캐너 호환) |
+| QR 렌더 | 오류정정 레벨 **Q**(Windows `QrService.cs`의 `ECCLevel.Q`와 일치 — `analysis/30 §3`) · 여백(quiet zone) 4모듈 · 배경 흰색 고정(다크모드에서도 반전 금지 — 스캐너 호환). **모듈 픽셀 크기는 표시 파라미터**로 화면 크기에 맞춰 정한다(Windows 기본 20px, 계약 아님) |
 
 ### 9.2 실패 문구 (`analysis/13 §4.8` 그대로)
 

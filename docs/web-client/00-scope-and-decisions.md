@@ -49,7 +49,7 @@ Windows 앱의 화면 상태 13종 + 모달 6종을 **전부** 만든다. 프로
 | 5 | `Capture` | P2 | ○ | N컷 연속 촬영 + 타임랩스 프레임 샘플링 |
 | 6 | `CutSelect` | P2 | ○ | 전체 재촬영 포함 |
 | 7 | `Result` | P2 | ○ | 합성 + 필터 4종 |
-| 8 | `Qr` | P2 | ○ | 업로드 3단계 + QR |
+| 8 | `Qr` | P2 | ○ | 업로드 3단계 + QR. **로그인 전제** — 게스트·TempUser 한도 초과는 effective QR off로 이 화면에 도달하지 않는다(Windows 동일, [03 §8.1](./03-screens-spec.md)) |
 | 9 | `Done` | P2 | ○ | 6초 자동 홈 복귀 |
 | 10 | `FrameEditor` | P3 | ○ | 슬롯 배치 편집기(공용·개인 둘 다) |
 | 11 | `Settings` | 전부 | ○ | 웹 무의미 항목 3개만 미노출(§4) |
@@ -156,7 +156,7 @@ Windows 앱의 화면 상태 13종 + 모달 6종을 **전부** 만든다. 프로
 
 ---
 
-## 5. 결정 목록 (WD1~WD18)
+## 5. 결정 목록 (WD1~WD20)
 
 각 결정은 **확정**이다. 바꾸려면 이 표를 고치고 [12](./12-web-vs-windows-differences.md)를 동시 갱신한다. (WD19·WD20은 2026-07-30 원격 반영분(it17~it19)과 사용자 위임 판단으로 추가됐다.)
 
@@ -174,7 +174,7 @@ Windows 앱의 화면 상태 13종 + 모달 6종을 **전부** 만든다. 프로
 | **WD10** | **게이트 키는 웹 전용 키 + 공개 전제** | 서버 `CLIENT_API_KEYS`에 **웹 전용 키를 추가 발급**하고 빌드 시 주입한다. 유출 시 그 키만 폐기. Origin 제한·rate limit은 권장 후속(P1) | [08 §4](./08-server-and-infra-prerequisites.md) |
 | **WD11** | **스택 = TypeScript + React 18 + Vite** | 도메인 계층은 **의존성 없는 순수 TS**(Windows `MCPhoto.Core` 대응). 상태는 Zustand, 테스트는 Vitest + Playwright | [01 §2](./01-tech-stack-and-structure.md) |
 | **WD12** | **배포 = Firebase Hosting 멀티사이트** | 기존 P1 사이트를 **손대지 않고** 별 사이트(target `kiosk`)로 배포한다. CSP·캐시 정책을 독립적으로 둘 수 있다 | [01 §5](./01-tech-stack-and-structure.md) |
-| **WD13** | **브랜딩·버전 = 런타임 JSON + 빌드 상수** | `/branding.json`을 시작 시 fetch(없거나 실패하면 기본값). 버전은 빌드 상수(`v{version} · {site}`). 재배포 없이 브랜딩 교체 가능 | [05 §8](./05-storage-and-persistence.md) |
+| **WD13** | **브랜딩·버전 = 런타임 JSON + 빌드 상수** | `/branding.json`을 시작 시 fetch(없거나 실패하면 기본값). 버전은 빌드 상수(**`v{version}`** — 배포 채널·빌드 시각은 캡션에 넣지 않는다, it18). 재배포 없이 브랜딩 교체 가능 | [05 §8](./05-storage-and-persistence.md) |
 | **WD14** | **세션 작업 공간 = OPFS `sessions/{id}/`** | 컷·합성물·타임랩스를 OPFS에 두고, 세션 종료·홈 복귀 시 해당 폴더를 삭제한다. **앱 시작 시 잔재 일괄 정리**(규격 `41 §4`) | [05 §3](./05-storage-and-persistence.md) |
 | **WD15** | **오프라인 = Service Worker precache** | 앱 셸 + 번들 프레임을 precache해 **오프라인에서도 게스트 촬영·로컬 저장이 동작**한다. 로그인·업로드·QR은 실패(우아 처리) | [01 §6](./01-tech-stack-and-structure.md) |
 | **WD16** | **PIN 기기 단위 잠금 도입** | 규격(5회 → 창 닫힘, 실패마다 1.5초)에 더해 **연속 5회 실패 시 5분 입력 차단**을 기기(브라우저 저장소) 단위로 둔다. **계정 단위 잠금은 금지**(DoS) | [07 §6](./07-auth-and-permissions-web.md) |
@@ -197,7 +197,7 @@ Windows 앱의 화면 상태 13종 + 모달 6종을 **전부** 만든다. 프로
 | M4 | 성공 오인 금지 | 저장(설정·프레임·결과물)·삭제·업로드 실패를 전부 토스트/인라인으로 표시. **OPFS 쓰기 실패도 표시**한다 |
 | M5 | QR은 업로드 성공 후에만 | 업로드 3단계 전부 성공 후 QR 렌더. 실패 시 QR 영역을 렌더하지 않는다 |
 | **M6-W** | **결과물 로컬 보관은 업로드 분기 이전에 수행한다.** 웹에서 "보관"은 **OPFS(또는 선택된 로컬 폴더) 기록 완료**를 뜻한다 | 합성 직후 OPFS 기록 → (폴더 핸들 있으면 폴더에도 기록) → **그다음** 업로드 분기. OPFS 기록이 실패하면 사용자에게 알리고 `SaveLocalCopy` 실패로 처리 |
-| M7 | `finalImageUrl`·`timelapseUrl` 중 최소 1개 non-null, 둘 다 끄면 업로드 안 함 | QR 토글 정규화(`docs/analysis/41 §2.4`)를 순수 함수로 이식 + 업로드 직전 재확인 |
+| M7 | `finalImageUrl`·`timelapseUrl` 중 최소 1개 non-null, 둘 다 끄면 업로드 안 함 | QR 토글 정규화(`docs/analysis/41 §2.4`)를 순수 함수로 이식 + 업로드 직전 재확인. **effective QR 판정**(`qrEffectivePolicy` — 게스트·TempUser 초과 오버라이드)은 그보다 앞선 게이트이며 **저장된 `EnableQrDelivery`를 write하지 않는다** |
 | M8 | URL null = "전송 옵션 꺼짐"을 만료·실패와 구분 | P1 페이지 책임(현행 구현 유지). 웹 앱은 이 규칙을 깨는 commit을 만들지 않는다 |
 | M9 | PIN 게이트 fail-closed / 한도 조회 fail-open | [07 §5·§6](./07-auth-and-permissions-web.md) |
 | M10 | 권한 = UI 미노출 + 커맨드 가드 + 서버 강제 3중 | 컴포넌트 렌더 가드 + 액션 함수 첫 줄 가드 + 서버 403 우아 처리 |
@@ -246,4 +246,4 @@ Windows 앱의 화면 상태 13종 + 모달 6종을 **전부** 만든다. 프로
 - [ ] P1-1 웹 게이트 키에 Origin 제한·rate limit(권장)
 - [ ] P1-2 번들 기본 프레임 PNG + `.slots` 자산 준비(오프라인 폴백용)
 
-> **선행 작업이 안 끝났을 때도 진행 가능한 범위**: P0-5(CORS)만 있으면 **게스트 촬영 전 흐름 + 업로드 + QR**까지 만들 수 있다(로그인 불요). P0-1~4는 **로그인·프레임 저작·계정·관리 화면**의 선행 조건이다. WBS는 이 순서로 짜여 있다([11](./11-wbs.md)).
+> **선행 작업이 안 끝났을 때도 진행 가능한 범위**: P0-5(CORS)만 있으면 **촬영 전 흐름 + 로컬 보관 + 업로드 3단계 + QR 렌더**까지 **구현**할 수 있다. 단 **QR은 로그인 전제**이므로(§2 표 8행) 화면 흐름을 통한 종단 검증은 로그인이 필요하고, Step 11 단계에서는 effective QR 판정을 목으로 고정해 검증한다([08 §1.1](./08-server-and-infra-prerequisites.md), [11 Step 11](./11-wbs.md)). P0-1~4는 **로그인·프레임 저작·계정·관리 화면**의 선행 조건이다.

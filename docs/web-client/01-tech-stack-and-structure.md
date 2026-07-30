@@ -84,7 +84,8 @@ src/adapters/     플랫폼 어댑터 — 카메라 · 인코더 · 합성 · �
 | `frames/slotsFile.ts` (`.slots` 파서·직렬화) | `src/MCPhoto.Core/Frames/LocalFrameStore.cs`(포맷 부분) | `analysis/41 §3.3` | `LocalFrameStoreTests.cs` |
 | `settings/appSettings.ts`(기본값·clamp) | `src/MCPhoto.Core/Settings/AppSettings.cs` | `analysis/41 §2.1` | `SettingsTests.cs` |
 | `settings/cutCountPolicy.ts`(자동 컷 수 해석, it17) | `src/MCPhoto.Core/Settings/CutCountPolicy.cs` | `analysis/41 §2.7` | `CutCountPolicyTests.cs` |
-| `settings/qrDeliveryPolicy.ts` | `src/MCPhoto.Core/Settings/QrDeliveryPolicy.cs` | `analysis/41 §2.4` | `QrDeliveryPolicyTests.cs`, `QrEffectivePolicyTests.cs` |
+| `settings/qrDeliveryPolicy.ts` | `src/MCPhoto.Core/Settings/QrDeliveryPolicy.cs` | `analysis/41 §2.4` | `QrDeliveryPolicyTests.cs` |
+| `settings/qrEffectivePolicy.ts`(**런타임 QR on/off** — 게스트·TempUser 초과 오버라이드) | `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs` | `design/wpf-it13-temp-user-role-design.md §7.1b` | `QrEffectivePolicyTests.cs` |
 | `roles/rolePolicy.ts`(`isPower`·`canWriteFrames`·`canManage`·`canResetPin`) | `src/MCPhoto.Core/Models/UserRole.cs` | `analysis/60 §1` | `RoleManagementTests.cs` |
 | `roles/roleChangePolicy.ts`(`assignableRoles`) | `src/MCPhoto.Core/Models/RoleChangePolicy.cs` | `analysis/60 §1.4` | `RoleManagementTests.cs`, `UserMgmtViewModelTests.cs` |
 | `upload/uploadContract.ts`(세션 ID·경로·토큰 URL·다운로드 페이지 URL·만료) | `src/MCPhoto.Core/Upload/UploadContract.cs` | `analysis/31 §7` | `UploadContractTests.cs` |
@@ -365,7 +366,7 @@ OAuth 리디렉트 URI는 **개발용도 Google Console에 등록**해야 한다
 | UI | `react`, `react-dom` | — |
 | 상태 | `zustand` | `persist` 미들웨어를 **authStore에 쓰지 않는다**(M2) |
 | IndexedDB | `idb` (얇은 래퍼) | 없어도 무방. 스키마 버전 관리만 하면 됨 |
-| QR 생성 | `qrcode`(canvas/PNG 출력) | Windows는 QRCoder ECC 기본값 사용. **오류정정 레벨·모듈 픽셀 크기는 [03 §9](./03-screens-spec.md) 값으로 고정** |
+| QR 생성 | `qrcode`(canvas/PNG 출력) | Windows는 QRCoder **`ECCLevel.Q`**(기본값이 아니라 명시 지정 — `src/MCPhoto.Core/Upload/QrService.cs`, `analysis/30 §3`). **오류정정 레벨은 Q로 맞춘다**([03 §9](./03-screens-spec.md)) |
 | MP4 muxing | `mp4-muxer` 또는 동급 순수 JS muxer | **버전 핀 고정 필수.** WebCodecs 경로에서만 사용 |
 | 테스트 | `vitest`, `@vitest/coverage-v8`, `@playwright/test`, `pixelmatch`(골든 비교) | — |
 

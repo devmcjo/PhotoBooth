@@ -25,7 +25,7 @@
 | 브랜딩·버전 | `branding.ini` / `bldinfo.ini` | **`/branding.json` fetch** + 빌드 상수 | 세션(매 시작 로드) |
 | **JWT** | 메모리 | **메모리 전용 — 저장 금지**(M2) | 페이지 수명 |
 | PIN 잠금 해제 시각 | (없음) | localStorage `mcphoto.pinLock.v1` | 5분(WD16) |
-| 결과 폴더 핸들 | (해당 없음) | IndexedDB `handles`(FileSystemDirectoryHandle) | 권한 유지되는 동안 |
+| 결과 폴더 핸들 | (해당 없음) | IndexedDB `handles`(FileSystemDirectoryHandle) — **Chromium 전용**(§5.3) | 권한 유지되는 동안 |
 
 ### 1.1 왜 IndexedDB와 OPFS를 섞는가
 
@@ -147,7 +147,22 @@ OPFS/
 | 정리(잔재) | **앱 시작 시 `sessions/` 하위 전체 삭제**(비정상 종료 대비) — 규격이며 생략하면 임시 영상이 무한 누적된다 |
 | **정리 비대상** | `results/`·`frames/`·로그는 **절대 지우지 않는다** |
 | 개별 삭제 실패 | 무시하고 최대한 정리 |
-| 쓰기 방식 | Worker에서 `createSyncAccessHandle()`(가장 빠름), 미지원 시 `createWritable()` |
+| 쓰기 방식 | **전용 Worker에서 `createSyncAccessHandle()`이 기본 경로**다(§3.1). `createWritable()`은 **Chromium·Firefox 전용 폴백**이며 Safari에는 없다 |
+
+### 3.1 OPFS 쓰기 경로 — Worker가 선택이 아니라 요구사항이다
+
+| 사실 | 결과 |
+|------|------|
+| `FileSystemFileHandle.createSyncAccessHandle()`은 **전용 Worker(DedicatedWorkerGlobalScope)에서만** 호출할 수 있다(전 브라우저 공통 — 메인 스레드 블로킹 방지) | 메인 스레드에서는 이 API를 쓸 수 없다 |
+| **Safari/WebKit은 `createWritable()`(`FileSystemWritableFileStream`)을 지원하지 않는다** | Safari에서 OPFS에 쓰는 방법은 **Worker + `createSyncAccessHandle` 하나뿐**이다 |
+| ⇒ | **모든 OPFS 쓰기(컷 JPEG·final·timelapse·프레임 PNG·결과물)를 하나의 `opfsWriter` Worker 경계 뒤로 모은다.** 메인 스레드에서 `createWritable()`을 먼저 시도하는 구조로 만들면 **iOS/iPadOS에서 전 저장 경로가 실패**한다(M6-W 파손 → E8 실패) |
+
+| 규칙 | 내용 |
+|------|------|
+| 구현 | `adapters/storage/opfsWriter.worker.ts` 1개. 메시지 API: `write(path, bytes)` · `remove(path, {recursive})` · `list(dir)` · `exists(path)`. `sessionWorkspace`·`resultSaver`·`frameStore`가 이 Worker를 공유한다 |
+| 읽기 | 읽기(`getFile()`)는 메인 스레드에서도 되므로 Worker를 거치지 않아도 된다 |
+| 폴백 | Worker가 `createSyncAccessHandle`을 못 쓰는 환경이면 **Worker 안에서** `createWritable()`을 시도한다(Chromium·Firefox). 둘 다 없으면 **OPFS 미지원**으로 판정하고 [10 §6.2](./10-testing-and-acceptance.md)의 축소 동작(촬영 전 경고)을 따른다 |
+| 해제 | `SyncAccessHandle`은 **파일당 배타 잠금**이다. 쓰기 후 반드시 `flush()` → `close()`. 닫지 않으면 같은 파일의 다음 쓰기가 `NoModificationAllowedError`로 실패한다 |
 
 ---
 
@@ -305,7 +320,7 @@ deleteLocal(frame):
 | 항목 | 규격 |
 |------|------|
 | 선택 | 설정 → [로컬 저장 폴더 선택] → `showDirectoryPicker({ mode: "readwrite", startIn: "documents" })` |
-| 저장 | 핸들을 IndexedDB `handles` 스토어에 저장(구조화 복제 가능) |
+| 저장 | 핸들을 IndexedDB `handles` 스토어에 저장(구조화 복제 가능) — **Chromium 전용 능력**이다. `showDirectoryPicker`(File System Access API)와 **"사용자 폴더 핸들의 IndexedDB 영속"** 은 둘 다 Chromium에만 있다(Safari·Firefox는 `showDirectoryPicker` 자체가 없다). 따라서 ② 계층 전체가 Chromium 데스크톱 한정이며, **`window.showDirectoryPicker` 기능 감지 1개로 UI·저장·복원 경로를 통째로 켜고 끈다** |
 | 재사용 | 앱 시작 시 `handle.queryPermission({mode:"readwrite"})` → `"granted"`면 사용 |
 | `"prompt"` | **자동 요청하지 않는다**(제스처 필요) → 설정 화면에 *"저장 폴더 권한을 다시 허용해 주세요 [허용]"* 배너. 그 버튼에서 `requestPermission()` |
 | `"denied"` | 핸들 폐기 + ①만 사용 + 안내 |
@@ -439,6 +454,8 @@ if (navigator.storage?.persist) {
 - [ ] `dbId` 유무 규약이 §4.4 표대로 결정된다(사본은 기록하지 않음)
 - [ ] 공용/개인 구분과 **프레임 이름 `_` 금지**가 구현됐다
 - [ ] 프레임 삭제 성공 판정이 **실제 부재 확인**이다
+- [ ] **모든 OPFS 쓰기가 Worker(`createSyncAccessHandle`) 경계를 지난다**(§3.1 — Safari에서 `createWritable()`이 없다)
+- [ ] `SyncAccessHandle`이 쓰기 후 `flush()` → `close()`된다(배타 잠금 해제)
 - [ ] 앱 시작 시 `sessions/` 잔재를 정리하고 **`results/`·`frames/`·로그는 건드리지 않는다**
 - [ ] 결과물 보관이 **업로드 이전에 완료**되고 실패해도 흐름을 막지 않는다(M6-W)
 - [ ] `results/` 용량 정책이 동작하고 삭제 사실이 로그·진단에 남는다

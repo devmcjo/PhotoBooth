@@ -210,9 +210,15 @@ canTransition(from, to):
 ```
 1. 타임랩스 생성        (세션 녹화본이 있고 인코더 사용 가능할 때. 실패 시 null로 계속)
 2. 로컬 저장            (설정 on이면. 실패 시 null 반환 + 로그, 크래시 금지)
-3. QR 전송 설정 on?  →  Qr 화면
-   off?               →  Done 화면
+3. effective QR 판정  →  on 이면 Qr 화면 / off 이면 Done 화면
+     isQrEnabled(raw설정, isLoggedIn, isTempUserBlocked):   ← QrEffectivePolicy(it13 §7.1b)
+       ① 게스트(미로그인)        → false  (Qr을 건너뛰고 Done — QR은 계정 단위 과금·한도의 대상)
+       ② TempUser이고 한도 초과  → false
+       ③ 그 외                   → 설정 EnableQrDelivery 그대로
+     저장된 설정 값은 어떤 경우에도 write하지 않는다(런타임 오버라이드일 뿐 — 한도 해제 시 즉시 원복).
 ```
+
+> ⚠️ 2026-07-30 정정: 종전 서술("QR 전송 설정 on?")은 effective 판정을 생략해 **게스트도 Qr 화면에 간다고 오독**될 수 있었다. 실제로는 미로그인이면 항상 `Done`이다(`src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`, 호출부 `ResultViewModel.Next`).
 
 ### 4.8 `Qr` — 업로드 및 QR 표시
 

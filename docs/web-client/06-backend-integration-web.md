@@ -136,6 +136,8 @@ class SsoNotConfiguredError extends BackendError {}                       // 501
 ③ POST /uploads/commit    → resultSessions 문서 생성 → 다운로드 페이지 활성화
 ```
 
+> **누가 이 경로를 타는가**: 서버 게이트는 `apiKey + optionalBearer`이므로 **무토큰(게스트) 업로드도 서버는 허용**한다. 그러나 **클라이언트는 effective QR이 on일 때만 업로드를 시작**하고 그것은 로그인 상태를 요구한다(`qrEffectivePolicy` — [03 §8.1](./03-screens-spec.md)) → **정상 흐름의 업로드에는 항상 Bearer가 붙는다.** `optionalBearer`에 기대는 무토큰 경로는 **남겨 두되(계약 유지) 정상 흐름에서 발생하지 않는다.** 그럼에도 M1 배선은 필수다 — 로그아웃 후 잔존 토큰이 붙으면 다른 계정의 한도가 차감된다.
+
 ### 4.1 ① prepare
 
 ```jsonc
@@ -285,7 +287,8 @@ img.src = imageUrl;
 ## 8. 체크리스트
 
 - [ ] 게이트 키가 모든 백엔드 호출에 부착되고 **서명 PUT에는 부착되지 않는다**
-- [ ] Bearer가 **토큰이 있을 때만** 부착되고, 로그아웃 직후 게스트 업로드에 **붙지 않는다**(M1 — E2E로 고정)
+- [ ] Bearer가 **토큰이 있을 때만** 부착되고, 로그아웃 직후에는 **붙지 않는다**(M1 — E2E로 고정)
+- [ ] 업로드는 **effective QR on일 때만** 시작된다(게스트·TempUser 초과에서 `/uploads/*` 요청 0건)
 - [ ] 401/403/404/409/501/네트워크 실패가 **각각 다른 안내**로 구분된다
 - [ ] 403의 `error.code`로 권한 부족과 TempUser 한도를 구분한다
 - [ ] `requiredHeaders`를 **순회해 전부** 부착한다(M14)

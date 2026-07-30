@@ -8,6 +8,7 @@
 | 작성일 | 2026-07-30 |
 | 상태 | **설계 확정 v1.1 — 구현 착수 가능**. 단, [08 서버·인프라 선행 작업](./08-server-and-infra-prerequisites.md)의 P0 항목은 코드 작성 전에 처리해야 한다 |
 | v1.1 갱신(2026-07-30) | 원격 it17~it19 반영 — **자동 컷 수**(sentinel 0, WD19)·**오버레이 복귀 집합**(it19)·**버전 표기 채널 폐기**(it18)·설정 그룹 이동·진단 개발자 문의 카드·**CORS 실측 반영**(`web/OPS-cors.md` — 다운로드 GET 불필요/PUT 필수) + **개인 프레임 이연 컷라인**(WD20) |
+| v1.2 갱신(2026-07-30) | 소스 대조 검증 반영 — ① **게스트에게는 QR이 제공되지 않는다**(`QrEffectivePolicy`: 미로그인 → `Result→Done`. 도메인 모듈·화면·테스트·WBS 마일스톤 정정) ② 타임랩스 **경로 A는 메인 스레드 전용**(`MediaRecorder`/`captureStream`이 Worker에 없음) + 브라우저 지원 현실표 ③ **OPFS 쓰기는 Worker `createSyncAccessHandle`이 유일 경로**(Safari에 `createWritable` 없음) ④ iOS Safari API 하한표(`OffscreenCanvas` WebGL2 = 17+) ⑤ QR **ECC Q**(Windows와 일치) ⑥ WBS 버전 캡션 `Site` 제거·컷 수 해석 식 정정 |
 | 범위 | Windows 앱의 **모든 화면**(촬영·프레임 저작·설정·계정·사용자 관리·진단)을 웹으로 구현 + 기존 다운로드 페이지(P1) 유지 |
 
 ---
@@ -30,7 +31,7 @@
 
 | # | 문서 | 무엇을 얻나 | 분량 |
 |---|------|-------------|------|
-| 1 | [00 · 범위와 결정](./00-scope-and-decisions.md) | 무엇을 만들고 무엇을 빼는가, 결정 18건(WD1~WD18), 불변식의 웹 변형 | 필독 |
+| 1 | [00 · 범위와 결정](./00-scope-and-decisions.md) | 무엇을 만들고 무엇을 빼는가, 결정 20건(WD1~WD20), 불변식의 웹 변형 | 필독 |
 | 2 | [13 · 소스·문서 참조 지도](./13-source-reference-map.md) | Windows 규격·소스의 **어디를** 봐야 하는가(화면·로직별 파일 경로) | 필독 |
 | 3 | [01 · 기술 스택과 프로젝트 구조](./01-tech-stack-and-structure.md) | 스택·폴더 구조·빌드·배포 형태 | 필독 |
 | 4 | [08 · 서버·인프라 선행 작업](./08-server-and-infra-prerequisites.md) | 코드 짜기 전에 처리할 서버·GCP·Google Console 작업 | 필독 |
@@ -42,7 +43,7 @@
 | 10 | [07 · 인증·권한](./07-auth-and-permissions-web.md) | OAuth 리디렉트·JWT·PIN 게이트·역할 게이트 | 구현 시 상시 참조 |
 | 11 | [09 · 키오스크 운영](./09-kiosk-operations.md) | 브라우저 키오스크 모드·권한 사전승인·전원 설정 | 배포 시 |
 | 12 | [10 · 테스트와 수락 기준](./10-testing-and-acceptance.md) | 테스트 전략·골든 이미지·실기기 매트릭스·수락 체크리스트 | 각 단계 종료 시 |
-| 13 | [11 · WBS(작업 분해)](./11-wbs.md) | Step 1~16 실행 계획(self-contained) | 실행 순서 |
+| 13 | [11 · WBS(작업 분해)](./11-wbs.md) | Step 0~17 실행 계획(self-contained) | 실행 순서 |
 | 14 | [12 · Web ↔ Windows 차이 보고서](./12-web-vs-windows-differences.md) | 다르게 동작하는 전 항목 + 기능 추가 시 규칙 | 보고·유지보수 |
 
 ### 특정 작업만 한다면
@@ -82,7 +83,7 @@ docs/web-client/*  (이 폴더)      ← 웹에서 그 규격을 어떤 기술�
 
 1. **규격을 바꿀 때는 `docs/analysis`를 먼저 고친다.** 그다음 이 폴더, 그다음 코드.
 2. 웹에서만 다르게 동작하게 만들었다면 **반드시 [12](./12-web-vs-windows-differences.md)에 행을 추가**한다. 등재되지 않은 차이는 버그로 취급한다.
-3. 결정을 바꿨다면 [00 §5 결정 목록](./00-scope-and-decisions.md#5-결정-목록-wd1wd18)의 해당 WD 항목을 갱신하고 사유를 남긴다.
+3. 결정을 바꿨다면 [00 §5 결정 목록](./00-scope-and-decisions.md#5-결정-목록-wd1wd20)의 해당 WD 항목을 갱신하고 사유를 남긴다.
 4. 새 화면·모달을 추가하면 [03](./03-screens-spec.md)과 [02 §2 상태 전이표](./02-app-shell-and-navigation.md)를 함께 갱신한다.
 
 ---
