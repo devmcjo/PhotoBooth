@@ -139,31 +139,98 @@ Select-String -Path .env.mcphoto-955fb -Pattern '^[A-Z_]+' | ForEach-Object { ($
 
 게이트 키는 **인증이 아니라 배포 식별자**다(WD10). 웹 앱의 키는 브라우저에 **공개될 것을 전제**하며, 유출되면 **그 키만 폐기**하고 웹을 재배포한다. 역할·과금 한도는 서버가 JWT로 강제하므로 키 공개로 권한이 새지 않는다.
 
-### 4.2 절차
+### 4.2 기존 키를 어디서 얻는가 (먼저 읽을 것)
 
-```bash
-# 1) 새 키 생성(32바이트 base64url)
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+`CLIENT_API_KEYS`는 **하나가 아니라 CSV 목록**이다. 웹 키를 "추가"하는 것이므로 **기존 값을 먼저 읽어야** 한다.
+값이 있는 곳은 두 군데인데 **진실원은 Secret Manager**다.
 
-# 2) CLIENT_API_KEYS 에 CSV로 **추가**한다
-cd web
-npx firebase functions:secrets:set CLIENT_API_KEYS --project mcphoto-955fb
-#    → 프롬프트에 "<기존 Windows 키>,<새 웹 키>" 를 함께 입력한다
+| 출처 | 무엇 | 신뢰도 |
+|------|------|--------|
+| **Secret Manager** (`CLIENT_API_KEYS`) | **배포된 서버가 실제로 쓰는 전체 목록** | ★ 진실원 |
+| `backend-apikey.local` (저장소 루트, gitignore) | Windows exe에 빌드 시 심는 **키 1개** | 참고용(교차 확인) |
 
-# 3) 재배포
-deploy-web.bat functions
+```powershell
+# 현재 등록된 전체 값을 출력한다 — 이 명령이 "기존 키"의 답이다
+cd E:\Study\photobooth\web
+npx firebase functions:secrets:access CLIENT_API_KEYS --project mcphoto-955fb
 ```
 
-> ⚠️ **기존 키를 지우면 배포된 Windows 앱이 즉시 죽는다.** 반드시 기존 값 + 콤마 + 새 키다. 기존 키는 `backend-apikey.local`(gitignore)에 있다.
+- 출력이 한 줄이면 키가 1개(Windows용), 콤마가 있으면 이미 여러 개다.
+- `backend-apikey.local`의 값이 **그 목록 안에 있어야** 정상이다(없다면 exe와 서버가 어긋난 상태 — 그것부터 확인).
+- 출력된 값은 반비밀이다. 화면 공유·이슈·채팅에 붙여 넣지 않는다.
 
-### 4.3 검증
+### 4.3 절차 (PowerShell, 복사해서 그대로)
 
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -H "X-MCPhoto-Client: <웹 키>" \
-  https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api/frames/default   # → 200
-curl -s -o /dev/null -w "%{http_code}\n" -H "X-MCPhoto-Client: bogus" \
-  https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api/frames/default   # → 401
+> 안전장치: `secrets:set`은 **새 버전을 만들 뿐**이고, 배포된 함수는 재배포 전까지 **기존 버전을 계속 쓴다.**
+> 즉 3단계(재배포) 전에는 실서비스에 영향이 없다 — **2단계에서 값을 눈으로 확인한 뒤** 배포한다.
+
+```powershell
+cd E:\Study\photobooth\web
+
+# 1) 현재 값 읽기 + 새 웹 키 생성 + 합치기
+$existing = (npx firebase functions:secrets:access CLIENT_API_KEYS --project mcphoto-955fb | Out-String).Trim()
+$webKey   = (node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))").Trim()
+$combined = "$existing,$webKey"
+
+# 2) ★ 배포 전 확인 — 키 개수가 (기존 + 1)인지, 줄바꿈·공백이 섞이지 않았는지
+"키 개수: " + ($combined -split ',').Count
+"길이: " + $combined.Length
+$combined -split ',' | ForEach-Object { "  - " + $_.Substring(0, 6) + "…(" + $_.Length + "자)" }
+
+# 3) 확인됐으면 등록(긴 문자열 오타를 막으려 임시 파일로 넘긴다)
+$tmp = Join-Path $env:TEMP "mcphoto-client-keys.txt"
+Set-Content -Path $tmp -Value $combined -NoNewline -Encoding ascii
+npx firebase functions:secrets:set CLIENT_API_KEYS --project mcphoto-955fb --data-file $tmp
+Remove-Item $tmp
+
+# 4) 재배포(이때부터 새 키가 유효해진다)
+.\deploy-web.bat functions
+
+# 5) 새 웹 키를 확인해 둔다 — A5의 .env.production.local 에 넣을 값이다
+$webKey
 ```
+
+| 단계에서 확인할 것 | 정상 |
+|---|---|
+| 2)의 "키 개수" | **기존 개수 + 1**. 1이 나오면 `$existing`이 비었다는 뜻이니 **중단**하고 4.2부터 다시 |
+| 2)의 각 키 길이 | 모두 40자 이상. 한 자리 수가 있으면 줄바꿈이 섞인 것이다 |
+| 3) 출력 | `Created a new secret version …` |
+
+> ⚠️ **기존 키를 지우면 배포된 Windows 앱이 즉시 401로 죽는다.** 위 절차는 기존 값을 읽어 뒤에 덧붙이는 형태라 안전하다. 수동으로 입력할 때는 **기존 값 + 콤마 + 새 키** 전체를 넣어야 한다(새 키만 넣으면 기존 키가 사라진다).
+
+### 4.4 잘못 등록했다면
+
+재배포 전이면 **아무 일도 일어나지 않았다** — 올바른 값으로 3)을 다시 실행하면 된다(새 버전이 또 생기고 최신 것이 쓰인다).
+이미 재배포해 Windows 앱이 401이 된다면, 4.2로 이전 값을 확인해 올바른 CSV로 다시 등록하고 재배포한다.
+Secret Manager는 버전을 보관하므로 이전 값도 조회할 수 있다:
+
+```powershell
+npx firebase functions:secrets:get CLIENT_API_KEYS --project mcphoto-955fb          # 버전 목록
+npx firebase functions:secrets:access CLIENT_API_KEYS@1 --project mcphoto-955fb     # 1번 버전 값
+```
+
+### 4.5 검증
+
+재배포가 끝난 뒤 실행한다(배포 전에는 이전 키 목록이 살아 있어 의미가 없다).
+
+```powershell
+$url = "https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api/frames/default"
+
+# 새 웹 키 → 200
+(Invoke-WebRequest $url -Headers @{ "X-MCPhoto-Client" = $webKey } -SkipHttpErrorCheck).StatusCode
+
+# 아무 문자열 → 401 (게이트가 실제로 동작하는지)
+(Invoke-WebRequest $url -Headers @{ "X-MCPhoto-Client" = "bogus" } -SkipHttpErrorCheck).StatusCode
+
+# 기존 Windows 키도 여전히 200인지 (회귀 확인 — 가장 중요하다)
+$winKey = (Get-Content ..\backend-apikey.local -Raw).Trim()
+(Invoke-WebRequest $url -Headers @{ "X-MCPhoto-Client" = $winKey } -SkipHttpErrorCheck).StatusCode
+```
+
+기대: **200 · 401 · 200**. 세 번째가 401이면 기존 키가 목록에서 빠진 것이니 4.4로 되돌린다.
+
+> `$webKey` 변수가 사라졌다면 4.2 명령으로 목록을 다시 읽어 **마지막 키**를 쓴다.
+> `-SkipHttpErrorCheck`는 PowerShell 7 이상에서 쓸 수 있다(없으면 401에서 예외가 난다).
 
 > `GET /health`로는 키 유효성을 판정할 수 없다 — **키가 없거나 틀려도 200이다**(06 §2.1). 위처럼 `/frames/default`의 401 여부로 확인한다.
 
