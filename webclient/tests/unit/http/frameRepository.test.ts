@@ -125,3 +125,74 @@ describe("H4: `PUT /frames/{id}` 함수가 여전히 없다(정적 검사)", () 
     expect(/updateFrame\s*[(:]/.test(source)).toBe(false);
   });
 });
+
+describe("H5: createFrame이 `upload` 봉투를 읽는다 (F-4 회귀)", () => {
+  /** analysis/31 §4.12의 응답 예시 **그대로**. */
+  const CREATED = {
+    frame: {
+      id: "abc123",
+      userId: null,
+      isDefault: true,
+      name: "여름 시즌 6컷",
+      imageUrl: "https://firebasestorage.googleapis.com/v0/b/x/o/frames%2Fdefault%2F8f2c.png",
+      imageSize: { width: 1200, height: 1800 },
+      slots: [{ index: 0, x: 60, y: 100, width: 500, height: 667 }],
+      createdAt: "2026-08-01T00:00:00.000Z",
+    },
+    upload: {
+      putUrl: "https://storage.googleapis.com/bucket/frames/default/8f2c.png?X-Goog-Algorithm=x",
+      downloadUrl: "https://firebasestorage.googleapis.com/v0/b/x/o/frames%2Fdefault%2F8f2c.png",
+      requiredHeaders: {
+        "Content-Type": "image/png",
+        "x-goog-meta-firebaseStorageDownloadTokens": "1e7c8b3a-0000",
+      },
+    },
+  };
+
+  const REQUEST = {
+    name: "여름 시즌 6컷",
+    imageSize: { width: 1200, height: 1800 },
+    slots: [{ index: 0, x: 60, y: 100, width: 500, height: 667 }],
+    ext: "png" as const,
+    contentType: "image/png",
+  };
+
+  it("putUrl·requiredHeaders가 채워진다(종전에는 항상 null·{}였다)", async () => {
+    // 최상위에서 읽으면 이미지 PUT이 조용히 생략되고 서버에 이미지 없는 문서만 남는다 —
+    // 모든 키오스크에서 영구 "불러올 수 없음" 카드가 된다.
+    const { repo, calls } = repoWith(() => json(CREATED, 201));
+    const created = await repo.createFrame(REQUEST);
+
+    expect(calls[0]!.init.method).toBe("POST");
+    expect(created.frame?.id).toBe("abc123");
+    expect(created.putUrl).toBe(CREATED.upload.putUrl);
+    expect(created.requiredHeaders).toEqual(CREATED.upload.requiredHeaders);
+  });
+
+  it("requiredHeaders 객체가 원형 보존된다(키를 골라 담지 않는다 — M14)", async () => {
+    const { repo } = repoWith(() => json(CREATED, 201));
+    const created = await repo.createFrame(REQUEST);
+    // 서명에 참여하는 헤더를 하나라도 빠뜨리면 403이다. 키 집합이 응답과 정확히 같아야 한다.
+    expect(Object.keys(created.requiredHeaders).sort()).toEqual([
+      "Content-Type",
+      "x-goog-meta-firebaseStorageDownloadTokens",
+    ]);
+  });
+
+  it("upload가 없으면 putUrl === null이다", async () => {
+    const { repo } = repoWith(() => json({ frame: CREATED.frame }, 201));
+    const created = await repo.createFrame(REQUEST);
+    expect(created.frame?.id).toBe("abc123");
+    expect(created.putUrl).toBeNull();
+    expect(created.requiredHeaders).toEqual({});
+  });
+
+  it("frame이 없으면 frame === null이다(최상위 폴백을 쓰지 않는다)", async () => {
+    // `parseFrame(record.frame ?? raw)` 폴백이 남아 있으면 `{upload:…}` 응답을 프레임으로
+    // 오인할 여지가 생긴다. 계약이 `{frame, upload}`로 확정됐으므로 폴백은 제거됐다.
+    const { repo } = repoWith(() => json({ upload: CREATED.upload }, 201));
+    const created = await repo.createFrame(REQUEST);
+    expect(created.frame).toBeNull();
+    expect(created.putUrl).toBe(CREATED.upload.putUrl);
+  });
+});

@@ -106,6 +106,52 @@
   margin-top: var(--gap-lg);
 }
 
+/*
+ * ── 화면 로컬 오버레이(`OverlayDialog`) ──
+ *
+ * 셸 모달(.scrim/.dialog)과 **마크업 규약은 같지만 스택이 다르다**. z-index를 셸 모달보다
+ * 낮게 유지해 유휴 경고가 언제나 위에 그려지게 한다(02 §6.2).
+ */
+
+.overlayScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  background: var(--bg-scrim);
+  /* 배경 클릭으로 닫지 않는다(오조작 방지). */
+}
+
+.overlayDialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: var(--gap-lg);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+
+.overlayTitle {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.overlayActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  justify-content: flex-end;
+}
+
 /* ── 토스트 ── */
 
 .toastHost {

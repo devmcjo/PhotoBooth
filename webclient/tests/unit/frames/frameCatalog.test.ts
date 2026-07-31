@@ -95,6 +95,10 @@ function harness(
       calls.listPersonal.push(userId);
       return [...(overrides.personal ?? [])];
     },
+    async scopeFrameNames() {
+      // 카탈로그는 이름 열거를 쓰지 않는다(저장 경로 전용 — 설계 §10.1).
+      return [];
+    },
     async cacheServerFrame(f) {
       calls.cache.push(f.name);
       if (overrides.cacheFails === true) return null;

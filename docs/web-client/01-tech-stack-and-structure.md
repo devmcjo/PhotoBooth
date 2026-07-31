@@ -95,10 +95,14 @@ src/adapters/     플랫폼 어댑터 — 카메라 · 인코더 · 합성 · �
 | `frames/frameCatalogPolicy.ts`(목록 우선순위·이름 dedup) | `src/MCPhoto.App/Services/FrameCatalogService.cs` | `analysis/13 §5` | `FrameCatalogServiceTests.cs` |
 | **`frames/frameLoadPolicy.ts`**(로딩 4국면·대기 상한·안내 문구, it20) | `src/MCPhoto.Core/Frames/FrameLoadPolicy.cs` | `analysis/13 §4.2` | `FrameLoadPolicyTests.cs` |
 | **`frames/frameCatalogProgress.ts`**(진행 단계 → 표시 문구, it20) | `src/MCPhoto.Core/Frames/FrameCatalogProgress.cs` | `03 §4.1`·`06 §6.1` | `FrameCatalogProgressTests.cs` |
+| **`frames/frameImagePolicy.ts`**(10MB·장변 4000 축소·지원 형식, Step 15) | `src/MCPhoto.Core/Frames/FrameImageValidator.cs` | `analysis/13 §6.2`·`03 §11.2` | `SlotLayoutTests.cs:256-287` |
+| **`frames/frameSavePolicy.ts`**(세션 정체성 축 · 저장 전 검증 7단+⑧ · 서버 등록 축, Step 15) | `src/MCPhoto.App/ViewModels/FrameEditorViewModel.cs`(`FrameSessionSource`·`TryValidateForSave`) | `analysis/13 §6.3·§6.4`·`03 §11.3·§11.4` | —(웹 테스트가 순서를 고정 — 정적 FR-13) |
 
 > **`DisplayApplyPolicy.cs`는 이식하지 않는다**(창 개념 없음, WD7).
 >
-> ⚠️ **`frameNaming.ts`의 판정 축 분리(2026-07-31)**: Windows `FrameNaming.IsFileNameSafe`는 **빈 값 + 파일시스템 금지문자만** 본다(길이 제한 없음). 웹 `validateFrameName`은 여기에 **100자 제한을 묶어** 두었으므로 **저장 전 선검증에 그대로 쓰면 축이 어긋난다** → `isFileNameSafe`를 별도 순수 함수로 두고 `validateFrameName`이 그것을 사용하는 형태로 분리한다(`03 §11.3` ⑤⑥).
+> ⚠️ **`frameNaming.ts`의 판정 축 분리(2026-07-31, Step 15에서 실사용)**: Windows `FrameNaming.IsFileNameSafe`는 **빈 값 + 파일시스템 금지문자만** 본다(길이 제한 없음). 웹 `validateFrameName`은 여기에 **100자 제한을 묶어** 두었으므로 **저장 전 선검증에 그대로 쓰면 축이 어긋난다** → `isFileNameSafe`를 별도 순수 함수로 두고 `validateFrameName`이 그것을 사용하는 형태로 분리했다(`03 §11.3` ⑤⑥). 정적 검사 **FR-12**가 `frameSavePolicy.ts`·`screens/frameEditor/*`에 `validateFrameName(`이 0건임을 고정한다.
+>
+> ⚠️ **`slotLayout.ts`의 `rescaleSlots`(Step 15 추가)** 는 Windows에 대응 순수 함수가 없다(`FrameEditorViewModel.ApplyPickedFrame` 인라인). 벡터 파일 대신 웹 테스트가 `// ↔ FrameEditorViewModel.cs:396-415` 주석으로 짝을 명시한다. `scaleSlots`와 **다르다** — 저쪽은 중심 유지 일괄 스케일이고 이쪽은 좌표계 환산이다.
 
 ---
 

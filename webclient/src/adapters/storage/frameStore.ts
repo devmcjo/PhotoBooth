@@ -181,6 +181,16 @@ export interface FrameStore {
   /** 공용 캐시(번들 제외). 이미지 파일이 실제로 없는 레코드는 **건너뛴다**(반쪽 프레임 미노출). */
   listPublic(): Promise<FrameTemplate[]>;
   listPersonal(userId: string): Promise<FrameTemplate[]>;
+  /**
+   * 저장 스코프의 기존 이름들(저장 전 검증 ⑦ · fork 이름 제안). **메타만 읽는다**
+   * (OPFS 존재 확인·object URL 생성 없음).
+   *
+   * ⚠️ `listPublic()`로 대신하지 마라: ① 목록 조회는 이미지가 없는 레코드를 **건너뛰지만**
+   *    저장 키는 그 레코드가 여전히 점유하고 있어 덮어쓰기가 일어난다 — 가드가 뚫린다.
+   *    ② 이름 하나 보려고 프레임 전체의 object URL을 만들 이유가 없다.
+   * 실패는 **빈 배열**이다(⑦이 조용히 꺼진다 — 03 §11.3 규격).
+   */
+  scopeFrameNames(scope: FrameScope, ownerId: string | null): Promise<readonly string[]>;
   /** 서버 프레임을 캐시한다. **OPFS 쓰기 성공 후에만** 메타를 기록한다. 실패는 `null`. */
   cacheServerFrame(frame: FrameTemplate, bytes: Blob): Promise<FrameTemplate | null>;
   /** Step 15가 쓰는 저장 경로. */
@@ -254,6 +264,10 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
   /**
    * 바이트를 OPFS에 쓰고 메타를 기록한다. **쓰기 순서가 규격이다** — 이미지가 먼저다.
    * 반대로 하면 이미지 없는 레코드가 목록에 올라간다(Windows의 "png 먼저, `.slots` 나중"과 같은 성질).
+   *
+   * ⚠️ 같은 키를 **덮어쓸 때** 이전 PNG를 지운다(설계 이탈 ⑥). 지우지 않으면 편집 저장마다 고아
+   *    파일이 쌓여 "프레임 1개 = 메타 1 + PNG 1"(05 §4) 불변식이 깨진다. **정리는 새 레코드를
+   *    기록한 뒤**다 — 반대로 하면 메타 기록 실패 시 이미지 없는 프레임이 된다.
    */
   async function persist(
     record: (imageFile: string) => FrameRecord,
@@ -272,6 +286,9 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
     }
 
     const target = record(imageFile);
+    // 덮어쓰기 대상(같은 키)의 이전 이미지 경로. 메타 기록 **전에** 읽어야 값이 남아 있다.
+    const previousImageFile = await findPreviousImageFile(target.key);
+
     const stored = await deps.meta.put(target);
     if (!stored) {
       // 고아 파일을 남기지 않는다(메타가 없으면 영원히 참조되지 않는 바이트가 된다).
@@ -279,11 +296,36 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
       return null;
     }
 
+    if (previousImageFile !== null && previousImageFile !== imageFile) {
+      // 실패는 경고만 — 고아 1개가 저장 실패보다 낫다.
+      try {
+        await deps.opfs.remove(previousImageFile);
+        release(previousImageFile); // 옛 경로의 object URL을 놓아준다.
+      } catch (err) {
+        logger.warn("이전 프레임 이미지 정리 실패(고아 파일이 남을 수 있음)", {
+          key: target.key,
+          imageFile: previousImageFile,
+          reason: describe(err),
+        });
+      }
+    }
+
     // 방금 쓴 파일을 되읽어 **디스크 백업 File**로 URL을 만든다(메모리에 바이트를 붙들지 않는다 — A-2).
     const file = await deps.opfs.readFile(imageFile);
     const url = toUrl(imageFile, file ?? bytes);
     if (url.length === 0) return null;
     return recordToTemplate(target, url);
+  }
+
+  /** 같은 키의 기존 레코드가 쓰던 이미지 경로. 없거나 조회 실패면 `null`(정리를 건너뛴다). */
+  async function findPreviousImageFile(key: string): Promise<string | null> {
+    try {
+      const records = await deps.meta.all();
+      return records.find((r) => r.key === key)?.imageFile ?? null;
+    } catch (err) {
+      logger.warn("이전 프레임 레코드 조회 실패(정리 생략)", { key, reason: describe(err) });
+      return null;
+    }
   }
 
   async function listPublic(): Promise<FrameTemplate[]> {
@@ -294,6 +336,25 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
     if (userId.length === 0) return [];
     // 타인 소유·공용은 제외한다(개인 프레임은 소유자에게만 보인다 — 05 §4.3).
     return listByFilter((record) => record.scope === "user" && record.ownerId === userId);
+  }
+
+  async function scopeFrameNames(
+    scope: FrameScope,
+    ownerId: string | null,
+  ): Promise<readonly string[]> {
+    try {
+      const records = await deps.meta.all();
+      return records
+        .filter((r) => r.scope === scope && (scope !== "user" || r.ownerId === ownerId))
+        .map((r) => r.name);
+    } catch (err) {
+      // ⚠️ 실패는 빈 배열이다 — ⑦ 가드가 조용히 꺼지고 ④가 2중 방어로 남는다(03 §11.3).
+      logger.warn("스코프 프레임 이름 조회 실패(⑦ 가드 비활성)", {
+        scope,
+        reason: describe(err),
+      });
+      return [];
+    }
   }
 
   async function cacheServerFrame(
@@ -426,6 +487,7 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
   return {
     listPublic,
     listPersonal,
+    scopeFrameNames,
     cacheServerFrame,
     saveLocal,
     deleteLocal,

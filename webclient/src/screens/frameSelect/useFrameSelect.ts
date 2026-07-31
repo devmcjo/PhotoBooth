@@ -11,6 +11,7 @@ import { getFrameCatalog, type UnavailableFrame } from "@adapters/frames/frameCa
 import { createFrameRepository } from "@adapters/http/frameRepository";
 import { getFrameStore } from "@adapters/storage/frameStore";
 import { fixFrameAndResolveCutCount } from "@shell/captureSessionController";
+import { setFrameEditorIntent } from "@shell/frameEditorIntent";
 import { sessionStore, useSessionStore } from "@shell/sessionStore";
 import { useSettingsStore } from "@shell/settingsStore";
 import { shellStore } from "@shell/shellStore";
@@ -247,13 +248,15 @@ export function useFrameSelect(): FrameSelectViewModel {
   const createFrame = useCallback(() => {
     if (!guardInteractive(stateRef.current.phase)) return;
     if (!permissions.canCreateFrame) return;
-    // TODO(Step 15): 편집 대상 인계 채널(신규 생성 세션)은 프레임 편집기가 만든다.
+    // ⚠️ 인계는 `go()` **직전**이다 — 순서를 뒤집으면 편집기가 이전 의도를 읽는다.
+    setFrameEditorIntent({ kind: "new" });
     shellStore.getState().go("FrameEditor");
   }, [permissions.canCreateFrame]);
 
   const editSelected = useCallback(() => {
     if (!canEditSelectedFrame(selected, role, user?.id ?? null, stateRef.current.phase)) return;
-    // TODO(Step 15): 선택 프레임 인계 채널은 프레임 편집기가 만든다.
+    if (selected === null) return;
+    setFrameEditorIntent({ kind: "edit", frame: selected });
     shellStore.getState().go("FrameEditor");
   }, [role, selected, user?.id]);
 

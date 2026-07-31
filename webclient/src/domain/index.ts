@@ -30,6 +30,8 @@ export * from "./frames/frameCatalogPolicy";
 export * from "./frames/frameLoadPolicy";
 export * from "./frames/frameCatalogProgress";
 export * from "./frames/frameStorePolicy";
+export * from "./frames/frameSavePolicy";
+export * from "./frames/frameImagePolicy";
 export * from "./frames/bundleManifest";
 export * from "./frames/fallbackFrameSpec";
 

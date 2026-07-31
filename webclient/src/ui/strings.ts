@@ -1,8 +1,17 @@
+import type {
+  FrameSaveRejection,
+  SaveScopeNoticeKind,
+} from "@domain/frames/frameSavePolicy";
+import type { FrameImageFailure } from "@adapters/frames/frameImageLoader";
+
 /**
  * 사용자 문구 카탈로그 — `analysis/13 §14`와 **1:1**로 맞춘다 (01 §8)
  *
  * 문구를 컴포넌트에 흩뿌리지 않는 이유: E22 테스트가 규격 문구와 문자열 일치를 검사하고,
  * 브랜딩·번역 교체 지점이 한 곳이어야 한다.
+ *
+ * ⚠️ 위 import는 **전부 `import type`** 이다(런타임 의존 0) — 판정 유니온과 문구를 1:1로 묶어
+ *    새 사유가 생겼을 때 `switch`가 컴파일 오류로 잡히게 하기 위함이다.
  */
 
 export const STRINGS = {
@@ -247,7 +256,8 @@ export const STRINGS = {
       "이 프레임 편집은 해당 기기에서만 적용됩니다. 서버의 기본 프레임은 변경되지 않으며, 다른 기기에는 반영되지 않습니다.",
     underscoreWarning: "이름에 '_'가 있어 공용 목록에서 보이지 않을 수 있습니다.",
     sameNameRejected: "원본과 같은 이름은 사용할 수 없습니다. 이름을 변경해 주세요.",
-    nameEmpty: "이름을 입력해 주세요.",
+    /** ⚠️ 규격 문구는 "프레임 이름을…"이다(03 §11.3 ⑤). Step 15에서 정정했다. */
+    nameEmpty: "프레임 이름을 입력해 주세요.",
     nameTooLong: "이름은 100자까지 입력할 수 있습니다.",
     nameInvalidChars: "이름에 사용할 수 없는 문자가 있습니다.",
     nameUnderscoreRejected: "프레임 이름에 '_'는 사용할 수 없습니다.",
@@ -279,10 +289,138 @@ export const STRINGS = {
     deleteLocalFailedSuffix: " (단, 로컬 파일 삭제 실패)",
   },
 
+  /** 프레임 편집기 — 03 §11 · §15.4 · §15.7 (Step 15 신설). */
+  frameEditor: {
+    titleNew: "프레임 만들기",
+    titleEdit: "프레임 편집",
+
+    loadImage: "이미지 불러오기",
+    /** 생성 모드에서만 노출한다(03 §11.5). */
+    pickExisting: "기존 프레임에서 불러오기",
+    slotCount: "슬롯 개수",
+    slotAspect: "슬롯 종횡비",
+    slotScale: "슬롯 크기",
+    nameLabel: "프레임 이름",
+    namePlaceholder: "예: 여름 6컷",
+    /** `{n}`을 슬롯 번호·좌표로 치환한다(스크린리더). */
+    slotAriaLabel: "슬롯 {n}",
+    noImage: "이미지를 불러와 주세요.",
+
+    /** 저장 전 검증 차단 문구(03 §11.3 — 문자열 일치). 나머지 4종은 `frames.*`에 있다. */
+    rejectNotLoggedIn: "로그인이 필요합니다.",
+    rejectNoPermission: "프레임을 만들 권한이 없습니다.",
+    rejectInvalidSlots: "슬롯이 겹치거나 프레임을 벗어났습니다.",
+    rejectNameConflict: "이미 같은 이름의 프레임이 있습니다. 다른 이름을 입력해 주세요.",
+
+    /** 이미지 로드 실패(`FrameImageFailure`와 1:1). 앞 3종은 analysis/13 §14 카탈로그와 문자열 일치다. */
+    imageUnsupported: "PNG/JPG/JPEG만 지원합니다.",
+    imageTooLarge: "이미지가 10MB를 초과합니다.",
+    imageDecodeFailed: "이미지를 읽을 수 없습니다.",
+    /** 웹 전용 실패(재인코딩 경로 부재 — A15-1). 카탈로그에 대응 항목이 없다. */
+    imageEncodeFailed: "이 브라우저에서는 이미지를 변환할 수 없습니다.",
+    editImageMissing: "이 프레임의 이미지를 불러올 수 없습니다.",
+    pickedImageMissing: "선택한 프레임의 이미지를 불러올 수 없습니다.",
+
+    /** 기존 프레임 불러오기 오버레이(03 §15.4). */
+    pickerTitle: "기존 프레임에서 불러오기",
+    pickerApply: "불러오기",
+    pickerEmpty: "불러올 수 있는 프레임이 없습니다.",
+    pickerFailed: "프레임 목록을 불러오지 못했습니다.",
+    /** `{n}`을 원본 이름으로 치환한다. 이미지를 직접 다시 불러오면 **비운다**. */
+    pickedSourceNotice: "'{n}'의 이미지·슬롯을 불러왔습니다. 새 프레임 이름을 입력해 주세요.",
+
+    /** 서버 등록 확인 오버레이(03 §15.7). 체크박스는 **기본 on**이고 열 때마다 리셋된다. */
+    registerTitle: "서버에도 등록할까요?",
+    registerCheckbox: "서버에도 등록",
+    /** ⚠️ 체크 상태와 무관한 **고정 문구**다(두 결과를 모두 명시 — 03 §11.4). */
+    registerCaption:
+      "체크하면 서버에 공용 기본 프레임으로 등록되어 다른 기기에서도 내려받습니다. 체크하지 않으면 이 기기에만 저장됩니다.",
+    /** `{n}`을 실패 사유로 치환한다. 원자성 안내가 뒤에 붙는다(03 §11.4). */
+    registerFailed:
+      "서버 등록 실패: {n} 이 기기에만 저장하려면 '서버에도 등록'을 해제하고 다시 저장해 주세요.",
+    saving: "저장 중...",
+    /** analysis/13 §14 "프레임 저장 실패"와 문자열 일치. */
+    saveLocalFailed: "저장에 실패했습니다.",
+
+    /** 저장 스코프 캡션 4종(`SaveScopeNoticeKind`와 1:1). `{n}`은 프레임 이름이다. */
+    scopePublicNew:
+      "저장 시 '{n}'을(를) 이 기기의 공용 목록에 만듭니다. 서버 등록 여부는 저장할 때 선택합니다.",
+    scopePublicFork: "원본은 그대로 두고 '{n}'(으)로 이 기기의 공용 목록에 저장됩니다.",
+    scopeOverwrite: "'{n}'을(를) 덮어씁니다.",
+    scopePersonal: "'{n}'을(를) 내 프레임으로 저장합니다.",
+
+    /** 권한 게이트(렌더 가드). */
+    noPermission: "프레임을 만들 권한이 없습니다.",
+    editNotAllowed: "이 프레임은 편집할 수 없어 새 프레임으로 시작합니다.",
+    backToFrameSelect: "프레임 선택으로",
+  },
+
   kiosk: {
     exit: "키오스크 종료",
   },
 } as const;
+
+/**
+ * 저장 전 검증 사유 → 문구(03 §11.3 표와 1:1).
+ * 도메인은 문자열을 갖지 않으므로 매핑은 여기 한 곳이다.
+ */
+export function frameSaveRejectionMessage(reason: FrameSaveRejection): string {
+  switch (reason) {
+    case "not-logged-in":
+      return STRINGS.frameEditor.rejectNotLoggedIn;
+    case "no-write-permission":
+      return STRINGS.frameEditor.rejectNoPermission;
+    case "invalid-slots":
+      return STRINGS.frameEditor.rejectInvalidSlots;
+    case "same-as-source":
+      return STRINGS.frames.sameNameRejected;
+    case "name-empty":
+      return STRINGS.frames.nameEmpty;
+    case "name-invalid-chars":
+      return STRINGS.frames.nameInvalidChars;
+    case "name-conflict":
+      return STRINGS.frameEditor.rejectNameConflict;
+    case "limit-reached":
+      return STRINGS.frames.limitReached;
+    default:
+      return STRINGS.error.temporary;
+  }
+}
+
+/** 저장 스코프 캡션. 문구 **종류**는 도메인이 고르고 조립만 여기서 한다. */
+export function frameSaveScopeNotice(kind: SaveScopeNoticeKind, name: string): string {
+  const label = name.trim().length === 0 ? STRINGS.frameEditor.namePlaceholder : name;
+  switch (kind) {
+    case "public-new":
+      return formatCount(STRINGS.frameEditor.scopePublicNew, label);
+    case "public-fork":
+      return formatCount(STRINGS.frameEditor.scopePublicFork, label);
+    case "overwrite":
+      return formatCount(STRINGS.frameEditor.scopeOverwrite, label);
+    case "personal":
+      return formatCount(STRINGS.frameEditor.scopePersonal, label);
+    default:
+      return "";
+  }
+}
+
+/** 이미지 로드 실패 → 문구(`FrameImageFailure`와 1:1). 조용한 실패를 만들지 않는다. */
+export function frameImageFailureMessage(failure: FrameImageFailure): string {
+  switch (failure) {
+    case "unsupported-type":
+      return STRINGS.frameEditor.imageUnsupported;
+    case "too-large":
+      return STRINGS.frameEditor.imageTooLarge;
+    case "decode-failed":
+      return STRINGS.frameEditor.imageDecodeFailed;
+    case "encode-failed":
+      return STRINGS.frameEditor.imageEncodeFailed;
+    case "fetch-failed":
+      return STRINGS.frameEditor.pickedImageMissing;
+    default:
+      return STRINGS.error.temporary;
+  }
+}
 
 /**
  * `{n}` 치환. 문구 카탈로그를 문자열 조립으로 오염시키지 않기 위한 단일 헬퍼.

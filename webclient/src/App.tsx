@@ -16,6 +16,7 @@ import {
   HomeView,
   ResultView,
 } from "@ui/views/FlowViews";
+import { FrameEditorView } from "@ui/views/FrameEditorView";
 import { FrameSelectView } from "@ui/views/FrameSelectView";
 import { QrView } from "@ui/views/QrView";
 import { DoneView } from "@ui/views/DoneView";
@@ -63,7 +64,7 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { failed: b
 }
 
 /**
- * 더미 화면 — 전이 검증 전용. 남은 것은 `Account`·`UserMgmt`·`FrameEditor`이고 Step 15·16이 교체한다.
+ * 더미 화면 — 전이 검증 전용. 남은 것은 `Account`·`UserMgmt`이고 Step 16이 교체한다.
  *
  * ⚠️ 여기에 기능 진입점을 두지 마라. Step 6·10이 임시로 두었던 카메라 테스트·로컬 폴더 지정
  *    버튼은 Step 13에서 설정 화면의 정식 위치로 옮겼다(정적 검사 SET-3이 재발을 막는다).
@@ -73,7 +74,7 @@ function DummyScreen({ screen }: { readonly screen: AppState }) {
   return (
     <main className="boot">
       <h1 className="boot__title">{screen}</h1>
-      <p className="boot__subtitle">전이 검증용 임시 화면 (Step 15·16에서 교체)</p>
+      <p className="boot__subtitle">전이 검증용 임시 화면 (Step 16에서 교체)</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "center" }}>
         {targets.map((to) => (
           <Button key={to} onClick={() => shellStore.getState().go(to)}>
@@ -125,7 +126,9 @@ function ModalStack() {
     case "pinPrompt":
       return <PinPromptModal />;
     default:
-      // 나머지 모달은 Step 15·16이 채운다. 그때까지 열려도 앱이 깨지지 않게 스텁을 둔다.
+      // 남은 모달(`diagnostics`)은 Step 16이 채운다. 그때까지 열려도 앱이 깨지지 않게 스텁을 둔다.
+      // ⚠️ 프레임 불러오기·삭제 확인·서버 등록 확인은 **화면 로컬 오버레이**다(03 §790) —
+      //    셸 모달 식별자로 되살리지 마라(FR-8).
       return (
         <Modal
           id={top.id}
@@ -144,8 +147,8 @@ function ModalStack() {
 }
 
 /**
- * 화면 라우팅. 촬영 흐름 전체(Home~Done)와 `Login`·`Settings`는 실물이고,
- * 남은 더미(`Account`·`UserMgmt`·`FrameEditor`)는 Step 15·16이 교체한다.
+ * 화면 라우팅. 촬영 흐름 전체(Home~Done)와 `Login`·`Settings`·`FrameEditor`는 실물이고,
+ * 남은 더미(`Account`·`UserMgmt`)는 Step 16이 교체한다.
  *
  * ⚠️ `Settings`·`Account`는 **`<PinGate>`로 감싼다**(07 §6.1). 게이트를 화면 렌더에 걸어야
  *    OAuth 복귀처럼 `go()`를 거치지 않는 진입로까지 구조적으로 덮인다.
@@ -164,6 +167,8 @@ function ScreenRouter({
       return <HomeView appName={branding.appName} subtitle={branding.subtitle} />;
     case "FrameSelect":
       return <FrameSelectView />;
+    case "FrameEditor":
+      return <FrameEditorView />;
     case "Guide":
       return <GuideView />;
     case "Capture":

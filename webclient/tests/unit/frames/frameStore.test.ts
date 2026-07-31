@@ -369,6 +369,138 @@ describe("saveLocal — Step 15가 쓰는 저장 경로", () => {
   });
 });
 
+describe("scopeFrameNames — 저장 전 검증 ⑦의 근거 (설계 §10.1)", () => {
+  function seeded(): FrameMetaStore {
+    return createMemoryFrameMeta([
+      record({ key: "public:P1", name: "P1", id: "p1", imageFile: "frames/p1.png" }),
+      record({ key: "public:P2", name: "P2", id: "p2", imageFile: "frames/missing.png" }),
+      record({
+        key: "user:me:M",
+        scope: "user",
+        ownerId: "me",
+        name: "M",
+        id: "local:user:me:M",
+        dbId: null,
+        imageFile: "frames/m.png",
+      }),
+      record({
+        key: "user:other:O",
+        scope: "user",
+        ownerId: "other",
+        name: "O",
+        id: "local:user:other:O",
+        dbId: null,
+        imageFile: "frames/o.png",
+      }),
+    ]);
+  }
+
+  it("공용은 공용 이름만, 개인은 본인 것만 돌려준다", async () => {
+    const s = store(seeded(), fakeOpfs());
+    expect([...(await s.scopeFrameNames("public", null))].sort()).toEqual(["P1", "P2"]);
+    expect(await s.scopeFrameNames("user", "me")).toEqual(["M"]);
+    expect(await s.scopeFrameNames("user", "other")).toEqual(["O"]);
+    expect(await s.scopeFrameNames("user", "nobody")).toEqual([]);
+  });
+
+  it("이미지가 없는 레코드의 이름도 포함한다(listPublic과의 차이 — 가드가 뚫리지 않는다)", async () => {
+    // 목록 조회는 이미지 없는 레코드를 건너뛰지만 저장 키는 그 레코드가 점유하고 있다.
+    const meta = seeded();
+    const opfs = fakeOpfs();
+    opfs.files.set("frames/p1.png", new Blob(["a"]));
+    const s = store(meta, opfs);
+    expect((await s.listPublic()).map((f) => f.name)).toEqual(["P1"]);
+    expect((await s.scopeFrameNames("public", null)).includes("P2")).toBe(true);
+  });
+
+  it("OPFS를 건드리지 않는다(메타만 읽는다)", async () => {
+    const opfs = fakeOpfs();
+    await store(seeded(), opfs).scopeFrameNames("public", null);
+    expect(opfs.calls).toEqual([]);
+  });
+
+  it("메타 조회 실패는 빈 배열이다(⑦이 조용히 꺼진다)", async () => {
+    const throwing: FrameMetaStore = {
+      all: async () => {
+        throw new Error("boom");
+      },
+      put: async () => true,
+      delete: async () => true,
+    };
+    expect(await store(throwing, fakeOpfs()).scopeFrameNames("public", null)).toEqual([]);
+  });
+});
+
+describe("F-5: 덮어쓰기 저장이 이전 OPFS 이미지를 지운다", () => {
+  const input = {
+    scope: "public" as const,
+    ownerId: null,
+    name: "덮어쓸 프레임",
+    dbId: null,
+    imageSize: { width: 100, height: 200 },
+    slots: [{ index: 0, x: 0, y: 0, width: 10, height: 10 }],
+  };
+
+  it("같은 키로 두 번 저장하면 OPFS에 PNG가 1개만 남는다", async () => {
+    const meta = createMemoryFrameMeta();
+    const opfs = fakeOpfs();
+    const released: string[] = [];
+    const s = store(meta, opfs, { released });
+
+    const first = await s.saveLocal({ ...input, bytes: new Blob(["a"]) });
+    expect(first).not.toBeNull();
+    expect(opfs.files.size).toBe(1);
+    const firstPath = [...opfs.files.keys()][0]!;
+
+    const second = await s.saveLocal({ ...input, bytes: new Blob(["b"]) });
+    expect(second).not.toBeNull();
+    // 고아 PNG가 쌓이면 "프레임 1개 = 메타 1 + PNG 1"(05 §4) 불변식이 깨진다.
+    expect(opfs.files.size).toBe(1);
+    expect(opfs.files.has(firstPath)).toBe(false);
+    expect(await meta.all()).toHaveLength(1);
+    // 옛 경로의 object URL도 놓아준다.
+    expect(released).toEqual([firstPath]);
+  });
+
+  it("다른 키(개인 스코프)는 서로의 이미지를 지우지 않는다", async () => {
+    const meta = createMemoryFrameMeta();
+    const opfs = fakeOpfs();
+    const s = store(meta, opfs);
+    await s.saveLocal({ ...input, bytes: new Blob(["a"]) });
+    await s.saveLocal({
+      ...input,
+      scope: "user",
+      ownerId: "me",
+      bytes: new Blob(["b"]),
+    });
+    expect(opfs.files.size).toBe(2);
+  });
+
+  it("이전 이미지 삭제 실패가 저장 자체를 실패시키지 않는다", async () => {
+    const meta = createMemoryFrameMeta();
+    const opfs = fakeOpfs({ removeOk: false, removeLeavesFile: true });
+    const s = store(meta, opfs);
+    await s.saveLocal({ ...input, bytes: new Blob(["a"]) });
+    const second = await s.saveLocal({ ...input, bytes: new Blob(["b"]) });
+    expect(second).not.toBeNull();
+    // 고아 1개가 남더라도 저장은 성공이다(고아 < 저장 실패).
+    expect(opfs.files.size).toBe(2);
+  });
+
+  it("정리는 **새 레코드를 기록한 뒤**다(메타 실패 시 이전 이미지를 지우지 않는다)", async () => {
+    const opfs = fakeOpfs();
+    opfs.files.set("frames/old.png", new Blob(["old"]));
+    const failingPut: FrameMetaStore = {
+      all: async () => [record({ key: "public:덮어쓸 프레임", imageFile: "frames/old.png" })],
+      put: async () => false,
+      delete: async () => true,
+    };
+    expect(await store(failingPut, opfs).saveLocal({ ...input, bytes: new Blob(["b"]) })).toBeNull();
+    // 이전 이미지가 그대로 있어야 한다 — 지웠으면 이미지 없는 프레임이 된다.
+    expect(opfs.files.has("frames/old.png")).toBe(true);
+  });
+});
+
 describe("S9·S10: 정적 불변식", () => {
   it("S9: frameStore.ts에 OPFS 직접 접근이 0건이다(VF-14)", () => {
     const source = readFileSync(join(SRC, "adapters/storage/frameStore.ts"), "utf8")

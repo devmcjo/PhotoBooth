@@ -22,14 +22,14 @@ export interface Toast {
 export const TOAST_DURATION_MS = { success: 4000, info: 4000, error: 6000 } as const;
 export const MAX_TOASTS = 3;
 
-/** 모달 식별자. 6종 + 유휴 경고(02 §10 · 00 §2). */
-export type ModalId =
-  | "cameraTest"
-  | "diagnostics"
-  | "pinPrompt"
-  | "framePicker"
-  | "confirmDelete"
-  | "idleWarning";
+/**
+ * **셸 모달** 식별자 4종(02 §10 · 00 §2).
+ *
+ * ⚠️ 프레임 불러오기·삭제 확인·서버 등록 확인은 **화면 로컬 오버레이**로 확정됐다(03 §790) —
+ *    식별자를 여기 되살리면 "나중에 누군가 셸 모달로 배선하는" 경로가 생겨 같은 UI가 둘이 된다.
+ *    정적 검사 FR-8이 `src/` 전체에서 그 리터럴 0건을 고정한다.
+ */
+export type ModalId = "cameraTest" | "diagnostics" | "pinPrompt" | "idleWarning";
 
 export interface ModalEntry {
   readonly id: ModalId;

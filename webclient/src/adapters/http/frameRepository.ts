@@ -119,6 +119,13 @@ export function createFrameRepository(
       );
     },
 
+    /**
+     * `201 { frame, upload: { putUrl, downloadUrl, requiredHeaders } }` — analysis/31 §4.12.
+     *
+     * ⚠️ **봉투는 `upload`다.** 종전 구현은 최상위에서 `putUrl`·`requiredHeaders`를 읽어 **항상
+     *    `null`·`{}`** 였다 — 그대로 두면 이미지 PUT이 조용히 생략되고 서버에는 이미지 없는 문서만
+     *    남아 **모든 키오스크에서 영구 "불러올 수 없음" 카드**가 된다(호출자가 0명이라 드러나지 않았다).
+     */
     async createFrame(request) {
       const raw = await client.request<unknown>({
         method: "POST",
@@ -127,10 +134,14 @@ export function createFrameRepository(
         auth: "required",
       });
       const record = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
-      const headers = record.requiredHeaders;
+      const upload = (
+        typeof record.upload === "object" && record.upload !== null ? record.upload : {}
+      ) as Record<string, unknown>;
+      const headers = upload.requiredHeaders;
       return {
-        frame: parseFrame(record.frame ?? raw),
-        putUrl: typeof record.putUrl === "string" ? record.putUrl : null,
+        frame: parseFrame(record.frame),
+        putUrl: typeof upload.putUrl === "string" ? upload.putUrl : null,
+        // 응답 객체를 **그대로 보존**한다 — 키를 골라 담으면 M14가 깨진다.
         requiredHeaders:
           typeof headers === "object" && headers !== null
             ? (headers as Record<string, string>)

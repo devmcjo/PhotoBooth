@@ -49,6 +49,7 @@ import {
   isValidLayout,
   MAX_SLOTS,
   MIN_SLOTS,
+  rescaleSlots,
   resizeKeepingAspect,
 } from "@domain/frames/slotLayout";
 import {
@@ -112,6 +113,40 @@ describe("slot 기하 보조", () => {
     expect(MIN_SLOTS).toBe(1);
     expect(MAX_SLOTS).toBe(6);
     expect(isValidLayout([], 1200, 1600)).toBe(false);
+  });
+});
+
+describe("rescaleSlots — 좌표계 환산(피커 적용) · ↔ FrameEditorViewModel.cs:396-415", () => {
+  it("factor=0.5에서 좌표·크기가 절반이고 half-to-even이 적용된다", () => {
+    // x=5 → 2.5 → 2(짝수 쪽), x=7 → 3.5 → 4(짝수 쪽). JS `Math.round`는 3·4를 낸다.
+    const slots = [
+      { index: 0, x: 5, y: 7, width: 100, height: 200 },
+      { index: 1, x: 200, y: 400, width: 100, height: 200 },
+    ];
+    expect(rescaleSlots(slots, 0.5, 600, 800)).toEqual([
+      { index: 0, x: 2, y: 4, width: 50, height: 100 },
+      { index: 1, x: 100, y: 200, width: 50, height: 100 },
+    ]);
+  });
+
+  it("결과가 항상 프레임 경계 안이다(clampToFrame 적용)", () => {
+    // 확대 배율에서 원본 위치가 경계를 넘으면 안쪽으로 당겨진다.
+    const slots = [{ index: 0, x: 900, y: 900, width: 400, height: 400 }];
+    const rescaled = rescaleSlots(slots, 2, 1000, 1000);
+    expect(rescaled[0]).toEqual({ index: 0, x: 200, y: 200, width: 800, height: 800 });
+  });
+
+  it("width/height는 최소 1이다(0px 슬롯 금지)", () => {
+    const slots = [{ index: 0, x: 0, y: 0, width: 3, height: 3 }];
+    const rescaled = rescaleSlots(slots, 0.01, 100, 100);
+    expect(rescaled[0]!.width).toBe(1);
+    expect(rescaled[0]!.height).toBe(1);
+  });
+
+  it("index를 보존하고 빈 목록은 빈 목록이다", () => {
+    expect(rescaleSlots([], 2, 100, 100)).toEqual([]);
+    const slots = [{ index: 3, x: 10, y: 10, width: 10, height: 10 }];
+    expect(rescaleSlots(slots, 1, 100, 100)[0]!.index).toBe(3);
   });
 });
 

@@ -55,13 +55,13 @@
 ### 4.1 생성·편집
 
 - **목적**: 이미지 업로드 → 슬롯 배치(개수/종횡비/크기) → 저장. 편집 범위는 **슬롯 배치만**(텍스트/스티커/배경 제외).
-- **흐름**: FrameSelect → [프레임 만들기] → 이미지 로드 → 슬롯 개수(1~6)·종횡비(4:3/3:4/1:1)·크기(70~130%) 지정 → 드래그로 이동 → [저장].
+- **흐름**: FrameSelect → [프레임 만들기] → 이미지 로드 → 슬롯 개수(1~6)·종횡비(4:3/3:4/1:1)·크기(10~300%) 지정 → 드래그로 이동 → [저장].
 - **⚠️ 진입 권한(it16)**: 편집기에 도달할 수 있는 역할은 **고급 유저(`advanced_user`)·매니저·관리자**뿐이다. `user`·`temp_user`·게스트는 [프레임 만들기]·[선택 편집] 버튼이 **미노출**이고 커맨드도 거부되므로 편집기(및 그 안의 "기존 프레임 불러오기" 모달)에 들어올 수 없다. 저장 경로에도 fail-closed 가드가 있다(`FrameEditorViewModel.Save` — `CanWriteFrames` 미보유 시 *"프레임을 만들 권한이 없습니다."*).
 - **화면·VM**: `FrameEditorView`(+ code-behind) · `FrameEditorViewModel`. 서비스: `IFrameRepository`, `ILocalFrameStore`.
 - **핵심 규칙**:
   - 이미지 검증(`LoadImage`, `FrameEditorViewModel.cs:63-107`): PNG/JPG/JPEG만, 10MB 이하, 장변 4000 초과 시 축소, PNG로 재인코딩.
   - 자동 배치(`SlotLayout.AutoArrange`, `SlotLayout.cs:23-71`): 세로 스트립(aspect<0.6)=1열, 그 외 격자(4=2×2, 6=2×3 등). 각 셀 안에서 `targetAspect` 유지 최대 사각형 중앙 배치.
-  - 크기 스케일(`OnSlotScalePercentChanged`, `:116-125` / `SlotLayout.ScaleSlots`, `:118-134`): 항상 원본 `_baseSlots` 기준으로 스케일(누적 오차 방지), 70~130 클램프, 중심 유지.
+  - 크기 스케일(`OnSlotScalePercentChanged`, `:116-125` / `SlotLayout.ScaleSlots`, `:118-134`): 항상 원본 `_baseSlots` 기준으로 스케일(누적 오차 방지), 10~300 클램프, 중심 유지.
   - 드래그(`UpdateSlot`, `:147-172`): 경계 클램프 + `_baseSlots` 중심 동기화. **좌표 변환은 순수함수 `EditorTransform`**(`EditorTransform.cs`)로 표시·드래그·클램프가 동일 변환(Uniform 스케일 + 중앙 레터박스) → WYSIWYG. 캔버스 기준은 `SlotCanvas.ActualWidth/Height`(`FrameEditorView.xaml.cs:70-73`), 절대 위치 이동(그랩 오프셋, `:106-143`).
   - 저장 유효성(`SlotLayout.IsValid`, `:165-175`): 개수 1~6, 경계 내, 겹침 없음.
   - **저장 전 검증(`TryValidateForSave`) — 순서가 규격**: ①로그인 → ②`CanWriteFrames` → ③슬롯 유효성 → ④원본 덮어쓰기 가드 → ⑤빈 이름 → ⑥금지문자(`FrameNaming.IsFileNameSafe`) → ⑦스코프 이름 충돌. 진입점이 [저장]과 서버 등록 확인 팝업 2개이므로 `PersistAsync` 첫 줄에서 **재실행**한다(팝업 경로 우회 차단). ⑦의 예외는 `EditOwnLocal` 세션뿐이다 — `SaveLocal`이 동명 파일을 경고 없이 덮어쓰므로 신규·fork 세션은 차단한다. ④를 ⑦보다 먼저 두는 이유는 ⑦이 디스크 열거 실패 시 비차단으로 꺼지기 때문이다(2중 방어).

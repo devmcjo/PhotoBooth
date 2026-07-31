@@ -645,7 +645,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - 설정 화면: [03 §12.1](./03-screens-spec.md) 그룹 5개 + 웹 전용 항목. 미노출 4항목은 렌더하지 않되 **값은 보존**. 게스트 제한 11개 항목. QR 연동 정규화·재활성. 저장 순서·성공/실패 정직 표시. 하단 sticky 저장 바.
   - 카메라 장치 선택(재검색·테스트·라벨 폴백) + **`App.tsx`의 임시 진입점 2개**([카메라 테스트 열기]·[로컬 저장 폴더 선택])를 여기로 이사하고 원본 제거.
   - **[보관된 결과물] 패널**(Step 10 이월): `resultsStore`의 `usage`/`removeFolder` 위에 얹기만 한다. 새 저장소 코드 금지.
-  - **이월(의도)**: [프레임 내보내기]/[가져오기] → Step 15(프레임 저장소 선행) · [앱 업데이트 확인] → Step 16(SW 선행) · [진단·상태] 버튼 → Step 16(모달 본체 선행).
+  - **이월(의도)**: [프레임 내보내기]/[가져오기] → **Step 16**(`exportImport.ts` — 2026-08-01 정정. 종전 "Step 15"는 오기였다) · [앱 업데이트 확인] → Step 16(SW 선행) · [진단·상태] 버튼 → Step 16(모달 본체 선행).
 - **검증 명령**: `npx tsc --noEmit` · `npx vitest run`(baseline 1051에서 증가) · `npx vite build` · 게스트/로그인 상태에서 설정 저장 후 `localStorage["mcphoto.settings.v1"]` 비교
   - ⚠️ **Playwright는 쓰지 않는다** — 아직 설치돼 있지 않고 도입은 Step 17이다. E16·E17은 node 단위 테스트로 등가 보장하고 화면 관측은 **V22 실측**([14 §10.8](./14-handoff-and-user-actions.md))으로 분리한다.
 - **완료 기준**:
@@ -689,7 +689,7 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
     "표시는 비었는데 복사는 된다"는 어긋남이 생긴다. 편집 중인 다른 draft 값은 건드리지 않는다.
   - ⚠️ **`serverStatusPanel`의 취소는 결과 폐기 방식이다** — `healthService.probe()`가 `AbortSignal`을 받지 않아 진행 중 요청 자체는 끊지 못한다(화면 상태는 건드리지 않는다).
     실제 요청 취소가 필요하면 Step 16에서 `healthService`에 신호를 뚫는다.
-  - **이월(의도 — 스텁 문구를 운영자에게 노출하지 않기 위함)**: [프레임 내보내기]/[가져오기] → **Step 15** · [앱 업데이트 확인] → **Step 16** · [진단·상태] 버튼 → **Step 16**.
+  - **이월(의도 — 스텁 문구를 운영자에게 노출하지 않기 위함)**: [프레임 내보내기]/[가져오기] → **Step 16**(2026-08-01 정정 — `exportImport.ts`가 소유한다) · [앱 업데이트 확인] → **Step 16** · [진단·상태] 버튼 → **Step 16**.
     `Account` 화면 본체도 Step 16이지만 **게이트 배선만 지금 넣었다**(나중에 붙이면 한 경로가 빠진다).
   - **미검증(사용자 액션 V22)**: 매번 PIN · 게스트 무가드 · **PIN 1회 오입력이 로그아웃을 유발하지 않음(E17 화면 관측)** · 최초 설정 후 재진입(A5) · 5회 → 5분 잠금 재시작 유지(E16) ·
     오프라인 입력 · 게스트 저장 후 운영자 값 보존(E23) · 컷 수 자동 왕복 · 카메라 2대 전환 · 보관 결과물 삭제 · 폴더 선택 3브라우저 · 설정 내보내기/가져오기 · 키패드 접근성 —
@@ -761,10 +761,11 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 
 - **Context Brief**: 슬롯 배치 편집기를 만든다. **표시·드래그·클램프가 하나의 좌표 변환**을 써야 WYSIWYG가 성립한다(Step 2에서 이식한 `editorTransform`). 편집은 **로컬 전용**이며 `PUT /frames/{id}`를 호출하지 않는다. 규격은 **[03 §11](./03-screens-spec.md)**, 기하는 `docs/analysis/14 §4`.
 - **⚠️ 이연 컷라인(WD20)**: 일정 압박 시 이 Step을 둘로 쪼갠다 — **15a(v1.0 필수)** = 편집기 + power 공용 신규 등록(`POST /frames` + 이미지 PUT) + 삭제 / **15b(v1.1 이연 가능)** = advanced_user 개인 로컬 저장 · 카탈로그 프레임 fork 사본 저장 · 프레임 피커의 개인 프레임 후보 · Step 16의 프레임 zip 내보내기/가져오기(E2). 15b를 미룰 때는 [선택 편집]·비power 저장 버튼만 미노출하면 되고 권한 게이트 구조는 그대로다. **설계·문서는 둘 다 완성 상태를 유지한다**(이연은 구현 순서일 뿐).
-- **대상 파일**: `src/screens/frameEditor/*`, `src/screens/modals/framePicker/*`, `src/screens/modals/confirmDelete/*`, `src/ui/views/FrameEditorView.tsx`
+- **대상 파일**: `src/screens/frameEditor/*`, ~~`src/screens/modals/framePicker/*`~~, ~~`src/screens/modals/confirmDelete/*`~~, `src/ui/views/FrameEditorView.tsx`
+  - ⚠️ **취소선 2개는 만들지 않았다**(설계 이탈 ①). `03 §790`이 불러오기·삭제 확인·서버 등록 확인을 전부 **화면 로컬 오버레이**로 규정했고 Step 14가 삭제를 그 형태로 이미 구현했다. 대신 `ui/components/OverlayDialog.tsx`(공통 껍데기)를 만들고 `ModalId`에서 `"framePicker"`·`"confirmDelete"`를 **제거**했다(정적 FR-8).
 - **선행 조건**: Step 14, Step 2(slotLayout·editorTransform·frameNaming·frameEditPolicy)
 - **구현 내용**:
-  - 이미지 로드(PNG/JPG, 10MB, 장변 4000 축소, **PNG 재인코딩**), 슬롯 개수 1~6·종횡비 3종·스케일 70~130%(원본 기준), Pointer Events 드래그(그랩 오프셋 절대 위치), 저장 검증(개수·경계·겹침).
+  - 이미지 로드(PNG/JPG, 10MB, 장변 4000 축소, **PNG 재인코딩**), 슬롯 개수 1~6·종횡비 3종·스케일 10~300%(원본 기준), Pointer Events 드래그(그랩 오프셋 절대 위치), 저장 검증(개수·경계·겹침).
   - 권한 3단 게이트 + **저장 전 검증 7단(순서가 규격 — [03 §11.3](./03-screens-spec.md))**: ①로그인 ②쓰기 권한 ③슬롯 유효성 ④원본 덮어쓰기 ⑤빈 이름 ⑥금지문자 ⑦스코프 이름 충돌. **진입점이 [저장]과 서버 등록 확인 모달 2개이므로 실제 저장 함수 첫 줄에서 재실행**한다(모달 경로 우회 차단).
   - **`isFileNameSafe` 분리**: 기존 `validateFrameName`은 100자 제한이 묶여 있어 ⑤⑥의 축과 다르다 → 순수 함수를 분리하고 `validateFrameName`이 그것을 쓰게 한다([01 §2](./01-tech-stack-and-structure.md) 주석).
   - **정책 배너는 편집 세션 전용**(신규 생성 세션은 서버 등록이 가능해 배너 문장이 거짓이 된다). 사본 분기는 **[선택 편집] 경로 전용**. `_` 비차단 경고·저장 스코프 동적 안내(등록을 **단정하지 않는 문구**).
@@ -780,7 +781,44 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [trigger] 서버 등록은 **power의 신규 생성 세션 + 모달 체크 on**에만 일어난다. 피커로 불러온 세션도 **신규 생성이므로 등록 대상**이다(2026-07-30 재정의 — 종전 "피커 세션은 등록 안 됨"은 폐기).
   - [원자성] 서버 등록이 실패하면 **로컬에도 저장되지 않고** 편집 세션이 유지된다(부분 성공 0).
 - **롤백**: 편집기·피커·삭제 모달 제거(프레임 사용만 가능).
-- [ ] 완료
+- [x] **완료(2026-08-01)** — 설계: [`docs/design/web-step15-frame-editor-and-picker.md`](../design/web-step15-frame-editor-and-picker.md). **WD20 15a + 15b 전량**(이연 없음).
+  - **산출물(신규 12)**: `domain/frames/frameSavePolicy.ts`·`frameImagePolicy.ts` /
+    `adapters/frames/frameImageLoader.ts` / `shell/frameEditorIntent.ts` /
+    `screens/frameEditor/frameEditorState.ts`·`frameEditorSave.ts`·`frameEditorEntry.ts`·`framePickerRunner.ts`·`previewUrl.ts`·`useFrameEditor.ts` /
+    `ui/components/OverlayDialog.tsx` / `ui/views/FrameEditorView.tsx`(+ `frameEditor.module.css`).
+    **수정 8**: `domain/frames/slotLayout.ts`(`rescaleSlots` **추가만**) · `domain/index.ts` ·
+    `adapters/storage/frameStore.ts`(`scopeFrameNames` 추가 + `persist` 고아 정리) ·
+    `adapters/http/frameRepository.ts`(`createFrame`의 `upload` 봉투) · `shell/shellStore.ts`(`ModalId` 4종으로 축소) ·
+    `screens/frameSelect/useFrameSelect.ts`(인계 채널 배선) · `ui/strings.ts`(`frameEditor` 섹션 + 매핑 함수 3종) ·
+    `App.tsx`·`ui/views/SettingsView.tsx`(주석).
+  - **기존 결함 2건 동반 수정**: **F-4** `createFrame`이 응답 봉투 `{frame, upload:{putUrl,requiredHeaders}}`를 안 읽고 최상위에서
+    찾아 **항상 `putUrl=null`** 이었다(호출자가 0명이라 드러나지 않았다 — 그대로 두면 이미지 PUT이 조용히 생략돼 모든 키오스크에서
+    영구 "불러올 수 없음" 카드가 된다). **F-5** `saveLocal`이 같은 키를 덮어쓸 때 이전 OPFS PNG를 지우지 않아 편집 저장마다
+    고아 파일이 남았다(정리는 **새 레코드 기록 뒤** — 반대로 하면 쓰기 실패 시 이미지 없는 프레임이 된다).
+  - **검증 수치**: `npx tsc --noEmit` 0 · `npx vitest run` **1655 통과**(69파일, 종전 1469/62파일 → **+186**) ·
+    `npx vitest run --coverage` `src/domain` lines 99.1 / branches 97.98 / functions 98.95(임계 95/90/95) ·
+    `npx vite build` 성공(207 모듈). `docs/spec-vectors/`·`tests/MCPhoto.Tests/`·`web/functions/` **무변경** → `dotnet test` 불필요.
+  - **설계 이탈 6건**(설계 문서 §18과 동일): ① 공용 모달 2종을 만들지 않고 `ModalId`에서 제거(화면 로컬 오버레이 통일) ·
+    ② 스테이지를 canvas가 아니라 **`<img>` + DOM 슬롯**으로(좌표계 이중화·`ImageBitmap` 수명·접근성 수동 구현 제거) ·
+    ③ ⑧ 개인 10개 상한을 7단 **뒤**에 편입(덮어쓰기는 상한 제외) · ④ 피커 목록에도 무진행 30초/총 60초 상한 ·
+    ⑤ 이미지 PUT 실패 시 서버 문서를 best-effort로 정리 · ⑥ `saveLocal` 덮어쓰기 고아 정리(F-5).
+  - **구현 중 추가한 이탈 3건**: ⑦ `frameSavePolicy`에 `DEFAULT_SCALE_PERCENT`(=100)를 함께 뒀다(reducer가 진입·이미지 교체·피커
+    적용에서 같은 값을 쓴다 — 배율 상수를 한곳에 모으기 위함). ⑧ 파일 이미지 교체에서도 배율을 100으로 되돌린다(설계는 피커
+    적용에만 명시했다 — 새 이미지는 새 레이아웃이라 같은 규칙이 자연스럽다). ⑨ `frameImageLoader`에 `fetchFrameImageBytes`·
+    `probeFrameImageSize`를 함께 뒀다 — [선택 편집] 진입의 **재인코딩 금지** 경로(§9.3)가 쓸 브라우저 함수가 설계에 배치되지
+    않았다. 같은 파일에 두고 "이쪽은 재인코딩하지 않는다"를 주석으로 못박았다.
+  - **정적 불변식 8건 신설**: FR-8(`"framePicker"`·`"confirmDelete"` 리터럴 0 + `ModalId` 4종) · FR-9(`PUT /frames/{id}` 0) ·
+    FR-10(`validateFrameSave(`가 `deps.createServerFrame(`·`deps.saveLocal(`보다 먼저) · FR-11(`requiresServerRegisterPrompt(` 호출 **정확히 2곳**) ·
+    FR-12(`validateFrameName(` 0 + `isFileNameSafe(` 존재) · FR-13(reason 리터럴 8개 순서 — 특히 ④ < ⑦) ·
+    FR-14(편집기 코드 `console.*` 0) · FR-15(`frameImageLoader`에 `mode: "cors"`). FR-5는 `FrameEditorView.tsx`까지 확장했고
+    FR-1의 검사 대상에 `frameImageLoader.ts`를 추가했다. 인계 채널 배선·`readFrameEditorIntent` 비파괴성도 함께 고정했다.
+  - **미검증(사용자 액션 V24)**: 브라우저·실계정·실기기가 필요한 8건을 [14 §10.10](./14-handoff-and-user-actions.md)에 등재했다.
+    **추정으로 통과 처리하지 않았다.**
+  - **📌 다음 작업자에게**: ① 삭제 UI는 Step 14의 화면 로컬 오버레이를 그대로 쓴다 — 재작성하지 마라(FR-5·FR-8).
+    ② 프레임 zip 내보내기/가져오기는 **Step 16**(`exportImport.ts`)이 소유한다(15 §6의 "Step 15" 서술은 오기였고 정정했다).
+    ③ `canEditFrame`은 power가 공용 로컬로 저장한 프레임(`userId=null`)을 **편집 불가**로 판정한다 — Windows와 같은 동작이고
+    FR-2가 삭제 축을 고정하므로 고치지 마라. 우회로는 피커로 불러와 새 이름으로 저장하는 것이다.
+    ④ 배율 범위는 **10~300**이다(Windows 실구현과 동일). 규격 문서에 남아 있던 70~130은 커밋 `0a93b59`가 넓히기 전의 **폐기값**이었고 2026-08-01에 문서 6곳을 소스에 맞췄다 — 되돌리지 마라.
 
 ---
 

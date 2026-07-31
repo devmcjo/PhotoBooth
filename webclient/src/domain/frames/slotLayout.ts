@@ -170,6 +170,35 @@ export function scaleSlots(
   });
 }
 
+/**
+ * 원본 이미지 크기 → 현재 프레임 크기 배율로 슬롯 값을 복사 보정한다.
+ * Windows `FrameEditorViewModel.ApplyPickedFrame`(:396-415)의 인라인 계산을 순수 함수로 옮긴 것이다.
+ *
+ * ⚠️ `scaleSlots`와 **다르다**: 저쪽은 중심 유지 일괄 스케일(사용자 배율)이고 이쪽은 좌표계 환산이다.
+ * ⚠️ 반올림은 `roundHalfToEven`이다 — C# `(int)Math.Round(x)`의 기본이 MidpointRounding.ToEven이라
+ *    Windows와 픽셀이 갈라지지 않게 맞춘다(04 §9).
+ */
+export function rescaleSlots(
+  slots: readonly Slot[],
+  factor: number,
+  frameW: number,
+  frameH: number,
+): Slot[] {
+  return slots.map((s) =>
+    clampToFrame(
+      {
+        index: s.index,
+        x: roundHalfToEven(s.x * factor),
+        y: roundHalfToEven(s.y * factor),
+        width: Math.max(1, roundHalfToEven(s.width * factor)),
+        height: Math.max(1, roundHalfToEven(s.height * factor)),
+      },
+      frameW,
+      frameH,
+    ),
+  );
+}
+
 /** 슬롯을 프레임 경계 내로 클램프(편집기용 — 슬롯 **전체**가 프레임 안에 들어온다). */
 export function clampToFrame(slot: Slot, frameW: number, frameH: number): Slot {
   const w = clamp(slot.width, 1, frameW);

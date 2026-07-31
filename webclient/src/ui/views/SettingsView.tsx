@@ -472,8 +472,8 @@ export function SettingsView() {
               )}
 
               {/*
-                전체 삭제는 **인라인 2단 확인**이다. `confirmDelete` 모달은 Step 15가
-                프레임 삭제용으로 소유하므로 여기서 선점하지 않는다.
+                전체 삭제는 **인라인 2단 확인**이다. 삭제 확인 공용 모달은 만들지 않는다 —
+                프레임 삭제 확인도 화면 로컬 오버레이로 확정됐다(03 §790 · Step 15 FR-8).
               */}
               <div className={styles.actions}>
                 {screen.confirmingDeleteAll ? (

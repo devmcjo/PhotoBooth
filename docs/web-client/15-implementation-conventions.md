@@ -123,9 +123,17 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | **FR-1** `frameStore.ts`·`frameCatalog.ts`·`frameImageCache.ts`에 OPFS 직접 접근 0건(VF-14) | `frameInvariants.test.ts` — 메인 스레드에서 쓰면 iOS/iPadOS Safari에서 **전 저장 경로**가 실패한다 |
 | **FR-2** `canDeleteFrame(` 호출이 **2인자**다 | 동상 — 소유자를 넘기면 power가 fork 저장한 *공용* 로컬 프레임(`userId=null`)의 삭제 능력이 회귀한다 |
 | **FR-3** 프레임 DB ≠ 로그 DB ≠ 폴더 핸들 DB | 동상(`mcphoto-frames`/`mcphoto`/`mcphoto-handles`) — 같은 DB 버전업의 영구 blocked 회피 |
-| **FR-5** `FrameSelectView.tsx`에 `pushModal(`·`"confirmDelete"`·`"framePicker"` 0건 | 동상 — 삭제 확인은 **화면 로컬 오버레이**다(03 §790). 공용 모달은 Step 15의 것이다 |
+| **FR-5** `FrameSelectView.tsx`·**`FrameEditorView.tsx`** 에 `pushModal(`·`"confirmDelete"`·`"framePicker"` 0건 + 공용 모달 디렉터리 부재 | 동상 — 삭제 확인·불러오기·서버 등록 확인은 전부 **화면 로컬 오버레이**다(03 §790). Step 15가 셸 식별자를 지웠으므로 **영구 원칙**이다 |
 | **FR-6** `compositor.ts`에 `mode: "cors"` 존재 | 동상 — 빠지면 서버 프레임을 그린 canvas가 오염돼 `convertToBlob`이 SecurityError를 던진다(WM2) |
 | **FR-7** `frameLoadPolicy.ts`의 기존 export 8종 보존 | 동상 — `docs/spec-vectors/frame-load-policy.json` 52케이스가 Windows와 교차 고정하는 이름들이다 |
+| **FR-8** `src/` 전체에 `"framePicker"`·`"confirmDelete"` 리터럴 0건 + `ModalId`가 셸 모달 4종 | 동상 — 식별자로 남으면 "나중에 셸 모달로 배선하는" 경로가 되어 같은 UI가 둘이 된다 |
+| **FR-9** `frameRepository.ts`에 `method: "PUT"`·`replaceImage`·`updateFrame` 0건 | 동상 — 편집 저장은 로컬 전용이다(03 §11.2). 함수가 있는 것만으로 호출 경로가 생긴다 |
+| **FR-10** `frameEditorSave.ts`에서 `validateFrameSave(`가 `deps.createServerFrame(`·`deps.saveLocal(`보다 **먼저** 등장 | 동상 — 진입점이 2개(저장 버튼·서버 등록 오버레이)라 재실행하지 않으면 오버레이 경로로 우회된다 |
+| **FR-11** `requiresServerRegisterPrompt(` 호출이 **정확히 2곳**(`useFrameEditor.ts`·`frameEditorSave.ts`) | 동상 — 오버레이 노출 축과 등록 분기 축이 갈라지면 "오버레이는 떴는데 등록은 안 되는" 조용한 불일치가 생긴다 |
+| **FR-12** `frameSavePolicy.ts`·`screens/frameEditor/*`에 `validateFrameName(` 0건, `isFileNameSafe(` 존재 | 동상 — 100자 제한이 묶인 판정을 저장 전 선검증에 쓰면 축이 어긋난다(03 §11.3 웹 주의) |
+| **FR-13** `frameSavePolicy.ts`의 reason 리터럴 8개 등장 순서 고정(특히 **④ `same-as-source` < ⑦ `name-conflict`**) | 동상 — ⑦은 이름 열거 실패 시 조용히 꺼지므로 ④가 2중 방어로 남아야 한다 |
+| **FR-14** `screens/frameEditor/*`·`FrameEditorView.tsx`에 `console.` 0건 | 동상 — 로깅 규약(`logStore`가 진단·내보내기의 유일한 소스) |
+| **FR-15** `frameImageLoader.ts`에 `mode: "cors"` 존재 | 동상 — WM2 규약 복제. 없어지면 원격 프레임을 그린 canvas가 오염된다 |
 | **VF-12** `fixFrameAndResolveCutCount(` 호출부가 **1곳**(`useFrameSelect.ts`) | 동상 — 해석 지점이 늘면 설정 변경이 진행 중 세션의 컷 수를 바꾼다(it17) |
 | `frameRepository.getUserFrames(` 호출 0건 | 동상 — `auth:"required"`라 401이면 **프레임 목록을 여는 것만으로 로그아웃 토스트**가 뜬다 |
 
@@ -231,8 +239,9 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
   Step 16의 계정·사용자 관리 화면도 같은 형태(렌더 가드 + 액션 첫 줄 가드)를 쓴다.
 - **[보관된 결과물] 패널은 `resultsStore` 위에 얹혀 있다**(`screens/settings/storedResultsPanel.ts`). Step 16 진단 모달이 같은 모듈을 재사용할 수 있다.
 - **`persistStorage.readStorageStatus()`가 생겼다** — `requestPersistentStorage`와 달리 **요청하지 않고 조회만** 한다. 화면 표시에는 반드시 이쪽을 쓴다(그러지 않으면 화면을 여는 것만으로 권한 창이 뜬다).
-- ⚠️ **`confirmDelete` 모달을 쓰지 않았다.** 전체 삭제는 인라인 2단 확인이다 — 그 모달은 **Step 15**(프레임 삭제 · "서버에서도 제거" 체크박스)가 소유한다.
-- **이월**: [프레임 내보내기]/[가져오기] → Step 15 · [앱 업데이트 확인]·[진단·상태] → Step 16. **설정 화면 섹션 6에 자리만 비어 있다.**
+- ⚠️ **`confirmDelete` 모달을 쓰지 않았다.** 전체 삭제는 인라인 2단 확인이다 — **그 모달은 끝내 만들어지지 않았다**(Step 15가 프레임 삭제까지 화면 로컬 오버레이로 확정하고 `ModalId`에서 식별자를 지웠다 — FR-8).
+- **이월**: [프레임 내보내기]/[가져오기] → **Step 16**(`exportImport.ts`) · [앱 업데이트 확인]·[진단·상태] → Step 16. **설정 화면 섹션 6에 자리만 비어 있다.**
+  - ⚠️ **2026-08-01 정정**: 종전 이 줄은 내보내기/가져오기를 "Step 15"로 적고 있었으나 **오기**다. WBS Step 16의 `src/adapters/storage/exportImport.ts`가 소유하며, Step 15의 명시적 비목표다(설계 §23.2).
 - **실측 V22 13건이 남아 있다**([14 §10.8](./14-handoff-and-user-actions.md)). 브라우저·실계정·실기기가 필요해 자동화 불가이며, **V22-4는 PIN이 없는 실계정**이 있어야 한다.
 
 ### Step 14 프레임 저장소·프레임 선택 — **완료(2026-08-01)**. 뒤 Step이 알아야 할 것만 남긴다
@@ -249,17 +258,27 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - **`compositor.loadFrameImage`가 원격/로컬로 갈라진다**: `https?:`에만 `{mode:"cors", cache:"force-cache"}`를 준다. `blob:`(OPFS 유래)·상대 경로(번들)는 옵션 없이 fetch한다. **https 분기의 `mode:"cors"`를 없애면 WM2가 깨진다**(FR-6).
 - **object URL의 소유자는 `frameImageCache` 하나다**(경로당 1개, 재사용). ⚠️ **화면 이탈에서 revoke하지 마라** — 선택 프레임의 URL이 `Result`의 합성까지 살아야 한다. 해제 시점은 **프레임 삭제**뿐이다.
 - **썸네일 resize 옵션은 미지원 시 예외 없이 조용히 무시된다**(`frameThumbnails.ts`). 결과 `bitmap.width`를 확인해 폴백을 정하고 그 판정을 모듈에 캐시한다. `ImageBitmap`은 반드시 `close()`(WR8).
-- **삭제 확인은 화면 로컬 오버레이다**(FR-5). Step 15가 `screens/modals/confirmDelete/*`를 만들 때 승격 여부를 정하면 된다 — 반대 방향(모달을 먼저 만들고 재작성)보다 되돌리기 쉽다.
-- **Step 15가 쓸 것이 준비돼 있다**: `frameStore.saveLocal(input)` · `frameStore.countPersonal(userId)` · `exceedsLocalFrameLimit(count)`(`LOCAL_FRAME_LIMIT = 10`) · `frameStore.usageBytes()`(Step 16 진단). **호출자는 아직 없다.** 편집 대상 인계 채널도 없다 — `useFrameSelect`의 `TODO(Step 15)` 두 곳이 그 자리다.
+- **삭제 확인은 화면 로컬 오버레이다**(FR-5). Step 15가 공용 모달로 승격하지 **않기로 확정**했고 `ModalId`에서 식별자를 지웠다(FR-8) — 되살리지 마라.
+- **Step 15가 그것들을 쓴다**: `frameStore.saveLocal(input)` · `countPersonal(userId)` · `exceedsLocalFrameLimit(count)`(`LOCAL_FRAME_LIMIT = 10`). `usageBytes()`는 아직 호출자가 없다(Step 16 진단). 편집 대상 인계 채널은 `shell/frameEditorIntent.ts`로 생겼다.
 - **번들 프레임은 매니페스트 규약이다**(`public/frames/index.json`). 브라우저는 정적 디렉터리를 열거할 수 없어 Windows `Directory.EnumerateFiles`의 대응물이 없다. **자산은 아직 커밋하지 않았다**(빈 배열) — 실 PNG는 운영 자산 준비 시 추가한다.
 - **prefetch는 `main.tsx`의 `startApp` 말미**다(`bootstrap()` 안이 아니다). 첫 페인트 뒤 1회, 결과 폐기, 실패 무시.
 - **실측 V23 8건이 남아 있다**([14 §10.9](./14-handoff-and-user-actions.md)). 브라우저·Safari·실계정이 필요해 자동화 불가다.
 
-### Step 15 프레임 편집기 — **불러오기 규격이 뒤집혔다**(2026-07-30 재정의)
-- **"기존 프레임 불러오기 = 사본"은 폐기됐다.** 세션 정체성이 **신규 생성**이 되어 power가 불러온 세션도 **서버 등록 대상**이다. 이름 자동 제안(`{원본} 사본`)도 없어졌다 — fork는 [선택 편집] 경로에만 남는다.
-- **서버 등록 확인 모달**이 신설됐다(모달 6종 → **7종**). 체크박스 **기본 on**, 노출 조건은 등록 분기와 동일 축, **원자성**(서버 실패 시 로컬도 저장 안 함).
-- **저장 전 검증 7단의 순서가 규격이다**([03 §11.3](./03-screens-spec.md)). 진입점이 2개이므로 실제 저장 함수 첫 줄에서 **재실행**한다.
-- ⚠️ **`isFileNameSafe`를 분리해야 한다**: Windows 판정은 "빈 값 + 금지문자"뿐인데 웹 `validateFrameName`은 **100자 제한이 묶여 있다**. 그대로 선검증에 쓰면 축이 어긋난다.
+### Step 15 프레임 편집기·피커·삭제 — **완료(2026-08-01)**. 뒤 Step이 알아야 할 것만 남긴다
+
+- **세션 정체성 축 하나가 전부를 결정한다**(`domain/frames/frameSavePolicy.ts`의 `FrameSessionSource` = `New` / `EditOwnLocal` / `ForkFromCatalog`). 배너 노출·서버 등록 오버레이·등록 분기·저장 캡션이 전부 이 값에서 나온다. ⚠️ **`isCreateMode` 같은 파생값을 만들지 마라** — 두 축이 갈라지면 "오버레이는 떴는데 등록은 안 되는" 조용한 불일치가 생긴다(FR-11이 호출 2건을 고정).
+- **"기존 프레임 불러오기 = 사본"은 폐기됐다**(2026-07-30 재정의). 피커로 불러온 세션도 `New`이고 power면 **서버 등록 대상**이다. 이름 자동 제안도 없다 — fork는 [선택 편집] 경로에만 남는다.
+- **저장 전 검증은 순수 함수 하나가 소유한다**(`validateFrameSave`). 순서가 규격이고(④ `same-as-source` < ⑦ `name-conflict`) FR-13이 소스 등장 순서로 기계 검증한다. ⑤⑥은 **`isFileNameSafe`만** 쓴다(길이 무관 — FR-12). 진입점 2개가 모두 `runFrameSave`를 지나고 그 **첫 실행문이 재검증**이다(FR-10).
+- **서버 등록은 원자적이다**: `POST /frames` → 서명 PUT 중 하나라도 실패하면 `saveLocal`에 **도달하지 않고** 서버 문서를 best-effort로 `DELETE`한다. ⚠️ 부분 성공을 허용하면 재시도가 ⑦ 가드와 **자기 자신과 충돌**해 저장이 영구히 막힌다.
+- **편집기 스테이지는 canvas가 아니라 `<img>` + DOM 슬롯이다**(설계 이탈 ②). 표시·드래그·클램프가 `useFrameEditor`의 `transform` state **하나**를 공유한다. 측정은 `getBoundingClientRect()`만 쓴다(선언 크기 금지 — 03 §11.7).
+- ⚠️ **[선택 편집] 진입은 이미지를 재인코딩하지 않는다**(`fetchFrameImageBytes`). `loadFrameImageFromUrl`을 쓰면 장변 4000 축소가 붙어 `frame.slots` 좌표계와 어긋나 **기존 슬롯이 전부 밀린다**. Windows `LoadForEdit`도 같은 이유로 파일을 그대로 읽는다.
+- **미리보기 object URL의 소유자는 `previewUrl.ts` 홀더다** — `frameImageCache`가 **아니다**(저쪽은 해제 시점이 "프레임 삭제"뿐이다). 언마운트 cleanup에서 `dispose()` 한다.
+- **`ModalId`가 셸 모달 4종으로 줄었다**(`cameraTest`·`diagnostics`·`pinPrompt`·`idleWarning`). 화면 로컬 오버레이 5종은 `ui/components/OverlayDialog.tsx`를 쓴다 — **`pushModal`을 부르지 않는다**(FR-5·FR-8).
+- **인계 채널은 `shell/frameEditorIntent.ts`다.** ⚠️ `readFrameEditorIntent()`는 **비파괴**다 — 소비형으로 바꾸면 `<StrictMode>` 2회차가 `new`로 떨어져 편집 세션이 조용히 신규 생성이 된다(Step 12·13과 같은 함정).
+- **배율 범위는 10~300이다**(`MIN_SCALE_PERCENT`/`MAX_SCALE_PERCENT` — Windows `FrameEditorViewModel.MinScale/MaxScale`과 동일). ⚠️ 규격 문서에 70~130이 오래 남아 있어 **두 번이나 되돌려질 뻔했다.** 커밋 `0a93b59`("슬롯 스케일 10~300%·직접입력")가 의도적으로 넓힌 값이고, 진실원 우선순위(**소스 > analysis > design**, `design/README §4`)상 소스가 사실이다. 문서 6곳을 2026-08-01에 맞췄다.
+- ⚠️ **`canEditFrame`은 power가 공용 로컬로 저장한 프레임(`userId=null`)을 편집 불가로 판정한다.** Windows와 같은 동작이고 FR-2가 삭제 축을 고정하고 있으니 고치지 마라 — 우회로는 피커로 불러와 새 이름으로 저장하는 것이다.
+- **기존 결함 2건을 함께 고쳤다**: `createFrame`의 `upload` 봉투(F-4 — 안 고치면 이미지가 영원히 안 올라간다) · `saveLocal` 덮어쓰기 고아 PNG(F-5 — 정리는 **새 레코드 기록 뒤**다).
+- **실측 V24 8건이 남아 있다**([14 §10.10](./14-handoff-and-user-actions.md)). 브라우저·실계정·실기기가 필요해 자동화 불가다.
 
 ### Step 14~16
 - 설정 저장은 `settingsStore.save(patch, { isGuest, webExtras? })`만 부르면 된다 — 게스트 제한 키 보존은 `settingsRepo`가 처리한다(Step 13 절 참고).
@@ -272,11 +291,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **1469**(62파일, Step 14 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13·14는 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + **15**(프레임 편집기·피커·삭제 — WD20 15a+15b 전량) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **1655**(69파일, Step 15 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13·14·15는 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 15~17, 실측 V1~V23 |
+| 미완 | Step 16~17, 실측 V1~V24 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 
@@ -286,4 +305,4 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | Step 15 | 불러오기 = 신규 생성으로 재정의, 서버 등록 확인 모달 신설, 저장 전 검증 7단, `isFileNameSafe` 분리 |
 | Step 9 | 변화 없음. 참고로 **웹 타임랩스 경로에는 GPL 노출이 없다**(브라우저 내장 인코더 — `12 B14`) |
 
-화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·Result·Qr·Done·**Login**·**Settings**가 실물이고, 나머지(Account·FrameEditor·UserMgmt)는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 + 로그인 + 설정은 이로써 전부 실물이다** — 남은 더미는 Step 15·16이 채운다. `Account`는 더미지만 **PIN 게이트 배선은 이미 걸려 있다**(Step 16은 안쪽 내용만 채우면 된다).
+화면은 Home·FrameSelect·Guide·Capture·CutSelect·Result·Qr·Done·**Login**·**Settings**·**FrameEditor**가 실물이고, 남은 더미는 **Account·UserMgmt 둘뿐**이다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 + 로그인 + 설정 + 프레임 저작은 이로써 전부 실물이다** — 남은 더미는 Step 16이 채운다. `Account`는 더미지만 **PIN 게이트 배선은 이미 걸려 있다**(Step 16은 안쪽 내용만 채우면 된다).

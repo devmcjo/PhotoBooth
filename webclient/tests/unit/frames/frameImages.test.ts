@@ -13,11 +13,16 @@ import {
   revokeFrameImage,
 } from "@adapters/frames/frameImageCache";
 import {
+  loadFrameImageFromFile,
+  loadFrameImageFromUrl,
+} from "@adapters/frames/frameImageLoader";
+import {
   createFrameThumbnail,
   FRAME_THUMB_WIDTH,
   resetThumbnailProbeForTests,
   thumbnailResizeSupported,
 } from "@adapters/frames/frameThumbnails";
+import { MAX_FRAME_IMAGE_BYTES } from "@domain/frames/frameImagePolicy";
 import { compose } from "@adapters/compose/compositor";
 import {
   attachLogStore,
@@ -285,6 +290,193 @@ describe("I6: 썸네일 실패는 null이고 중간 비트맵을 닫는다", () 
     expect(await createFrameThumbnail(new Blob(["x"]))).toBeNull();
     // 프로브 비트맵 + 폴백 전체 디코드 비트맵 둘 다 닫혔다.
     expect(closed.filter((b) => b.closed)).toHaveLength(2);
+  });
+});
+
+// ── I9: frameImageLoader — 형식·용량 선검사 → 디코드 → 축소 → PNG 재인코딩 ──
+
+interface LoaderStubs {
+  readonly bitmapOptions: unknown[];
+  readonly closed: FakeBitmap[];
+  readonly drawn: number[][];
+  readonly canvasSizes: number[][];
+}
+
+/** `createImageBitmap` + `OffscreenCanvas(convertToBlob)` 가짜. node에는 둘 다 없다. */
+function stubLoaderEnvironment(
+  source: { width: number; height: number },
+  options: { decodeThrows?: boolean; convertThrows?: boolean; noContext?: boolean } = {},
+): LoaderStubs {
+  const bitmapOptions: unknown[] = [];
+  const closed: FakeBitmap[] = [];
+  const drawn: number[][] = [];
+  const canvasSizes: number[][] = [];
+
+  vi.stubGlobal("createImageBitmap", async (_blob: Blob, opts?: unknown) => {
+    bitmapOptions.push(opts);
+    if (options.decodeThrows === true) throw new Error("decode failed");
+    return makeBitmap(source.width, source.height, closed);
+  });
+
+  class FakeOffscreenCanvas {
+    constructor(
+      readonly width: number,
+      readonly height: number,
+    ) {
+      canvasSizes.push([width, height]);
+    }
+    getContext(): unknown {
+      if (options.noContext === true) return null;
+      return {
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: "low",
+        drawImage: (_b: unknown, _x: number, _y: number, w: number, h: number) => {
+          drawn.push([w, h]);
+        },
+      };
+    }
+    async convertToBlob(opts?: { type?: string }): Promise<Blob> {
+      if (options.convertThrows === true) throw new Error("convertToBlob unsupported");
+      return new Blob(["png-bytes"], { type: opts?.type ?? "image/png" });
+    }
+  }
+  vi.stubGlobal("OffscreenCanvas", FakeOffscreenCanvas);
+
+  return { bitmapOptions, closed, drawn, canvasSizes };
+}
+
+function fakeFile(name: string, type: string, size: number): File {
+  const file = new File([new Uint8Array(1)], name, { type });
+  // `size`는 읽기 전용이라 정의로 덮는다(10MB 바이트를 실제로 만들지 않기 위함).
+  Object.defineProperty(file, "size", { value: size });
+  return file;
+}
+
+describe("I9: loadFrameImageFromFile — 선검사·재인코딩·비트맵 해제", () => {
+  it("지원하지 않는 형식은 디코드조차 하지 않는다", async () => {
+    const stubs = stubLoaderEnvironment({ width: 100, height: 100 });
+    const outcome = await loadFrameImageFromFile(fakeFile("a.gif", "image/gif", 100));
+    expect(outcome).toEqual({ ok: false, failure: "unsupported-type" });
+    expect(stubs.bitmapOptions).toHaveLength(0);
+  });
+
+  it("10MB 초과는 too-large다", async () => {
+    const stubs = stubLoaderEnvironment({ width: 100, height: 100 });
+    const outcome = await loadFrameImageFromFile(
+      fakeFile("a.png", "image/png", MAX_FRAME_IMAGE_BYTES + 1),
+    );
+    expect(outcome).toEqual({ ok: false, failure: "too-large" });
+    expect(stubs.bitmapOptions).toHaveLength(0);
+  });
+
+  it("정상 경로는 항상 PNG로 재인코딩하고 EXIF 회전을 편다", async () => {
+    const stubs = stubLoaderEnvironment({ width: 1200, height: 1600 });
+    const outcome = await loadFrameImageFromFile(fakeFile("a.jpg", "image/jpeg", 1000));
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.image.width).toBe(1200);
+    expect(outcome.image.height).toBe(1600);
+    expect(outcome.image.blob.type).toBe("image/png");
+    // ⚠️ 빼면 아이폰 세로 사진이 옆으로 눕는다(A15-2).
+    expect(stubs.bitmapOptions[0]).toEqual({ imageOrientation: "from-image" });
+    // ImageBitmap은 GC 대상이 아니다(WR8).
+    expect(stubs.closed).toHaveLength(1);
+  });
+
+  it("장변 4000 초과는 축소해서 그린다", async () => {
+    const stubs = stubLoaderEnvironment({ width: 8000, height: 4000 });
+    const outcome = await loadFrameImageFromFile(fakeFile("big.png", "image/png", 1000));
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect([outcome.image.width, outcome.image.height]).toEqual([4000, 2000]);
+    expect(stubs.canvasSizes[0]).toEqual([4000, 2000]);
+    expect(stubs.drawn[0]).toEqual([4000, 2000]);
+  });
+
+  it("디코드 실패는 decode-failed다(예외 미전파)", async () => {
+    stubLoaderEnvironment({ width: 10, height: 10 }, { decodeThrows: true });
+    expect(await loadFrameImageFromFile(fakeFile("a.png", "image/png", 100))).toEqual({
+      ok: false,
+      failure: "decode-failed",
+    });
+  });
+
+  it("인코딩 경로가 전부 없으면 encode-failed이고 비트맵은 닫힌다", async () => {
+    // node에는 `document`가 없어 HTMLCanvasElement 폴백도 쓸 수 없다.
+    const stubs = stubLoaderEnvironment({ width: 100, height: 100 }, { convertThrows: true });
+    expect(await loadFrameImageFromFile(fakeFile("a.png", "image/png", 100))).toEqual({
+      ok: false,
+      failure: "encode-failed",
+    });
+    expect(stubs.closed).toHaveLength(1);
+  });
+
+  it("0×0 디코드 결과는 decode-failed다(0px 캔버스 금지)", async () => {
+    stubLoaderEnvironment({ width: 0, height: 0 });
+    expect(await loadFrameImageFromFile(fakeFile("a.png", "image/png", 100))).toEqual({
+      ok: false,
+      failure: "decode-failed",
+    });
+  });
+});
+
+describe("I10: loadFrameImageFromUrl — 피커 경로(읽기 전용)", () => {
+  it("https에는 CORS 옵션을, blob:에는 옵션 없이 fetch한다(WM2 규약 복제)", async () => {
+    stubLoaderEnvironment({ width: 100, height: 100 });
+    const calls = stubFetch(() => new Response(new Blob(["src"]), { status: 200 }));
+
+    await loadFrameImageFromUrl("https://cdn.example.com/a.png");
+    expect(calls[0]!.init.mode).toBe("cors");
+    expect(calls[0]!.init.cache).toBe("force-cache");
+
+    await loadFrameImageFromUrl("blob:http://localhost/abc");
+    expect(calls[1]!.init.mode).toBeUndefined();
+
+    await loadFrameImageFromUrl("/frames/basic4.png");
+    expect(calls[2]!.init.mode).toBeUndefined();
+  });
+
+  it("비200·빈 본문·네트워크 예외는 전부 fetch-failed다", async () => {
+    stubLoaderEnvironment({ width: 100, height: 100 });
+
+    stubFetch(() => new Response(null, { status: 404 }));
+    expect(await loadFrameImageFromUrl("/a.png")).toEqual({ ok: false, failure: "fetch-failed" });
+
+    stubFetch(() => new Response(new Blob([]), { status: 200 }));
+    expect(await loadFrameImageFromUrl("/a.png")).toEqual({ ok: false, failure: "fetch-failed" });
+
+    stubFetch(() => {
+      throw new TypeError("Failed to fetch");
+    });
+    expect(await loadFrameImageFromUrl("/a.png")).toEqual({ ok: false, failure: "fetch-failed" });
+  });
+
+  it("빈 URL은 요청조차 하지 않는다", async () => {
+    stubLoaderEnvironment({ width: 100, height: 100 });
+    const calls = stubFetch(() => new Response(new Blob(["x"])));
+    expect(await loadFrameImageFromUrl("   ")).toEqual({ ok: false, failure: "fetch-failed" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("번들 JPG(4000 초과)도 축소되어 PNG로 돌아온다", async () => {
+    stubLoaderEnvironment({ width: 6000, height: 3000 });
+    stubFetch(() => new Response(new Blob(["jpg"]), { status: 200 }));
+    const outcome = await loadFrameImageFromUrl("/frames/wide.jpg");
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect([outcome.image.width, outcome.image.height]).toEqual([4000, 2000]);
+    expect(outcome.image.blob.type).toBe("image/png");
+  });
+
+  it("OPFS에 아무것도 쓰지 않는다(임시 파일 금지 — 03 §11.7)", () => {
+    const source = readFileSync(join(SRC, "adapters/frames/frameImageLoader.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    for (const forbidden of ["OpfsClient", "getOpfsClient", "createWritable", "getDirectory("]) {
+      expect(source.includes(forbidden), forbidden).toBe(false);
+    }
   });
 });
 
