@@ -28,6 +28,24 @@ export const STRINGS = {
     start: "촬영 시작",
   },
 
+  login: {
+    title: "로그인",
+    google: "Google로 로그인",
+    /** 리디렉트 개시 후 버튼 라벨(비활성 상태 — 중복 클릭 방지 · 03 §3). */
+    redirecting: "Google로 이동하는 중…",
+    /** `/oauth2callback` 처리 중 스피너 문구(조작 요소 없음 — 07 §2.5). */
+    processing: "로그인 처리 중…",
+    /** 5종을 **구분해서** 표시한다(07 §2.6 · 03 §3.1). 키는 `LoginMessageKey`와 1:1이다. */
+    errors: {
+      cancelled: "Google 로그인이 취소되었습니다.",
+      rejected:
+        "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요.",
+      notConfigured: "Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요.",
+      network: "Google 로그인 중 오류가 발생했습니다. 네트워크를 확인해 주세요.",
+      clientNotConfigured: "로그인이 구성되지 않았습니다. 관리자에게 문의하세요.",
+    },
+  },
+
   idle: {
     title: "계속 진행하시겠어요?",
     /** `{n}`을 남은 초로 치환한다. */
@@ -53,7 +71,8 @@ export const STRINGS = {
     server: "서버에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
     notConfigured: "서버가 구성되지 않았습니다. 관리자에게 문의하세요.",
     forbidden: "권한이 없습니다.",
-    sessionExpired: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
+    /** 규격 문구는 "세션"이다(07 §4.3 · 12 C10) — "로그인이 만료"로 쓰지 않는다. */
+    sessionExpired: "세션이 만료되었습니다. 다시 로그인해 주세요.",
   },
 
   camera: {

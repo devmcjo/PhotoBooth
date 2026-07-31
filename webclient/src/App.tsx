@@ -6,7 +6,7 @@ import { logger } from "@adapters/storage/logStore";
 import { getFullscreenController } from "@shell/fullscreenController";
 import { getIdleWatchdog } from "@shell/idleWatchdog";
 import { shellStore, useShellStore } from "@shell/shellStore";
-import { sessionStore, useSessionStore } from "@shell/sessionStore";
+import { useSessionStore } from "@shell/sessionStore";
 import { useSettingsStore } from "@shell/settingsStore";
 import { CameraTestModal } from "@screens/modals/cameraTest/CameraTestModal";
 import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
@@ -20,6 +20,7 @@ import {
 } from "@ui/views/FlowViews";
 import { QrView } from "@ui/views/QrView";
 import { DoneView } from "@ui/views/DoneView";
+import { LoginView } from "@ui/views/LoginView";
 import { formatCount, STRINGS } from "@ui/strings";
 import { env, versionCaption } from "./env";
 import type { Branding } from "@adapters/platform/branding";
@@ -172,8 +173,8 @@ function ModalStack() {
 }
 
 /**
- * 화면 라우팅. Step 7까지 구현된 화면은 실물을, 나머지는 더미를 렌더한다.
- * 더미는 Step 8·11~16이 하나씩 교체한다.
+ * 화면 라우팅. 촬영 흐름 전체(Home~Done)와 `Login`은 실물이고,
+ * 남은 더미(`Settings`·`Account`·`UserMgmt`·`FrameEditor`)는 Step 13·15·16이 교체한다.
  */
 function ScreenRouter({
   screen,
@@ -199,6 +200,8 @@ function ScreenRouter({
       return <QrView />;
     case "Done":
       return <DoneView appName={branding.appName} />;
+    case "Login":
+      return <LoginView />;
     default:
       return <DummyScreen screen={screen} />;
   }
@@ -272,16 +275,4 @@ export function installFirstGestureHandlers(
   target.addEventListener("pointerdown", handler, { once: true });
   target.addEventListener("keydown", handler, { once: true });
   return remove;
-}
-
-/** 세션 사용자를 세팅하는 개발용 헬퍼(Step 12가 실 로그인으로 대체). */
-export function devLogin(id: string): void {
-  sessionStore.getState().login({
-    id,
-    role: "user",
-    createdAt: new Date().toISOString(),
-    email: null,
-    authMethod: "google",
-    hasPin: false,
-  });
 }

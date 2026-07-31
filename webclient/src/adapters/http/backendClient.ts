@@ -1,5 +1,6 @@
 import { logger } from "@adapters/storage/logStore";
 import { getToken } from "@shell/authStore";
+import { handleSessionExpired } from "@shell/sessionExpiry";
 import { env } from "../../env";
 import {
   NotAuthenticatedError,
@@ -37,6 +38,15 @@ export interface RequestOptions {
   readonly auth?: "none" | "optional" | "required";
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
+  /**
+   * 401의 의미. 기본값은 **요청에 Bearer가 실제로 붙었는가**로 정한다:
+   *   토큰 부착됨 → `"expired"`(세션 만료 → 해제)
+   *   토큰 없음   → `"reject"`(호출부가 해석 — 예: `/auth/google`의 401 = 계정 거부)
+   *
+   * ⚠️ **PIN 검증만 명시적으로 `"reject"`** 를 넘긴다 — 한 번 틀렸다고 로그아웃되면 안 된다
+   *    (07 §4.3 · E17).
+   */
+  readonly unauthorized?: "expired" | "reject";
 }
 
 export interface BackendClientDeps {
@@ -45,6 +55,8 @@ export interface BackendClientDeps {
   readonly gateKey?: string;
   readonly tokenProvider?: () => string | null;
   readonly now?: () => number;
+  /** 기본 `handleSessionExpired`(`shell/sessionExpiry`). 테스트 주입점. */
+  readonly onSessionExpired?: (path?: string) => void;
 }
 
 function buildUrl(baseUrl: string, path: string, query?: RequestOptions["query"]): string {
@@ -68,6 +80,8 @@ export function createBackendClient(deps: BackendClientDeps = {}): BackendClient
   const gateKey = deps.gateKey ?? env.backendApiKey;
   const tokenProvider = deps.tokenProvider ?? getToken;
   const now = deps.now ?? (() => Date.now());
+  // 401 → 세션 해제의 **단일 지점**이다(설계 §4.5). 화면·서비스에 같은 판정을 두지 않는다.
+  const notifySessionExpired = deps.onSessionExpired ?? handleSessionExpired;
 
   async function request<T>(options: RequestOptions): Promise<T> {
     const method = options.method ?? "GET";
@@ -136,6 +150,14 @@ export function createBackendClient(deps: BackendClientDeps = {}): BackendClient
         errorCode: envelope.code,
         elapsedMs,
       });
+
+      if (response.status === 401) {
+        // 만료 판정은 **오류를 던지기 직전 한 곳에서만** 한다(C10).
+        // `expired`면 `sessionStore.expireSession()`이 돌고 M1 구독이 토큰을 폐기한다.
+        const meaning = options.unauthorized ?? (token !== null ? "expired" : "reject");
+        if (meaning === "expired") notifySessionExpired(options.path);
+      }
+
       throw toBackendError(response.status, envelope);
     }
 

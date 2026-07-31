@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |------|-----|
-| 문서 | **다음 작업자(사람 또는 에이전트)가 Step 11부터 이어가기 위해 알아야 할 것** |
+| 문서 | **다음 작업자(사람 또는 에이전트)가 Step 13부터 이어가기 위해 알아야 할 것** |
 | 대상 | 이 폴더의 설계 문서를 읽었지만 **코드를 처음 보는** 사람 |
-| 작성일 | 2026-07-31 (Step 1~10 완료 시점) |
+| 작성일 | 2026-07-31 작성 · **2026-08-01 갱신(Step 12 인증 완료 시점)** |
 | 성격 | 설계 문서(00~14)가 "무엇을"이라면, 이 문서는 **"이 저장소에서는 어떻게"** 다 |
 
 > 왜 필요한가: Step 1~8을 구현하며 굳어진 관례와, 실제로 밟은 함정들이 커밋 메시지에만 남아 있다.
@@ -16,7 +16,7 @@
 
 ```bash
 cd webclient && npm ci
-npx tsc --noEmit && npx vitest run     # 873 통과(34파일)
+npx tsc --noEmit && npx vitest run     # 1051 통과(45파일)
 cd ../web/functions && npm test         # 316 통과
 cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
@@ -25,11 +25,11 @@ cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 
 | 다음 | 선행 조건 |
 |------|-----------|
-| **Step 12 인증** | A1·A2·A3(OAuth·시크릿·게이트 키). Step 11까지 끝나 **게스트 완주 경로(★마일스톤 A)가 코드상 완성**돼 있다 |
-| Step 13~16 | 동상 |
+| **Step 13 PIN + 설정 화면** | Step 12(계정 API·로그인) 완료 + Step 3(설정 저장). ⚠️ PIN 호출에는 **`unauthorized: "reject"`** 를 반드시 넘긴다(§6 Step 12 절) |
+| Step 14~16 | 동상 |
 | Step 17 E2E·실기기 | 실기기 3대(사람). Playwright 도입도 이 Step이다 |
 
-권장 분할: 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
+권장 분할: 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
 
 ---
 
@@ -94,6 +94,14 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 |--------|------|
 | **WM1** CSS 반전 금지 | `src/` 전체에 `scaleX(-1)`·`rotateY(180deg)` 없음 + `CameraPreview`가 `<video>` 미렌더 |
 | **M2** JWT 메모리 전용 | `authStore.ts` 소스에 저장소 API 문자열 0건 |
+| **M2-a** `sessionStorage`는 `adapters/auth/oauthStateStore.ts` **한 파일에만** | `authInvariants.test.ts` — `src/` 전체 grep(주석 제거 후) |
+| **M2-b** 인증 11파일에 `localStorage`·`indexedDB`·`document.cookie`·`persist(` 0건 | 동상 |
+| **AUTH-1** `sessionStore.login(` 호출부는 **콜백 러너 1곳뿐** | 동상 — `devLogin` 류 세션 위조 헬퍼 재발 방지 |
+| **AUTH-2** `clientKind`가 `"web"`으로 고정 | 동상 — 빠지면 서버가 desktop client_id로 교환해 반드시 실패한다 |
+| **AUTH-3** 인증 파일의 `logger` 컨텍스트에 `code`·`state`·`nonce`·`codeVerifier`·`token`·`pin` 키 0건 | 동상 — 이 키는 마스킹 대상이라 진단이 무용해진다 |
+| **AUTH-4** `App.tsx`에 `devLogin` 0건 | 동상 |
+| **AUTH-5** authorize URL에 `prompt=select_account` 존재 | 동상 — 빠지면 손님이 직전 운영자 계정으로 원탭 로그인된다 |
+| dev 포트 5173 + `strictPort: true` | 동상(`vite.config.ts` 소스) — Google Console·서버 허용 목록과 정합 |
 | 도메인 순수성 | §2 |
 | **유휴 상한** 총 대기 60초 < `IDLE_TIMEOUT_MS` 120초 | `shell.test.ts`(도메인 사본 = 셸 실제값 동기화까지) |
 | MP4 muxer import는 **`encode.worker.ts` 하나뿐** | `timelapseService.test.ts` — 코어를 node 테스트 가능 상태로 고정 |
@@ -170,10 +178,22 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - ⚠️ **`App.tsx`의 `ScreenRouter`에 `Result` 케이스가 빠져 있었다**(Step 8/10이 `ResultView`를 만들고 라우팅을 붙이지 않았다 — `Result`가 더미 화면으로 렌더됐다). Step 11에서 `Result`·`Qr`·`Done` 3케이스를 함께 붙였다.
 - **실측 V20 5건이 남아 있다**([14 §10.5](./14-handoff-and-user-actions.md)). 브라우저·폰이 필요해 자동화 불가이며 **폰 스캔은 Step 12(로그인) 이후**다.
 
-### Step 12 인증
-- 서버는 준비됐다. 클라이언트는 **`clientKind: "web"`을 보내야 한다**(미지정은 desktop이라 웹 client_id로 교환되지 않는다).
-- M1 배선(`installTokenLifecycle`)은 이미 설치돼 있고 테스트가 고정한다. **토큰 폐기를 로그아웃 버튼에 걸지 않는다.**
-- PKCE·state·nonce는 `sessionStorage`, 토큰은 **메모리만**(M2).
+### Step 12 인증 — **완료(2026-08-01)**. 뒤 Step이 알아야 할 것만 남긴다
+- **`sessionStore.expireSession()`이 생겼다.** 401 만료 전용이며 **촬영 데이터를 지우지 않는다**(`logout()`은 지운다 — `discardCaptureData()` 동반).
+  [02 §5.2](./02-app-shell-and-navigation.md) 매트릭스가 만료 행의 촬영 데이터를 "유지"로 못박기 때문이다. `currentUser` 변경 진입점은 이제 **`login`/`logout`/`expireSession` 3개**이고,
+  M1 구독은 "필드가 null이 되는 것"을 보므로 `installTokenLifecycle`은 **무수정**이다.
+- ⚠️ **PIN 계열 호출에는 `unauthorized: "reject"` 를 반드시 넘긴다**(Step 13). `backendClient`의 기본값은
+  "Bearer가 붙었으면 `expired`"라서, 그냥 두면 **PIN을 한 번 틀렸을 때 로그아웃**된다(E17 회귀). 지금은 `accountService.verifyMyPin` 한 곳에만 붙어 있다.
+- **401 → 세션 해제는 `backendClient`의 401 분기 한 곳**이 소유한다(`shell/sessionExpiry.ts`의 `handleSessionExpired`, 멱등).
+  화면·서비스에 `isUnauthorized(err)` 기반 세션 해제를 **추가하지 마라** — 두 곳이 되면 토스트가 2번 뜬다.
+- **`sessionStorage`는 `adapters/auth/oauthStateStore.ts` 전용이다**(정적 테스트 M2-a가 다른 파일 사용을 0건으로 고정). 들어가는 값은 PKCE·state·nonce·returnTo뿐이고 콜백 즉시 삭제된다.
+- **`sessionStore.login()` 호출은 `screens/oauthCallback/oauthCallbackRunner.ts` 1곳뿐**이라는 정적 테스트(AUTH-1)가 있다 → `devLogin` 류 세션 위조 헬퍼를 만들면 실패한다(그 헬퍼는 이 Step에서 삭제했다).
+- **콜백은 화면 상태가 아니라 URL 경로다.** `APP_STATES`에 `OauthCallback`이 없고, `main.tsx`가 `classifyRoute`로 분기해 `ScreenRouter` **밖**에서 `OauthCallbackGate`를 렌더한다.
+  콜백 소비는 **React 밖 동기 1회**(`captureOauthCallback`)라 `<StrictMode>` 이중 effect에 영향받지 않는다 — **`useEffect`로 옮기지 마라**(2회째가 "취소"로 성공 문구를 덮는다).
+- **`Login` 화면이 실물이 됐다**(`ui/views/LoginView.tsx` ↔ `screens/login/useGoogleSignIn.ts`). 로직은 `runSignIn(deps)`로 분리돼 node에서 검증된다(훅은 테스트에서 호출할 수 없다).
+- **dev 포트가 5173 + `strictPort: true`로 고정됐다.** Google Console·서버 허용 목록이 5173이라 포트가 밀리면 `redirect_uri_mismatch`로 조용히 실패한다 — **바꾸지 마라.**
+- 토큰은 여전히 **메모리만**(M2)이고 새로고침 = 재로그인이 정상이다(C6).
+- **실측 V21 10건이 남아 있다**([14 §10.6](./14-handoff-and-user-actions.md)). 실 Google 계정·배포 헤더·폰이 필요해 자동화 불가이며 **E17 화면 관측은 Step 13 이후**다.
 
 ### Step 14 프레임 선택 — **it20 대기 국면이 절반이다**(2026-07-31 main 머지분)
 - `analysis/13 §4.2`에 **로딩 4국면**(`Loading`/`Ready`/`Degraded`/`Failed`) 규격이 신설됐다. 웹 반영은 [03 §4.1](./03-screens-spec.md)·[06 §6.1](./06-backend-integration-web.md)·[02 §6.2](./02-app-shell-and-navigation.md).
@@ -202,11 +222,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **873**(34파일) · 서버 **316** · Windows **938**(Windows 수치는 Step 8.5 시점 실측. Step 9·10·11은 `docs/spec-vectors/`를 건드리지 않아 재측정 대상이 아니다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **1051**(45파일) · 서버 **316** · Windows **938**(Step 12 시점 3스위트 전부 실측. Step 12는 `docs/spec-vectors/`를 건드리지 않았고 서버·WPF 코드도 무변경이다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 12~17, 실측 V1~V20 |
+| 미완 | Step 13~17, 실측 V1~V21 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 
@@ -216,4 +236,4 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | Step 15 | 불러오기 = 신규 생성으로 재정의, 서버 등록 확인 모달 신설, 저장 전 검증 7단, `isFileNameSafe` 분리 |
 | Step 9 | 변화 없음. 참고로 **웹 타임랩스 경로에는 GPL 노출이 없다**(브라우저 내장 인코더 — `12 B14`) |
 
-화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·**Result·Qr·Done**이 실물이고, 나머지(Login·Account·Settings·FrameEditor·UserManagement)는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 화면은 이로써 전부 실물이다** — 남은 더미는 Step 12·13·15·16이 채운다.
+화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·Result·Qr·Done·**Login**이 실물이고, 나머지(Account·Settings·FrameEditor·UserMgmt)는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 + 로그인 화면은 이로써 전부 실물이다** — 남은 더미는 Step 13·15·16이 채운다.

@@ -582,7 +582,49 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] **`localStorage`·`sessionStorage`·IndexedDB·쿠키에 JWT가 없다**(E4 — 자동 검사). 로그인 실패·미구성에서도 [닫기]로 게스트 흐름 복귀가 된다. PIN 오입력이 로그아웃을 유발하지 않는다.
   - [trigger] 리디렉트는 버튼 탭에만. 콜백 처리는 `sessionStorage`에 값이 있을 때 **1회만**.
 - **롤백**: `googleSignIn`·콜백 라우트 제거(게스트 전용 앱으로 동작).
-- [ ] 완료
+- [x] **완료 (2026-08-01)** — 설계: [`docs/design/web-step12-google-sso-auth.md`](../design/web-step12-google-sso-auth.md)
+  - **산출물(신규 12)**: `domain/auth/pkceCodec.ts`(base64url 자체 구현 — `btoa` 미사용) · `domain/auth/authorizeUrl.ts`(파라미터 순서·인코딩 고정) ·
+    `domain/auth/oauthCallbackPolicy.ts`(중단 5사유 판정 · `returnTo` clamp) · `domain/auth/loginFailure.ts`(진단 6종 → 문구 5종) ·
+    `adapters/auth/pkce.ts`(Web Crypto 포트) · `adapters/auth/oauthStateStore.ts`(**`sessionStorage` 유일 소유자**) · `adapters/auth/googleSignIn.ts`(`POST /auth/google`) ·
+    `screens/oauthCallback/oauthCallbackRunner.ts`(capture/run/apply 3단 — React 무관) · `screens/login/useGoogleSignIn.ts`(로직 `runSignIn` 분리) ·
+    `shell/loginStore.ts` · `shell/sessionExpiry.ts` · `ui/views/{LoginView,OauthCallbackView}.tsx` ·
+    `tests/unit/auth/{pkceCodec,authorizeUrl,oauthCallbackPolicy,loginFailure,pkce,oauthStateStore,googleSignIn,oauthCallbackRunner,loginBinding,sessionExpiry,authInvariants}.test.ts`(11파일)
+  - **수정(8)**: `main.tsx`(9단계 실배선 — `classifyRoute` **첫 소비자**) · `App.tsx`(`Login` 라우팅 + **`devLogin` 삭제**) ·
+    `shell/sessionStore.ts`(**`expireSession()` 신설**) · `adapters/http/backendClient.ts`(`RequestOptions.unauthorized` + `onSessionExpired` — 401 단일 지점) ·
+    `adapters/http/accountService.ts`(`verifyMyPin`에 `unauthorized:"reject"`) · `ui/strings.ts`(`login` 절 + `error.sessionExpired` 문구 정정) ·
+    `vite.config.ts`(dev 포트 **5273 → 5173** + `strictPort: true`) · `docs/design/README.md`(2곳 등재)
+  - **검증(실측)**: `npx tsc --noEmit` 오류 0 · `npx vitest run` **1051 통과(45파일)** — 873/34에서 **+178(+11파일)** · `npx vite build` 성공(번들 266→276 kB, gzip 92→95 kB) ·
+    `cd web/functions && npm test` **316 통과(18스위트, 무변경)** · `dotnet test tests/MCPhoto.Tests` **938 통과(무변경)** ·
+    정적 불변식 7건은 **일시 변형 4회로 실패까지 확인**(M2-a/AUTH-1/AUTH-2/AUTH-5) · `docs/spec-vectors/` **무변경**
+  - **정적 불변식 7건 신설**(`tests/unit/auth/authInvariants.test.ts` — 15 §3.4. 테스트 케이스는 **9건**이며 7건 외에 검사 경로 존재 가드 + dev 포트 정합이 붙는다):
+    **M2-a** `sessionStorage`는 `oauthStateStore.ts` 한 파일에만 ·
+    **M2-b** 인증 11파일에 `localStorage`·`indexedDB`·`document.cookie`·`persist(` 0건 · **AUTH-1** `.login(` 호출부는 콜백 러너 1곳뿐(`devLogin` 류 재발 방지) ·
+    **AUTH-2** `clientKind`가 `"web"`으로 고정 · **AUTH-3** 인증 파일의 `logger` 컨텍스트에 `code`·`state`·`nonce`·`codeVerifier`·`token`·`pin` 키 0건 ·
+    **AUTH-4** `App.tsx`에 `devLogin` 0건 · **AUTH-5** authorize URL에 `prompt=select_account` 존재
+  - ⚠️ **설계 이탈 ①(가장 중요 — 규격 반영)**: 401 처리에 `logout()`이 아니라 **`sessionStore.expireSession()`** 을 쓴다. `logout()`은 `discardCaptureData()`를 동반하는데
+    [02 §5.2](./02-app-shell-and-navigation.md) 매트릭스는 "JWT 만료 감지" 행의 촬영 데이터를 **유지**로 못박고 [07 §4.3](./07-auth-and-permissions-web.md)도 "촬영·합성·로컬 보관은 계속"이라고 쓴다.
+    401이 가장 잘 나는 지점이 `Qr` 업로드(`optionalBearer`도 무효 토큰은 401)라 거기서 `finalImage`를 버리면 **[기기에 저장]까지 죽는다**.
+    **M1은 그대로 성립한다** — 구독은 "`logout()` 호출"이 아니라 `currentUser`가 null이 되는 것을 보므로 `installTokenLifecycle`은 **무수정**이다.
+  - ⚠️ **설계 이탈 ②**: 콜백을 **`APP_STATES`에 넣지 않았다.** 200ms~2초짜리 부트스트랩 국면이라 전이 대상이 아니고, 상태로 만들면 `canTransition` 13×13에 아무도 못 가는 행/열이 생긴다.
+    경로 분기는 기존 `classifyRoute`(전 저장소 호출 0건이던 순수 함수)가 담당하고, `main.tsx`가 `ScreenRouter` **밖**에서 `OauthCallbackGate`로 렌더한다.
+  - ⚠️ **설계 이탈 ③**: URL 스크럽(`history.replaceState`)을 [07 §2.2](./07-auth-and-permissions-web.md) 절차의 h가 아니라 **판정 직후·교환 전**에 한다 — ① 실패 경로에도 주소창에 `code`가 남지 않고
+    ② 교환 100초 사이 새로고침으로 같은 code 재진입이 **구조적으로 불가능**해지고 ③ `installRouter`가 더미 history 엔트리를 쌓기 전이라 `/oauth2callback`이 히스토리에 남지 않는다.
+    **[07 §2.2] 문서도 이 순서로 정정**했다.
+  - ⚠️ **설계 이탈 ④**: 화면 컴포넌트는 `ui/views/`, 로직은 `screens/`에 뒀다(WBS 대상 파일은 `screens/login/*`·`screens/oauthCallback/*`였다).
+    Step 8~11의 실제 배치(`QrView.tsx` ↔ `screens/qr/uploadRunner.ts`)를 따랐다 — 새 화면만 다른 배치를 쓰면 `ScreenRouter`의 import가 두 갈래가 된다.
+  - ⚠️ **설계 이탈 ⑤(사소·테스트 가능성)**: `oauthStateStore`의 3함수에 **선택적 저장소 인자**를 뒀다(`savePendingOauth(state, store?)`). 설계 시그니처는 인자 없음이지만
+    `settingsRepo`의 `StorageLike` 주입 선례를 따라야 "예외를 던지는 저장소"·"손상 JSON" 경로를 node에서 검증할 수 있다(설계 §6.1도 "저장소를 주입한다"고 쓴다). 기본값은 실 `sessionStorage`다.
+    같은 이유로 `handleSessionExpired(path?)`가 진단용 경로를 받고(설계 §4.6의 `{ path }` 로그를 위해), `useGoogleSignIn`의 로직을 **`runSignIn(deps)`** 으로 분리했다(훅은 node에서 호출할 수 없다).
+  - ⚠️ **설계 이탈 ⑥(사소)**: AUTH-2 정적 검사가 `clientKind: "web"` 리터럴 **또는** `OAUTH_CLIENT_KIND = "web"` + `clientKind: OAUTH_CLIENT_KIND` 둘 중 하나를 통과시킨다.
+    설계 §6.2는 리터럴 검사라고 썼지만 §3.2·§8은 상수 경유를 지시해 서로 어긋났다 — 상수를 `"desktop"`으로 바꾸는 변형에서 실제로 실패함을 확인했다.
+  - **미구현(의도)**: PIN 모달·설정 화면(Step 13), 계정·사용자 관리 화면(Step 16), Playwright E2E(E3·E3b·E4·E17 — Step 17). E2E 4종은 이번 Step에서 **단위 테스트로 등가 보장**했다
+    (E3/E3b = `sessionExpiry.test.ts` + 기존 `authStore.test.ts` · E4 = 정적 M2-a/M2-b · E17 = `sessionExpiry.test.ts`의 PIN 절).
+  - **미검증(사용자 액션 V21)**: 실 Google 계정 완주 · 배포본 CSP 위반 0건 · `prompt=select_account` 실동작 · 새로고침 게스트 복귀 + 저장소 토큰 0건 · 로그인 후 폰 QR 스캔 ·
+    `firebaseapp.com` 도메인 · 실패 경로 4종(취소·직접 진입·400·client_id 빈 값) — **10건 전부 브라우저·실계정·폰이 필요해 추정 통과 처리하지 않았다.**
+    절차는 [14 §10.6](./14-handoff-and-user-actions.md)에 **V21-1~V21-10**으로 등재했다(E17 화면 관측은 Step 13으로 이월 — [14 §10.7](./14-handoff-and-user-actions.md)).
+  - **📌 다음 작업자에게**: ① `verifyMyPin` 외의 PIN 계열 호출을 추가하면 **`unauthorized: "reject"` 를 반드시 넘긴다**(기본값은 `expired`다).
+    ② `sessionStore.login()`을 부르는 코드를 늘리면 AUTH-1이 실패한다 — 세션을 세우는 경로는 콜백 러너 1곳이어야 한다.
+    ③ `sessionStorage`가 필요하면 `oauthStateStore.ts`에 넣지 말고 **왜 필요한지 먼저 검토**한다(M2-a가 막는다).
 
 ---
 

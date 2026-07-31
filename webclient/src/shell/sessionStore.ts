@@ -16,8 +16,9 @@ import type { OutputFormat } from "@domain/settings/appSettings";
  *    두 번째 인자를 Zustand가 **조용히 무시**해서 M1(토큰 폐기) 구독이 한 번도 실행되지 않는다.
  *    `authStore.test.ts`가 이 배선을 기계적으로 고정한다.
  *
- * ⚠️ `currentUser` 변경 진입점은 **`login` / `logout`뿐**이다. 다른 경로를 만들면
- *    M1 구독이 덮지 못하는 사각이 생긴다.
+ * ⚠️ `currentUser` 변경 진입점은 **`login` / `logout` / `expireSession`뿐**이다. 규칙의 요지는
+ *    "진입점 개수"가 아니라 **`currentUser` 필드를 통해서만 바꾼다**는 것이다(02 §5.1) —
+ *    그래야 M1 구독 한 곳이 모든 경로를 덮는다.
  */
 
 /** 컷 1개. 실제 픽셀은 OPFS에 있고 여기서는 참조만 든다(모바일 메모리 한계 — WR8). */
@@ -59,6 +60,16 @@ export interface SessionState {
   login(user: SessionUser): void;
   /** 로그아웃. 구독이 토큰을 폐기한다(M1) — 여기서 토큰을 직접 지우지 않는다. */
   logout(): void;
+  /**
+   * JWT 만료 감지(401) → **사용자만** 해제한다.
+   *
+   * ⚠️ **`discardCaptureData()`를 부르지 않는다.** [02 §5.2] 매트릭스가 "JWT 만료 감지" 행의
+   *    촬영 데이터를 **유지**로 못박고, [07 §4.3]도 "촬영·합성·로컬 보관은 계속된다"고 쓴다.
+   *    401이 가장 잘 나는 지점이 `Qr` 화면의 업로드인데 거기서 `finalImage`를 버리면
+   *    [기기에 저장]까지 죽는다 — 결과물이 로컬에 남아 있음을 알려야 하는 규격과 정반대다.
+   * ⚠️ 토큰은 여기서 지우지 않는다 — `currentUser`가 null이 되면 M1 구독이 폐기한다.
+   */
+  expireSession(): void;
   setSession(session: CaptureSessionState<CapturedCut>): void;
   setSessionId(sessionId: string | null): void;
   setFilter(filter: FilterKind): void;
@@ -93,6 +104,11 @@ export const sessionStore = createStore<SessionState>()(
     logout() {
       set({ currentUser: null });
       get().discardCaptureData();
+    },
+
+    expireSession() {
+      // 촬영 데이터는 그대로 둔다(02 §5.2) — 게스트가 되어 QR만 사라진다.
+      set({ currentUser: null });
     },
 
     setSession(session) {

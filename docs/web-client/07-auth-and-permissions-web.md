@@ -58,18 +58,23 @@
                                         로그인된다(자격증명 입력 없이 QR 한도·프레임 권한 획득)
  4. Google 인증 → /oauth2callback?code=…&state=…  로 복귀
  5. 콜백 처리:
-      a. sessionStorage에서 값 복원 (없으면 → 오류 화면 + 홈)
+      a. sessionStorage에서 값 복원 **+ 즉시 삭제**(원자적 소비 — 재진입 시 반드시 없음)
       b. state 대조 (불일치 → "Google 로그인이 취소되었습니다." + 홈)
       c. error 파라미터 있으면 → 취소로 처리
       d. startedAt이 3분 초과면 → 취소로 처리 (Windows 타임아웃과 동일)
-      e. POST /auth/google { code, codeVerifier, redirectUri, nonce, clientKind: "web" }
+      e. history.replaceState로 URL의 code·state 제거          ← 흔적·재사용 방지
+           ↑ **판정 직후·교환 전이다**(성공 후가 아니다 — Step 12 구현에서 앞당겼다):
+             ① 401·네트워크 실패에도 주소창에 인가 코드가 남지 않는다
+             ② 교환은 최대 100초다 — 그 사이 새로고침해도 같은 code로 재진입할 수 없다
+             ③ 라우터가 더미 history 엔트리를 쌓기 전이라 /oauth2callback이 히스토리에 남지 않는다
+      f. POST /auth/google { code, codeVerifier, redirectUri, nonce, clientKind: "web" }
            ↑ clientKind는 서버 확장 B2가 도입하는 필드다. **웹은 반드시 "web"을 보낸다** —
              미지정은 "desktop"(하위 호환)이라 서버가 데스크톱 client_id/secret으로 code를
              교환해 실패한다([08 §4.2](./08-server-and-infra-prerequisites.md)).
-      f. 성공 → 토큰을 메모리에 보관 + 세션 사용자 설정
-      g. sessionStorage 값 즉시 삭제
-      h. history.replaceState로 URL의 code·state 제거          ← 흔적·재사용 방지
-      i. returnTo 화면으로 복귀 (없으면 Home)
+      g. 성공 → 토큰을 메모리에 보관 + 세션 사용자 설정
+      h. returnTo 화면으로 복귀 (없으면 Home)
+           ↑ 리디렉트로 앱이 통째로 재시작됐으므로 촬영 세션에 의존하는 화면으로는 복귀할 수 없다 →
+             Home·FrameSelect·Settings·Account 4종으로 clamp한다(그 외는 Home).
 ```
 
 ### 2.3 PKCE 생성 (Web Crypto)

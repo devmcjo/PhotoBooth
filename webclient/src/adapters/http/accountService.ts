@@ -42,6 +42,9 @@ export function createAccountService(client: BackendClient = getBackendClient())
         path: "accounts/me/pin/verify",
         body: { pin },
         auth: "required",
+        // ⚠️ 이 호출의 401은 **PIN 불일치**이지 세션 만료가 아니다(07 §4.3 · E17).
+        //    기본값(`expired`)에 맡기면 PIN을 한 번 틀렸을 때 로그아웃되는 회귀가 난다.
+        unauthorized: "reject",
       });
     },
 

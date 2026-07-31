@@ -24,8 +24,14 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       // 실기기 테스트는 Hosting preview channel을 권장한다(01 §5.4).
-      port: 5273,
-      strictPort: false,
+      //
+      // ⚠️ 포트를 바꾸지 마라. Google Console에 등록된 리디렉트 URI와 서버
+      //    `OAUTH_REDIRECT_ALLOWLIST`가 **`http://localhost:5173/oauth2callback`** 이고
+      //    서버는 완전 일치로 검사한다(14 §2.2·§3.3).
+      // ⚠️ `strictPort: true`가 필요한 이유: 꺼져 있으면 포트 충돌 시 vite가 조용히 5174로
+      //    옮겨가고, 그러면 Google이 `redirect_uri_mismatch`로 거부해 "로그인이 안 된다"만 보인다.
+      port: 5173,
+      strictPort: true,
     },
   };
 });
