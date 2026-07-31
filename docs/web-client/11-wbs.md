@@ -316,7 +316,14 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] `ctx.filter`·CSS `filter`로 흑백을 만들지 않는다(grep 확인). 타임랩스·저장·업로드 **없음**.
   - [trigger] 재합성은 필터 변경·진입에만. 프레임은 변경할 수 없다(M11).
 - **롤백**: `src/adapters/compose`·`Result` 화면 삭제.
-- [ ] 완료
+- [x] **완료 (2026-07-31)**
+  - `composeCore`(**순수 RGBA — 브라우저 API 없음**), `pixelFilters`(BT.601 흑백·밝게·뷰티 bilateral CPU), `resizeArea`(OpenCV `INTER_AREA` 대응), `compositor`(디코딩·인코딩만), `useResultCompose` + `ResultView`.
+  - **골든 이미지 체계 구축**: `tests/MCPhoto.Tests/GoldenImageTests.cs`가 결정적 패턴(체커보드·그라데이션·피부톤·고주파 1080×1440 4장 + 프레임 1200×1600)을 **코드로 생성**하고 실제 `CompositionService`로 기준 4장을 만든다. 최초 실행에 생성, 이후에는 **무손실 회귀 게이트**(합성 코드가 바뀌면 여기서 먼저 실패).
+  - **웹 대조 결과: 4개 필터 전부 허용 오차 통과**(10 §4.2). 프레임 배경(슬롯 밖)은 **0px·완전 일치**로 별도 검증 — 슬롯이 1px만 밀려도 걸린다.
+  - node에 canvas가 없어 `tests/golden/png.ts`에 최소 PNG 디코더(`node:zlib`)를 뒀다. **제품 코드가 아니다**.
+  - ⚠️ **설계 판단**: 픽셀 연산을 `composeCore`(순수)로 몰아 **브라우저와 골든 테스트가 같은 코드 경로**를 지나게 했다. 브라우저 `createImageBitmap` resize를 쓰면 테스트가 검증하지 못하는 경로가 생긴다.
+  - ⚠️ **발견**: 최초 픽스처(컷 480×640 < 슬롯 490×653)가 **확대 경로**를 타 MAE 21로 실패했다. 실제 컷은 카메라 해상도라 축소가 정상 — 픽스처를 1080×1440으로 고쳐 현실과 맞췄다.
+  - **미구현(의도)**: 뷰티 WebGL2 가속. CPU 구현이 **정확도 기준**이고 골든을 통과한다. 실기기 성능 예산(1.2초)을 넘으면 그때 WebGL2 경로를 CPU 폴백과 함께 추가한다.
 
 ---
 

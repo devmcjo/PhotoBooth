@@ -17,9 +17,12 @@ import { fixFrameAndResolveCutCount } from "@shell/captureSessionController";
 import { useSettingsStore } from "@shell/settingsStore";
 import { sessionStore, useSessionStore, type CapturedCut } from "@shell/sessionStore";
 import { shellStore } from "@shell/shellStore";
-import { Button } from "@ui/components";
+import { Button, Spinner } from "@ui/components";
 import { STRINGS } from "@ui/strings";
 import { CameraPreview } from "./CameraPreview";
+import { useResultCompose } from "@screens/result/useResultCompose";
+import { isQrEffectivelyEnabled } from "@domain/settings/qrEffectivePolicy";
+import type { FilterKind } from "@domain/filters/filterParams";
 import { useCaptureRunner } from "@screens/capture/useCaptureRunner";
 import styles from "./screens.module.css";
 
@@ -315,4 +318,78 @@ function CutThumbnail({ cut }: { readonly cut: CapturedCut }) {
 /** 카메라를 쓰지 않는 화면으로 나갈 때 확실히 정지시킨다. */
 export function useStopCameraOnUnmount(): void {
   useEffect(() => () => getCameraService().stop(), []);
+}
+
+// ─────────────────────────────────── Result ──────────────────────────────────
+
+/**
+ * 결과 화면 — 03 §8 (합성 + 필터 4종)
+ *
+ * ⚠️ [다음]의 목적지는 **effective QR 판정**이 정한다(qrEffectivePolicy).
+ *    게스트·TempUser 한도 초과는 `Qr`을 건너뛰고 `Done`으로 간다(VF-11 · E23).
+ *    저장된 `EnableQrDelivery`를 **write하지 않는다** — 게스트 촬영 한 번에 운영자 설정이 꺼진다.
+ */
+export function ResultView() {
+  const result = useResultCompose();
+  const rawEnableQr = useSettingsStore((s) => s.values.EnableQrDelivery);
+  const user = useSessionStore((s) => s.currentUser);
+
+  const filterLabels: Record<FilterKind, string> = {
+    None: "원본",
+    Grayscale: "흑백",
+    Brightness: "밝게",
+    Beauty: "뷰티",
+  };
+
+  function goNext(): void {
+    // TempUser 한도는 Step 11에서 qr-usage 조회로 채운다(지금은 미차단).
+    const qrOn = isQrEffectivelyEnabled(rawEnableQr, user !== null, false);
+    shellStore.getState().go(qrOn ? "Qr" : "Done");
+  }
+
+  return (
+    <main className={styles.screen}>
+      <div className={styles.captureStage}>
+        {result.composing && <Spinner label="합성 중입니다…" />}
+        {result.error !== null && (
+          <p className={styles.note} role="alert">
+            {result.error}
+          </p>
+        )}
+        {result.imageUrl !== null && !result.composing && (
+          <img className={styles.resultImage} src={result.imageUrl} alt="합성 결과" />
+        )}
+      </div>
+
+      <div className={styles.actions}>
+        {result.filters.map((filter) => (
+          <Button
+            key={filter}
+            variant={filter === result.filter ? "primary" : "secondary"}
+            disabled={result.composing}
+            onClick={() => result.setFilter(filter)}
+          >
+            {filterLabels[filter]}
+          </Button>
+        ))}
+      </div>
+
+      <div className={styles.actions}>
+        <Button onClick={() => void shellStore.getState().returnHome("결과 취소")}>
+          {STRINGS.common.cancel}
+        </Button>
+        <Button
+          variant="primary"
+          disabled={result.composing || result.imageUrl === null}
+          onClick={goNext}
+        >
+          {STRINGS.common.next}
+        </Button>
+      </div>
+
+      {result.elapsedMs !== null && (
+        <p className={styles.note}>합성 {result.elapsedMs}ms</p>
+      )}
+    </main>
+  );
 }
