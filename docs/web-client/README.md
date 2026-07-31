@@ -6,7 +6,7 @@
 | 대상 독자 | 이 폴더의 문서만 보고 개발에 착수하는 프론트엔드 개발자(또는 에이전트) |
 | 전제 지식 | 없음. 필요한 Windows 규격·소스 위치는 각 문서 안에 경로로 명시했다 |
 | 작성일 | 2026-07-30 |
-| 상태 | **설계 확정 v1.1 — 구현 착수 가능**. 단, [08 서버·인프라 선행 작업](./08-server-and-infra-prerequisites.md)의 P0 항목은 코드 작성 전에 처리해야 한다 |
+| 상태 | **구현 진행 중 — WBS Step 1~5 + 서버 선행작업(B1·B2·B4) 완료**(2026-07-31, 브랜치 `feature/web-client-foundation`). 남은 콘솔·배포 작업은 [14 · 인수인계와 사용자 액션](./14-handoff-and-user-actions.md)에 절차로 정리돼 있다 |
 | v1.1 갱신(2026-07-30) | 원격 it17~it19 반영 — **자동 컷 수**(sentinel 0, WD19)·**오버레이 복귀 집합**(it19)·**버전 표기 채널 폐기**(it18)·설정 그룹 이동·진단 개발자 문의 카드·**CORS 실측 반영**(`web/OPS-cors.md` — 다운로드 GET 불필요/PUT 필수) + **개인 프레임 이연 컷라인**(WD20) |
 | v1.3 갱신(2026-07-30) | **Opus 적대 리뷰 반영(설계 리뷰 완료)** — 치명 3(M1 Zustand 배선·**은행가 반올림 `roundHalfToEven`**·삭제 소유자 검사 회귀)·중요 11(WBS Step 7 프레임 공급·`currentPin` 계약·`SlotPlacement` 이식·opfsWriter 명시·**JWT 만료 C10 등재**·빌드값 빈 문자열 폴백·**타임랩스 OPFS 스풀 재설계**·`prompt=select_account`·Ready "누적" 통일·E24 범위·stale 주석)·사소 9 |
 | v1.2 갱신(2026-07-30) | 소스 대조 검증 반영 — ① **게스트에게는 QR이 제공되지 않는다**(`QrEffectivePolicy`: 미로그인 → `Result→Done`. 도메인 모듈·화면·테스트·WBS 마일스톤 정정) ② 타임랩스 **경로 A는 메인 스레드 전용**(`MediaRecorder`/`captureStream`이 Worker에 없음) + 브라우저 지원 현실표 ③ **OPFS 쓰기는 Worker `createSyncAccessHandle`이 유일 경로**(Safari에 `createWritable` 없음) ④ iOS Safari API 하한표(`OffscreenCanvas` WebGL2 = 17+) ⑤ QR **ECC Q**(Windows와 일치) ⑥ WBS 버전 캡션 `Site` 제거·컷 수 해석 식 정정 |
@@ -44,8 +44,9 @@
 | 10 | [07 · 인증·권한](./07-auth-and-permissions-web.md) | OAuth 리디렉트·JWT·PIN 게이트·역할 게이트 | 구현 시 상시 참조 |
 | 11 | [09 · 키오스크 운영](./09-kiosk-operations.md) | 브라우저 키오스크 모드·권한 사전승인·전원 설정 | 배포 시 |
 | 12 | [10 · 테스트와 수락 기준](./10-testing-and-acceptance.md) | 테스트 전략·골든 이미지·실기기 매트릭스·수락 체크리스트 | 각 단계 종료 시 |
-| 13 | [11 · WBS(작업 분해)](./11-wbs.md) | Step 0~17 실행 계획(self-contained) | 실행 순서 |
+| 13 | [11 · WBS(작업 분해)](./11-wbs.md) | Step 0~17 실행 계획(self-contained) + **Step별 완료 기록** | 실행 순서 |
 | 14 | [12 · Web ↔ Windows 차이 보고서](./12-web-vs-windows-differences.md) | 다르게 동작하는 전 항목 + 기능 추가 시 규칙 | 보고·유지보수 |
+| 15 | [14 · 인수인계와 사용자 액션](./14-handoff-and-user-actions.md) | **코드로 끝낼 수 없는 작업**(OAuth 클라이언트·시크릿·버킷 CORS·첫 배포)의 절차·순서·검증 + 완료된 구현 요약 | **구현 중 상시** |
 
 ### 특정 작업만 한다면
 

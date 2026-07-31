@@ -121,7 +121,11 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] 앱 로직·라우팅·상태 관리 **없음**. **P1 사이트는 변경되지 않는다**(배포 대상이 `hosting:kiosk`뿐).
   - [trigger] 빌드는 `npm run build`에서만, 배포는 `--only hosting:kiosk`에서만 일어난다.
 - **롤백**: `webclient/` 삭제 + `firebase.json`의 kiosk 블록 제거(그린필드라 이전 상태 = 없음).
-- [ ] 완료
+- [x] **완료 (2026-07-30) — 단, 첫 배포·CSP 헤더 실측은 미완**
+  - 산출: `webclient/` 스캐폴드(Vite 5 + React 18 + TS strict, `outDir=../web/kiosk`), `env.ts`(두 URL 정규화 방향 반대 + 빈 값 폴백 + 경고 배열), `index.html`, `manifest.webmanifest` + 플레이스홀더 아이콘 3종, `branding.json`, `webclient/deploy.bat`.
+  - 인프라: kiosk 사이트 생성(`mcphoto-955fb-kiosk`) + `.firebaserc`에 **두 타깃 등록**, `firebase.json` hosting을 배열로 전환(default 블록 무변경).
+  - ⚠️ **회귀 방지 추가 조치**: `web/deploy-web.bat`의 배포 대상을 `hosting:default`로 고정했다. 그대로 `--only hosting`이면 kiosk까지 배포해 `web/kiosk/` 부재 시 실패한다(N1 위반). `docs/analysis/80 §6.5`에 등재.
+  - **남은 것**: `firebase deploy --only hosting:kiosk` 실행 + `curl -sI`로 CSP·nosniff 확인 + 콘솔 CSP 위반 0건 확인.
 
 ---
 
@@ -145,7 +149,14 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] UI·어댑터·저장소 코드 **없음**. Windows 제품 코드는 **변경하지 않는다**(테스트 파일만 벡터 읽기로 전환).
   - [trigger] 벡터 불일치 시 **양쪽 테스트가 동시에 실패**해야 한다(한 벡터 값을 일부러 바꿔 확인).
 - **롤백**: `src/domain`·`tests` 삭제, Windows 테스트를 커밋 이전으로 revert.
-- [ ] 완료
+- [x] **완료 (2026-07-30)**
+  - 도메인 28개 파일 이식(§2.2 표 전량 + `mathCompat.roundHalfToEven`·`fallbackFrameSpec`). `DisplayApplyPolicy` 미이식(WD7).
+  - 벡터 **14개 파일 / 271 케이스** 생성(`docs/spec-vectors/`, 생성기 `webclient/scripts/genVectors.ts`).
+  - 검증: 웹 **234 테스트 통과**, `src/domain` 커버리지 **99.4% stmts / 97.4% branches**. Windows **839 테스트 통과**(신규 `SpecVectorTests` 16 포함, 기존 823 무회귀).
+  - **트리거 확인 완료**: `center-crop.json`의 기대값 1px을 일부러 틀리게 하면 **웹·Windows가 동시에 실패**하고 복원하면 동시에 통과한다.
+  - 순수성 기계 검증: `tests/unit/domain/purity.test.ts`가 도메인 밖 import·`Date.now`·`Math.random`·브라우저 API·`console`을 파일 단위로 금지한다.
+  - ⚠️ **설계와 다르게 한 점**: 기존 Windows 테스트를 벡터 읽기로 **전환하지 않고** `SpecVectorTests.cs`를 **신설**했다. 기존 823개의 집중 단언을 보존하면서 교차 검증을 얻는 편이 회귀 위험이 낮다(요구의 목적 "양쪽이 같은 파일을 읽어 통과"는 충족).
+  - **프레임 이름 `_` 규칙 해소(모순 아님 — 스코프가 다르다)**: 서버 `web/functions/src/domain/validation.ts:297`이 `POST /frames`의 이름에 `_`가 있으면 **400으로 거부**한다. 따라서 ① **서버 등록 경로**(power 신규 공용) = **하드 거부**(M15·E13이 맞다) ② **로컬 전용 저장**(advanced_user 개인) = 서버를 거치지 않으므로 거부 사유가 없고, 공용 파일명 규약 충돌만 **비차단 경고**(Windows `FrameEditorViewModel`과 동일). 도메인은 `validateFrameNameForServer`(하드) / `validateFrameName` + `underscoreWarning`(로컬)로 **두 경로를 분리**해 이식했다. 문서 정정 불필요.
 
 ---
 
@@ -166,7 +177,13 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] `results/`·`frames/`·로그는 **잔재 정리로 삭제되지 않는다**(더미 파일을 넣어 확인). 화면 UI 없음.
   - [trigger] 잔재 정리는 **앱 시작 시 1회만**. 브랜딩 fetch 실패가 부팅을 막지 않는다.
 - **롤백**: 해당 파일 삭제. 저장소 데이터는 DevTools에서 수동 삭제.
-- [ ] 완료
+- [x] **완료 (2026-07-31) — 브라우저 실측만 남음**
+  - `opfsProtocol`(경로 방어: `..`·빈 세그먼트 거부) + `opfsWriter.worker`(**sync-access-handle 1순위 → Worker 내 createWritable 폴백 → none**, `truncate(0)` 후 쓰기, `finally`에서 `close()`) + `opfsClient`(RPC·15초 타임아웃·실패는 `false`).
+  - `settingsRepo`(알 수 없는 키 보존·타입 불일치만 기본값·`BackendApiKey` 미저장·`omitKeys`로 게스트 값 보존·저장 boolean), `sessionWorkspace`, `logPolicy`+`logStore`(IndexedDB 링버퍼·마스킹·배치·메모리 폴백·`logger` 파사드가 부팅 이전 로그를 버퍼링), `persistStorage`, `branding`(800ms·독립 폴백), `settingsStore`, `bootstrap`(1~6단계).
+  - 검증: 웹 **68 + 부트스트랩 11 테스트**. 순서 검증(브랜딩 fetch < 잔재 정리), `results/`·`frames/` 미접촉, OPFS 미지원·localStorage 불가에서도 부팅 완주.
+  - ⚠️ **발견·수정**: `isStorageLow`가 `1 - usage/quota`의 부동소수 오차로 **정확히 임계값(90%)을 경고로 넘겼다** → 바이트 정수 비교로 교체.
+  - **남은 것**: 실제 브라우저에서 DevTools → OPFS 잔재 삭제·localStorage 키 확인(문서의 [관측] 항목).
+- [ ] 브라우저 실측
 
 ---
 
@@ -192,7 +209,12 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] 화면 내용·카메라·HTTP **없음**. 유휴 만료가 **로그아웃하지 않는다**(테스트로 고정). 상단바가 `Capture`·`Qr`에서 숨겨지고 그 화면에 자체 취소 버튼이 있다.
   - [trigger] 유휴 경고는 감시 대상 화면에서 120초 무동작에만. 전체화면 요청은 **사용자 제스처**에만.
 - **롤백**: `src/shell`·`src/ui` 삭제.
-- [ ] 완료
+- [x] **완료 (2026-07-31) — 브라우저 실측만 남음**
+  - `sessionStore`(**`subscribeWithSelector` 적용** + 썸네일 `close()`), `authStore`(모듈 변수 1개 + `installTokenLifecycle` 구독 = **M1**), `shellStore`(전이·오버레이 복귀·`returnHome` 6단계·모달 스택·토스트), `idleWatchdog`(**실경과 기반**), `fullscreenController`, `visibility`(WM4), `wakeLock`, `keyboardLock`, `globalErrorHandler`(M16), `router`(2경로·popstate·beforeunload), `ui/strings`, `ui/theme/tokens.css`, 공통 컴포넌트 6종, `App.tsx`(더미 13화면 + ErrorBoundary), `main.tsx`(8·10·11단계).
+  - 검증: **36 테스트**. M1 4케이스(로그아웃/직접 조작/재로그인 교체/**미배선 시 토큰 잔존**), M2 정적 검사(authStore 소스에 저장소 API 0건), 오버레이 복귀 덮어쓰기 방지(it19), `returnHome` 순서, 유휴 실경과·경고 중 활동 무시·감시 제외 화면, 탭 hidden 취소.
+  - ⚠️ **발견·수정**: `globalErrorHandler`의 쿨다운 초기값이 `0`이라 **`now()`가 작은 시계에서 첫 오류 복구가 먹혔다** → `-Infinity`로 교체.
+  - **남은 것**: 브라우저에서 더미 화면 전이·유휴 경고·전체화면 배너 육안 확인.
+- [ ] 브라우저 실측
 
 ---
 
@@ -212,7 +234,12 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] 업로드 PUT·인증 흐름 **없음**(Step 11·12). 자동 재시도 **없음**. 로그에 토큰·본문이 남지 않는다(로그 스냅샷 테스트).
   - [trigger] 게이트 키는 값이 있을 때만 부착. Bearer는 토큰이 있을 때만.
 - **롤백**: `src/adapters/http` 삭제.
-- [ ] 완료
+- [x] **완료 (2026-07-31) — 실서버 프로브만 남음**
+  - `errors`(BackendError·NetworkError·NotAuthenticatedError·**TempUserLimitError**·SsoNotConfiguredError + 봉투 파싱·폴백 코드), `backendClient`(게이트 키 전 호출·Bearer 3수준·100초 타임아웃·`credentials: "omit"`·자동 재시도 없음), `healthService`(2프로브), `accountService`, `frameRepository`, `uploadGateway`, `qrUsageService`(fail-open), `tempUserLimitsService`.
+  - 검증: **48 테스트**. 7개 상태코드가 각각 다른 타입으로, `TEMP_USER_*` 403이 권한 오류와 분리, 네트워크 실패가 상태 오류와 미혼동, `auth:"required"` + 무토큰이 **요청을 보내지 않음**, `requiredHeaders` 원형 보존(M14), 로그에 토큰·본문·서버 message 미포함.
+  - ⚠️ **발견·수정**: 로그 마스킹 목록의 `code`(OAuth 인가 코드)가 **오류 코드까지 마스킹**해 진단 불가였다 → 마스킹은 유지하고 로그 필드를 `errorCode`로 분리.
+  - **남은 것**: 실서버 `/health`·`/frames/default` 프로브(게이트 키 필요 — 사용자 액션 후).
+- [ ] 실서버 프로브
 
 ---
 
