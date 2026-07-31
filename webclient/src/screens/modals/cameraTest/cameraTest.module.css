@@ -1,0 +1,42 @@
+/* 카메라 테스트 모달 — 03 §15.1 */
+
+.previewWrap {
+  /* 프리뷰가 모달 안에서 과하게 커지지 않게 한다(세로·가로 회전 양쪽 대응). */
+  max-height: 55vh;
+  display: flex;
+  justify-content: center;
+}
+
+/* 플래시: DOM 오버레이. canvas에 그리면 합성 픽셀에 섞인다(04 §4.2). */
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  /* reduced-motion에서도 플래시는 기능이므로 유지한다(애니메이션이 아니라 상태다). */
+  opacity: 0.9;
+}
+
+.mirrorNote {
+  margin: var(--gap-sm) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  text-align: center;
+}
+
+.notice {
+  margin: var(--gap) 0 0;
+  padding: var(--gap-sm);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.deviceList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  margin-top: var(--gap);
+  justify-content: center;
+}

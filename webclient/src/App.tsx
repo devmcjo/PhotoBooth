@@ -6,6 +6,7 @@ import { getFullscreenController } from "@shell/fullscreenController";
 import { getIdleWatchdog } from "@shell/idleWatchdog";
 import { shellStore, useShellStore } from "@shell/shellStore";
 import { sessionStore, useSessionStore } from "@shell/sessionStore";
+import { CameraTestModal } from "@screens/modals/cameraTest/CameraTestModal";
 import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
 import { formatCount, STRINGS } from "@ui/strings";
 import { env, versionCaption } from "./env";
@@ -64,6 +65,15 @@ function DummyScreen({ screen }: { readonly screen: AppState }) {
       <Button variant="ghost" onClick={() => void shellStore.getState().returnHome("사용자 취소")}>
         홈으로
       </Button>
+
+      {/* Step 6 실측용 진입점. Step 13에서 설정 화면의 [카메라 테스트]로 옮긴다. */}
+      <Button
+        onClick={() =>
+          shellStore.getState().pushModal({ id: "cameraTest", dismissible: true })
+        }
+      >
+        카메라 테스트 열기
+      </Button>
     </main>
   );
 }
@@ -100,6 +110,8 @@ function ModalStack() {
   switch (top.id) {
     case "idleWarning":
       return <IdleWarningModal />;
+    case "cameraTest":
+      return <CameraTestModal />;
     default:
       // 나머지 모달은 Step 6·13·15·16이 채운다. 그때까지 열려도 앱이 깨지지 않게 스텁을 둔다.
       return (
