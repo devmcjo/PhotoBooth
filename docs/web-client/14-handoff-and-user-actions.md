@@ -297,20 +297,35 @@ Step 11 구현 후 브라우저 Network 탭에서 `OPTIONS 204 → PUT 200`을 �
 | `webclient/deploy.bat` | **완료**(빌드 + `--only hosting:kiosk`) |
 | `web/deploy-web.bat` | **`hosting:default`로 고정**(§6.3) |
 
-### 6.2 절차
+### 6.2 절차 (PowerShell)
 
-```bash
-# 1) 빌드 주입값 — webclient/.env.production.local (gitignore 대상, 커밋 금지)
-cd webclient
-cat > .env.production.local <<'EOF'
-VITE_BACKEND_API_KEY=<A3의 웹 키>
-VITE_GOOGLE_CLIENT_ID=<A1의 client_id>
-VITE_APP_VERSION=0.1.0
-EOF
+```powershell
+cd E:\Study\photobooth\webclient
+
+# 1) 빌드 주입값 — webclient/.env.production.local (gitignore 대상, 커밋되지 않는다)
+Set-Content .env.production.local -Encoding ascii -Value @(
+  "VITE_BACKEND_API_KEY=<A3의 웹 키>",
+  "VITE_GOOGLE_CLIENT_ID=<A1의 client_id>",
+  "VITE_APP_VERSION=0.1.0"
+)
+
+# 값이 아니라 키 이름만 확인
+Get-Content .env.production.local | ForEach-Object { ($_ -split '=')[0] }
 
 # 2) 빌드 + 배포
-deploy.bat
+.\deploy.bat
 ```
+
+메모장으로 `webclient\.env.production.local`을 만들어 세 줄을 넣어도 결과는 같다.
+
+| 값 | 어디서 | 비밀인가 |
+|-----|--------|:--------:|
+| `VITE_BACKEND_API_KEY` | A3에서 만든 **웹** 게이트 키(`$webKey`) | **아니다** — JS 번들에 그대로 들어가 브라우저에서 보인다(WD10). Windows 키를 넣지 않도록 주의 |
+| `VITE_GOOGLE_CLIENT_ID` | A1의 client_id(`….apps.googleusercontent.com`) | 아니다 |
+| `VITE_APP_VERSION` | 하단 캡션에 `v0.1.0`으로 표시된다 | — |
+
+> ⚠️ **`VITE_*` 값은 전부 브라우저에 공개된다.** client_secret·JWT_SECRET·Windows 게이트 키를 여기에 넣으면 안 된다.
+> 비밀은 서버(Secret Manager)에만 둔다.
 
 ### 6.3 ⚠️ 기존 P1 배포 스크립트가 바뀌었다
 
