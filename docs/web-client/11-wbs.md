@@ -261,7 +261,14 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] **`<video>`를 직접 화면에 보이지 않는다.** CSS `transform: scaleX(-1)`가 코드에 없다(grep으로 확인 — WM1). 촬영 시퀀스·저장 **없음**.
   - [trigger] 스트림은 `start()` 호출에만 열린다. Ready 신호는 3조건 충족 시 **1회만**.
 - **롤백**: `src/adapters/camera`·카메라 테스트 모달 삭제.
-- [ ] 완료
+- [x] **완료 (2026-07-31) — 실기기 실측만 남음**
+  - `cameraTypes`(FrameSource·FrameProcessor 인터페이스로 브라우저 의존을 분리 → node 테스트 가능), `fpsMeter`(최근 1초 윈도우), `deviceEnumerator`(**deviceId → label → groupId → 첫 장치** 폴백 + 빈 라벨 매칭 금지 + `devicechange`), `frameProcessor.worker`(거울 `setTransform` → 중앙 크롭 `drawImage` 소스 사각형, OffscreenCanvas 1개 재사용, 3소비자 분기, `finally`에서 `close()`, 큐를 쌓지 않고 **최신 프레임으로 교체**), `frameProcessorClient`(스틸 타임아웃 5초), `videoFrameSource`(`playsinline`·숨김·`rVFC`→rAF 폴백·`mediaTime` 중복 스킵), `cameraService`(싱글턴·멱등 start·Ready 게이트·8초 타임아웃·`configure` 런타임 토글), `CameraPreview`+`CameraStatsCaption`, 카메라 테스트 모달.
+  - 검증: **35 테스트**(누적 456). Ready 3조건 개별 확인, 8초 타임아웃 → Failed + 자원 정리, `OverconstrainedError` 재시도, 열기 실패 = `false`(예외 없음), `stop()`이 트랙·Worker·소스 전부 정리(LED 조건), 거울 토글이 재시작 없이 Worker로 전달, Ready 전 스틸 거부.
+  - **WM1 정적 검사 추가**: `src/` 전체(.ts/.tsx/.css)에 `scaleX(-1)`·`rotateY(180deg)`가 없고 `CameraPreview`가 `<video>`를 렌더하지 않음을 테스트가 고정한다.
+  - ⚠️ **fps 윈도우 경계 판정**: 정확히 1초 경계의 프레임을 윈도우 **밖**으로 본다(과대보고 금지). 과소보고는 Ready가 조금 늦어질 뿐이라 안전측이다.
+  - ⚠️ **`rVFC` 타입 주의**: TS DOM lib이 `requestVideoFrameCallback`을 필수 멤버로 선언하지만 Safari 15.4 미만에는 없다 — 타입을 믿고 분기를 빼면 그 기기에서 프레임 루프가 시작되지 않는다. 옵셔널 타입으로 감싸 런타임 감지를 유지했다.
+  - **남은 것**: 실기기에서 프리뷰 fps·거울 on/off가 저장 결과에 반영되는지·모달 닫은 뒤 LED 소등·카메라 없는 환경 8초 Failed 확인([14 §10](./14-handoff-and-user-actions.md)).
+- [ ] 실기기 실측
 
 ---
 
