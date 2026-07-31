@@ -13,6 +13,7 @@ namespace MCPhoto.Tests;
 /// FrameCatalogService는 인터페이스가 아니므로 스텁 repo/localStore를 주입한 실제 인스턴스를 쓴다
 /// (FrameCatalogServiceTests와 동일 패턴 — 신규 인터페이스 추출 금지).
 /// </summary>
+[Collection(FallbackCacheCollection.Name)]   // it20 N2: 공유 fallback 캐시 경로 경합 제거
 public class FramePickerViewModelTests : IDisposable
 {
     private sealed class EmptyRepo : IFrameRepository

@@ -14,6 +14,7 @@ namespace MCPhoto.Tests;
 /// it7 Step 1 (B9): 슬롯 개수 값 기반 바인딩 회귀. SlotCount 변경이 Slots 개수에 정확 반영되고
 /// Save가 그 개수만큼 저장하는지(초기화 clobber로 1개 되던 버그 방지) VM 레벨로 고정.
 /// </summary>
+[Collection(FallbackCacheCollection.Name)]   // it20 N2: 공유 fallback 캐시 경로 경합 제거
 public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 {
     private sealed class CapturingFrameRepository : IFrameRepository

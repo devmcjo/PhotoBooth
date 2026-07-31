@@ -52,7 +52,9 @@ public sealed partial class FramePickerViewModel : ObservableObject
 
         try
         {
-            // 공용: 번들 + 파워 캐시 + DB isDefault 다운로드(이름 dedup). FrameCatalogService가 동시 호출을 직렬화한다.
+            // 공용: 번들 + 파워 캐시 + DB isDefault 다운로드(이름 dedup).
+            // it20: FrameCatalogService는 동시 호출을 **공유**한다(단일 비행) — 줄 세우기가 아니라 합류다.
+            // 취소는 경계에서 OperationCanceledException으로 전파되고(아래 catch가 흡수) 공유 작업은 계속 진행한다.
             foreach (var f in await _catalog.GetDefaultFramesAsync(ct))
                 Frames.Add(f);
 
