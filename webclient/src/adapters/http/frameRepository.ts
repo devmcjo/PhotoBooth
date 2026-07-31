@@ -81,8 +81,15 @@ export interface FrameRepository {
   getUserFrames(userId: string): Promise<FrameTemplate[]>;
   /** power 전용 공용 프레임 등록. */
   createFrame(request: CreateFrameRequest): Promise<CreateFrameResponse>;
-  /** power 전용 서버 삭제. */
-  deleteFrame(id: string): Promise<void>;
+  /**
+   * power 전용 서버 삭제. 서버 응답 `{ deleted: boolean }`을 **그대로** 돌려준다.
+   *
+   * ⚠️ **`deleted: false`는 성공이 아니다**(analysis/31 §4.14 — 문서 미발견). 호출부는 이름 매칭으로
+   *    재시도하고, 그래도 없으면 "문서를 찾지 못했습니다"로 안내한다(03 §15.5 · 성공 오인 금지).
+   * ⚠️ 예외(401/403/404/네트워크)는 **그대로 던진다** — HTTP 서비스의 기존 관례이고
+   *    호출부가 "서버 삭제 실패: {사유}"로 표현한다.
+   */
+  deleteFrame(id: string): Promise<boolean>;
 }
 
 export function createFrameRepository(
@@ -132,11 +139,15 @@ export function createFrameRepository(
     },
 
     async deleteFrame(id) {
-      await client.request<unknown>({
+      const raw = await client.request<unknown>({
         method: "DELETE",
         path: `frames/${encodeURIComponent(id)}`,
         auth: "required",
       });
+      // 형태가 어긋나면 **성공으로 오인하지 않는다**(응답 본문이 비었을 때 true로 읽으면
+      // "지웠습니다"를 띄우고 문서는 그대로 남는다).
+      const deleted = (raw as { deleted?: unknown } | null)?.deleted;
+      return typeof deleted === "boolean" ? deleted : false;
     },
   };
 }

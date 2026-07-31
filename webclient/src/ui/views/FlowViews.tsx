@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { slotAspectRatio, type FrameTemplate } from "@domain/frames/types";
+import { slotAspectRatio } from "@domain/frames/types";
 import {
   getSelectedCuts,
   isSelectionComplete,
@@ -8,18 +8,10 @@ import {
   canFullRetake,
   beginFullRetake,
 } from "@domain/capture/captureSession";
-import { createFallbackFrame, ensureFallbackImageUrl } from "@adapters/frames/fallbackFrame";
-import { hasUsableImage } from "@domain/frames/frameCatalogPolicy";
-import {
-  classifyFrameLoad,
-  frameLoadNotice,
-  type FrameLoadPhase,
-} from "@domain/frames/frameLoadPolicy";
 import { getCameraService } from "@adapters/camera/cameraService";
 import { requestWakeLock } from "@adapters/platform/wakeLock";
 import { unlockAudio } from "@adapters/platform/shutterSound";
 import { logger } from "@adapters/storage/logStore";
-import { fixFrameAndResolveCutCount } from "@shell/captureSessionController";
 import { useSettingsStore } from "@shell/settingsStore";
 import { sessionStore, useSessionStore, type CapturedCut } from "@shell/sessionStore";
 import { shellStore } from "@shell/shellStore";
@@ -33,8 +25,10 @@ import { useCaptureRunner } from "@screens/capture/useCaptureRunner";
 import styles from "./screens.module.css";
 
 /**
- * 촬영 흐름 화면 — Home · FrameSelect(최소판) · Guide · Capture · CutSelect
- * (03 §2·§4·§5·§6·§7)
+ * 촬영 흐름 화면 — Home · Guide · Capture · CutSelect · Result (03 §2·§5·§6·§7·§8)
+ *
+ * ⚠️ `FrameSelect`는 **여기 없다.** Step 14에서 본편(`ui/views/FrameSelectView.tsx`)으로 분리했다 —
+ *    대기 4국면·삭제 오버레이·카탈로그 배선이 붙어 이 파일에 두기에는 너무 커졌다.
  */
 
 // ─────────────────────────────────── Home ───────────────────────────────────
@@ -55,101 +49,6 @@ export function HomeView({ appName, subtitle }: { readonly appName: string; read
         {STRINGS.home.start}
       </Button>
       <p className={styles.note}>촬영을 시작하면 카메라 사용 권한을 묻습니다.</p>
-    </main>
-  );
-}
-
-// ──────────────────────────────── FrameSelect ────────────────────────────────
-
-/**
- * 최소 프레임 선택(WBS Step 7의 선순환 해소용).
- * 목록은 **코드 생성 fallback 1개**뿐이고, 서버 카탈로그·캐시·권한 UI·삭제는 Step 14가 확장한다.
- */
-export function FrameSelectView() {
-  const configuredCutCount = useSettingsStore((s) => s.values.CutCount);
-  const [frames, setFrames] = useState<FrameTemplate[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  /** 로딩 1회분이 끝났는지. Step 14가 진짜 국면 상태(FrameLoadPhase)로 대체한다. */
-  const [loaded, setLoaded] = useState(false);
-  /** [다시 시도] 카운터. 증가하면 effect가 다시 돈다(어댑터는 실패를 캐시하지 않는다). */
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoaded(false);
-    void ensureFallbackImageUrl().then((url) => {
-      if (cancelled) return;
-      // 이미지 생성 실패 시 어댑터는 예외가 아니라 **빈 URL**을 준다. 그 프레임을 목록에 올리면
-      // 6컷을 다 찍은 뒤 Result에서야 합성이 실패한다 → 여기서 걸러 Failed로 끝낸다(03 §4.1).
-      const candidate = createFallbackFrame(url, new Date().toISOString());
-      const usable = hasUsableImage(candidate) ? [candidate] : [];
-      setFrames(usable);
-      // 첫 항목 자동 선택(03 §4). 목록이 비면 선택도 없다 → [다음] 비활성.
-      setSelectedId(usable[0]?.id ?? null);
-      setLoaded(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const selected = frames.find((f) => f.id === selectedId) ?? null;
-  // 로딩이 끝나기 전에는 판정하지 않는다. 대기 오버레이·진행 문구는 Step 14 범위다.
-  const phase: FrameLoadPhase = loaded ? classifyFrameLoad(frames.length, false) : "Loading";
-  const notice = frameLoadNotice(phase);
-
-  return (
-    <main className={styles.screen}>
-      <h1 className={styles.title}>프레임 선택</h1>
-      <div className={styles.frameGrid}>
-        {frames.map((frame) => (
-          <button
-            key={frame.id}
-            type="button"
-            className={[styles.frameCard, frame.id === selectedId ? styles.frameCardSelected : ""]
-              .filter(Boolean)
-              .join(" ")}
-            aria-pressed={frame.id === selectedId}
-            onClick={() => setSelectedId(frame.id)}
-          >
-            {frame.imageUrl.length > 0 && (
-              <img className={styles.frameThumb} src={frame.imageUrl} alt="" />
-            )}
-            <span>{frame.name}</span>
-            <span className={styles.note}>슬롯 {frame.slots.length}개</span>
-          </button>
-        ))}
-      </div>
-
-      {notice.length > 0 && (
-        <p className={styles.note} role="alert">
-          {notice}
-        </p>
-      )}
-
-      <div className={styles.actions}>
-        <Button onClick={() => void shellStore.getState().returnHome("프레임 선택 취소")}>
-          {STRINGS.common.cancel}
-        </Button>
-        {phase === "Failed" && (
-          <Button onClick={() => setReloadKey((n) => n + 1)}>{STRINGS.common.retry}</Button>
-        )}
-        <Button
-          variant="primary"
-          disabled={selected === null}
-          onClick={() => {
-            if (selected === null) return;
-            // ★ 컷 수 해석의 **유일한 지점**(VF-12 · WD19).
-            fixFrameAndResolveCutCount(selected, configuredCutCount);
-            shellStore.getState().go("Guide");
-          }}
-        >
-          {STRINGS.common.next}
-        </Button>
-      </div>
-      <p className={styles.note}>
-        Step 14에서 서버 공용 프레임·개인 프레임 목록으로 확장됩니다.
-      </p>
     </main>
   );
 }

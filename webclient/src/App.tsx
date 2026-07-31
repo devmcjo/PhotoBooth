@@ -12,11 +12,11 @@ import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
 import {
   CaptureView,
   CutSelectView,
-  FrameSelectView,
   GuideView,
   HomeView,
   ResultView,
 } from "@ui/views/FlowViews";
+import { FrameSelectView } from "@ui/views/FrameSelectView";
 import { QrView } from "@ui/views/QrView";
 import { DoneView } from "@ui/views/DoneView";
 import { LoginView } from "@ui/views/LoginView";

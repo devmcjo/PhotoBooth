@@ -13,6 +13,7 @@ import {
   captureOauthCallback,
   runOauthCallback,
 } from "@screens/oauthCallback/oauthCallbackRunner";
+import { getFrameCatalog } from "@adapters/frames/frameCatalog";
 import { installVisibilityHandlers } from "@adapters/platform/visibility";
 import { requestWakeLock } from "@adapters/platform/wakeLock";
 import { logger, getLogStore } from "@adapters/storage/logStore";
@@ -104,6 +105,30 @@ function startApp(branding: Branding): void {
 
   mount(branding, callbackPending);
   installFirstGesture();
+
+  prefetchFrames();
+}
+
+/**
+ * 프레임 카탈로그 prefetch — 첫 페인트 **뒤** fire-and-forget · 결과 폐기 · 실패 무시.
+ *
+ * 단일 비행이라 화면 진입은 줄 서지 않고 **이 작업에 합류**해 `(n/m)`을 즉시 본다(06 §6.1).
+ * 손님이 [촬영하기]를 누를 때쯤이면 이미 다운로드 중이다 — 단일 비행이 실제로 값을 내는 경로다.
+ *
+ * ⚠️ `bootstrap()` 안에 넣지 마라 — 01 §4.2의 부트스트랩 1~11단계 순서가 바뀐다.
+ * ⚠️ `loadPublic`은 reject하지 않지만 `.catch`와 `try`를 **둘 다** 둔다: 여기서 새는 예외가
+ *    `startApp`을 깨면 마운트 후 배선(로그·첫 제스처)이 중단된다.
+ */
+function prefetchFrames(): void {
+  try {
+    void getFrameCatalog()
+      .loadPublic()
+      .catch(() => undefined);
+  } catch (err) {
+    logger.warn("프레임 prefetch 시작 실패(무시)", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 bootstrap().then(

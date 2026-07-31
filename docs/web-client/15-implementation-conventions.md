@@ -120,6 +120,14 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | **SET-3** `App.tsx`에 임시 진입점 문자열 0건 | 동상 — Step 6·10의 실측용 버튼이 되살아나 진입로가 둘이 되는 것을 막는다 |
 | **SET-4** `shell/settingsStore.ts`에 `isGuest: false` 0건 | 동상 — 하드코딩이 재발하면 게스트 조작이 운영자 값을 덮는다 |
 | **SET-5** `screens/settings/*`가 `settingsRepo.save`를 직접 부르지 않는다 | 동상 — 저장은 반드시 `settingsStore.save`를 지나야 clamp·게스트 제한이 걸린다 |
+| **FR-1** `frameStore.ts`·`frameCatalog.ts`·`frameImageCache.ts`에 OPFS 직접 접근 0건(VF-14) | `frameInvariants.test.ts` — 메인 스레드에서 쓰면 iOS/iPadOS Safari에서 **전 저장 경로**가 실패한다 |
+| **FR-2** `canDeleteFrame(` 호출이 **2인자**다 | 동상 — 소유자를 넘기면 power가 fork 저장한 *공용* 로컬 프레임(`userId=null`)의 삭제 능력이 회귀한다 |
+| **FR-3** 프레임 DB ≠ 로그 DB ≠ 폴더 핸들 DB | 동상(`mcphoto-frames`/`mcphoto`/`mcphoto-handles`) — 같은 DB 버전업의 영구 blocked 회피 |
+| **FR-5** `FrameSelectView.tsx`에 `pushModal(`·`"confirmDelete"`·`"framePicker"` 0건 | 동상 — 삭제 확인은 **화면 로컬 오버레이**다(03 §790). 공용 모달은 Step 15의 것이다 |
+| **FR-6** `compositor.ts`에 `mode: "cors"` 존재 | 동상 — 빠지면 서버 프레임을 그린 canvas가 오염돼 `convertToBlob`이 SecurityError를 던진다(WM2) |
+| **FR-7** `frameLoadPolicy.ts`의 기존 export 8종 보존 | 동상 — `docs/spec-vectors/frame-load-policy.json` 52케이스가 Windows와 교차 고정하는 이름들이다 |
+| **VF-12** `fixFrameAndResolveCutCount(` 호출부가 **1곳**(`useFrameSelect.ts`) | 동상 — 해석 지점이 늘면 설정 변경이 진행 중 세션의 컷 수를 바꾼다(it17) |
+| `frameRepository.getUserFrames(` 호출 0건 | 동상 — `auth:"required"`라 401이면 **프레임 목록을 여는 것만으로 로그아웃 토스트**가 뜬다 |
 
 새 불변식을 만들면 **같은 방식으로 고정**하는 것이 이 저장소의 관례다.
 
@@ -227,15 +235,25 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - **이월**: [프레임 내보내기]/[가져오기] → Step 15 · [앱 업데이트 확인]·[진단·상태] → Step 16. **설정 화면 섹션 6에 자리만 비어 있다.**
 - **실측 V22 13건이 남아 있다**([14 §10.8](./14-handoff-and-user-actions.md)). 브라우저·실계정·실기기가 필요해 자동화 불가이며, **V22-4는 PIN이 없는 실계정**이 있어야 한다.
 
-### Step 14 프레임 선택 — **it20 대기 국면이 절반이다**(2026-07-31 main 머지분)
-- `analysis/13 §4.2`에 **로딩 4국면**(`Loading`/`Ready`/`Degraded`/`Failed`) 규격이 신설됐다. 웹 반영은 [03 §4.1](./03-screens-spec.md)·[06 §6.1](./06-backend-integration-web.md)·[02 §6.2](./02-app-shell-and-navigation.md).
-- **판정 계층은 Step 8.5에서 이미 이식됐다**(다시 만들지 마라): `domain/frames/frameLoadPolicy.ts`(`classifyFrameLoad`·`finalizeFrameLoad`·`nextFrameLoadDeadlineMs`·`frameLoadNotice` + 상한 상수) · `domain/frames/frameCatalogProgress.ts`(`catalogProgressLabel`). 벡터 `docs/spec-vectors/frame-load-policy.json` 52케이스가 Windows와 교차 고정한다. **이번 Step은 그 위에 어댑터·화면만 얹는 것이다.**
-  - 함수명이 WBS 약칭(`classify`/`finalize`)이 아니라 **한정형**이다 — `domain/index.ts`가 평면 `export *` 배럴이라 짧은 이름은 충돌한다.
-  - `finalizeFrameLoad`는 어떤 입력에서도 `Loading`을 반환하지 않는다. 화면의 `finally`가 이 함수로 국면을 닫으면 오버레이 고착이 **구조적으로 불가능**하다.
-- **웹이 Windows보다 이 규격이 급하다**: Windows는 "최초 실행 1회"지만 웹은 **신규 기기·시크릿 창·저장소 비우기마다** 첫 방문이다.
-- 불변식 **총 대기 60초 < `IDLE_TIMEOUT_MS` 120초**는 `shell.test.ts`가 이미 고정하고 있다(§3.4).
-- 상한 타이머는 `setTimeout` 누적이 아니라 **실경과 기준**으로 판정한다(WM3와 동종 — 탭 백그라운드 스로틀).
-- 카탈로그 로더는 **단일 비행 + 진행 replay**다. 부트스트랩 prefetch와 화면 진입이 **한 작업을 공유**하고, [기다리지 않고 시작]의 취소는 **호출자별**이라 공유 작업은 계속 진행해 캐시를 완성한다.
+### Step 14 프레임 저장소·프레임 선택 — **완료(2026-08-01)**. 뒤 Step이 알아야 할 것만 남긴다
+
+- **프레임 메타는 별 DB `mcphoto-frames` v1이다**(`adapters/storage/frameStore.ts`). ⚠️ `mcphoto`(로그)를 **절대 v2로 올리지 마라** — 그 연결은 앱 수명 내내 열려 있고 `onversionchange`가 없어 업그레이드가 **영구 blocked** 된다. 연결은 트랜잭션 1회마다 열고 닫는다(`dirHandleRepo` 패턴). `05 §4.2` 문서를 이 결정으로 정정했다.
+- **판정 계층은 Step 8.5 것 그대로다.** Step 14가 도메인에 추가한 것은 `isFrameListInteractive`(`frameLoadPolicy.ts`) + `frameStorePolicy.ts` + `bundleManifest.ts` **셋뿐**이고, `classifyFrameLoad`·`finalizeFrameLoad`·`nextFrameLoadDeadlineMs`·`frameLoadNotice`는 **한 글자도 바뀌지 않았다**(FR-7이 고정).
+- **오버레이 고착은 구조적으로 불가능하다**: `finalizeFrameLoad`가 어떤 입력에서도 `Loading`을 반환하지 않고, `runFrameLoad`의 `finally`가 그 함수를 **무조건** 부른다. 새 로딩 경로를 만들면 이 형태를 그대로 따라라.
+- **카탈로그는 모듈 싱글턴 단일 비행이다**(`getFrameCatalog()`). ⚠️ 인스턴스를 새로 만들면 중복 다운로드가 돌아온다. 취소는 **호출자별**이라 `<StrictMode>` 이중 effect도 중복을 만들지 않는다 — **공유 작업까지 죽이도록 바꾸지 마라.**
+  - JS 고유 함정 둘이 주석으로 박혀 있다: **A** `inFlight ??= (async () => { try … finally … })()`는 동기 throw에서 정리가 대입보다 먼저 일어나 **해결된 promise가 영구히 남는다** → `finally`를 태스크 바깥에 두고 `if (inFlight === task)` 동일성 가드. **B** `Promise.race`의 패자는 영원히 pending이라 abort 리스너가 남는다 → 어느 쪽이 이기든 `removeEventListener`.
+- ⚠️ **`loadCore`의 서버 조회 catch를 지우거나 rethrow로 바꾸지 마라.** 오프라인이 `Ready`(≠`Degraded`)인 성질이 그 catch 하나에 걸려 있다 — 바꾸면 오프라인 부스가 **매 진입마다** 안내를 띄운다(E20 회귀).
+- ⚠️ **`frameRepository.getUserFrames`를 부르지 마라**(정적 검사가 0건을 고정). `auth:"required"`라 401 → `handleSessionExpired` → **프레임 목록을 여는 것만으로 로그아웃 토스트**다. 개인 프레임은 정책상 서버에 없다(`loadPersonal` = `frameStore.listPersonal`).
+- ⚠️ **`canDeleteFrame(frame, role)`은 2인자다**(FR-2). `userId`를 넘기면 power가 fork 저장한 *공용* 로컬 프레임의 삭제 능력이 회귀한다.
+- **`frameRepository.deleteFrame`이 `Promise<boolean>`으로 바뀌었다**(종전은 응답을 버렸다). `{deleted:false}`는 **성공이 아니다** — 호출부가 이름 매칭으로 재시도한다. 형태가 어긋난 응답도 `false`다.
+- **`compositor.loadFrameImage`가 원격/로컬로 갈라진다**: `https?:`에만 `{mode:"cors", cache:"force-cache"}`를 준다. `blob:`(OPFS 유래)·상대 경로(번들)는 옵션 없이 fetch한다. **https 분기의 `mode:"cors"`를 없애면 WM2가 깨진다**(FR-6).
+- **object URL의 소유자는 `frameImageCache` 하나다**(경로당 1개, 재사용). ⚠️ **화면 이탈에서 revoke하지 마라** — 선택 프레임의 URL이 `Result`의 합성까지 살아야 한다. 해제 시점은 **프레임 삭제**뿐이다.
+- **썸네일 resize 옵션은 미지원 시 예외 없이 조용히 무시된다**(`frameThumbnails.ts`). 결과 `bitmap.width`를 확인해 폴백을 정하고 그 판정을 모듈에 캐시한다. `ImageBitmap`은 반드시 `close()`(WR8).
+- **삭제 확인은 화면 로컬 오버레이다**(FR-5). Step 15가 `screens/modals/confirmDelete/*`를 만들 때 승격 여부를 정하면 된다 — 반대 방향(모달을 먼저 만들고 재작성)보다 되돌리기 쉽다.
+- **Step 15가 쓸 것이 준비돼 있다**: `frameStore.saveLocal(input)` · `frameStore.countPersonal(userId)` · `exceedsLocalFrameLimit(count)`(`LOCAL_FRAME_LIMIT = 10`) · `frameStore.usageBytes()`(Step 16 진단). **호출자는 아직 없다.** 편집 대상 인계 채널도 없다 — `useFrameSelect`의 `TODO(Step 15)` 두 곳이 그 자리다.
+- **번들 프레임은 매니페스트 규약이다**(`public/frames/index.json`). 브라우저는 정적 디렉터리를 열거할 수 없어 Windows `Directory.EnumerateFiles`의 대응물이 없다. **자산은 아직 커밋하지 않았다**(빈 배열) — 실 PNG는 운영 자산 준비 시 추가한다.
+- **prefetch는 `main.tsx`의 `startApp` 말미**다(`bootstrap()` 안이 아니다). 첫 페인트 뒤 1회, 결과 폐기, 실패 무시.
+- **실측 V23 8건이 남아 있다**([14 §10.9](./14-handoff-and-user-actions.md)). 브라우저·Safari·실계정이 필요해 자동화 불가다.
 
 ### Step 15 프레임 편집기 — **불러오기 규격이 뒤집혔다**(2026-07-30 재정의)
 - **"기존 프레임 불러오기 = 사본"은 폐기됐다.** 세션 정체성이 **신규 생성**이 되어 power가 불러온 세션도 **서버 등록 대상**이다. 이름 자동 제안(`{원본} 사본`)도 없어졌다 — fork는 [선택 편집] 경로에만 남는다.
@@ -254,11 +272,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **1297**(54파일, Step 13 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13은 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **1469**(62파일, Step 14 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13·14는 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 14~17, 실측 V1~V22 |
+| 미완 | Step 15~17, 실측 V1~V23 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 

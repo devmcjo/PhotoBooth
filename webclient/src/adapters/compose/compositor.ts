@@ -48,10 +48,16 @@ async function toRgba(source: ImageBitmapSource): Promise<RgbaImage> {
  * 프레임 이미지를 **CORS-clean**하게 가져온다(WM2).
  * `fetch` + `createImageBitmap(blob)` 경로라 `crossOrigin` 속성 없이도 오염되지 않는다 —
  * 단 서버가 CORS 헤더를 주어야 한다(`firebasestorage`는 항상 `ACAO: *`).
+ *
+ * ⚠️ **원격(https)에만 CORS 규약을 적용한다.** Step 14부터 캐시된 프레임의 `imageUrl`은 OPFS 유래
+ *    `blob:` object URL이고, 번들은 상대 경로다 — 둘 다 same-origin이라 `mode:"cors"`·
+ *    `cache:"force-cache"`가 의미 없고 브라우저별 동작이 불확실하다.
+ * ⚠️ https 분기에서 `mode: "cors"`를 없애면 WM2가 깨진다(정적 검사 FR-6이 이 문자열을 고정한다).
  */
 async function loadFrameImage(url: string): Promise<RgbaImage> {
   if (url.length === 0) throw new ComposeError("프레임 이미지 URL이 비어 있습니다.");
-  const response = await fetch(url, { mode: "cors", cache: "force-cache" });
+  const remote = /^https?:/i.test(url);
+  const response = await fetch(url, remote ? { mode: "cors", cache: "force-cache" } : {});
   if (!response.ok) {
     throw new ComposeError(`프레임 이미지를 불러올 수 없습니다(HTTP ${response.status}).`);
   }

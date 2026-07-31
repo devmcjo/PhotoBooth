@@ -166,7 +166,9 @@ function openDb(): Promise<IDBDatabase> {
         const store = db.createObjectStore(LOG_STORE_NAME, { autoIncrement: true });
         store.createIndex("by_ts", "ts");
       }
-      // 프레임 메타 스토어는 Step 14(frameStore)가 같은 DB에 버전을 올려 추가한다.
+      // ⚠️ 프레임 메타는 **이 DB에 없다.** 별 DB(`mcphoto-frames` v1 — `frameStore.ts`)를 쓴다:
+      //    이 연결은 앱 수명 내내 열려 있는데 아래 `onsuccess`에 `onversionchange`가 없어서
+      //    같은 DB를 v2로 올리면 업그레이드가 **영구 blocked** 된다. 여기에 스토어를 추가하지 마라.
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB 열기 실패"));

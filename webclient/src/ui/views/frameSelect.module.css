@@ -1,0 +1,185 @@
+/*
+ * 프레임 선택 화면 — 03 §4·§4.1·§15.5
+ *
+ * 화면 로컬 오버레이 3종(대기·실패·삭제 확인)은 **셸 모달 스택을 쓰지 않는다**. 유휴 경고(셸 모달)는
+ * 언제나 이 위에 그려진다(02 §6.2) — 그래서 z-index를 셸보다 낮게 유지한다.
+ */
+
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  min-height: 220px;
+}
+
+/* ── 대기·실패 scrim (렌더 가드 ①) ── */
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap);
+  padding: var(--gap);
+  text-align: center;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.overlayMessage {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+
+.overlayNotice {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-body);
+}
+
+/* ── 카드 ── */
+
+.card {
+  position: relative;
+  display: flex;
+}
+
+.cardButton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  cursor: pointer;
+  min-height: var(--touch-min);
+  text-align: center;
+}
+
+.cardSelected {
+  border-color: var(--accent);
+}
+
+.cardButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 카드 안에 버튼을 중첩하지 않는다 — ✕는 **형제** 버튼이다(중첩은 HTML 위반이자 접근성 파손). */
+.deleteButton {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 2;
+  /* 터치 타깃 48px 이상(01 §8). */
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--fg);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+.cardName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardCaption {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.unavailableCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.unavailableThumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+/* ── 삭제 확인 오버레이 ── */
+
+.deleteScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  background: rgb(0 0 0 / 55%);
+}
+
+.deleteDialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  width: min(100%, 420px);
+  padding: var(--gap);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  text-align: left;
+}
+
+.deleteTitle {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.deleteBody {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+
+.deleteOption {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  min-height: var(--touch-min);
+}
+
+.deleteActions {
+  display: flex;
+  gap: var(--gap-sm);
+  justify-content: flex-end;
+}

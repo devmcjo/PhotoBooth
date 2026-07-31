@@ -506,8 +506,10 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
     토스트를 띄운다(설계는 성공 토스트만 명시). 저장 실패를 성공으로 보이게 하지 않기 위해서다(M4).
     `dirHandleRepo`의 신규 IndexedDB 연결에는 `onversionchange`를 **걸었다**(로그 DB가 빠진 함정).
   - **📌 다음 작업자에게**: `logStore.ts`가 `mcphoto` DB를 열 때 `db.onversionchange = () => db.close()`가
-    **아직 없다**. **Step 14가 "프레임 메타 스토어를 같은 DB에 버전 올려 추가"하기 전에 반드시 처리해야
-    한다** — 그러지 않으면 업그레이드가 영구 blocked 된다.
+    **아직 없다**. ~~Step 14가 "프레임 메타 스토어를 같은 DB에 버전 올려 추가"하기 전에 반드시 처리해야 한다~~
+    → **해소(2026-08-01, Step 14)**: 같은 DB를 올리지 않고 **별 DB `mcphoto-frames` v1**을 신설했다.
+    `mcphoto`를 업그레이드할 계획이 사라졌으므로 `onversionchange` 추가는 불필요하고, 추가하면 다른 탭
+    업그레이드 시 **로그가 조용히 죽는** 새 실패 모드가 생긴다 → 넣지 않는다.
   - **미구현(의도)**: 업로드·QR 일체(Step 11 — `resultNext.ts`에 주석 자리만 남겼다),
     E8 [기기에 저장] 다운로드 버튼(Step 11), [보관된 결과물] 패널·정식 폴더 UI(Step 13),
     `isTempUserBlocked`는 아직 상수 `false`(Step 11이 `qrUsageService`로 교체).
@@ -720,7 +722,38 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] 편집·삭제 UI는 권한 없는 역할에서 **렌더되지 않는다**. `user`·`temp_user`의 기존 프레임이 **목록에서 사라지지 않는다**. `frames/` 캐시가 세션 잔재 정리에 삭제되지 않는다.
   - [trigger] 서버 조회는 화면 진입 시 1회. 프레임 고정과 **컷 수 해석은 [다음]에만**(설정 화면에서 컷 수를 바꿔도 진행 중 세션의 값은 변하지 않는다).
 - **롤백**: `frameStore`·`frameCatalog` 제거 → fallback 프레임만으로 동작.
-- [ ] 완료
+- [x] **완료(2026-08-01)** — 설계: [`docs/design/web-step14-frame-catalog-and-select.md`](../design/web-step14-frame-catalog-and-select.md)
+  - **산출물(신규 13)**: `domain/frames/frameStorePolicy.ts`·`bundleManifest.ts` / `adapters/storage/frameStore.ts` /
+    `adapters/frames/frameCatalog.ts`·`bundleFrames.ts`·`frameDownloader.ts`·`frameImageCache.ts`·`frameThumbnails.ts` /
+    `screens/frameSelect/frameLoadDeadline.ts`·`frameLoadRunner.ts`·`frameSelectActions.ts`·`useFrameSelect.ts` /
+    `ui/views/FrameSelectView.tsx`(+ `frameSelect.module.css`) / `public/frames/index.json`(`[]` — 규약만).
+    **수정 7**: `domain/frames/frameLoadPolicy.ts`(`isFrameListInteractive` **추가만**) · `domain/index.ts` ·
+    `adapters/http/frameRepository.ts`(`deleteFrame → Promise<boolean>`) · `adapters/compose/compositor.ts`(원격/로컬 fetch 분기) ·
+    `adapters/storage/logStore.ts`(주석만) · `ui/strings.ts` · `ui/views/FlowViews.tsx`(최소 `FrameSelect` 제거) · `App.tsx` · `main.tsx`(prefetch).
+  - **검증 수치**: `npx tsc --noEmit` 0 · `npx vitest run` **1469 통과**(62파일, 종전 1297/54파일 → **+172**) ·
+    `npm run coverage` `src/domain` lines 99.04 / branches 98.07 / functions 98.88(임계 95/90/95) · `npx vite build` 성공(192 모듈).
+    `docs/spec-vectors/`·`tests/MCPhoto.Tests/`·`web/functions/` **무변경** → `dotnet test` 불필요.
+  - **설계 이탈 6건**(설계 문서 §14와 동일): ① IndexedDB를 `mcphoto`가 아니라 **`mcphoto-frames` v1**에 만든다(로그 DB의
+    상시 연결 + `onversionchange` 부재 → 영구 blocked). ② 삭제 확인을 공용 `confirmDelete` 모달이 아니라 **화면 로컬 오버레이**로
+    만든다(Step 15 선점 방지 — 정적 FR-5). ③ CORS 실패 프레임을 "선택 시 안내"가 아니라 **선택 불가 카드**로 만든다
+    (합성 실패를 촬영 뒤로 미루지 않는다 — `06 §6` 정정). ④ OPFS 이미지가 **이미 없으면 삭제를 성공**으로 본다
+    (`05 §4.7` 정정 — 실패로 보면 카드가 영원히 남는다). ⑤ 개인 프레임에 `GET /frames?userId=`를 **쓰지 않는다**
+    (`auth:"required"` → 401 → 세션 해제. 얻는 것은 빈 배열). ⑥ `public/frames/`에 자산을 커밋하지 않고 **빈 매니페스트만** 둔다.
+  - **구현 중 추가한 이탈 2건**: ⑦ `FrameLoadDeps`에 선택 필드 `registerAbort?(abort)`를 넣었다 — 설계가
+    "[기다리지 않고 시작]·언마운트가 `controller.abort()`를 부른다"고만 쓰고 그 핸들을 화면에 넘기는 채널을 정하지
+    않았다. 러너가 컨트롤러를 소유하므로 생성 직후 1회 넘긴다. ⑧ `createFrameStore`에 선택 필드
+    `imageUrl?`·`releaseImage?`를 넣었다(기본값 = `frameImageCache`) — node 테스트에 `File`·`URL.createObjectURL`
+    왕복을 강요하지 않기 위함이고, 운영 경로의 소유자는 설계대로 `frameImageCache`다.
+  - **정적 불변식 6건 신설**(`tests/unit/frames/frameInvariants.test.ts`): FR-1(OPFS 직접 접근 0) · FR-2(`canDeleteFrame` 2인자) ·
+    FR-3(DB 이름 3종 상이) · FR-5(`FrameSelectView`에 `pushModal(`·`"confirmDelete"` 0) · FR-6(`compositor`에 `mode: "cors"` 존재) ·
+    FR-7(`frameLoadPolicy` 기존 export 8종 보존). 여기에 VF-12(`fixFrameAndResolveCutCount` 호출부 1곳) ·
+    `getUserFrames` 호출 0건 · prefetch 위치 · 신규 13파일 `console.*` 0건을 함께 고정했다.
+  - **미검증(사용자 액션 V23)**: 브라우저 실행이 필요한 8건을 [14 §10.9](./14-handoff-and-user-actions.md)에 등재했다.
+    **추정으로 통과 처리하지 않았다.**
+  - **📌 다음 작업자에게**: ① 삭제 확인 UI는 화면 로컬 오버레이다 — Step 15가 `screens/modals/confirmDelete/*`를 만들면
+    승격 여부를 그때 정한다(FR-5가 선점을 막는다). ② `frameStore.saveLocal`·`countPersonal`·`exceedsLocalFrameLimit`가
+    **이미 준비돼 있다**(호출자 없음). ③ 편집 대상 인계 채널은 없다 — `useFrameSelect`의 `TODO(Step 15)` 두 곳이 그 자리다.
+    ④ `frameRepository.getUserFrames`를 부르지 마라(정적 검사가 0건을 고정한다).
 
 ---
 

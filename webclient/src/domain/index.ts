@@ -29,6 +29,8 @@ export * from "./frames/slotsFile";
 export * from "./frames/frameCatalogPolicy";
 export * from "./frames/frameLoadPolicy";
 export * from "./frames/frameCatalogProgress";
+export * from "./frames/frameStorePolicy";
+export * from "./frames/bundleManifest";
 export * from "./frames/fallbackFrameSpec";
 
 export * from "./settings/appSettings";

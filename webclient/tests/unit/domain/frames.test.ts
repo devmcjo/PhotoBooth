@@ -25,6 +25,7 @@ import {
   finalizeFrameLoad,
   FRAME_LOAD_PHASES,
   frameLoadNotice,
+  isFrameListInteractive,
   IDLE_WARNING_REFERENCE_SECONDS,
   MAX_TOTAL_WAIT_SECONDS,
   NO_PROGRESS_TIMEOUT_SECONDS,
@@ -493,6 +494,16 @@ describe("frameLoadPolicy — 로딩 국면(it20)", () => {
     expect(frameLoadNotice("Degraded").length).toBeGreaterThan(0);
     expect(frameLoadNotice("Failed").length).toBeGreaterThan(0);
     expect(frameLoadNotice("Degraded")).not.toBe(frameLoadNotice("Failed"));
+  });
+
+  it("D1: 목록 조작은 Ready·Degraded에서만 열린다(4국면 전수)", () => {
+    // Loading·Failed에서 [다음]·[만들기]·[선택 편집]·삭제 ✕가 열리면 손님이 빈 목록으로 진행한다.
+    expect(isFrameListInteractive("Ready")).toBe(true);
+    expect(isFrameListInteractive("Degraded")).toBe(true);
+    expect(isFrameListInteractive("Loading")).toBe(false);
+    expect(isFrameListInteractive("Failed")).toBe(false);
+    // 전수: 4국면 중 정확히 2개만 true다(국면이 늘면 이 테스트가 먼저 깨진다).
+    expect(FRAME_LOAD_PHASES.filter(isFrameListInteractive)).toEqual(["Ready", "Degraded"]);
   });
 
   it("초기 국면이 Loading이고 국면 목록은 4값이다", () => {

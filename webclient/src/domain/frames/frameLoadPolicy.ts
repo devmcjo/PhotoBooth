@@ -101,6 +101,20 @@ export function finalizeFrameLoad(
   return current === "Failed" || current === "Loading" ? "Ready" : current;
 }
 
+/**
+ * 목록 조작(선택·[다음]·[프레임 만들기]·[선택 편집]·삭제 ✕)을 허용하는 국면인가 — 03 §4.1.
+ *
+ * Windows는 이것을 `FrameSelectViewModel.IsInteractive` 속성으로 뒀지만, 웹에서 화면 파일에 두면
+ * jsdom이 없는 이 저장소에서는 **영원히 테스트되지 않는다**(15 §3.1). 국면만 받는 순수 술어이므로
+ * 판정 도메인에 둔다.
+ *
+ * ⚠️ 화면은 이 판정을 **2중**으로 쓴다: ① scrim + `disabled`(렌더 가드) ② 각 액션 함수 첫 줄(액션 가드).
+ *    ①만 두면 키보드 포커스·경쟁 상태로 우회되고, ②만 두면 눌러도 반응이 없어 고장으로 보인다(M10).
+ */
+export function isFrameListInteractive(phase: FrameLoadPhase): boolean {
+  return phase === "Ready" || phase === "Degraded";
+}
+
 /** `Degraded` 안내. "모두"가 들어가는 이유는 `frameLoadNotice` 주석 참조. */
 export const FRAME_LOAD_DEGRADED_NOTICE =
   "서버 프레임을 모두 가져오지 못해 지금 준비된 프레임으로 진행합니다.";
