@@ -64,6 +64,8 @@
 | B10 | 업로드 진행률 | HTTP 스트림 래핑 | **XHR `upload.onprogress`**(`fetch`는 업로드 진행률 미제공) | 단계 라벨·합산 로직 동일(순서 비의존) |
 | B11 | OAuth 인가 코드 수신 | loopback `HttpListener` + 시스템 브라우저 | **같은 브라우저 리디렉트** `/oauth2callback` | PKCE·state·nonce·3분 타임아웃 동일. 서버 확장 필요([08 §4](./08-server-and-infra-prerequisites.md)) |
 | B12 | 브랜딩·버전 | 브랜딩 = `branding.ini` 외부 파일 · 버전 = **어셈블리 리소스 + exe LastWriteTime**(it18에서 `bldinfo.ini` 폐기) | 브랜딩 = `/branding.json` fetch · 버전 = 빌드 상수 | 표시 항목(`v{Version}`, 채널 없음)·폴백값·"첫 렌더 전 주입" 규격 동일. "빌드 산출물 자신이 버전의 유일한 출처"라는 방향도 일치 |
+| B13 | 프레임 준비 대기(it20) | 시작 prefetch + `SemaphoreSlim` → **단일 비행 + `IProgress` 중계**, 상한 타이머는 `CancellationTokenSource.CancelAfter` 재무장 | 동일한 4국면·동일 상한(무진행 30초 / 총 60초). 상한 타이머는 **실경과 기준**(탭 백그라운드 스로틀 대비 — WM3와 동종) | 국면 판정·문구가 **같은 순수 함수**이고 벡터 `frame-load-policy.json`으로 교차 고정([10 §3.2](./10-testing-and-acceptance.md)) |
+| B14 | 타임랩스 인코더의 라이선스 노출 | **ffmpeg.exe 동봉(GPLv3)** — 준수 의무(전문 동봉·고지·대응 소스 제공)가 배포물에 붙는다(`design/wpf-ffmpeg-licensing-and-distribution-design.md`) | **브라우저 내장** `WebCodecs`/`MediaRecorder` — **GPL 노출이 없다.** 추가 의존은 MP4 muxer(MIT 계열)뿐이며 `webclient/THIRD-PARTY.md`에 기록한다 | 산출물 규격(H.264/MP4·배속·해상도)은 동일. 라이선스 의무만 다르다 — **웹이 유리한 방향의 차이** |
 
 ---
 

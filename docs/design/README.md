@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| 최종 업데이트 | 2026-07-30 (인덱스 신설 + 멀티플랫폼 클라이언트 아키텍처 설계 추가, it17 설계 2건 등재·구현 완료) |
+| 최종 업데이트 | 2026-07-31 (it20 프레임 다운로드 대기 UI·ffmpeg 라이선스 검토 문서 등재 — 등재 누락분 보완) |
 | 갱신 규칙 | 새 설계 문서를 추가하면 이 인덱스의 해당 절에 등재한다. 이터레이션이 완료돼 내용이 `docs/analysis`에 흡수되면 §4로 옮긴다 |
 
 ---
@@ -18,7 +18,7 @@
 | 백엔드 API를 확장한다 | [백엔드 프록시 전환 설계](./wpf-backend-proxy-migration-design.md) + [`docs/analysis/31`](../analysis/31-backend-api-reference.md) |
 | 인증·계정 모델을 바꾼다 | [it15 Google 전용 인증](./wpf-it15-google-only-auth-design.md) · [Google SSO 설계](./wpf-google-sso-design.md) · [it14 PIN 게이트](./wpf-it14-settings-pin-gate-design.md) |
 | 역할·권한을 바꾼다 | [it16 고급 유저 역할](./wpf-it16-advanced-user-role-design.md) · [it13 임시 유저 역할](./wpf-it13-temp-user-role-design.md) |
-| 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 신규 생성·서버 등록 팝업](./wpf-frame-create-from-existing-and-server-register-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
+| 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 신규 생성·서버 등록 팝업](./wpf-frame-create-from-existing-and-server-register-design.md) · [it20 다운로드 대기 UI](./wpf-it20-frame-download-waiting-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
 | 촬영 컷 수·슬롯 관계를 바꾼다 | [it17 컷 수 자동 모드](./wpf-it17-auto-cutcount-design.md) |
 | 웹 다운로드 페이지를 바꾼다 | [it17 자동 저장·공유](./web-it17-download-share-design.md) → [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
@@ -68,6 +68,8 @@
 | [wpf-it10-server-connectivity-design](./wpf-it10-server-connectivity-design.md) · [wpf-it10-wbs](./wpf-it10-wbs.md) | 서버 연결 상태 표시 |
 | [wpf-it11-deferred-features-design](./wpf-it11-deferred-features-design.md) · [wpf-it11-wbs](./wpf-it11-wbs.md) | 재촬영·진단 화면·카메라 이름·업로드 진행률. **컷별 재촬영은 미구현**(설계만 존재) |
 | [wpf-it12-design](./wpf-it12-design.md) · [wpf-it12-wbs](./wpf-it12-wbs.md) | 설정 편집 게이트·레이아웃·버전 표기 조정 |
+| [wpf-it20-frame-download-waiting-design](./wpf-it20-frame-download-waiting-design.md) | **it20** 기본 프레임 다운로드 대기 UI. 로딩 4국면(`Loading`/`Ready`/`Degraded`/`Failed`)·무진행 30초/총 60초 2단 상한·`finally`가 국면을 무조건 확정하는 구조·`FrameCatalogService` 단일 비행(single-flight) + 진행 중계 |
+| [wpf-ffmpeg-licensing-and-distribution-design](./wpf-ffmpeg-licensing-and-distribution-design.md) | **검토 전용(미착수)** ffmpeg GPLv3 준수 의무와 배포 형태. 동봉 자체는 위반이 아니고 **조건 미이행**이 위반이라는 판정, LGPL 빌드·`h264_mf` 전환 경로 |
 | [wpf-it17-auto-cutcount-design](./wpf-it17-auto-cutcount-design.md) | 촬영 컷 수 "자동" 모드(ini sentinel 0 → `max(6, 슬롯+2)`). 설정 도메인과 실효값 도메인을 분리한 근거, 단일 해석 지점(`CaptureSession.Begin`) |
 
 ---

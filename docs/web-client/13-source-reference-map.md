@@ -101,7 +101,7 @@
 |---------|-------------------|-----------|-----------|
 | `Home` | `ViewModels/HomeViewModel.cs` | `Views/HomeView.xaml` | — |
 | `Login` | `ViewModels/LoginGuestViewModel.cs` | `Views/LoginGuestView.xaml` | `Core/Accounts/{IAccountService,IGoogleSignInService,GoogleOAuthPkce}.cs` |
-| `FrameSelect` | `ViewModels/FrameSelectViewModel.cs` | `Views/FrameSelectView.xaml` | `Core/Frames/{FrameEditPolicy,FrameOrigin,LocalFrameStore}.cs`, `App/Services/FrameCatalogService.cs` |
+| `FrameSelect` | `ViewModels/FrameSelectViewModel.cs` | `Views/FrameSelectView.xaml` | `Core/Frames/{FrameEditPolicy,FrameOrigin,LocalFrameStore,FrameLoadPolicy,FrameCatalogProgress}.cs`, `App/Services/FrameCatalogService.cs` |
 | `Guide` | `ViewModels/GuideViewModel.cs` | `Views/GuideView.xaml` | — |
 | `Capture` | `ViewModels/CaptureViewModel.cs` | `Views/CaptureView.xaml` | `Core/Capture/{CaptureSession,PreviewReadiness,CropCalculator}.cs`, `Capture/OpenCvCameraService.cs` |
 | `CutSelect` | `ViewModels/CutSelectViewModel.cs` | `Views/CutSelectView.xaml` | `Core/Capture/CaptureSession.cs` |
@@ -217,7 +217,9 @@
 | PIN 게이트 | [07 §6](./07-auth-and-permissions-web.md), [03 §15.3](./03-screens-spec.md) | 61 §7, 31 §4.5 | `AppShellViewModel.EnsurePinGateAsync`, `Views/PinPromptWindow.xaml.cs` |
 | 설정 화면 | [03 §12](./03-screens-spec.md), [05 §2](./05-storage-and-persistence.md) | 13 §8, 41 §2, 12 §1 | `SettingsViewModel.cs`, `Core/Settings/AppSettings.cs` |
 | 프레임 목록·카탈로그 | [03 §4](./03-screens-spec.md), [05 §4](./05-storage-and-persistence.md) | 13 §5, 41 §3, 31 §4.10 | `App/Services/FrameCatalogService.cs`, `Core/Frames/LocalFrameStore.cs` |
+| **프레임 로딩 대기·국면**(it20) | [03 §4.1](./03-screens-spec.md), [06 §6.1](./06-backend-integration-web.md), [02 §6.2](./02-app-shell-and-navigation.md) | **13 §4.2**, 11 §3 | `Core/Frames/{FrameLoadPolicy,FrameCatalogProgress}.cs`, `FrameSelectViewModel.cs`. 설계: `design/wpf-it20-frame-download-waiting-design.md` |
 | 프레임 편집기 | [03 §11](./03-screens-spec.md) | 13 §6, 14 §4 | `FrameEditorViewModel.cs`, `Core/Frames/{SlotLayout,EditorTransform,FrameNaming,FrameEditPolicy}.cs` |
+| **불러오기·서버 등록 확인**(2026-07-30 재정의) | [03 §11.3~§11.5](./03-screens-spec.md) | **13 §6.3~§6.5**, 11 §4.1 | `FrameEditorViewModel.{TryValidateForSave,PersistAsync,ApplyPickedFrame}`, `Core/Frames/FrameNaming.IsFileNameSafe`. 설계: `design/wpf-frame-create-from-existing-and-server-register-design.md` |
 | 계정·사용자 관리 | [03 §13·§14](./03-screens-spec.md), [07 §5](./07-auth-and-permissions-web.md) | 13 §10, 60 §1·§2, 31 §4.3~§4.9 | `{AccountViewModel,UserMgmtViewModel}.cs`, `Core/Models/{UserRole,RoleChangePolicy}.cs` |
 | 진단 모달 | [03 §15.2](./03-screens-spec.md) | 13 §9.2 | `DiagnosticsViewModel.cs` |
 | 유휴 감시 | [02 §6](./02-app-shell-and-navigation.md) | 13 §7 | `Core/Navigation/{IdleWatchdog,IdleCountdown}.cs` |

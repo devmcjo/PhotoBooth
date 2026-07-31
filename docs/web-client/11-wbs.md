@@ -26,7 +26,7 @@
 - **VF-9** 설정 키·기본값·범위·`.slots` 포맷·결과물 파일명은 `docs/analysis/41`에 전수 문서화돼 있다.
 - **VF-10** Windows 앱에는 배포용 번들 프레임 PNG가 커밋돼 있지 않다(`Example/`의 예시 이미지만 존재). → **번들 프레임 자산은 새로 준비하거나 코드 생성 fallback으로 시작**해야 한다.
 - **VF-11** **게스트(미로그인)에게는 QR이 제공되지 않는다.** `ResultViewModel.Next`가 `QrEffectivePolicy.IsQrEnabled(raw, isLoggedIn, isTempUserBlocked)`로 판정하고 미로그인이면 `Qr`을 건너뛰고 `Done`으로 간다. → **Step 11의 종단(폰 스캔) 검증은 로그인 상태에서만 가능**하며, Step 11 자체는 effective QR 목으로 검증한다. (근거: 소스 `src/MCPhoto.App/ViewModels/ResultViewModel.cs:149`, `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs`, `design/wpf-it13-temp-user-role-design.md §7.1b`. `docs/analysis/60 §2`·`13 §4.7`·`61 §1`의 대응 정정은 **반영 완료**(2026-07-30))
-- **VF-12** 컷 수 해석 지점은 **`FrameSelect` [다음]** 1곳이다(`FrameSelectViewModel.cs:210` → `CaptureSession.Begin` → `CutCountPolicy.Resolve`). 세션이 `CutCount`·`IsAutoCutCount`를 보유하고 `GuideViewModel`이 설정이 아니라 **세션에서 읽는다**(`GuideViewModel.cs:27·30`). → 전체 재촬영으로 `Guide`에 재진입해도 재해석하지 않는다.
+- **VF-12** 컷 수 해석 지점은 **`FrameSelect` [다음]** 1곳이다(`FrameSelectViewModel.Next` → `CaptureSession.Begin` → `CutCountPolicy.Resolve`). 세션이 `CutCount`·`IsAutoCutCount`를 보유하고 `GuideViewModel`이 설정이 아니라 **세션에서 읽는다**. → 전체 재촬영으로 `Guide`에 재진입해도 재해석하지 않는다. (it20 이후 `Loading`·`Failed` 국면에서는 그 [다음] 자체가 차단된다 — [03 §4.1](./03-screens-spec.md))
 - **VF-13** Windows QR은 **QRCoder `ECCLevel.Q` + 기본 모듈 20px**이다(`src/MCPhoto.Core/Upload/QrService.cs`, `analysis/30 §3`). → 웹도 **ECC Q**로 맞춘다([03 §9](./03-screens-spec.md)).
 - **VF-14** `createSyncAccessHandle()`은 **전용 Worker 전용** API이고, **Safari 17~18.x에는 `createWritable()`이 없다**(최신 Safari에서 Baseline 2025로 추가 — 지원 하한 17 기준으로는 없다고 간주, 기능 감지로 판정). → **모든 OPFS 쓰기를 Worker 경계 뒤로 모아야** iOS/iPadOS에서 저장이 성립한다([05 §3.1](./05-storage-and-persistence.md)).
 - **VF-15** `MediaRecorder`·`HTMLCanvasElement.captureStream()`은 **Worker에 없다**(Window 전용, `OffscreenCanvas`에 `captureStream` 없음). → **타임랩스 경로 A는 메인 스레드 전용**이며 경로 B(WebCodecs, Worker 가능)를 1순위로 두는 근거가 된다([04 §7.3a](./04-media-pipeline-web.md)).
@@ -433,17 +433,21 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 
 ## Step 14: 프레임 저장소 + 프레임 선택 화면
 
-- **Context Brief**: 프레임 카탈로그(로컬 캐시 → 서버 → 번들 → fallback 4단 우선순위 + **이름 dedup**)와 프레임 선택 화면을 만든다. 서버 프레임 이미지는 **CORS-clean 로드 후 OPFS 캐시**가 필수다(WM2). 규격은 **[05 §4](./05-storage-and-persistence.md)**, **[03 §4](./03-screens-spec.md)**.
-- **대상 파일**: `src/adapters/storage/frameStore.ts`(opfsWriter 경유), `src/adapters/frames/frameCatalog.ts`, `src/screens/frameSelect/*`, `src/ui/views/FrameSelectView.tsx`, `webclient/public/frames/*`
+- **Context Brief**: 프레임 카탈로그(로컬 캐시 → 서버 → 번들 → fallback 4단 우선순위 + **이름 dedup**)와 프레임 선택 화면을 만든다. 서버 프레임 이미지는 **CORS-clean 로드 후 OPFS 캐시**가 필수다(WM2). **첫 방문 대기 4국면(it20)이 이 Step의 절반이다** — 규격은 **[03 §4.1](./03-screens-spec.md)**, **[06 §6.1](./06-backend-integration-web.md)**, **[05 §4](./05-storage-and-persistence.md)**.
+- **대상 파일**: `src/domain/frames/frameLoadPolicy.ts`, `src/domain/frames/frameCatalogProgress.ts`, `docs/spec-vectors/frame-load-policy.json`, `src/adapters/storage/frameStore.ts`(opfsWriter 경유), `src/adapters/frames/frameCatalog.ts`, `src/screens/frameSelect/*`, `src/ui/views/FrameSelectView.tsx`, `webclient/public/frames/*`
 - **선행 조건**: Step 3, Step 5, Step 12(본인 프레임 로드), Step 0-5
 - **구현 내용**:
+  - **도메인 선이식(it20)**: `frameLoadPolicy`(4국면 판정·무진행 30초/총 60초 상한·안내 문구) + `frameCatalogProgress`(단계 → 문구, `(n/m)` 조립). **둘 다 순수 함수**다. Windows `FrameLoadPolicyTests.cs`(13건)·`FrameCatalogProgressTests.cs`(5건)에서 벡터를 덤프해 `frame-load-policy.json`으로 교차 고정한다([10 §3.2](./10-testing-and-acceptance.md)).
   - `frameStore`: IndexedDB 메타([05 §4.2](./05-storage-and-persistence.md) 스키마) + OPFS PNG. 저장·조회·삭제(실제 부재 확인)·10개 상한.
-  - `frameCatalog`: 4단 우선순위 + **이름 기준 dedup**, 서버 미도달 시 ②만 건너뛴다. 번들 `.slots` 없으면 2×2 자동, 최종 fallback은 코드 생성(1200×1600).
+  - `frameCatalog`: 4단 우선순위 + **이름 기준 dedup**, 서버 미도달 시 ②만 건너뛴다. 번들 `.slots` 없으면 2×2 자동, 최종 fallback은 코드 생성(1200×1600). **단일 비행 + 진행 보고**: 동시 호출은 한 작업을 공유하고 늦게 합류한 구독자에게 최근 보고를 replay한다. 취소는 **호출자별**이며 공유 작업은 계속 진행해 캐시를 완성한다([06 §6.1](./06-backend-integration-web.md)).
   - 프레임 선택 화면: 썸네일 그리드(축소 비트맵), 첫 항목 자동 선택, 권한 플래그 2축, 카드 ✕ 노출 규칙.
+  - **대기 오버레이·실패 카드·인라인 안내**: `Loading`에서 [다음]·[만들기]·[선택 편집]·삭제 ✕를 **scrim + 상태 가드 2중**으로 차단. 국면 확정은 `finally`가 **무조건** 수행한다(오버레이 고착 경로 0). [기다리지 않고 시작]은 새 로딩을 시작하지 않고 현재 대기만 접는다. 삭제 후 재스캔은 **조용한 갱신**이다.
   - [다음]에서 프레임 고정 + **컷 수 해석 1회**(it17): `cutCountPolicy.resolve(configuredCutCount, slotCount)` — 자동(`0`)이면 `max(6, 슬롯+2)`, 고정이면 `max(설정, 슬롯)`. 세션에 **`cutCount`와 `isAutoCutCount`를 함께** 기록한다(Guide의 "(자동)" 배지 근거). **이 화면이 유일한 해석 지점**이며 `Guide`·`Capture`·전체 재촬영에서 재해석하지 않는다.
-- **검증 명령**: `npx vitest run tests/unit/frames` · 오프라인 모드에서 목록 확인 · 서버 프레임으로 합성 성공 확인
+- **검증 명령**: `npx vitest run tests/unit/frames` · 오프라인 모드에서 목록 확인 · 서버 프레임으로 합성 성공 확인 · **DevTools 네트워크 스로틀(Slow 3G)로 첫 방문 재현**
 - **완료 기준**:
   - [관측] 온라인에서 서버 공용 프레임이 목록에 나타나고 OPFS에 캐시된다. **두 번째 진입에서 재다운로드하지 않는다**(이름 dedup — Network 확인). 오프라인에서도 목록이 비지 않는다. 선택한 프레임으로 합성이 성공한다.
+  - [관측·it20] **저장소를 비운 첫 방문**(Slow 3G)에서 진입 즉시 대기 오버레이 + `(n/m)` 카운터가 뜨고, "빈 목록 + 활성 [다음]"이 **한 프레임도 나타나지 않는다**. 오프라인 진입은 안내 없이 조용히 캐시로 마감된다(`Ready` — `Degraded` 아님).
+  - [불변식] **총 대기 상한 60초 < `IDLE_TIMEOUT_MS` 120초**를 정적 테스트가 고정한다([02 §6.2](./02-app-shell-and-navigation.md)). 대기 중 유휴 경고가 겹치지 않는다.
   - [관측·it17] `CutCount=0`(자동)으로 저장한 뒤 **슬롯 5개** 프레임을 고르고 [다음]을 누르면 세션의 `cutCount`가 **7**, `isAutoCutCount`가 `true`이며 `Guide`에 "7 (자동)"이 표시된다.
   - [non-goal] 편집·삭제 UI는 권한 없는 역할에서 **렌더되지 않는다**. `user`·`temp_user`의 기존 프레임이 **목록에서 사라지지 않는다**. `frames/` 캐시가 세션 잔재 정리에 삭제되지 않는다.
   - [trigger] 서버 조회는 화면 진입 시 1회. 프레임 고정과 **컷 수 해석은 [다음]에만**(설정 화면에서 컷 수를 바꿔도 진행 중 세션의 값은 변하지 않는다).
@@ -460,15 +464,20 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **선행 조건**: Step 14, Step 2(slotLayout·editorTransform·frameNaming·frameEditPolicy)
 - **구현 내용**:
   - 이미지 로드(PNG/JPG, 10MB, 장변 4000 축소, **PNG 재인코딩**), 슬롯 개수 1~6·종횡비 3종·스케일 70~130%(원본 기준), Pointer Events 드래그(그랩 오프셋 절대 위치), 저장 검증(개수·경계·겹침).
-  - 권한 3단 게이트 + 저장 시 fail-closed 재확인. 상시 정책 배너. 사본 분기·원본 덮어쓰기 가드·`_` 비차단 경고·저장 스코프 동적 안내.
-  - power 신규 생성 = `POST /frames` + 이미지 PUT(+로컬 캐시), advanced_user = 로컬 전용.
-  - 프레임 피커 모달(내부 그리드, 이미지 읽기만, 슬롯 배율 보정, 임시 파일 없음, 항상 사본).
-  - 삭제 확인 모달(로컬 항상 → power 체크 시 서버, 결과별 문구 4종).
+  - 권한 3단 게이트 + **저장 전 검증 7단(순서가 규격 — [03 §11.3](./03-screens-spec.md))**: ①로그인 ②쓰기 권한 ③슬롯 유효성 ④원본 덮어쓰기 ⑤빈 이름 ⑥금지문자 ⑦스코프 이름 충돌. **진입점이 [저장]과 서버 등록 확인 모달 2개이므로 실제 저장 함수 첫 줄에서 재실행**한다(모달 경로 우회 차단).
+  - **`isFileNameSafe` 분리**: 기존 `validateFrameName`은 100자 제한이 묶여 있어 ⑤⑥의 축과 다르다 → 순수 함수를 분리하고 `validateFrameName`이 그것을 쓰게 한다([01 §2](./01-tech-stack-and-structure.md) 주석).
+  - **정책 배너는 편집 세션 전용**(신규 생성 세션은 서버 등록이 가능해 배너 문장이 거짓이 된다). 사본 분기는 **[선택 편집] 경로 전용**. `_` 비차단 경고·저장 스코프 동적 안내(등록을 **단정하지 않는 문구**).
+  - **서버 등록 확인 모달([03 §11.4](./03-screens-spec.md))**: power 신규 생성 저장 시 노출. 체크박스 **기본 on** + 열 때마다 리셋, 체크 상태를 **닫기 전에 확정**, 고정 캡션, **원자성**(서버 등록 실패 시 로컬 저장도 안 함).
+  - power 신규 생성 = 체크 on일 때 `POST /frames` + 이미지 PUT(+로컬 캐시) / 체크 off면 로컬 공용만, advanced_user = 로컬 전용.
+  - 프레임 피커 모달(내부 그리드, 이미지 읽기만, 슬롯 배율 보정, 임시 파일 없음). **세션 정체성 = 신규 생성**(사본 아님), **이름 자동 제안 없음** + 원본 안내 캡션(이미지를 직접 다시 불러오면 비운다).
+  - 삭제 확인 모달(로컬 항상 → power 체크 시 서버, 결과별 문구 4종). 삭제 후 목록 재스캔은 **조용한 갱신**(Step 14 국면 규칙).
 - **검증 명령**: `npx vitest run tests/unit/frameEditor` · 편집 후 그 프레임으로 촬영·합성해 **슬롯 위치 일치** 확인 · 골든 이미지 재실행
 - **완료 기준**:
-  - [관측] 이미지를 넣으면 슬롯이 자동 배치되고 드래그로 이동하며, 저장 후 **그 프레임으로 촬영한 합성 결과의 슬롯 위치가 편집기 화면과 일치**한다(0px). 겹침·경계 이탈에서 저장이 거부된다. 사본 이름 규칙이 동작한다.
+  - [관측] 이미지를 넣으면 슬롯이 자동 배치되고 드래그로 이동하며, 저장 후 **그 프레임으로 촬영한 합성 결과의 슬롯 위치가 편집기 화면과 일치**한다(0px). 겹침·경계 이탈에서 저장이 거부된다. 사본 이름 규칙이 [선택 편집] 경로에서 동작한다.
+  - [관측] **기존 이름을 그대로 타이핑해 저장하면 차단된다**(⑦) — 다른 공용 프레임이 조용히 덮어써지지 않는다. 예외는 [선택 편집]으로 연 본인 로컬 프레임뿐이다.
   - [non-goal] **`PUT /frames/{id}`를 호출하지 않는다**(Network 확인). 카탈로그 유래 프레임 편집이 **원본을 변경하지 않는다**. `user` 역할로는 편집기에 진입할 수 없다. 임시 파일이 생기지 않는다(저장 취소 후 OPFS 확인).
-  - [trigger] 서버 등록은 **power의 신규 생성 저장**에만(피커로 불러온 세션은 등록되지 않는다).
+  - [trigger] 서버 등록은 **power의 신규 생성 세션 + 모달 체크 on**에만 일어난다. 피커로 불러온 세션도 **신규 생성이므로 등록 대상**이다(2026-07-30 재정의 — 종전 "피커 세션은 등록 안 됨"은 폐기).
+  - [원자성] 서버 등록이 실패하면 **로컬에도 저장되지 않고** 편집 세션이 유지된다(부분 성공 0).
 - **롤백**: 편집기·피커·삭제 모달 제거(프레임 사용만 가능).
 - [ ] 완료
 

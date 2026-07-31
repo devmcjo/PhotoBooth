@@ -18,7 +18,7 @@
 cd webclient && npm ci
 npx tsc --noEmit && npx vitest run     # 492 통과
 cd ../web/functions && npm test         # 316 통과
-cd ../.. && dotnet test tests/MCPhoto.Tests   # 840 통과
+cd ../.. && dotnet test tests/MCPhoto.Tests   # 937 통과
 ```
 
 세 개가 다 녹색이면 재개 지점이 건강한 것이다. 그다음 **[11 · WBS](./11-wbs.md)의 체크박스**에서 다음 Step을 고른다(각 Step에 산출물·검증·이탈 사항이 기록돼 있다).
@@ -151,10 +151,24 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - M1 배선(`installTokenLifecycle`)은 이미 설치돼 있고 테스트가 고정한다. **토큰 폐기를 로그아웃 버튼에 걸지 않는다.**
 - PKCE·state·nonce는 `sessionStorage`, 토큰은 **메모리만**(M2).
 
+### Step 14 프레임 선택 — **it20 대기 국면이 절반이다**(2026-07-31 main 머지분)
+- `analysis/13 §4.2`에 **로딩 4국면**(`Loading`/`Ready`/`Degraded`/`Failed`) 규격이 신설됐다. 웹 반영은 [03 §4.1](./03-screens-spec.md)·[06 §6.1](./06-backend-integration-web.md)·[02 §6.2](./02-app-shell-and-navigation.md).
+- Windows에 **순수 함수 2개가 새로 생겼고 웹에는 아직 없다**: `FrameLoadPolicy`(판정·상한·문구, 테스트 13건) · `FrameCatalogProgress`(진행 문구, 5건). 도메인으로 이식하고 `docs/spec-vectors/frame-load-policy.json`으로 교차 고정한다.
+- **웹이 Windows보다 이 규격이 급하다**: Windows는 "최초 실행 1회"지만 웹은 **신규 기기·시크릿 창·저장소 비우기마다** 첫 방문이다.
+- 불변식 **총 대기 60초 < `IDLE_TIMEOUT_MS` 120초** — 값은 이미 정합이므로 **정적 테스트로 고정만** 하면 된다(§3.4 관례).
+- 상한 타이머는 `setTimeout` 누적이 아니라 **실경과 기준**으로 판정한다(WM3와 동종 — 탭 백그라운드 스로틀).
+- 카탈로그 로더는 **단일 비행 + 진행 replay**다. 부트스트랩 prefetch와 화면 진입이 **한 작업을 공유**하고, [기다리지 않고 시작]의 취소는 **호출자별**이라 공유 작업은 계속 진행해 캐시를 완성한다.
+
+### Step 15 프레임 편집기 — **불러오기 규격이 뒤집혔다**(2026-07-30 재정의)
+- **"기존 프레임 불러오기 = 사본"은 폐기됐다.** 세션 정체성이 **신규 생성**이 되어 power가 불러온 세션도 **서버 등록 대상**이다. 이름 자동 제안(`{원본} 사본`)도 없어졌다 — fork는 [선택 편집] 경로에만 남는다.
+- **서버 등록 확인 모달**이 신설됐다(모달 6종 → **7종**). 체크박스 **기본 on**, 노출 조건은 등록 분기와 동일 축, **원자성**(서버 실패 시 로컬도 저장 안 함).
+- **저장 전 검증 7단의 순서가 규격이다**([03 §11.3](./03-screens-spec.md)). 진입점이 2개이므로 실제 저장 함수 첫 줄에서 **재실행**한다.
+- ⚠️ **`isFileNameSafe`를 분리해야 한다**: Windows 판정은 "빈 값 + 금지문자"뿐인데 웹 `validateFrameName`은 **100자 제한이 묶여 있다**. 그대로 선검증에 쓰면 축이 어긋난다.
+
 ### Step 13~16
 - 설정 화면은 `settingsStore.save(patch, {isGuest})`만 부르면 된다 — 게스트 제한 키 보존은 `settingsRepo`가 처리한다.
 - 권한 게이트는 도메인에 다 있다(`rolePolicy`·`roleChangePolicy`·`frameEditPolicy`). 화면은 **렌더 가드 + 액션 첫 줄 가드** 2중으로 쓴다(M10).
-- 프레임 이름: 서버 등록 경로는 `validateFrameNameForServer`(`_` 하드 거부), 로컬 저장은 `validateFrameName` + `underscoreWarning`(비차단).
+- 프레임 이름 판정은 **세 축**이다: 서버 등록 = `validateFrameNameForServer`(`_` 하드 거부) / 로컬 저장 = `validateFrameName` + `underscoreWarning`(비차단) / **저장 전 선검증 = `isFileNameSafe`**(길이 무관, 빈 값·금지문자만).
 
 ---
 
@@ -162,10 +176,18 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + 서버 B1·B2·B4 |
-| 테스트 | 웹 **492** · 서버 **316** · Windows **840** |
-| 브랜치 | `feature/web-client-foundation` (11 커밋, 푸시됨) |
-| `main` | **무변경** |
-| 미완 | Step 9~17, 사용자 액션 A1~A5, 실측 V1~V17 |
+| 완료 | WBS Step 0~8 + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **492** · 서버 **316** · Windows **937** |
+| 브랜치 | `feature/web-client-foundation` |
+| `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
+| 미완 | Step 9~17, 실측 V1~V17 |
+
+**main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
+
+| 대상 | 늘어난 것 |
+|------|-----------|
+| Step 14 | `frameLoadPolicy`·`frameCatalogProgress` 도메인 이식 + 벡터 1파일 + 대기/실패 오버레이 + 단일 비행 로더 + 유휴 상한 불변식 테스트 |
+| Step 15 | 불러오기 = 신규 생성으로 재정의, 서버 등록 확인 모달 신설, 저장 전 검증 7단, `isFileNameSafe` 분리 |
+| Step 9 | 변화 없음. 참고로 **웹 타임랩스 경로에는 GPL 노출이 없다**(브라우저 내장 인코더 — `12 B14`) |
 
 화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·Result가 실물이고, 나머지는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조).

@@ -93,8 +93,12 @@ src/adapters/     플랫폼 어댑터 — 카메라 · 인코더 · 합성 · �
 | `upload/uploadOrchestration.ts`(3단계 순서·최소 1개·진행률 합산) | `src/MCPhoto.Core/Upload/UploadService.cs` | `analysis/31 §5` | `UploadServiceTests.cs` |
 | `filters/filterParams.ts` | `src/MCPhoto.Capture/Filters.cs` | `analysis/14 §6` | `FiltersTests.cs` |
 | `frames/frameCatalogPolicy.ts`(목록 우선순위·이름 dedup) | `src/MCPhoto.App/Services/FrameCatalogService.cs` | `analysis/13 §5` | `FrameCatalogServiceTests.cs` |
+| **`frames/frameLoadPolicy.ts`**(로딩 4국면·대기 상한·안내 문구, it20) | `src/MCPhoto.Core/Frames/FrameLoadPolicy.cs` | `analysis/13 §4.2` | `FrameLoadPolicyTests.cs` |
+| **`frames/frameCatalogProgress.ts`**(진행 단계 → 표시 문구, it20) | `src/MCPhoto.Core/Frames/FrameCatalogProgress.cs` | `03 §4.1`·`06 §6.1` | `FrameCatalogProgressTests.cs` |
 
 > **`DisplayApplyPolicy.cs`는 이식하지 않는다**(창 개념 없음, WD7).
+>
+> ⚠️ **`frameNaming.ts`의 판정 축 분리(2026-07-31)**: Windows `FrameNaming.IsFileNameSafe`는 **빈 값 + 파일시스템 금지문자만** 본다(길이 제한 없음). 웹 `validateFrameName`은 여기에 **100자 제한을 묶어** 두었으므로 **저장 전 선검증에 그대로 쓰면 축이 어긋난다** → `isFileNameSafe`를 별도 순수 함수로 두고 `validateFrameName`이 그것을 사용하는 형태로 분리한다(`03 §11.3` ⑤⑥).
 
 ---
 

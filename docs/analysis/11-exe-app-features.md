@@ -64,22 +64,25 @@
   - 크기 스케일(`OnSlotScalePercentChanged`, `:116-125` / `SlotLayout.ScaleSlots`, `:118-134`): 항상 원본 `_baseSlots` 기준으로 스케일(누적 오차 방지), 70~130 클램프, 중심 유지.
   - 드래그(`UpdateSlot`, `:147-172`): 경계 클램프 + `_baseSlots` 중심 동기화. **좌표 변환은 순수함수 `EditorTransform`**(`EditorTransform.cs`)로 표시·드래그·클램프가 동일 변환(Uniform 스케일 + 중앙 레터박스) → WYSIWYG. 캔버스 기준은 `SlotCanvas.ActualWidth/Height`(`FrameEditorView.xaml.cs:70-73`), 절대 위치 이동(그랩 오프셋, `:106-143`).
   - 저장 유효성(`SlotLayout.IsValid`, `:165-175`): 개수 1~6, 경계 내, 겹침 없음.
-  - 저장(`Save`) **역할별 분기**:
-    - **power**(admin/manager) **신규 생성**: 공용 기본 프레임 → DB(`isDefault=true, userId=null`) + 로컬 캐시(frameId 기반, 접두 없음). **공용 기본 프레임을 서버에 배포하는 유일한 경로**.
+  - **저장 전 검증(`TryValidateForSave`) — 순서가 규격**: ①로그인 → ②`CanWriteFrames` → ③슬롯 유효성 → ④원본 덮어쓰기 가드 → ⑤빈 이름 → ⑥금지문자(`FrameNaming.IsFileNameSafe`) → ⑦스코프 이름 충돌. 진입점이 [저장]과 서버 등록 확인 팝업 2개이므로 `PersistAsync` 첫 줄에서 **재실행**한다(팝업 경로 우회 차단). ⑦의 예외는 `EditOwnLocal` 세션뿐이다 — `SaveLocal`이 동명 파일을 경고 없이 덮어쓰므로 신규·fork 세션은 차단한다. ④를 ⑦보다 먼저 두는 이유는 ⑦이 디스크 열거 실패 시 비차단으로 꺼지기 때문이다(2중 방어).
+  - 저장(`Save` → `PersistAsync`) **역할별 분기**:
+    - **power**(admin/manager) **신규 생성**: 저장 시 **서버 등록 확인 팝업**(`IsServerRegisterConfirmVisible`)이 먼저 뜬다. 체크(`RegisterToServer`, **기본 on**, 열 때마다 리셋) 시 공용 기본 프레임 → DB(`isDefault=true, userId=null`) + 로컬 캐시(frameId 기반, 접두 없음) — **공용 기본 프레임을 서버에 배포하는 유일한 경로**. 미체크면 로컬 공용만(`Id=""`). 팝업 노출 조건은 DB insert 분기와 **동일**(`IsPower() && _sessionSource == New`)하며 `IsCreateMode`가 아니라 세션 축을 쓴다.
+    - **원자성(D6)**: 체크 on에서 `SaveAsync`가 실패하면 로컬 저장도 화면 전환도 하지 않고 편집 세션을 유지한 채 *"서버 등록 실패: {사유} 이 PC에만 저장하려면 '서버에도 등록'을 해제하고 다시 저장해 주세요."* 를 안내한다. 로컬만 저장해두면 재시도 시 ⑦ 가드가 자기 자신과 충돌해 저장이 영구히 막힌다.
     - **advanced_user**(고급 유저, it16): 비power 분기를 타서 **로컬 전용**(DB 미저장), 개인 스코프 `{계정}_{이름}.png` 접두. 서버 쓰기 요청이 발생하지 않는다(프레임 쓰기 라우트는 `requirePower` 뒤라 애초에 403).
     - **user·temp_user**: 저장 경로에 도달하지 않는다(위 진입 권한 — it16 이전에는 `user`가 로컬 전용으로 저장할 수 있었다).
     - 10개 초과는 `InvalidOperationException`, 이름 금지문자는 `IOException` 메시지를 그대로 노출.
-- **프레임 편집은 로컬 전용(it15 F1)**: 편집기 상단에 상시 배너 **"이 프레임 편집은 해당 PC에서만 적용됩니다. 서버의 기본 프레임은 변경되지 않으며, 다른 PC에는 반영되지 않습니다."** 를 표시한다(역할·출처·모드 무관, `Visibility` 바인딩 없음).
+- **프레임 편집은 로컬 전용(it15 F1)**: 편집기 상단에 배너 **"이 프레임 편집은 이 PC에만 적용되며, 서버와 다른 PC에는 반영되지 않습니다."** 를 표시한다(**`IsCreateMode` 역게이트 — 편집 세션 전용**. 신규 생성 세션은 서버 등록이 가능하므로 이 배너가 거짓이 된다. `XamlResourceTests.FrameEditor_LocalOnly_Banner_Is_Gated_By_IsCreateMode`가 정적으로 고정한다).
   - it2의 "로컬만 / DB도 업데이트" 확인 팝업과 `SaveToDb`·`FrameDiff`·`IFrameRepository.UpdateAsync`/`SupportsUpdateById`는 **클라이언트에서 전면 제거**됐다. 편집 저장은 어떤 경로로도 서버를 호출하지 않는다.
-  - **fork 저장**(`FrameEditPolicy.RequiresFork` = 출처가 `UserLocal`이 아님): DB/번들/fallback 유래 프레임을 편집하면 원본 파일을 건드리지 않고 `FrameNaming.NextCopyName`이 만든 **`{원본이름} 사본`**(충돌 시 ` 2`, ` 3` … 99, 그 뒤 GUID 8자)으로 신규 저장한다. 이름 제안값은 진입 시 1회 계산되며 사용자가 수정할 수 있다.
+  - **fork 저장**(`FrameEditPolicy.RequiresFork` = 출처가 `UserLocal`이 아님) — **[선택 편집] 경로 전용이다**(F2 "기존 프레임 불러오기"는 fork가 아니라 신규 생성이다): DB/번들/fallback 유래 프레임을 편집하면 원본 파일을 건드리지 않고 `FrameNaming.NextCopyName`이 만든 **`{원본이름} 사본`**(충돌 시 ` 2`, ` 3` … 99, 그 뒤 GUID 8자)으로 신규 저장한다. 이름 제안값은 진입 시 1회 계산되며 사용자가 수정할 수 있다.
   - fork 저장은 `FrameTemplate.Id = ""`로 `SaveLocal(ownerName: null)`을 호출해 **`.slots`에 `#dbid`를 기록하지 않는다** → 로컬 사본은 `local:{파일명}` id를 갖고 서버 문서와 연결이 끊긴다. 원본 이름이 `PublicFrameNames()`에 남으므로 `FrameCatalogService`의 이름 dedup이 유지되어 **DB 재다운로드가 발생하지 않는다**.
   - **원본 덮어쓰기 가드**: 공용 스코프(power) fork에서 이름을 원본과 같게 두면 저장을 중단하고 *"원본과 같은 이름은 사용할 수 없습니다. 이름을 변경해 주세요."* 를 표시한다. user 스코프는 파일명이 `{계정}_{이름}`이라 공용 원본과 겹치지 않으므로 가드하지 않는다.
-  - 저장 스코프(power=공용 `{이름}.png` / user=개인 `{계정}_{이름}.png`)는 **현행 유지**. 저장 버튼 위 `SaveScopeNotice` 캡션이 이번 저장의 실제 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임)를 동적으로 안내한다 — 배너는 정책, 캡션은 결과.
+  - 저장 스코프(power=공용 `{이름}.png` / user=개인 `{계정}_{이름}.png`)는 **현행 유지**. 저장 버튼 위 `SaveScopeNotice` 캡션이 이번 저장의 실제 결과(공용 목록 생성 / fork / 덮어쓰기 / 내 프레임)를 동적으로 안내한다 — 배너는 정책, 캡션은 결과. power 신규 생성 문구는 *"저장 시 '{이름}'을(를) 이 PC의 공용 목록에 만듭니다. 서버 등록 여부는 저장할 때 선택합니다."* 로, 서버 등록을 **단정하지 않는다**(등록 여부는 팝업 선택이므로).
   - power 스코프 저장 시 이름에 `_`가 있으면 *"이름에 '_'가 있어 공용 목록에서 보이지 않을 수 있습니다."* 를 **비차단** 경고로 남긴다(공용/user 구분자 충돌, `LocalFrameStore` 규약).
 - **기존 프레임 불러오기(it15 F2)**: "이미지 불러오기" 바로 아래 **"기존 프레임 불러오기"** 버튼(`IsCreateMode` = 생성 모드 전용). 파일 탐색기가 아니라 편집기 내부 **오버레이 모달**(새 `Window` 아님)에서 프레임 선택 화면과 같은 썸네일 그리드로 고른다.
   - 목록 VM = `FramePickerViewModel`(Transient). 후보 = `FrameCatalogService.GetDefaultFramesAsync()`(공용: 번들 + DB 캐시 + DB 다운로드) + `GetUserFramesAsync(userId)`(본인 개인 로컬). 번들·fallback도 **복사는 허용**(원본을 수정하지 않으므로 안전) — 역할 필터 없음.
   - `ApplyPickedFrame`: 반드시 `LoadImage` 경유(번들 `.jpg` 대응 + 장변 4000 축소)로 이미지를 **읽기만** 하고, 슬롯은 `FrameWidth / src.ImageSize.Width` 배율로 보정해 새 `Slot` 인스턴스로 값 복사한다. **임시 파일을 만들지 않는다**(디스크 쓰기는 `Save()` 1회뿐) → "저장 전 취소 시 임시 파일 정리"가 임시 파일 부재로 자동 충족.
-  - 세션 정체성은 항상 fork(`ForkFromCatalog`)이며 `_isEditing`은 건드리지 않는다 → 생성 흐름 유지(다른 프레임으로 다시 바꿀 수 있음). **F2로 불러온 세션은 power여도 DB에 등록되지 않는다**(서버 배포는 빈 편집기 신규 생성만).
+  - **세션 정체성 = 신규 생성(`FrameSessionSource.New`)** — 사본이 아니다(2026-07-30 재정의, 설계 `wpf-frame-create-from-existing-and-server-register-design.md` R1). `_isEditing`은 건드리지 않아 생성 흐름이 유지되고(다른 프레임으로 다시 바꿀 수 있음), **power가 불러온 세션도 서버 등록 대상**이라 저장 시 확인 팝업이 뜬다.
+  - **이름을 자동 제안하지 않는다**: `FrameName`을 건드리지 않아 사용자가 이미 입력한 값을 보존한다(원본 이름을 채우면 ⑦ 가드에 100% 걸리는 값을 제안하는 셈). 대신 이름 입력 위에 `PickedSourceNotice` 캡션 *"'{원본이름}'의 이미지·슬롯을 불러왔습니다. 새 프레임 이름을 입력해 주세요."* 를 띄우고, 이미지를 직접 다시 불러오면(`LoadImage`) 비운다. `FrameNaming.NextCopyName`은 F1 fork 경로에서 계속 쓰인다.
   - [취소]는 모달만 닫고 편집기 상태·디스크 모두 무변경. 목록 로딩은 `CancellationToken`으로 중단한다.
   - 썸네일 카드는 `Themes/Controls.xaml`의 공유 리소스(`FrameCard.ItemContainer` / `FrameCard.Content` / `FrameCard.FilePathToImage`)로 프레임 선택 화면과 시각을 공유하며, 삭제 ✕ 버튼만 `FrameSelectView`가 합성한다.
 - **편집 권한 규칙(역할×출처, item2 · it16 §4)**: 편집 진입·"선택 편집" 버튼 노출은 순수 함수 `FrameEditPolicy.CanEdit`가 게이트한다.
@@ -88,7 +91,7 @@
   - **게스트**: 편집 불가(전부). **temp_user·user**: **전부 불가**(it16 E4 — 사용만). **advanced_user**: 본인 로컬 생성분만(`UserId==현재계정` 검증). **power**: 본인 로컬 + DB 공용 기본. **번들·fallback**: 누구도 불가.
   - `FrameSelectViewModel.CanEdit`는 이 순수 함수에 위임(기존 `local:` 무검증 결함 제거). 진입(`EditFrame`)·버튼(`CanEditSelected`) 이중 게이트 + 저장(`Save`) fail-closed 3중 방어.
   - ⚠️ **폐지(it15)**: it2의 power 기본 프레임 편집 저장 팝업(`IsDbUpdatePromptVisible` / `SaveLocalOnly` / `SaveToDb` / `CancelDbUpdatePrompt`)과 `FrameDiff`, `IFrameRepository.SupportsUpdateById`·`UpdateAsync`, `FrameEditPolicy.RequiresDbUpdatePrompt`는 모두 삭제됐다. 서버 라우트 `PUT /frames/{id}`는 남아 있지만 **앱은 호출하지 않는다**(운영/관리 도구 전용).
-- **근거**: `FrameEditorViewModel.cs`, `FramePickerViewModel.cs`, `FrameEditorView.xaml`(+ code-behind), `FrameSelectView.xaml`, `Themes/Controls.xaml`, `FrameOrigin.cs`, `FrameEditPolicy.cs`, `FrameNaming.cs`, `IFrameRepository.cs`, `HttpFrameRepository.cs`, `EditorTransform.cs`, `SlotLayout.cs`, `SlotAspect.cs`. 설계: `docs/design/wpf-it15-frame-ux-design.md`.
+- **근거**: `FrameEditorViewModel.cs`, `FramePickerViewModel.cs`, `FrameEditorView.xaml`(+ code-behind), `FrameSelectView.xaml`, `Themes/Controls.xaml`, `FrameOrigin.cs`, `FrameEditPolicy.cs`, `FrameNaming.cs`, `IFrameRepository.cs`, `HttpFrameRepository.cs`, `EditorTransform.cs`, `SlotLayout.cs`, `SlotAspect.cs`. 설계: `docs/design/wpf-it15-frame-ux-design.md`, `docs/design/wpf-frame-create-from-existing-and-server-register-design.md`(F2 재정의·서버 등록 팝업·이름 충돌 가드).
 
 ### 4.2 삭제(역할별)
 

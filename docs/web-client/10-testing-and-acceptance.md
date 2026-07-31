@@ -52,6 +52,9 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 | `uploadOrchestration.test.ts` | `UploadServiceTests.cs` | 최소 1개 불변식 · 3단계 순서 · 진행률 합산(**순서 비의존**) |
 | `timelapseSpeed.test.ts` | `FfmpegArgsTests.cs` | `computeSpeedFactor` 표(12/15/30/60/120초) |
 | `frameCatalogPolicy.test.ts` | `FrameCatalogServiceTests.cs` | 우선순위 4단 · **이름 dedup** · 서버 미도달 폴백 |
+| **`frameLoadPolicy.test.ts`**(it20) | `FrameLoadPolicyTests.cs`(13건) | `classify` 진리표(0개→Failed / 중단→Degraded / 그 외 Ready) · `finalize`의 **quiet 갈래에서 `Loading`을 반환하지 않는다**(오버레이 고착 불가) · `nextDeadline`(무진행 30초 vs 잔여 총량 중 **먼저 오는 쪽**, 0 이하 → 즉시 취소) · 국면별 안내 문구 |
+| **`frameCatalogProgress.test.ts`**(it20) | `FrameCatalogProgressTests.cs`(5건) | 단계별 문구 · `total>0`일 때만 `(n/m)` 부착 · 보고 전 시작 문구 |
+| **`frameNaming.test.ts` 증분** | `FrameNamingTests.cs`(+39줄) | **`isFileNameSafe`**: 빈 값·공백만 → false, 금지문자 → false, **길이는 보지 않는다**(100자 초과도 true — `validateFrameName`과 축이 다르다) |
 
 ---
 
@@ -85,6 +88,9 @@ docs/spec-vectors/*.json      ← 플랫폼 중립 (입력 → 기대 출력)
 | `cut-count.json` | `{configured, slotCount} → {resolved, isAuto}` | `CutCountPolicyTests.cs` |
 | `qr-normalize.json` | QR 토글 정규화·재활성 | `QrDeliveryPolicyTests.cs` |
 | `slots-file.json` | `.slots` 텍스트 → 파싱 결과(손상 줄 포함) | `LocalFrameStoreTests.cs` |
+| **`frame-load-policy.json`**(it20 — **미작성**) | `{frameCount, waitInterrupted} → phase` + `{current, frameCount, waitInterrupted, quiet} → phase` + `{elapsedMs} → nextDeadlineMs` | `FrameLoadPolicyTests.cs` |
+
+> 14파일 271케이스가 작성돼 있다. **`frame-load-policy.json`은 Step 14 착수 시 추가한다** — Windows 쪽 `FrameLoadPolicyTests.cs`가 이미 13건으로 판정을 고정하고 있으므로 §3.3 절차대로 그쪽에서 덤프해 추출한다.
 
 ### 3.3 추출 절차 (1회)
 
