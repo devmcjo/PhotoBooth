@@ -155,7 +155,8 @@
   "code": "4/0AeanS0...",
   "codeVerifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   "redirectUri": "http://127.0.0.1:53412/",
-  "nonce": "n-0S6_WzA2Mj"
+  "nonce": "n-0S6_WzA2Mj",
+  "clientKind": "desktop"
 }
 ```
 
@@ -163,8 +164,15 @@
 |------|:----:|------|
 | `code` | ✅ | 문자열, 트림 후 1~2048자 |
 | `codeVerifier` | ✅ | RFC 7636 — `^[A-Za-z0-9\-._~]{43,128}$` |
-| `redirectUri` | ✅ | **loopback만**: scheme `http`, host `127.0.0.1` 또는 `localhost`, 경로 `/` 또는 없음, 쿼리·프래그먼트·인증정보 금지, 포트 1~65535 선택, 총 길이 ≤256 |
+| `redirectUri` | ✅ | **허용 목록(완전 일치) 또는 loopback**. ① `OAUTH_REDIRECT_ALLOWLIST`(CSV env)에 **정확히 일치**하면 통과 ② 아니면 loopback 규칙: scheme `http`, host `127.0.0.1`/`localhost`, 경로 `/` 또는 없음, 쿼리·프래그먼트·인증정보 금지, 포트 1~65535 선택. 총 길이 ≤256 |
 | `nonce` | — | 있으면 `^[A-Za-z0-9\-._~]{1,256}$`. id_token의 `nonce`와 대조된다 |
+| `clientKind` | — | `desktop` \| `web`. **미지정 = `desktop`**(하위 호환). 그 외 문자열은 400. 선택된 종류의 client_id/secret 쌍으로 code를 교환한다 |
+
+> **검사 순서가 계약이다(허용 목록 먼저).** 웹 개발용 `http://localhost:5173/oauth2callback`은 loopback처럼 보이지만 loopback 규칙은 경로 `/`만 허용한다 — 순서를 뒤집으면 허용 목록에 등록해도 영구히 400이 된다.
+>
+> **prefix 매칭은 쓰지 않는다.** 허용 목록에 `https://a.web.app/oauth2callback`이 있어도 `https://a.web.app.evil.com/oauth2callback`은 거부된다(open redirect·SSRF 방어). 이 값은 서버가 Google에 보내는 code 교환 요청에 그대로 실린다.
+>
+> **audience는 목록이다.** 구성된 모든 client_id(`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_ID_WEB`)를 `verifyIdToken`에 넘기고 `payload.aud`가 그 목록에 **포함**되는지 확인한다. code 교환이 이미 한 클라이언트로 고정되므로 목록은 **우리 소유 클라이언트끼리만** 넓힌다.
 
 **응답 200**
 ```json
@@ -186,7 +194,7 @@
 
 | 상태·코드 | 원인 | 클라이언트 처리 |
 |-----------|------|-----------------|
-| 501 `not_implemented` | 서버에 `GOOGLE_OAUTH_CLIENT_ID` 미설정 | *"Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요."* |
+| 501 `not_implemented` | 구성된 OAuth 클라이언트가 하나도 없음, **또는 요청한 `clientKind`가 미구성**(예: 웹 client_id 없이 `clientKind:"web"`) | *"Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요."* |
 | 400 `invalid_argument` | 위 필드 형식 위반 | 개발 오류(정상 흐름에선 발생하지 않아야 한다) |
 | 401 `unauthorized` | code 교환 실패 / id_token 검증 실패(aud·iss·exp 불일치, `email_verified=false`, nonce 불일치, 허용 도메인(`GOOGLE_ALLOWED_HD`) 밖) / 계정 매핑 실패 | *"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."* — 서버가 사유를 **일반화**한다(계정 열거 방지). 상세 사유는 서버 로그에만 남는다 |
 
@@ -717,10 +725,15 @@ P1은 백엔드 API를 쓰지 않는다. **Firestore `resultSessions/{token}` �
 | `STORAGE_BUCKET` | env | ✅ | 서명 URL·토큰 URL 조립 |
 | `HOSTING_BASE_URL` | env | — | 다운로드 페이지 base URL |
 | `JWT_EXPIRES_IN_SECONDS` | env | — | 기본 `28800`(8시간) |
-| `GOOGLE_OAUTH_CLIENT_ID` | env | SSO 사용 시 | **SSO 활성화 신호** — 없으면 `/auth/google`는 501 |
-| `GOOGLE_ALLOWED_HD` | env | — | 허용 Workspace 도메인(빈 값 = 제한 없음) |
+| `GOOGLE_OAUTH_CLIENT_ID` | env | desktop SSO 사용 시 | **desktop 종류 활성화 신호**(Windows 앱) |
+| `GOOGLE_OAUTH_CLIENT_ID_WEB` | env | web SSO 사용 시 | **web 종류 활성화 신호**(웹 클라이언트). Desktop 클라이언트와 유형이 달라 **공유할 수 없다** |
+| `GOOGLE_OAUTH_CLIENT_SECRET_WEB` | secret | web SSO 사용 시 | 웹 클라이언트 secret. **선언된 시크릿이라 배포 시 반드시 존재해야 한다**(미사용이어도 placeholder 등록) |
+| `OAUTH_REDIRECT_ALLOWLIST` | env | web SSO 사용 시 | 허용 `redirectUri` CSV(**완전 일치**). 예: `https://mcphoto-955fb-kiosk.web.app/oauth2callback,http://localhost:5173/oauth2callback` |
+| `GOOGLE_ALLOWED_HD` | env | — | 허용 Workspace 도메인(빈 값 = 제한 없음). **종류 무관 공통 적용** |
 
-- `GOOGLE_OAUTH_CLIENT_SECRET`은 배포 시 항상 존재해야 하므로 SSO 미사용이어도 placeholder를 등록한다. 따라서 "시크릿만 있고 client id 없음"은 **정상 비활성** 상태다.
+- `/auth/google`는 **구성된 종류가 하나 이상**이면 활성이다. 요청한 `clientKind`가 미구성이면 그 요청만 501이다.
+- 종류별로 "id를 켰는데 secret이 없으면 **조기 실패**" 규칙이 동일하게 적용된다(오구성 배포 방지).
+- `GOOGLE_OAUTH_CLIENT_SECRET`(및 `_WEB`)은 배포 시 항상 존재해야 하므로 SSO 미사용이어도 placeholder를 등록한다. 따라서 "시크릿만 있고 client id 없음"은 **정상 비활성** 상태다.
 - 게이트 키는 **여러 개 등록 가능**하다(CSV). 플랫폼별로 다른 키를 발급하면 유출 시 해당 키만 폐기할 수 있다 — 새 클라이언트마다 별도 키를 받는 것을 권장한다.
 
 ---

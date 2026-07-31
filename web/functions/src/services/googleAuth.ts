@@ -42,10 +42,28 @@ export interface OAuth2ClientLike {
 
 /** OAuth2Client 생성에 필요한 구성. */
 export interface GoogleAuthConfig {
+  /** code 교환에 쓸 클라이언트 id(선택된 `clientKind`의 것). */
   clientId: string;
+  /** code 교환에 쓸 클라이언트 secret(선택된 `clientKind`의 것). */
   clientSecret: string;
   /** 허용 hosted domain(빈 문자열이면 hd 제한 없음, §6.5). */
   allowedHd?: string;
+  /**
+   * B2: 허용 id_token audience 목록(구성된 모든 client_id).
+   * 비었으면 `[clientId]`로 폴백한다(하위 호환 — 종전 단일 client_id 동작).
+   */
+  audiences?: string[];
+}
+
+/**
+ * 허용 audience 목록. 목록이 없으면 code 교환에 쓴 client_id 하나만 허용한다.
+ *
+ * code 교환이 이미 한 클라이언트로 고정되므로 이 목록은 **우리가 소유한 클라이언트끼리만** 넓힌다
+ * (외부 client_id는 목록에 없으므로 통과하지 못한다).
+ */
+export function acceptableAudiences(cfg: GoogleAuthConfig): string[] {
+  const list = (cfg.audiences ?? []).filter((a) => a.length > 0);
+  return list.length > 0 ? list : [cfg.clientId];
 }
 
 /** 검증 입력(클라가 /auth/google로 전달한, 이미 형식 검증된 값). */
@@ -81,8 +99,8 @@ export function assertPayloadAndExtractEmail(
   if (!payload) {
     throw new GoogleAuthError("id_token payload가 비어 있습니다.");
   }
-  // audience: 우리 client_id와 정확히 일치해야 한다.
-  if (payload.aud !== cfg.clientId) {
+  // audience: 우리가 구성한 client_id 중 하나와 정확히 일치해야 한다(B2 — 목록화).
+  if (typeof payload.aud !== "string" || !acceptableAudiences(cfg).includes(payload.aud)) {
     throw new GoogleAuthError("id_token audience 불일치.");
   }
   // issuer: Google 발행 여부.
@@ -155,7 +173,7 @@ export async function verifyGoogleCodeAndGetEmail(
   try {
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: cfg.clientId,
+      audience: acceptableAudiences(cfg),
     });
     payload = ticket.getPayload();
   } catch (err) {

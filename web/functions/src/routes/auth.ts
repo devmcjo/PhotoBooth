@@ -10,9 +10,10 @@ import { loadConfig } from "../config";
 import { issueToken } from "../domain/jwt";
 import {
   validateAuthCode,
+  validateClientKind,
   validateCodeVerifier,
-  validateLoopbackRedirectUri,
   validateNonce,
+  validateRedirectUri,
 } from "../domain/validation";
 import { asyncHandler } from "../http/async";
 import { requireApiKey } from "../http/auth";
@@ -45,8 +46,23 @@ export function authRouter(): Router {
       if (!codeRes.ok) throw HttpError.invalid(codeRes.error);
       const verifierRes = validateCodeVerifier(req.body?.codeVerifier);
       if (!verifierRes.ok) throw HttpError.invalid(verifierRes.error);
-      const redirectRes = validateLoopbackRedirectUri(req.body?.redirectUri);
+      // B2: 어느 OAuth 클라이언트로 교환할지 요청이 명시한다. 미지정 = desktop(하위 호환).
+      const kindRes = validateClientKind(req.body?.clientKind);
+      if (!kindRes.ok) throw HttpError.invalid(kindRes.error);
+      // B1: loopback(데스크톱) 또는 허용 목록(웹)만 통과. 완전 일치.
+      const redirectRes = validateRedirectUri(
+        req.body?.redirectUri,
+        cfg.oauthRedirectAllowlist
+      );
       if (!redirectRes.ok) throw HttpError.invalid(redirectRes.error);
+
+      // 요청한 종류가 구성되지 않았으면 구성 오류다(401로 감추지 않는다 — 운영자가 원인을 알아야 한다).
+      const client = cfg.googleOAuthClients[kindRes.value];
+      if (!client) {
+        throw HttpError.notImplemented(
+          `Google 로그인이 이 클라이언트 종류로 구성되지 않았습니다: ${kindRes.value}`
+        );
+      }
 
       // nonce는 선택: 있으면 형식 검증 후 id_token nonce 대조에 사용(§8.4).
       let nonce: string | undefined;
@@ -61,9 +77,10 @@ export function authRouter(): Router {
       try {
         email = await verifyGoogleCodeAndGetEmail(
           {
-            clientId: cfg.googleOAuthClientId,
-            clientSecret: cfg.googleOAuthClientSecret,
+            clientId: client.clientId,
+            clientSecret: client.clientSecret,
             allowedHd: cfg.googleAllowedHd,
+            audiences: cfg.googleOAuthAudiences,
           },
           {
             code: codeRes.value,
