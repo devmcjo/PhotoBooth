@@ -69,9 +69,9 @@
 
 | 환경변수 | 종류 | 값 |
 |----------|------|-----|
-| `GOOGLE_OAUTH_CLIENT_ID_WEB` | env | A1의 client_id |
+| `GOOGLE_OAUTH_CLIENT_ID_WEB` | env (`functions/.env.mcphoto-955fb`) | A1의 client_id |
 | `GOOGLE_OAUTH_CLIENT_SECRET_WEB` | **secret** | A1의 client_secret |
-| `OAUTH_REDIRECT_ALLOWLIST` | env | A1의 redirect URI 3개를 **CSV로** |
+| `OAUTH_REDIRECT_ALLOWLIST` | env (같은 파일) | A1의 redirect URI 3개를 **CSV로** |
 
 ### 3.2 ⚠️ 배포 순서 주의 (먼저 읽을 것)
 
@@ -91,16 +91,34 @@ cd web
 # 1) 시크릿 등록(프롬프트에 client_secret 입력). 당장 SSO를 안 쓸 거면 placeholder라도 넣는다.
 npx firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET_WEB --project mcphoto-955fb
 
-# 2) env 등록 — functions/.env (gitignore 대상, 커밋 금지)
-#    OAUTH_REDIRECT_ALLOWLIST 는 A1에서 등록한 URI와 **완전히 같은 문자열**이어야 한다.
-cat >> functions/.env <<'EOF'
-GOOGLE_OAUTH_CLIENT_ID_WEB=<A1의 client_id>
-OAUTH_REDIRECT_ALLOWLIST=https://mcphoto-955fb-kiosk.web.app/oauth2callback,https://mcphoto-955fb-kiosk.firebaseapp.com/oauth2callback,http://localhost:5173/oauth2callback
-EOF
+# 2) env 등록 — functions/.env.mcphoto-955fb 에 **두 줄 추가**
+#    (이 저장소는 env가 둘로 나뉜다: .env = 공통, .env.<프로젝트id> = 프로젝트별.
+#     기존 GOOGLE_OAUTH_CLIENT_ID(Desktop)가 프로젝트별 파일에 있으므로 웹 값도 같은 파일에 넣는다.
+#     Firebase가 두 파일을 모두 읽어 배포한다. gitignore 대상이라 커밋되지 않는다.)
+#
+#    OAUTH_REDIRECT_ALLOWLIST 는 A1에 등록한 URI 3개와 **문자 하나까지 같아야** 한다(콤마 구분·공백 없음).
+#    기존 GOOGLE_OAUTH_CLIENT_ID 는 지우지 않는다 — Windows(desktop) 로그인이 그 값을 쓴다.
+#    (PowerShell 명령은 아래 참조)
 
 # 3) 재배포(시크릿·env 변경은 재배포가 필요하다)
 deploy-web.bat functions
 ```
+
+**2)를 PowerShell로** — 편집기로 열어 두 줄을 붙여 넣어도 결과는 같다.
+
+```powershell
+cd E:\Study\photobooth\web\functions
+Add-Content .env.mcphoto-955fb "GOOGLE_OAUTH_CLIENT_ID_WEB=<A1의 웹 client_id>"
+Add-Content .env.mcphoto-955fb "OAUTH_REDIRECT_ALLOWLIST=https://mcphoto-955fb-kiosk.web.app/oauth2callback,https://mcphoto-955fb-kiosk.firebaseapp.com/oauth2callback,http://localhost:5173/oauth2callback"
+
+# 확인(값은 보지 않고 키만)
+Select-String -Path .env.mcphoto-955fb -Pattern '^[A-Z_]+' | ForEach-Object { ($_ -split '=')[0] }
+```
+
+| 값 | 무엇인가 |
+|-----|----------|
+| `GOOGLE_OAUTH_CLIENT_ID_WEB` | A1에서 만든 **Web application** 클라이언트의 client_id(`….apps.googleusercontent.com`). 비밀이 아니다 |
+| `OAUTH_REDIRECT_ALLOWLIST` | 위 문자열 그대로. 서버가 이 목록과 **완전 일치**하는 `redirectUri`만 통과시킨다([analysis/31 §4.2](../analysis/31-backend-api-reference.md)) |
 
 ### 3.4 검증
 
