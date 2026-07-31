@@ -341,13 +341,24 @@ cd web && deploy-web.bat hosting
 
 ### 6.4 검증
 
-```bash
-# kiosk 사이트가 서빙되고 CSP·nosniff가 붙는가
-curl -sI https://mcphoto-955fb-kiosk.web.app/ | grep -iE "content-security-policy|x-content-type-options"
+```powershell
+# curl.exe 를 쓴다 — PowerShell의 `curl` 은 Invoke-WebRequest 별칭이라 -sI 가 통하지 않고,
+# grep 도 없다(Select-String 을 쓴다).
+curl.exe -sI https://mcphoto-955fb-kiosk.web.app/ |
+  Select-String -Pattern "HTTP/|content-security-policy|x-content-type-options|cache-control"
 
 # P1 사이트 무변경
-curl -sI https://mcphoto-955fb.web.app/ | head -1
+curl.exe -sI https://mcphoto-955fb.web.app/ | Select-Object -First 1
 ```
+
+| 경로 | 기대 `Cache-Control` | 왜 |
+|------|----------------------|-----|
+| `/` · `/oauth2callback` · `/index.html` | **`no-cache, max-age=0`** | 재배포가 즉시 반영돼야 한다 |
+| `/assets/**` | `public, max-age=31536000, immutable` | 파일명에 해시가 있어 영구 캐시가 안전하다 |
+
+> ⚠️ **`/`가 `max-age=3600`으로 나오면 안 된다.** Hosting은 헤더를 **rewrite 이전의 요청 경로**로 매칭하므로
+> `/index.html` 규칙만으로는 손님이 실제로 여는 `/`가 덮이지 않는다(2026-07-31 실측으로 발견해 `firebase.json`에
+> `/`·`/oauth2callback` 규칙을 추가했다). 그대로 두면 재배포 후 최대 1시간 동안 옛 HTML이 서빙된다.
 
 | 확인 | 기대 |
 |------|------|

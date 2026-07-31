@@ -50,6 +50,15 @@
         ]
       },
       {
+        "//": "⚠️ Hosting은 헤더를 **rewrite 이전의 요청 경로**로 매칭한다. 손님이 실제로 여는 것은 `/`이고 그 요청은 `/index.html` 규칙에 걸리지 않아 기본 max-age=3600이 붙었다(2026-07-31 실측). 그러면 재배포해도 최대 1시간 동안 옛 HTML이 서빙된다 — P1 사이트에서 겪은 사고와 같은 계열이다. SPA rewrite로 HTML을 서빙하는 경로를 **전부 열거**한다(라우터 경로는 2개뿐 — web-client/02 §3). 경로가 늘면 여기에 추가한다.",
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "/oauth2callback",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
         "source": "/index.html",
         "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
       },
