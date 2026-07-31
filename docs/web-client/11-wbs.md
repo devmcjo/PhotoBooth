@@ -289,7 +289,14 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] 합성·업로드 **없음**. 촬영 중 탭을 숨기면 **홈으로 복귀하고 부분 컷이 남지 않는다**(OPFS 세션 폴더 삭제 확인 — WM4). 재촬영 상한 초과 시 버튼 비활성 + 커맨드 거부. **컷 수 N을 하드코딩하지 않는다**(it17 — 컷 루프와 `CutSelect` 그리드가 7·9 같은 임의 N을 수용하고, 그리드 열 수가 CSS `auto-fill`/wrap이다).
   - [trigger] 시퀀스는 **Ready 이후에만** 시작. 플래시는 설정 on일 때만, 셔터음도 설정 on일 때만.
 - **롤백**: 해당 화면 파일 삭제(더미 화면으로 복귀).
-- [ ] 완료
+- [x] **완료 (2026-07-31) — 실기기 완주 실측만 남음**
+  - `domain/capture/captureTiming`(FLASH 120ms · INTERVAL 300ms — 카메라 테스트 모달과 **같은 상수를 공유**한다), `captureSequence`(a~f 순서·실경과 카운트다운·[바로 촬영]·취소), `useCaptureRunner`(진입 7단계 배선), `captureSessionController`(프레임 확정 + **컷 수 해석 유일 지점** + OPFS 작업 공간 + 홈 복귀 정리 훅), `shutterSound`(AudioContext unlock + 자산 없으면 합성음), `fallbackFrame`(하양 1200×1600 PNG 생성), 화면 5종(Home·FrameSelect 최소판·Guide·Capture·CutSelect).
+  - 검증: **26 테스트**(누적 482). a~f 순서, 플래시 off가 캡처 **후**, 컷 사이 300ms·마지막 뒤 없음, 실경과 카운트다운(느린 delay에서도 tick 수가 아니라 경과로 종료), [바로 촬영]이 **매 컷** 동작, 취소 시 플래시 잔존 없음, 스틸·저장 실패를 컷으로 세지 않음, **N=1·6·7·8·9·10 하드코딩 없음**(it17).
+  - 그리드는 CSS `auto-fill`이라 7·9컷도 수용한다. 컷 선택 번호는 선택 배열 인덱스라 해제 시 자동 재계산된다.
+  - ⚠️ **발견·수정**: 플래시 off가 컷 단위 `finally`와 시퀀스 단위 안전망에서 **두 번** 통지됐다 → `setFlash`를 멱등으로 바꿔 중복 리렌더를 제거했다.
+  - ⚠️ 재촬영은 `Guide`로 돌아가되 **컷 수를 재해석하지 않는다**(세션 값 사용 — it17).
+  - **남은 것**: 실기기에서 6컷 완주·OPFS `cut1..6.jpg` 생성·탭 hidden 시 부분 컷 미잔존 확인([14 §10.1](./14-handoff-and-user-actions.md) V14~V17).
+- [ ] 실기기 완주 실측
 
 ---
 
