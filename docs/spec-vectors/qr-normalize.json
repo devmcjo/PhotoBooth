@@ -1,0 +1,119 @@
+{
+  "name": "qr-normalize",
+  "spec": "docs/analysis/41 §2.4 (QrDeliveryPolicy)",
+  "note": "QR on인데 하위 둘 다 off면 QR off(하위 값 보존). 재활성 시 하위 둘 다 on.",
+  "cases": [
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": true,
+        "sendPhoto": true,
+        "sendTimelapse": true
+      },
+      "expected": {
+        "enableQrDelivery": true,
+        "sendPhoto": true,
+        "sendTimelapse": true
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": true,
+        "sendPhoto": true,
+        "sendTimelapse": false
+      },
+      "expected": {
+        "enableQrDelivery": true,
+        "sendPhoto": true,
+        "sendTimelapse": false
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": true,
+        "sendPhoto": false,
+        "sendTimelapse": true
+      },
+      "expected": {
+        "enableQrDelivery": true,
+        "sendPhoto": false,
+        "sendTimelapse": true
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": true,
+        "sendPhoto": false,
+        "sendTimelapse": false
+      },
+      "expected": {
+        "enableQrDelivery": false,
+        "sendPhoto": false,
+        "sendTimelapse": false
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": false,
+        "sendPhoto": true,
+        "sendTimelapse": true
+      },
+      "expected": {
+        "enableQrDelivery": false,
+        "sendPhoto": true,
+        "sendTimelapse": true
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": false,
+        "sendPhoto": true,
+        "sendTimelapse": false
+      },
+      "expected": {
+        "enableQrDelivery": false,
+        "sendPhoto": true,
+        "sendTimelapse": false
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": false,
+        "sendPhoto": false,
+        "sendTimelapse": true
+      },
+      "expected": {
+        "enableQrDelivery": false,
+        "sendPhoto": false,
+        "sendTimelapse": true
+      }
+    },
+    {
+      "kind": "normalize",
+      "input": {
+        "enableQrDelivery": false,
+        "sendPhoto": false,
+        "sendTimelapse": false
+      },
+      "expected": {
+        "enableQrDelivery": false,
+        "sendPhoto": false,
+        "sendTimelapse": false
+      }
+    },
+    {
+      "kind": "reEnable",
+      "input": {},
+      "expected": {
+        "sendPhoto": true,
+        "sendTimelapse": true
+      }
+    }
+  ]
+}

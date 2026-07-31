@@ -1,0 +1,400 @@
+{
+  "name": "scale-slots",
+  "spec": "docs/analysis/14 §4.2 (scaleSlots) · 04 §9",
+  "note": "cx는 부동소수(floor 금지). newX = roundHalfToEven(cx - newW/2). 결과는 편집기 clampToFrame 적용 후.",
+  "cases": [
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 60,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 1,
+            "x": 615,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 2,
+            "x": 60,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 3,
+            "x": 615,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          }
+        ],
+        "factor": 1,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 1,
+          "x": 615,
+          "y": 80,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 2,
+          "x": 60,
+          "y": 820,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 3,
+          "x": 615,
+          "y": 820,
+          "width": 525,
+          "height": 700
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 60,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 1,
+            "x": 615,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 2,
+            "x": 60,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 3,
+            "x": 615,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          }
+        ],
+        "factor": 0.7,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 138,
+          "y": 185,
+          "width": 368,
+          "height": 490
+        },
+        {
+          "index": 1,
+          "x": 694,
+          "y": 185,
+          "width": 368,
+          "height": 490
+        },
+        {
+          "index": 2,
+          "x": 138,
+          "y": 925,
+          "width": 368,
+          "height": 490
+        },
+        {
+          "index": 3,
+          "x": 694,
+          "y": 925,
+          "width": 368,
+          "height": 490
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 60,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 1,
+            "x": 615,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 2,
+            "x": 60,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 3,
+            "x": 615,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          }
+        ],
+        "factor": 1.3,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 682,
+          "height": 910
+        },
+        {
+          "index": 1,
+          "x": 518,
+          "y": 0,
+          "width": 682,
+          "height": 910
+        },
+        {
+          "index": 2,
+          "x": 0,
+          "y": 690,
+          "width": 682,
+          "height": 910
+        },
+        {
+          "index": 3,
+          "x": 518,
+          "y": 690,
+          "width": 682,
+          "height": 910
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 60,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 1,
+            "x": 615,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 2,
+            "x": 60,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 3,
+            "x": 615,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          }
+        ],
+        "factor": 0.85,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 100,
+          "y": 132,
+          "width": 446,
+          "height": 595
+        },
+        {
+          "index": 1,
+          "x": 654,
+          "y": 132,
+          "width": 446,
+          "height": 595
+        },
+        {
+          "index": 2,
+          "x": 100,
+          "y": 872,
+          "width": 446,
+          "height": 595
+        },
+        {
+          "index": 3,
+          "x": 654,
+          "y": 872,
+          "width": 446,
+          "height": 595
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 199,
+            "y": 199,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "factor": 1.05,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 196,
+          "y": 196,
+          "width": 105,
+          "height": 105
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 300,
+            "y": 300,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "factor": 1.505,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 275,
+          "y": 275,
+          "width": 150,
+          "height": 150
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "factor": 1.5,
+        "frameW": 120,
+        "frameH": 120
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 120,
+          "height": 120
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 1100,
+            "y": 1500,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "factor": 1.3,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 1070,
+          "y": 1470,
+          "width": 130,
+          "height": 130
+        }
+      ]
+    },
+    {
+      "input": {
+        "baseSlots": [
+          {
+            "index": 0,
+            "x": 10,
+            "y": 10,
+            "width": 2,
+            "height": 2
+          }
+        ],
+        "factor": 0.1,
+        "frameW": 100,
+        "frameH": 100
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 10,
+          "y": 10,
+          "width": 1,
+          "height": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,343 @@
+{
+  "name": "overlap",
+  "spec": "docs/analysis/14 §4.4 (overlaps · hasAnyOverlap · isValid)",
+  "note": "경계 접촉은 겹침이 아니다. isValid = 개수 1~6 AND 전부 경계 내 AND 겹침 없음.",
+  "cases": [
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 100,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "expected": {
+        "overlaps": false
+      }
+    },
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 0,
+          "y": 100,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "expected": {
+        "overlaps": false
+      }
+    },
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 99,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "expected": {
+        "overlaps": true
+      }
+    },
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 50,
+          "y": 50,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "expected": {
+        "overlaps": true
+      }
+    },
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 200,
+          "y": 200,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "expected": {
+        "overlaps": false
+      }
+    },
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 10,
+          "y": 10,
+          "width": 10,
+          "height": 10
+        }
+      },
+      "expected": {
+        "overlaps": true
+      }
+    },
+    {
+      "kind": "pair",
+      "input": {
+        "a": {
+          "index": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        },
+        "b": {
+          "index": 1,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "expected": {
+        "overlaps": true
+      }
+    },
+    {
+      "kind": "layout",
+      "input": {
+        "slots": [
+          {
+            "index": 0,
+            "x": 60,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 1,
+            "x": 615,
+            "y": 80,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 2,
+            "x": 60,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          },
+          {
+            "index": 3,
+            "x": 615,
+            "y": 820,
+            "width": 525,
+            "height": 700
+          }
+        ],
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "hasAnyOverlap": false,
+        "isValid": true
+      }
+    },
+    {
+      "kind": "layout",
+      "input": {
+        "slots": [
+          {
+            "index": 0,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 1,
+            "x": 99,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "hasAnyOverlap": true,
+        "isValid": false
+      }
+    },
+    {
+      "kind": "layout",
+      "input": {
+        "slots": [],
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "hasAnyOverlap": false,
+        "isValid": false
+      }
+    },
+    {
+      "kind": "layout",
+      "input": {
+        "slots": [
+          {
+            "index": 0,
+            "x": -1,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "hasAnyOverlap": false,
+        "isValid": false
+      }
+    },
+    {
+      "kind": "layout",
+      "input": {
+        "slots": [
+          {
+            "index": 0,
+            "x": 1150,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "hasAnyOverlap": false,
+        "isValid": false
+      }
+    },
+    {
+      "kind": "layout",
+      "input": {
+        "slots": [
+          {
+            "index": 0,
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 1,
+            "x": 110,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 2,
+            "x": 220,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 3,
+            "x": 330,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 4,
+            "x": 440,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 5,
+            "x": 550,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          },
+          {
+            "index": 6,
+            "x": 660,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        ],
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "hasAnyOverlap": false,
+        "isValid": false
+      }
+    }
+  ]
+}

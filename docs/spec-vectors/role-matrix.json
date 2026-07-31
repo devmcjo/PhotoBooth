@@ -1,0 +1,364 @@
+{
+  "name": "role-matrix",
+  "spec": "docs/analysis/60 §1 · §1.4 — 서버 setRole 매트릭스와 1:1",
+  "note": "assignableRoles 순서는 위계 오름차순 고정. canResetPin만 '엄격히 낮은 위계'.",
+  "cases": [
+    {
+      "input": {
+        "actor": "temp_user",
+        "current": "temp_user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "temp_user",
+        "current": "user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "temp_user",
+        "current": "advanced_user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "temp_user",
+        "current": "manager"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "temp_user",
+        "current": "admin"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "user",
+        "current": "temp_user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "user",
+        "current": "user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "user",
+        "current": "advanced_user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "user",
+        "current": "manager"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "user",
+        "current": "admin"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "advanced_user",
+        "current": "temp_user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "advanced_user",
+        "current": "user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "advanced_user",
+        "current": "advanced_user"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "advanced_user",
+        "current": "manager"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "advanced_user",
+        "current": "admin"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "manager",
+        "current": "temp_user"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "manager",
+        "current": "user"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "manager",
+        "current": "advanced_user"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "manager",
+        "current": "manager"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "manager",
+        "current": "admin"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": false,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "actor": "admin",
+        "current": "temp_user"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user",
+          "manager"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "admin",
+        "current": "user"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user",
+          "manager"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "admin",
+        "current": "advanced_user"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user",
+          "manager"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "admin",
+        "current": "manager"
+      },
+      "expected": {
+        "assignableRoles": [
+          "temp_user",
+          "user",
+          "advanced_user",
+          "manager"
+        ],
+        "canManage": true,
+        "canResetPin": true
+      }
+    },
+    {
+      "input": {
+        "actor": "admin",
+        "current": "admin"
+      },
+      "expected": {
+        "assignableRoles": [],
+        "canManage": true,
+        "canResetPin": false
+      }
+    },
+    {
+      "input": {
+        "role": "temp_user"
+      },
+      "expected": {
+        "isPower": false,
+        "canWriteFrames": false,
+        "hierarchyRank": 0
+      }
+    },
+    {
+      "input": {
+        "role": "user"
+      },
+      "expected": {
+        "isPower": false,
+        "canWriteFrames": false,
+        "hierarchyRank": 1
+      }
+    },
+    {
+      "input": {
+        "role": "advanced_user"
+      },
+      "expected": {
+        "isPower": false,
+        "canWriteFrames": true,
+        "hierarchyRank": 2
+      }
+    },
+    {
+      "input": {
+        "role": "manager"
+      },
+      "expected": {
+        "isPower": true,
+        "canWriteFrames": true,
+        "hierarchyRank": 3
+      }
+    },
+    {
+      "input": {
+        "role": "admin"
+      },
+      "expected": {
+        "isPower": true,
+        "canWriteFrames": true,
+        "hierarchyRank": 4
+      }
+    }
+  ]
+}

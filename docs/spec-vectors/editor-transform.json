@@ -1,0 +1,251 @@
+{
+  "name": "editor-transform",
+  "spec": "docs/analysis/14 §4.5 (EditorTransform)",
+  "note": "scale·origin은 부동소수 그대로(floor 금지). 왕복(frame→canvas→frame)이 원값으로 돌아와야 한다.",
+  "cases": [
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0.375,
+        "originX": 175,
+        "originY": 0,
+        "displayWidth": 450,
+        "displayHeight": 600
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 600,
+        "canvasH": 800,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0.5,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 600,
+        "displayHeight": 800
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 1200,
+        "canvasH": 1600,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 1,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 1200,
+        "displayHeight": 1600
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 2400,
+        "canvasH": 3200,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 2,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 2400,
+        "displayHeight": 3200
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 1000,
+        "canvasH": 1000,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0.625,
+        "originX": 125,
+        "originY": 0,
+        "displayWidth": 750,
+        "displayHeight": 1000
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 900,
+        "canvasH": 400,
+        "frameW": 400,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0.25,
+        "originX": 400,
+        "originY": 0,
+        "displayWidth": 100,
+        "displayHeight": 400
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 0,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 0,
+        "displayHeight": 0
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 0,
+        "frameW": 1200,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 0,
+        "displayHeight": 0
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 0,
+        "frameH": 1600
+      },
+      "expected": {
+        "scale": 0,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 0,
+        "displayHeight": 0
+      }
+    },
+    {
+      "kind": "compute",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 0
+      },
+      "expected": {
+        "scale": 0,
+        "originX": 0,
+        "originY": 0,
+        "displayWidth": 0,
+        "displayHeight": 0
+      }
+    },
+    {
+      "kind": "roundTrip",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 1600,
+        "fx": 0,
+        "fy": 0
+      },
+      "expected": {
+        "canvas": {
+          "x": 175,
+          "y": 0
+        },
+        "frame": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "kind": "roundTrip",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 1600,
+        "fx": 600,
+        "fy": 800
+      },
+      "expected": {
+        "canvas": {
+          "x": 400,
+          "y": 300
+        },
+        "frame": {
+          "x": 600,
+          "y": 800
+        }
+      }
+    },
+    {
+      "kind": "roundTrip",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 1600,
+        "fx": 1200,
+        "fy": 1600
+      },
+      "expected": {
+        "canvas": {
+          "x": 625,
+          "y": 600
+        },
+        "frame": {
+          "x": 1200,
+          "y": 1600
+        }
+      }
+    },
+    {
+      "kind": "roundTrip",
+      "input": {
+        "canvasW": 800,
+        "canvasH": 600,
+        "frameW": 1200,
+        "frameH": 1600,
+        "fx": 137,
+        "fy": 911
+      },
+      "expected": {
+        "canvas": {
+          "x": 226.375,
+          "y": 341.625
+        },
+        "frame": {
+          "x": 137,
+          "y": 911
+        }
+      }
+    }
+  ]
+}

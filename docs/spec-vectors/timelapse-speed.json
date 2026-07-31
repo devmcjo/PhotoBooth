@@ -1,0 +1,119 @@
+{
+  "name": "timelapse-speed",
+  "spec": "docs/analysis/14 §7.2 (ComputeSpeedFactor)",
+  "note": "세션이 목표 상한(15초) 이하면 1.0(원속). 그보다 길면 sessionSeconds / 12.5, 최소 1.",
+  "cases": [
+    {
+      "input": {
+        "sessionSeconds": 0
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 1
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 5
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 9.9
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 10
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 12.5
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 15
+      },
+      "expected": {
+        "factor": 1
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 15.0001
+      },
+      "expected": {
+        "factor": 1.200008
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 20
+      },
+      "expected": {
+        "factor": 1.6
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 25
+      },
+      "expected": {
+        "factor": 2
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 38
+      },
+      "expected": {
+        "factor": 3.04
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 50
+      },
+      "expected": {
+        "factor": 4
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 125
+      },
+      "expected": {
+        "factor": 10
+      }
+    },
+    {
+      "input": {
+        "sessionSeconds": 1000
+      },
+      "expected": {
+        "factor": 80
+      }
+    }
+  ]
+}

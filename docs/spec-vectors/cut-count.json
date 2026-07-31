@@ -1,0 +1,507 @@
+{
+  "name": "cut-count",
+  "spec": "docs/analysis/41 §2.7 · 13 §4.2·§4.3 (CutCountPolicy, it17)",
+  "note": "자동(0) = max(6, 슬롯+2), 고정 = max(설정, 슬롯). 슬롯 음수는 0으로 취급.",
+  "cases": [
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 0
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 1
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 2
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 3
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 4
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 5
+      },
+      "expected": {
+        "resolved": 7,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 6
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 8
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": 10
+      },
+      "expected": {
+        "resolved": 12,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 0,
+        "slotCount": -3
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": true
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 0
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 1
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 2
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 3
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 4
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 5
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 6
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 8
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": 10
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 6,
+        "slotCount": -3
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 0
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 1
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 2
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 3
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 4
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 5
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 6
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 8
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": 10
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 8,
+        "slotCount": -3
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 0
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 1
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 2
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 3
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 4
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 5
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 6
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 8
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": 10
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": 10,
+        "slotCount": -3
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 0
+      },
+      "expected": {
+        "resolved": 0,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 1
+      },
+      "expected": {
+        "resolved": 1,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 2
+      },
+      "expected": {
+        "resolved": 2,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 3
+      },
+      "expected": {
+        "resolved": 3,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 4
+      },
+      "expected": {
+        "resolved": 4,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 5
+      },
+      "expected": {
+        "resolved": 5,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 6
+      },
+      "expected": {
+        "resolved": 6,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 8
+      },
+      "expected": {
+        "resolved": 8,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": 10
+      },
+      "expected": {
+        "resolved": 10,
+        "isAuto": false
+      }
+    },
+    {
+      "input": {
+        "configured": -1,
+        "slotCount": -3
+      },
+      "expected": {
+        "resolved": 0,
+        "isAuto": false
+      }
+    }
+  ]
+}
