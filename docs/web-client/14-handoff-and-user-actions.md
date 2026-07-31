@@ -81,11 +81,15 @@
 
 ### 3.3 절차
 
+> ⚠️ **`web/` 안에서 실행한다.** 프로젝트를 지정하는 `.firebaserc`가 거기에만 있어서,
+> 다른 폴더(예: `webclient/`)에서 실행하면 *"No currently active project"* 로 실패한다.
+> 아래 명령은 `--project`를 명시해 두었으므로 위치와 무관하게 동작한다(`firebase use --add`는 불필요).
+
 ```bash
 cd web
 
 # 1) 시크릿 등록(프롬프트에 client_secret 입력). 당장 SSO를 안 쓸 거면 placeholder라도 넣는다.
-npx firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET_WEB
+npx firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET_WEB --project mcphoto-955fb
 
 # 2) env 등록 — functions/.env (gitignore 대상, 커밋 금지)
 #    OAUTH_REDIRECT_ALLOWLIST 는 A1에서 등록한 URI와 **완전히 같은 문자열**이어야 한다.
@@ -125,7 +129,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 # 2) CLIENT_API_KEYS 에 CSV로 **추가**한다
 cd web
-npx firebase functions:secrets:set CLIENT_API_KEYS
+npx firebase functions:secrets:set CLIENT_API_KEYS --project mcphoto-955fb
 #    → 프롬프트에 "<기존 Windows 키>,<새 웹 키>" 를 함께 입력한다
 
 # 3) 재배포
