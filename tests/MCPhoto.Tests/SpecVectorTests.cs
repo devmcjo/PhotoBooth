@@ -77,6 +77,10 @@ public class SpecVectorTests
         _ = label;
     }
 
+    /// <summary>벡터의 국면 문자열 → enum. C# enum 이름과 **정확히 같은 철자**여야 한다(대소문자 구분).</summary>
+    private static FrameLoadPhase ReadPhase(JsonElement e)
+        => Enum.Parse<FrameLoadPhase>(e.GetString()!, ignoreCase: false);
+
     private static void AssertRect(JsonElement expected, CropRect actual, string label)
     {
         Assert.Equal(expected.GetProperty("x").GetInt32(), actual.X);
@@ -93,7 +97,7 @@ public class SpecVectorTests
         {
             "center-crop", "auto-arrange", "scale-slots", "clamp-slot", "overlap",
             "editor-transform", "role-matrix", "copy-name", "session-id", "timelapse-speed",
-            "settings-clamp", "cut-count", "qr-normalize", "slots-file"
+            "settings-clamp", "cut-count", "qr-normalize", "slots-file", "frame-load-policy"
         };
         foreach (var name in expected)
             Assert.True(File.Exists(Path.Combine(VectorDir, name + ".json")), $"누락: {name}.json");
@@ -426,6 +430,87 @@ public class SpecVectorTests
             Assert.Equal(expected.GetProperty("resolved").GetInt32(), CutCountPolicy.Resolve(configured, slotCount));
             Assert.Equal(expected.GetProperty("isAuto").GetBoolean(), CutCountPolicy.IsAuto(configured));
         }
+    }
+
+    /// <summary>
+    /// it20 프레임 로딩 정책 교차 검증. 이 벡터는 **웹 구현이 아니라 이 프로젝트의 판정**에서 나왔다
+    /// (<see cref="FrameLoadPolicyTests"/> 13건을 옮긴 것). 그러므로 이 테스트가 통과한다는 것은
+    /// "웹이 참조하는 기대값이 Windows 구현과 일치한다"는 증명이다 — 웹 쪽 vectors.test.ts가 같은 파일을 읽는다.
+    /// 값 하나를 틀리면 **양쪽이 동시에 실패**해야 한다(10 §3.3).
+    /// </summary>
+    [Fact]
+    public void FrameLoadPolicy_Matches_Vector()
+    {
+        int classify = 0, finalize = 0, deadline = 0, notice = 0, constants = 0;
+
+        foreach (var c in LoadCases("frame-load-policy").EnumerateArray())
+        {
+            var i = c.GetProperty("input");
+            var expected = c.GetProperty("expected");
+
+            switch (c.GetProperty("kind").GetString())
+            {
+                case "classify":
+                    Assert.Equal(
+                        ReadPhase(expected.GetProperty("phase")),
+                        FrameLoadPolicy.Classify(
+                            i.GetProperty("frameCount").GetInt32(),
+                            i.GetProperty("waitInterrupted").GetBoolean()));
+                    classify++;
+                    break;
+
+                case "finalize":
+                    Assert.Equal(
+                        ReadPhase(expected.GetProperty("phase")),
+                        FrameLoadPolicy.Finalize(
+                            ReadPhase(i.GetProperty("current")),
+                            i.GetProperty("frameCount").GetInt32(),
+                            i.GetProperty("waitInterrupted").GetBoolean(),
+                            i.GetProperty("quiet").GetBoolean()));
+                    finalize++;
+                    break;
+
+                case "nextDeadline":
+                    Assert.Equal(
+                        expected.GetProperty("nextDeadlineMs").GetInt64(),
+                        (long)FrameLoadPolicy
+                            .NextDeadline(TimeSpan.FromMilliseconds(i.GetProperty("elapsedMs").GetInt64()))
+                            .TotalMilliseconds);
+                    deadline++;
+                    break;
+
+                case "notice":
+                    Assert.Equal(
+                        expected.GetProperty("notice").GetString(),
+                        FrameLoadPolicy.NoticeFor(ReadPhase(i.GetProperty("phase"))));
+                    notice++;
+                    break;
+
+                case "constants":
+                    // 상한 상수는 `const`라 xUnit2000이 'expected' 자리에 오기를 요구한다. 진실원이 이쪽이므로
+                    // (벡터가 이 값에서 나왔다) 순서를 그대로 두는 것이 실패 메시지도 정확하다 — 틀린 쪽이 actual로 찍힌다.
+                    Assert.Equal(FrameLoadPolicy.NoProgressTimeoutSeconds,
+                        expected.GetProperty("noProgressTimeoutSeconds").GetInt32());
+                    Assert.Equal(FrameLoadPolicy.MaxTotalWaitSeconds,
+                        expected.GetProperty("maxTotalWaitSeconds").GetInt32());
+                    Assert.Equal(FrameLoadPolicy.IdleWarningReferenceSeconds,
+                        expected.GetProperty("idleWarningReferenceSeconds").GetInt32());
+                    // enum 0번 값 = Loading (ViewModel 초기 상태 안전 보장)
+                    Assert.Equal(default(FrameLoadPhase), ReadPhase(expected.GetProperty("defaultPhase")));
+                    constants++;
+                    break;
+
+                default:
+                    throw new InvalidOperationException("알 수 없는 kind");
+            }
+        }
+
+        // 케이스가 통째로 빠져도 "전부 통과"로 보이므로 종류별 개수를 고정한다.
+        Assert.Equal(7, classify);
+        Assert.Equal(32, finalize);
+        Assert.Equal(8, deadline);
+        Assert.Equal(4, notice);
+        Assert.Equal(1, constants);
     }
 
     [Fact]

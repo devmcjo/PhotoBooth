@@ -48,6 +48,7 @@ export const EXPECTED_VECTOR_NAMES = [
   "copy-name",
   "cut-count",
   "editor-transform",
+  "frame-load-policy",
   "overlap",
   "qr-normalize",
   "role-matrix",

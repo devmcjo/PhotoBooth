@@ -13,7 +13,13 @@ import {
   setToken,
   uninstallTokenLifecycle,
 } from "@shell/authStore";
-import { createIdleWatchdog, setIdleWatchdogForTests } from "@shell/idleWatchdog";
+import { createIdleWatchdog, IDLE_TIMEOUT_MS, setIdleWatchdogForTests } from "@shell/idleWatchdog";
+import {
+  IDLE_WARNING_REFERENCE_SECONDS,
+  MAX_TOTAL_WAIT_MS,
+  MAX_TOTAL_WAIT_SECONDS,
+  NO_PROGRESS_TIMEOUT_SECONDS,
+} from "@domain/frames/frameLoadPolicy";
 import { installGlobalErrorHandler } from "@shell/globalErrorHandler";
 import { classifyRoute, needsUnloadGuard } from "@shell/router";
 import {
@@ -472,6 +478,32 @@ describe("idleWatchdog — 실경과 기반(WM3)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * 프레임 준비 대기 상한 × 유휴 경고 (02 §6.2 · it20)
+ *
+ * 문서에만 있으면 어느 한쪽 상수를 고칠 때 조용히 깨진다 — 15 §3.4 관례대로 테스트가 막는다.
+ * 깨졌을 때의 증상: 손님이 대기 오버레이를 보는 중에 "자리를 비우셨나요?" 팝업이 겹친다.
+ */
+describe("프레임 대기 상한 불변식(02 §6.2)", () => {
+  it("총 대기 상한이 유휴 무동작 판정보다 짧다", () => {
+    expect(MAX_TOTAL_WAIT_SECONDS * 1000).toBeLessThan(IDLE_TIMEOUT_MS);
+  });
+
+  it("무진행 상한이 총 상한보다 짧다 — 2단 상한이 의미를 가지려면", () => {
+    expect(NO_PROGRESS_TIMEOUT_SECONDS).toBeLessThan(MAX_TOTAL_WAIT_SECONDS);
+  });
+
+  it("도메인이 들고 있는 유휴 참조 상수가 셸의 실제 값과 같다", () => {
+    // 도메인은 셸을 import할 수 없어 값을 **복사**해 둔다(Windows도 동일한 사본 구조).
+    // 사본이 낡으면 위 두 검사가 거짓 안심을 준다 → 여기서 동기화까지 고정한다.
+    expect(IDLE_WARNING_REFERENCE_SECONDS * 1000).toBe(IDLE_TIMEOUT_MS);
+  });
+
+  it("ms 파생 상수가 초 상수와 일치한다", () => {
+    expect(MAX_TOTAL_WAIT_MS).toBe(MAX_TOTAL_WAIT_SECONDS * 1000);
   });
 });
 

@@ -39,6 +39,18 @@ export function dedupeByName(frames: readonly FrameTemplate[]): FrameTemplate[] 
   return result;
 }
 
+/**
+ * 목록에 올릴 수 있는 프레임인지 — **이미지 URL이 실제로 있는가**만 본다.
+ *
+ * 웹 전용 판정이다: 이미지는 object URL·OPFS 캐시·서버 URL 중 하나로 **늦게** 채워지고,
+ * 생성·다운로드가 실패하면 어댑터는 예외 대신 **빈 문자열**을 돌려준다(어댑터 규약 — 15 §2).
+ * 빈 URL 프레임을 목록에 올리면 손님이 **6컷을 다 찍은 뒤 `Result`에서야** 합성 실패를 만난다.
+ * 여기서 걸러 "프레임 0개 = `Failed`"(03 §4.1)로 **선택 화면에서** 끝낸다.
+ */
+export function hasUsableImage(frame: FrameTemplate): boolean {
+  return frame.imageUrl.trim().length > 0;
+}
+
 export interface CatalogInput {
   /** ① OPFS에 캐시된 공용 프레임. */
   readonly localCache: readonly FrameTemplate[];

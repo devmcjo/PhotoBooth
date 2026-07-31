@@ -9,6 +9,12 @@ import {
   beginFullRetake,
 } from "@domain/capture/captureSession";
 import { createFallbackFrame, ensureFallbackImageUrl } from "@adapters/frames/fallbackFrame";
+import { hasUsableImage } from "@domain/frames/frameCatalogPolicy";
+import {
+  classifyFrameLoad,
+  frameLoadNotice,
+  type FrameLoadPhase,
+} from "@domain/frames/frameLoadPolicy";
 import { getCameraService } from "@adapters/camera/cameraService";
 import { requestWakeLock } from "@adapters/platform/wakeLock";
 import { unlockAudio } from "@adapters/platform/shutterSound";
@@ -63,22 +69,34 @@ export function FrameSelectView() {
   const configuredCutCount = useSettingsStore((s) => s.values.CutCount);
   const [frames, setFrames] = useState<FrameTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** 로딩 1회분이 끝났는지. Step 14가 진짜 국면 상태(FrameLoadPhase)로 대체한다. */
+  const [loaded, setLoaded] = useState(false);
+  /** [다시 시도] 카운터. 증가하면 effect가 다시 돈다(어댑터는 실패를 캐시하지 않는다). */
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setLoaded(false);
     void ensureFallbackImageUrl().then((url) => {
       if (cancelled) return;
-      const frame = createFallbackFrame(url, new Date().toISOString());
-      setFrames([frame]);
-      // 첫 항목 자동 선택(03 §4).
-      setSelectedId(frame.id);
+      // 이미지 생성 실패 시 어댑터는 예외가 아니라 **빈 URL**을 준다. 그 프레임을 목록에 올리면
+      // 6컷을 다 찍은 뒤 Result에서야 합성이 실패한다 → 여기서 걸러 Failed로 끝낸다(03 §4.1).
+      const candidate = createFallbackFrame(url, new Date().toISOString());
+      const usable = hasUsableImage(candidate) ? [candidate] : [];
+      setFrames(usable);
+      // 첫 항목 자동 선택(03 §4). 목록이 비면 선택도 없다 → [다음] 비활성.
+      setSelectedId(usable[0]?.id ?? null);
+      setLoaded(true);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   const selected = frames.find((f) => f.id === selectedId) ?? null;
+  // 로딩이 끝나기 전에는 판정하지 않는다. 대기 오버레이·진행 문구는 Step 14 범위다.
+  const phase: FrameLoadPhase = loaded ? classifyFrameLoad(frames.length, false) : "Loading";
+  const notice = frameLoadNotice(phase);
 
   return (
     <main className={styles.screen}>
@@ -103,10 +121,19 @@ export function FrameSelectView() {
         ))}
       </div>
 
+      {notice.length > 0 && (
+        <p className={styles.note} role="alert">
+          {notice}
+        </p>
+      )}
+
       <div className={styles.actions}>
         <Button onClick={() => void shellStore.getState().returnHome("프레임 선택 취소")}>
           {STRINGS.common.cancel}
         </Button>
+        {phase === "Failed" && (
+          <Button onClick={() => setReloadKey((n) => n + 1)}>{STRINGS.common.retry}</Button>
+        )}
         <Button
           variant="primary"
           disabled={selected === null}

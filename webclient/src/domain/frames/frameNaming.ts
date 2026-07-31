@@ -25,6 +25,25 @@ const COPY_SUFFIX_PATTERN = /^(.*?)\s*사본(?:\s+(\d{1,2}))?$/;
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/;
 
 /**
+ * 로컬 파일명으로 쓸 수 있는 이름인지 — **빈 값·공백만이 아니고 파일시스템 금지문자가 없다**.
+ * Windows `FrameNaming.IsFileNameSafe`(= `LocalFrameStore.EnsureFileNameSafe`)와 **동일 판정**이다.
+ *
+ * ⚠️ **길이를 보지 않는다.** `validateFrameName`은 100자 제한을 함께 보므로 **축이 다르다**
+ *    (01 §2 매핑표 주석 · 03 §11.3 ⑤⑥). 저장 전 선검증에 길이 검사가 섞이면, 파워 신규 생성이
+ *    "서버 insert는 성공했는데 로컬 저장은 이름 때문에 실패"하는 반쪽 상태를 못 막는 대신
+ *    엉뚱한 이유로 정상 이름을 거부한다.
+ *
+ * ⚠️ 검사 대상은 **원문**이다(trim 결과가 아니다). 실제 파일명이 되는 문자열이 그대로 이 값이기 때문이며,
+ *    Windows도 `IndexOfAny`를 원문에 건다. 그래서 `"이름\n"`은 여기서 **거부**되지만
+ *    `validateFrameName`은 trim 후 판정하므로 **통과**한다 — 의도된 축 차이다.
+ */
+export function isFileNameSafe(name: string | null | undefined): boolean {
+  if (name === null || name === undefined) return false;
+  if (name.trim().length === 0) return false;
+  return !INVALID_FILENAME_CHARS.test(name);
+}
+
+/**
  * `"{X} 사본"` / `"{X} 사본 N"` 접미를 제거해 원형 이름을 얻는다(접미가 없으면 원문 그대로).
  * 접미를 떼면 이름이 비게 되는 경우(예: `"사본"`)도 원문을 그대로 반환한다 — 빈 이름을 만들지 않는다.
  */
@@ -84,12 +103,18 @@ export interface FrameNameValidation {
  *    아니다. 다만 **공용** 스코프에서는 파일명 규약과 충돌하므로 `underscoreWarning`으로 안내한다
  *    (Windows `FrameEditorViewModel`과 동일한 비차단 경고).
  *    **서버에 등록하는 경로는 `validateFrameNameForServer`를 쓴다** — 서버가 400으로 거부한다.
+ *
+ * ⚠️ 저장 **직전** 선검증은 길이를 보지 않는 `isFileNameSafe`를 쓴다. 이름 판정은 **세 축**이다:
+ *    서버 등록 = `validateFrameNameForServer` / 로컬 저장 = `validateFrameName` + `underscoreWarning` /
+ *    저장 전 선검증 = `isFileNameSafe`.
  */
 export function validateFrameName(name: string): FrameNameValidation {
   const trimmed = name.trim();
   if (trimmed.length === 0) return { ok: false, reason: "empty" };
   if (trimmed.length > MAX_FRAME_NAME_LENGTH) return { ok: false, reason: "too-long" };
-  if (INVALID_FILENAME_CHARS.test(trimmed)) return { ok: false, reason: "invalid-chars" };
+  // 금지문자 판정은 `isFileNameSafe`가 유일한 원본이다(축 분리 후에도 두 곳에서 정규식을 쓰지 않는다).
+  // **`trimmed`를 넘기는 것이 계약**이다 — 원문을 넘기면 `"이름\n"`의 판정이 바뀌어 기존 결과가 회귀한다.
+  if (!isFileNameSafe(trimmed)) return { ok: false, reason: "invalid-chars" };
   return { ok: true };
 }
 

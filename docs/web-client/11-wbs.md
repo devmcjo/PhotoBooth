@@ -348,7 +348,20 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [관측] fallback 이미지 생성을 강제 실패시키면 `FrameSelect`에서 안내가 뜨고 **[다음]이 활성화되지 않는다**.
   - [non-goal] 대기 오버레이·카탈로그 로더·편집기 화면은 **만들지 않는다**(Step 14·15). 도메인 순수성 검사를 통과해야 한다.
 - **롤백**: 신규 도메인 2파일·벡터 1파일 삭제, `frameNaming`·`FlowViews` revert.
-- [ ] 완료
+- [x] **완료 (2026-07-31)**
+  - **도메인 2파일 신설**: `frameLoadPolicy.ts`(4국면 + 상한 3종 + `nextFrameLoadDeadlineMs`·`classifyFrameLoad`·`finalizeFrameLoad`·`frameLoadNotice`), `frameCatalogProgress.ts`(단계 4값 + `catalogProgressLabel` + 시작 문구). 둘 다 `src/domain/index.ts`에 export 추가, **순수성 검사 자동 통과**(glob 수집 — purity 65 → 69).
+  - **`isFileNameSafe` 축 분리**: 길이를 보지 않는 별도 순수 함수로 추출하고 `validateFrameName`이 **`trimmed`를 넘겨** 호출하도록 재작성. 기존 `frameNaming` 테스트 **무수정 통과**로 판정 불변을 증명했다(회귀 감시자는 기존 테스트다).
+  - **공유 벡터 `docs/spec-vectors/frame-load-policy.json` 52케이스**(classify 7 / finalize 32 / nextDeadline 8 / notice 4 / constants 1). 값은 `FrameLoadPolicyTests.cs` 13건에서 **손으로 옮겼다** — `genVectors.ts`를 돌리지 않았다(웹 구현으로 덮어쓰면 교차 검증 무력화 — 15 §3.3). 벡터 파일 14 → **15**(`loadVector.ts`·`SpecVectorTests.cs` 양쪽 목록 갱신).
+  - **검증 수치**: 웹 vitest **492 → 530 전부 통과**(frames +27, vectors +3, shell +4, purity +4), Windows **937 → 938 전부 통과**(`SpecVectorTests.FrameLoadPolicy_Matches_Vector` 1건 추가, `SpecVectorTests` 자체는 16 → 17). `npx tsc --noEmit` 0, `npm run build` 성공, `npm run coverage` 임계 통과(lines 98.47 / branches 97.29).
+  - **트리거 실증**: `nextDeadline`의 `45000 → 15000`을 `16000`으로 훼손하니 **웹·Windows가 동시에 실패**했고(웹 `expected 15000 to be 16000`, Windows `SpecVectorTests.cs:474 Values differ`), 원복 후 양쪽 전부 통과했다. 교차 고정 장치가 실제로 작동한다.
+  - `finalize`가 **32조합 전수에서 `Loading`을 반환하지 않음**을 웹 테스트와 벡터 양쪽에 박았다(벡터 자체가 불변식을 위반하지 못하도록 `expected.phase`에 `Loading`이 없음을 검사하는 테스트도 추가).
+  - 유휴 상한 불변식 4건을 `shell.test.ts`에 고정(총 60초 < `IDLE_TIMEOUT_MS` 120초, 무진행 < 총, **도메인 사본 = 셸 실제값 동기화**, ms 파생 = 초 × 1000). 사본 동기화 검사는 Core→App 참조가 불가능한 Windows에는 없는 **웹 전용 안전망**이다.
+  - ⚠️ **설계 이탈 ①(함수명 한정형)**: WBS 본문 약칭 `classify`/`finalize`/`nextDeadline`/`noticeFor` → `classifyFrameLoad`/`finalizeFrameLoad`/`nextFrameLoadDeadlineMs`/`frameLoadNotice`. 이유: `src/domain/index.ts`가 **평면 `export *` 배럴**이라 일반명은 Step 14·15에서 모호 재수출을 만든다(실제로 `captureSession.slotCount`가 `FlowViews`에서 `slotCountOf` 별칭을 강제했다). 저장소 관례도 한정형이다.
+  - ⚠️ **설계 이탈 ②(벡터 kind 2종 추가)**: 10 §3.2 표에 없는 `notice`·`constants`를 넣었다. 이유: 안내 문구와 상한 숫자도 **양쪽에 중복 존재하는 규격**이라 벡터에 없으면 한쪽만 고쳐도 아무 테스트가 실패하지 않는다. kind별 개수를 양쪽이 단언하므로 케이스가 통째로 빠지는 사고도 잡힌다.
+  - ⚠️ **설계 이탈 ③(`hasUsableImage` 추가)**: 대상 파일 목록 밖인 `frameCatalogPolicy.ts`에 판정을 추가했다. 이유: jsdom이 없어(`vitest environment: node`) 뷰 안의 인라인 판정은 테스트가 닿지 못한다 — "순수 코어 + 얇은 래퍼"(15 §3.1)대로 판정만 도메인으로 올려 `frames.test.ts`가 덮게 했다. Step 14 카탈로그 조립에서도 같은 판정이 필요하다.
+  - ⚠️ **설계 이탈 ④(xUnit 인자 순서)**: `SpecVectorTests`의 `constants` 갈래에서 설계 코드 조각대로 쓰면 상한 상수가 `const`라 **xUnit2000 경고 4건**이 새로 생겼다. 진실원이 Windows이므로 상수를 `expected`, 벡터 값을 `actual`로 두어 경고를 없앴다(실패 메시지에 틀린 쪽인 벡터 값이 찍혀 오히려 정확하다). 저장소 경고는 기존 `GoldenImageTests` xUnit1031 1건 그대로다.
+  - **미검증(사용자 액션)**: `FrameSelect`의 fallback 실패 경로(§9 관측 — 안내 문구 노출 · [다음] 비활성 · [다시 시도] 동작)는 **브라우저 1회 수동 관측이 남아 있다**. 이 세션에 브라우저 자동화 수단이 없었고 jsdom·Testing Library가 없어 자동 테스트로 대체할 수 없다. 판정 함수 3종(`hasUsableImage`·`classifyFrameLoad`·`frameLoadNotice`)은 단위 테스트가 덮으며, 배선만 육안 확인이 필요하다. Step 14에서 화면 테스트 체계와 함께 정리한다.
+  - **미구현(의도)**: 대기 오버레이·카탈로그 로더(단일 비행 + 진행 replay)·프레임 편집기 화면은 **Step 14·15 범위**라 만들지 않았다. `catalogProgressLabel`은 아직 호출자가 없다(Step 14가 소비한다).
 
 ---
 

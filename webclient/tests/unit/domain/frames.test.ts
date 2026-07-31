@@ -10,8 +10,26 @@ import {
   buildCatalog,
   dedupeByName,
   hasUnderscoreCacheConflict,
+  hasUsableImage,
   serverFramesToCache,
 } from "@domain/frames/frameCatalogPolicy";
+import {
+  CATALOG_START_LABEL,
+  catalogProgressLabel,
+  FRAME_CATALOG_PHASES,
+  type FrameCatalogProgress,
+} from "@domain/frames/frameCatalogProgress";
+import {
+  classifyFrameLoad,
+  DEFAULT_FRAME_LOAD_PHASE,
+  finalizeFrameLoad,
+  FRAME_LOAD_PHASES,
+  frameLoadNotice,
+  IDLE_WARNING_REFERENCE_SECONDS,
+  MAX_TOTAL_WAIT_SECONDS,
+  NO_PROGRESS_TIMEOUT_SECONDS,
+  nextFrameLoadDeadlineMs,
+} from "@domain/frames/frameLoadPolicy";
 import { canDeleteFrame, canEditFrame, requiresFork } from "@domain/frames/frameEditPolicy";
 import {
   classifyFrameOrigin,
@@ -19,6 +37,7 @@ import {
   isOwnedLocal,
 } from "@domain/frames/frameOrigin";
 import {
+  isFileNameSafe,
   MAX_FRAME_NAME_LENGTH,
   underscoreWarning,
   validateFrameName,
@@ -239,6 +258,46 @@ describe("frameNaming — 이름 검증", () => {
     expect(taken).toHaveLength(99);
     expect(nextCopyName("A", taken, () => "deadbeef")).toBe("A 사본 deadbeef");
   });
+
+  // ── isFileNameSafe: 저장 전 선검증 축(it20 · Windows FrameNaming.IsFileNameSafe) ──
+
+  it("isFileNameSafe는 빈 값·공백만·null·undefined를 거부한다", () => {
+    expect(isFileNameSafe(null)).toBe(false);
+    expect(isFileNameSafe(undefined)).toBe(false);
+    expect(isFileNameSafe("")).toBe(false);
+    expect(isFileNameSafe("   ")).toBe(false);
+  });
+
+  it("isFileNameSafe는 파일시스템 금지문자를 거부한다", () => {
+    for (const bad of ["a/b", "a\\b", "a:b", 'a"b', "a<b", "a>b", "a|b", "a?b", "a*b"]) {
+      expect(isFileNameSafe(bad), bad).toBe(false);
+    }
+  });
+
+  it("isFileNameSafe는 쓸 수 있는 이름을 허용한다", () => {
+    for (const good of ["기본프레임", "내_프레임", "기본프레임 사본 2", "my frame 2024"]) {
+      expect(isFileNameSafe(good), good).toBe(true);
+    }
+  });
+
+  it("isFileNameSafe는 길이를 보지 않는다 — validateFrameName과 축이 다르다", () => {
+    // 저장 전 선검증에 길이 검사가 섞이면 엉뚱한 이유로 정상 이름을 거부한다(01 §2 매핑표 주석).
+    const long = "a".repeat(MAX_FRAME_NAME_LENGTH + 1);
+    expect(isFileNameSafe(long)).toBe(true);
+    expect(validateFrameName(long)).toEqual({ ok: false, reason: "too-long" });
+  });
+
+  it("isFileNameSafe는 원문을 검사한다(trim 전) — validateFrameName과 의도된 축 차이", () => {
+    // 실제 파일명이 되는 문자열이 그대로 이 값이므로 원문을 본다(Windows도 IndexOfAny를 원문에 건다).
+    expect(isFileNameSafe("이름\n")).toBe(false);
+    expect(validateFrameName("이름\n").ok).toBe(true);
+  });
+
+  it("사본 이름은 언제나 저장 가능하다 — 생성한 이름이 선검증에 걸리면 저장이 막힌다", () => {
+    expect(isFileNameSafe(nextCopyName("기본프레임", [], () => "deadbeef"))).toBe(true);
+    const taken = ["A 사본", ...Array.from({ length: 98 }, (_, i) => `A 사본 ${i + 2}`)];
+    expect(isFileNameSafe(nextCopyName("A", taken, () => "deadbeef"))).toBe(true);
+  });
 });
 
 describe("slotsFile — 직렬화 왕복", () => {
@@ -330,5 +389,153 @@ describe("frameCatalogPolicy — 우선순위·dedup", () => {
   it("`_` 이름 공용 프레임은 캐시 충돌 경고 대상이다", () => {
     expect(hasUnderscoreCacheConflict(frame({ name: "내_프레임" }))).toBe(true);
     expect(hasUnderscoreCacheConflict(frame({ name: "내 프레임" }))).toBe(false);
+  });
+
+  it("이미지 URL이 없는 프레임은 목록에 올릴 수 없다", () => {
+    // 어댑터는 이미지 생성 실패를 예외가 아니라 빈 문자열로 알린다 — 여기서 걸러야
+    // 손님이 6컷을 다 찍은 뒤 Result에서 합성 실패를 만나지 않는다.
+    expect(hasUsableImage(frame({ imageUrl: "" }))).toBe(false);
+    expect(hasUsableImage(frame({ imageUrl: "   " }))).toBe(false);
+    expect(hasUsableImage(frame({ imageUrl: "blob:x" }))).toBe(true);
+  });
+});
+
+describe("frameLoadPolicy — 로딩 국면(it20)", () => {
+  it("프레임이 0개거나 음수면 무조건 Failed다", () => {
+    // 빈 목록 + 활성 [다음]을 없애는 것이 이 설계의 목적이다(T-1).
+    expect(classifyFrameLoad(0, false)).toBe("Failed");
+    expect(classifyFrameLoad(0, true)).toBe("Failed");
+    expect(classifyFrameLoad(-1, false)).toBe("Failed");
+  });
+
+  it("대기가 중단됐지만 프레임이 남았으면 Degraded다", () => {
+    expect(classifyFrameLoad(1, true)).toBe("Degraded");
+    expect(classifyFrameLoad(3, true)).toBe("Degraded");
+  });
+
+  it("중단 없이 프레임을 얻으면 Ready다 — 오프라인 조용한 폴백도 이 경로", () => {
+    // 서버 조회 실패는 어댑터에서 삼켜져 waitInterrupted=false로 도달한다(E20 · it10 폴백).
+    expect(classifyFrameLoad(1, false)).toBe("Ready");
+    expect(classifyFrameLoad(3, false)).toBe("Ready");
+  });
+
+  it("소리 내는 계기는 classify 결과를 그대로 채택한다", () => {
+    expect(finalizeFrameLoad("Loading", 2, true, false)).toBe("Degraded");
+    expect(finalizeFrameLoad("Loading", 2, false, false)).toBe("Ready");
+  });
+
+  it("조용한 재스캔은 종전 국면을 유지한다", () => {
+    // 네트워크 안내가 삭제 조작에 끼어들지 않는다.
+    expect(finalizeFrameLoad("Ready", 2, true, true)).toBe("Ready");
+    expect(finalizeFrameLoad("Degraded", 2, false, true)).toBe("Degraded");
+  });
+
+  it("조용한 재스캔이라도 Failed·Loading은 Ready로 닫는다", () => {
+    // Loading 갈래를 빠뜨리면 조용한 재스캔이 대기 오버레이를 영구 고착시킨다.
+    expect(finalizeFrameLoad("Failed", 2, false, true)).toBe("Ready");
+    expect(finalizeFrameLoad("Loading", 2, true, true)).toBe("Ready");
+  });
+
+  it("프레임 0개는 quiet·종전과 무관하게 항상 Failed다", () => {
+    for (const current of FRAME_LOAD_PHASES) {
+      for (const quiet of [false, true]) {
+        expect(finalizeFrameLoad(current, 0, false, quiet), `${current}/${String(quiet)}`).toBe(
+          "Failed",
+        );
+      }
+    }
+  });
+
+  it("어떤 입력에서도 Loading을 반환하지 않는다(32조합 전수)", () => {
+    // 이 불변식이 깨지면 Step 14의 대기 오버레이가 영구 고착된다(Windows T-8과 같은 전수 검사).
+    let combos = 0;
+    for (const current of FRAME_LOAD_PHASES) {
+      for (const quiet of [false, true]) {
+        for (const frameCount of [0, 2]) {
+          for (const interrupted of [false, true]) {
+            const label = `${current}/${String(frameCount)}/${String(interrupted)}/${String(quiet)}`;
+            expect(finalizeFrameLoad(current, frameCount, interrupted, quiet), label).not.toBe(
+              "Loading",
+            );
+            combos++;
+          }
+        }
+      }
+    }
+    expect(combos).toBe(32);
+  });
+
+  it("총 상한이 넉넉하면 무진행 상한을 그대로 쓴다", () => {
+    expect(nextFrameLoadDeadlineMs(0)).toBe(30_000);
+  });
+
+  it("잔량이 무진행 상한보다 짧으면 잔량으로 클램프된다", () => {
+    expect(nextFrameLoadDeadlineMs(45_000)).toBe(15_000);
+    // 경계: 잔량 30000은 `<`가 아니므로 클램프되지 않고, 30001ms 경과부터 잔량이 이긴다.
+    expect(nextFrameLoadDeadlineMs(30_000)).toBe(30_000);
+    expect(nextFrameLoadDeadlineMs(30_001)).toBe(29_999);
+  });
+
+  it("총 상한을 소진하면 0이다 — 음수를 돌려주지 않는다", () => {
+    // Math.min으로 축약하면 여기서 음수가 나온다(즉시 취소가 아니라 무한 대기가 된다).
+    expect(nextFrameLoadDeadlineMs(60_000)).toBe(0);
+    expect(nextFrameLoadDeadlineMs(90_000)).toBe(0);
+  });
+
+  it("상한 순서 불변식 — 무진행 < 총 < 유휴 참조", () => {
+    expect(NO_PROGRESS_TIMEOUT_SECONDS).toBeLessThan(MAX_TOTAL_WAIT_SECONDS);
+    expect(MAX_TOTAL_WAIT_SECONDS).toBeLessThan(IDLE_WARNING_REFERENCE_SECONDS);
+  });
+
+  it("Loading·Ready는 안내가 없고 Degraded·Failed는 서로 다른 안내를 갖는다", () => {
+    expect(frameLoadNotice("Loading")).toBe("");
+    expect(frameLoadNotice("Ready")).toBe("");
+    expect(frameLoadNotice("Degraded").length).toBeGreaterThan(0);
+    expect(frameLoadNotice("Failed").length).toBeGreaterThan(0);
+    expect(frameLoadNotice("Degraded")).not.toBe(frameLoadNotice("Failed"));
+  });
+
+  it("초기 국면이 Loading이고 국면 목록은 4값이다", () => {
+    // C# enum 0번 값(Loading)의 안전망을 명시 상수로 대체한 것이므로 값이 바뀌면 안 된다.
+    expect(DEFAULT_FRAME_LOAD_PHASE).toBe("Loading");
+    expect(FRAME_LOAD_PHASES).toEqual(["Loading", "Ready", "Degraded", "Failed"]);
+  });
+});
+
+describe("frameCatalogProgress — 진행 문구(it20)", () => {
+  it("4단계 문구가 모두 비어 있지 않고 서로 다르다", () => {
+    // 같으면 손님이 진행을 구분할 수 없다(T-14).
+    const labels = FRAME_CATALOG_PHASES.map((phase) => catalogProgressLabel({ phase }));
+    for (const label of labels) {
+      expect(label.trim().length).toBeGreaterThan(0);
+    }
+    expect(new Set(labels).size).toBe(4);
+  });
+
+  it("다운로드 단계에 total이 있으면 (n/m) 카운터가 붙는다", () => {
+    expect(catalogProgressLabel({ phase: "DownloadingImage", index: 2, total: 3 })).toContain(
+      "(2/3)",
+    );
+  });
+
+  it("total이 0이면 카운터를 생략한다", () => {
+    // "(0/0)"을 붙이면 진행이 멈춘 것처럼 보인다.
+    expect(catalogProgressLabel({ phase: "DownloadingImage" })).not.toContain("(");
+  });
+
+  it("보고 전 시작 문구가 존재한다(오버레이의 빈 문구 구간 방지)", () => {
+    expect(CATALOG_START_LABEL.length).toBeGreaterThan(0);
+  });
+
+  it("진행 객체에 프레임 이름을 담지 않는다(카드 폭·오버레이 높이 요동 방지)", () => {
+    // @ts-expect-error 프레임 이름은 규격상 진행 객체의 멤버가 아니다 — 초과 프로퍼티는 타입 오류다.
+    const withName: FrameCatalogProgress = { phase: "Completed", frameName: "아주 긴 프레임 이름" };
+    expect(catalogProgressLabel(withName)).toBe("프레임 목록을 정리하는 중…");
+  });
+
+  it("알 수 없는 단계는 시작 문구로 떨어진다", () => {
+    // 서버·미래 버전에서 온 값이 빈 문구를 만들지 않게 한다(C# `_ =>` 갈래 대응).
+    const unknownPhase = "Nope" as unknown as (typeof FRAME_CATALOG_PHASES)[number];
+    expect(catalogProgressLabel({ phase: unknownPhase })).toBe(CATALOG_START_LABEL);
   });
 });

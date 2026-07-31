@@ -9,6 +9,17 @@ import {
   frameToCanvas,
   isValidTransform,
 } from "@domain/frames/editorTransform";
+import {
+  classifyFrameLoad,
+  DEFAULT_FRAME_LOAD_PHASE,
+  finalizeFrameLoad,
+  frameLoadNotice,
+  IDLE_WARNING_REFERENCE_SECONDS,
+  MAX_TOTAL_WAIT_SECONDS,
+  NO_PROGRESS_TIMEOUT_SECONDS,
+  nextFrameLoadDeadlineMs,
+  type FrameLoadPhase,
+} from "@domain/frames/frameLoadPolicy";
 import { nextCopyName, stripCopySuffix } from "@domain/frames/frameNaming";
 import {
   autoArrange,
@@ -60,7 +71,7 @@ function expectClose(actual: number, expected: number): void {
 }
 
 describe("벡터 파일 목록", () => {
-  it("14개 파일이 모두 있고 이름이 기대와 일치한다", () => {
+  it("15개 파일이 모두 있고 이름이 기대와 일치한다", () => {
     expect(vectorFileNames()).toEqual([...EXPECTED_VECTOR_NAMES]);
   });
 });
@@ -438,5 +449,86 @@ describe("slots-file", () => {
     for (const { input, expected } of cases) {
       expect(parseSlotsFile(input.text), JSON.stringify(input.text)).toEqual(expected);
     }
+  });
+});
+
+describe("frame-load-policy", () => {
+  type Case = {
+    kind: "classify" | "finalize" | "nextDeadline" | "notice" | "constants";
+    input: {
+      frameCount?: number;
+      waitInterrupted?: boolean;
+      current?: FrameLoadPhase;
+      quiet?: boolean;
+      elapsedMs?: number;
+      phase?: FrameLoadPhase;
+    };
+    expected: {
+      phase?: FrameLoadPhase;
+      nextDeadlineMs?: number;
+      notice?: string;
+      noProgressTimeoutSeconds?: number;
+      maxTotalWaitSeconds?: number;
+      idleWarningReferenceSeconds?: number;
+      defaultPhase?: FrameLoadPhase;
+    };
+  };
+  const cases = loadCases<Case>("frame-load-policy");
+
+  it("모든 케이스가 일치한다", () => {
+    for (const c of cases) {
+      const where = JSON.stringify(c.input);
+      switch (c.kind) {
+        case "classify":
+          expect(classifyFrameLoad(c.input.frameCount!, c.input.waitInterrupted!), where).toBe(
+            c.expected.phase,
+          );
+          break;
+        case "finalize":
+          expect(
+            finalizeFrameLoad(
+              c.input.current!,
+              c.input.frameCount!,
+              c.input.waitInterrupted!,
+              c.input.quiet!,
+            ),
+            where,
+          ).toBe(c.expected.phase);
+          break;
+        case "nextDeadline":
+          expect(nextFrameLoadDeadlineMs(c.input.elapsedMs!), where).toBe(
+            c.expected.nextDeadlineMs,
+          );
+          break;
+        case "notice":
+          expect(frameLoadNotice(c.input.phase!), where).toBe(c.expected.notice);
+          break;
+        case "constants":
+          expect(NO_PROGRESS_TIMEOUT_SECONDS).toBe(c.expected.noProgressTimeoutSeconds);
+          expect(MAX_TOTAL_WAIT_SECONDS).toBe(c.expected.maxTotalWaitSeconds);
+          expect(IDLE_WARNING_REFERENCE_SECONDS).toBe(c.expected.idleWarningReferenceSeconds);
+          expect(DEFAULT_FRAME_LOAD_PHASE).toBe(c.expected.defaultPhase);
+          break;
+        default:
+          // 오타난 kind가 조용히 건너뛰어지면 검증 자체가 사라진다.
+          throw new Error(`알 수 없는 kind: ${String(c.kind)}`);
+      }
+    }
+  });
+
+  it("종류별 케이스 수가 유지된다 — Windows 쪽과 같은 숫자다", () => {
+    // 케이스가 통째로 빠져도 "전부 통과"로 보이므로 개수를 고정한다.
+    const count = (kind: Case["kind"]): number => cases.filter((c) => c.kind === kind).length;
+    expect(count("classify")).toBe(7);
+    expect(count("finalize")).toBe(32);
+    expect(count("nextDeadline")).toBe(8);
+    expect(count("notice")).toBe(4);
+    expect(count("constants")).toBe(1);
+  });
+
+  it("벡터가 Loading으로 확정되는 케이스를 담고 있지 않다", () => {
+    // 벡터 자체가 "finalize는 Loading을 돌려주지 않는다" 불변식을 위반하지 못하게 한다.
+    const phases = cases.filter((c) => c.kind === "finalize").map((c) => c.expected.phase);
+    expect(phases).not.toContain("Loading");
   });
 });
