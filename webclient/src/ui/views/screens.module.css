@@ -1,0 +1,194 @@
+/* 촬영 흐름 화면 공용 레이아웃 — 03 §1 (세로·가로 양쪽에서 동작해야 한다) */
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap);
+  padding: var(--gap);
+  text-align: center;
+  min-height: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-body);
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  justify-content: center;
+}
+
+/* ── 프레임 선택 ── */
+
+.frameGrid {
+  display: grid;
+  /* 열 수를 하드코딩하지 않는다 — 프레임 개수가 늘어도 레이아웃이 견딘다. */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--gap);
+  width: 100%;
+  max-width: 720px;
+}
+
+.frameCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  cursor: pointer;
+  min-height: var(--touch-min);
+}
+
+.frameCardSelected {
+  border-color: var(--accent);
+}
+
+.frameThumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+/* ── 가이드 ── */
+
+.guideList {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: var(--gap-sm) var(--gap);
+  margin: 0;
+  text-align: left;
+}
+
+.guideList dt {
+  color: var(--fg-muted);
+}
+
+.guideList dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.autoBadge {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* ── 촬영 ── */
+
+.captureStage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: 100%;
+  max-width: 720px;
+  min-height: 0;
+}
+
+.progress {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(4rem, 18vw, 9rem);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 4px 24px rgb(0 0 0 / 60%);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 플래시는 DOM 오버레이다 — canvas에 그리면 합성 픽셀에 섞인다(04 §4.2). */
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  pointer-events: none;
+}
+
+/* ── 컷 선택 ── */
+
+.cutGrid {
+  display: grid;
+  /* it17: 자동 컷 수가 7·9를 만들 수 있다 — 열 수를 하드코딩하지 않는다. */
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: var(--gap-sm);
+  width: 100%;
+  max-width: 860px;
+}
+
+.cutCard {
+  position: relative;
+  padding: 0;
+  border: 3px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #000;
+  cursor: pointer;
+  overflow: hidden;
+  /* 대표 슬롯 종횡비를 인라인 스타일로 받는다(프레임마다 다르다). */
+}
+
+.cutCardSelected {
+  border-color: var(--accent);
+}
+
+.cutThumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cutOrder {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 800;
+  font-size: 0.95rem;
+}

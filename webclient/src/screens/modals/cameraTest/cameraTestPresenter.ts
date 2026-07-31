@@ -1,5 +1,6 @@
 import { getCameraService, type CameraService } from "@adapters/camera/cameraService";
 import { logger } from "@adapters/storage/logStore";
+import { FLASH_DURATION_MS } from "@domain/capture/captureTiming";
 import { slotAspectToRatio, DEFAULT_SLOT_ASPECT } from "@domain/frames/slotAspect";
 
 /**
@@ -12,8 +13,8 @@ import { slotAspectToRatio, DEFAULT_SLOT_ASPECT } from "@domain/frames/slotAspec
  * ⚠️ 닫을 때 **카메라를 확실히 정지**한다 — 빠뜨리면 LED가 켜진 채 남는다.
  */
 
-/** 플래시 지속 시간(analysis/13 §13 — 실촬영과 동일). */
-export const FLASH_DURATION_MS = 120;
+// 실촬영과 **같은 상수**를 쓴다 — 테스트 모달의 목적이 동일 재현이므로 값이 갈라지면 안 된다.
+export { FLASH_DURATION_MS };
 
 export interface CameraTestOptions {
   readonly deviceId: string | null;

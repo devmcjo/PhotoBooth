@@ -8,6 +8,13 @@ import { shellStore, useShellStore } from "@shell/shellStore";
 import { sessionStore, useSessionStore } from "@shell/sessionStore";
 import { CameraTestModal } from "@screens/modals/cameraTest/CameraTestModal";
 import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
+import {
+  CaptureView,
+  CutSelectView,
+  FrameSelectView,
+  GuideView,
+  HomeView,
+} from "@ui/views/FlowViews";
 import { formatCount, STRINGS } from "@ui/strings";
 import { env, versionCaption } from "./env";
 import type { Branding } from "@adapters/platform/branding";
@@ -131,6 +138,33 @@ function ModalStack() {
   }
 }
 
+/**
+ * 화면 라우팅. Step 7까지 구현된 화면은 실물을, 나머지는 더미를 렌더한다.
+ * 더미는 Step 8·11~16이 하나씩 교체한다.
+ */
+function ScreenRouter({
+  screen,
+  branding,
+}: {
+  readonly screen: AppState;
+  readonly branding: Branding;
+}) {
+  switch (screen) {
+    case "Home":
+      return <HomeView appName={branding.appName} subtitle={branding.subtitle} />;
+    case "FrameSelect":
+      return <FrameSelectView />;
+    case "Guide":
+      return <GuideView />;
+    case "Capture":
+      return <CaptureView />;
+    case "CutSelect":
+      return <CutSelectView />;
+    default:
+      return <DummyScreen screen={screen} />;
+  }
+}
+
 export function App({ branding }: { readonly branding: Branding }) {
   const screen = useShellStore((s) => s.screen);
   const fullscreenLost = useShellStore((s) => s.fullscreenLost);
@@ -167,7 +201,7 @@ export function App({ branding }: { readonly branding: Branding }) {
       )}
 
       <ScreenErrorBoundary>
-        <DummyScreen screen={screen} />
+        <ScreenRouter screen={screen} branding={branding} />
       </ScreenErrorBoundary>
 
       <ModalStack />
