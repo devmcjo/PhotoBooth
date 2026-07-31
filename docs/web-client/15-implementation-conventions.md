@@ -16,7 +16,7 @@
 
 ```bash
 cd webclient && npm ci
-npx tsc --noEmit && npx vitest run     # 1051 통과(45파일)
+npx tsc --noEmit && npx vitest run     # 1297 통과(54파일)
 cd ../web/functions && npm test         # 316 통과
 cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
@@ -25,11 +25,11 @@ cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 
 | 다음 | 선행 조건 |
 |------|-----------|
-| **Step 13 PIN + 설정 화면** | Step 12(계정 API·로그인) 완료 + Step 3(설정 저장). ⚠️ PIN 호출에는 **`unauthorized: "reject"`** 를 반드시 넘긴다(§6 Step 12 절) |
-| Step 14~16 | 동상 |
+| **Step 14 프레임 저장소·선택** | Step 3·5·12 + Step 8.5(판정 도메인 이식 완료 — 다시 만들지 마라) |
+| Step 15~16 | 동상 |
 | Step 17 E2E·실기기 | 실기기 3대(사람). Playwright 도입도 이 Step이다 |
 
-권장 분할: 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
+권장 분할: 14 / 15 / 16을 각각 한 세션. Step 15·16은 화면이 커서 한 세션을 다 쓴다.
 
 ---
 
@@ -110,6 +110,16 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | `resultSaver.ts`·`resultsStore.ts`가 **메인 스레드에서 OPFS를 직접 만지지 않는다**(VF-14) | `resultSaver.test.ts` — 소스에 `navigator.storage`·`createWritable`·`createSyncAccessHandle`·`getDirectory(` 0건 |
 | `dirHandleRepo.ts`는 **OPFS를 건드리지 않는다** | 동상. ⚠️ 이 파일만 `createWritable`이 **허용**된다(대상이 사용자 디렉터리이고 Worker가 그 핸들에 닿을 수 없다) |
 | 폴더 핸들 DB ≠ 로그 DB | 동상(`DIR_HANDLE_DB_NAME !== LOG_DB_NAME`) — 같은 DB 버전업의 영구 blocked 회피 |
+| **PIN-1** PIN 6파일의 `logger` 컨텍스트에 `pin`·`newPin`·`currentPin`·`code`·`state`·`nonce`·`token` 0건 | `settingsInvariants.test.ts` — 마스킹돼 진단이 무용해지거나, 이름을 바꿔 우회하면 **PIN이 실제로 샌다** |
+| **PIN-2** `verifyMyPin`·`setMyPin` **둘 다** `unauthorized: "reject"` | 동상 — 빠지면 PIN 1회 오입력·`currentPin` 불일치가 **로그아웃**을 유발한다(E17) |
+| **PIN-3** `mcphoto.pinLock.v1` 문자열이 `pinLockRepo.ts` 한 파일에만 | 동상 — 두 곳이 쓰면 형식이 갈라져 기기 잠금이 조용히 무력화된다 |
+| **PIN-4** `pinPrompt` 모달의 `pushModal`은 `shell/pinGate.ts` 한 곳뿐 | 동상 — 게이트를 우회해 모달만 띄우는 경로 차단 |
+| **PIN-5** `shell/pinGate.ts`·`pinPromptRunner.ts`에 `localStorage` 0건 | 동상 — 잠금 저장의 소유자는 어댑터 하나다 |
+| **SET-1** `SettingsView`·`settingsForm`에 `clampSettings(`·`closestFrom(`·`normalizeQrToggles(` 0건 | 동상 — 화면이 도메인을 우회해 보정하면 진실원(analysis/41 §2)이 둘이 되어 Windows와 값이 갈라진다 |
+| **SET-2** `GUEST_LOCKED_KEYS` 전부가 `SettingsView`의 `badge("…")`·`locked("…")`를 지난다 | 동상 — 새 제한 키에서 렌더 가드만 빠지는 것을 잡는다 |
+| **SET-3** `App.tsx`에 임시 진입점 문자열 0건 | 동상 — Step 6·10의 실측용 버튼이 되살아나 진입로가 둘이 되는 것을 막는다 |
+| **SET-4** `shell/settingsStore.ts`에 `isGuest: false` 0건 | 동상 — 하드코딩이 재발하면 게스트 조작이 운영자 값을 덮는다 |
+| **SET-5** `screens/settings/*`가 `settingsRepo.save`를 직접 부르지 않는다 | 동상 — 저장은 반드시 `settingsStore.save`를 지나야 clamp·게스트 제한이 걸린다 |
 
 새 불변식을 만들면 **같은 방식으로 고정**하는 것이 이 저장소의 관례다.
 
@@ -195,6 +205,28 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - 토큰은 여전히 **메모리만**(M2)이고 새로고침 = 재로그인이 정상이다(C6).
 - **실측 V21 10건이 남아 있다**([14 §10.6](./14-handoff-and-user-actions.md)). 실 Google 계정·배포 헤더·폰이 필요해 자동화 불가이며 **E17 화면 관측은 Step 13 이후**다.
 
+### Step 13 PIN 게이트·설정 화면 — **완료(2026-08-01)**. 뒤 Step이 알아야 할 것만 남긴다
+- **PIN 게이트는 네비게이션 가드가 아니라 `<PinGate>` 렌더 게이트다.** 통과하지 못하면 `SettingsView`가 **마운트되지 않는다**.
+  `Settings`·`Account` 둘 다 감싸져 있고, OAuth 복귀(`returnTo="Settings"`)처럼 `go()`를 거치지 않는 경로까지 구조적으로 덮인다.
+  **새 보호 화면이 생기면 `<PinGate screen="X">`로 감싸는 것만으로 끝난다** — 화면 안에 가드를 심지 마라.
+- ⚠️ **`<PinGate>`의 effect에 cleanup을 두지 마라.** `<StrictMode>` 이중 effect가 1회차를 취소해 설정 화면에서 즉시 튕겨 나간다(Step 12와 동종 함정).
+  "매번 확인"은 cleanup이 아니라 `installPinGateLifecycle()`의 **화면·`currentUser` 변경 구독**이 승인을 폐기해 성립한다. `ensureScreenPinGate`는 멱등이다.
+- **모달 결과를 기다리는 채널이 생겼다**(`openPinPrompt` → `resolvePinPrompt`). `pushModal`은 여전히 fire-and-forget이므로,
+  **결과를 기다려야 하는 모달을 새로 만들면 이 형태를 따른다**: pending 1개 · 해제 멱등 · 항상 `popModal` 동반 · **마운트 감시 타임아웃**(5초)으로 무한 스피너 차단.
+  ⚠️ 그 모달 컴포넌트는 `Modal`의 내장 `Esc`(→ `popModal`)를 쓰면 안 된다 — 약속이 미해결로 남는다. 자체 keydown에서 resolver를 부른다.
+- **`sessionStore.markPinSet()`이 생겼다**(`currentUser` 진입점 4번째). 멱등이고 **null을 만들지 않아** M1 구독에 영향이 없다. AUTH-1(`.login(` 1곳)에도 걸리지 않는다.
+- **설정 저장은 `settingsStore.save(patch, { isGuest, webExtras? })` 하나다.** `reEnableQr()`·`saveWebExtras()`는 **제거됐다**(호출자 0 + `isGuest: false` 하드코딩 버그).
+  `save`는 이제 **메모리 값에도 clamp를 적용**한다 — 저장소와 화면이 갈라지지 않게 하기 위함이고, 03 §12.4의 재반영 단계가 여기에 걸려 있다.
+- **게스트 제한은 4중이다**: 렌더 가드(`SettingsView`) → 액션 가드(`changeSetting` 첫 줄) → **패치 제외(`buildSavePatch`)** → 저장소 `omitKeys`. **본체는 세 번째**다.
+  새 제한 키는 `GUEST_LOCKED_KEYS`에 넣기만 하면 ②③④가 자동으로 따라오고, ①의 누락은 **SET-2**가 잡는다.
+- **`domain/settings/settingsEditPolicy.ts`가 "무엇을 편집할 수 있는가"의 단일 판정처다**(`isSettingEditable`·`settingLockReason`·`displaySettingValue`·`omittedSaveKeys`).
+  Step 16의 계정·사용자 관리 화면도 같은 형태(렌더 가드 + 액션 첫 줄 가드)를 쓴다.
+- **[보관된 결과물] 패널은 `resultsStore` 위에 얹혀 있다**(`screens/settings/storedResultsPanel.ts`). Step 16 진단 모달이 같은 모듈을 재사용할 수 있다.
+- **`persistStorage.readStorageStatus()`가 생겼다** — `requestPersistentStorage`와 달리 **요청하지 않고 조회만** 한다. 화면 표시에는 반드시 이쪽을 쓴다(그러지 않으면 화면을 여는 것만으로 권한 창이 뜬다).
+- ⚠️ **`confirmDelete` 모달을 쓰지 않았다.** 전체 삭제는 인라인 2단 확인이다 — 그 모달은 **Step 15**(프레임 삭제 · "서버에서도 제거" 체크박스)가 소유한다.
+- **이월**: [프레임 내보내기]/[가져오기] → Step 15 · [앱 업데이트 확인]·[진단·상태] → Step 16. **설정 화면 섹션 6에 자리만 비어 있다.**
+- **실측 V22 13건이 남아 있다**([14 §10.8](./14-handoff-and-user-actions.md)). 브라우저·실계정·실기기가 필요해 자동화 불가이며, **V22-4는 PIN이 없는 실계정**이 있어야 한다.
+
 ### Step 14 프레임 선택 — **it20 대기 국면이 절반이다**(2026-07-31 main 머지분)
 - `analysis/13 §4.2`에 **로딩 4국면**(`Loading`/`Ready`/`Degraded`/`Failed`) 규격이 신설됐다. 웹 반영은 [03 §4.1](./03-screens-spec.md)·[06 §6.1](./06-backend-integration-web.md)·[02 §6.2](./02-app-shell-and-navigation.md).
 - **판정 계층은 Step 8.5에서 이미 이식됐다**(다시 만들지 마라): `domain/frames/frameLoadPolicy.ts`(`classifyFrameLoad`·`finalizeFrameLoad`·`nextFrameLoadDeadlineMs`·`frameLoadNotice` + 상한 상수) · `domain/frames/frameCatalogProgress.ts`(`catalogProgressLabel`). 벡터 `docs/spec-vectors/frame-load-policy.json` 52케이스가 Windows와 교차 고정한다. **이번 Step은 그 위에 어댑터·화면만 얹는 것이다.**
@@ -211,9 +243,9 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - **저장 전 검증 7단의 순서가 규격이다**([03 §11.3](./03-screens-spec.md)). 진입점이 2개이므로 실제 저장 함수 첫 줄에서 **재실행**한다.
 - ⚠️ **`isFileNameSafe`를 분리해야 한다**: Windows 판정은 "빈 값 + 금지문자"뿐인데 웹 `validateFrameName`은 **100자 제한이 묶여 있다**. 그대로 선검증에 쓰면 축이 어긋난다.
 
-### Step 13~16
-- 설정 화면은 `settingsStore.save(patch, {isGuest})`만 부르면 된다 — 게스트 제한 키 보존은 `settingsRepo`가 처리한다.
-- 권한 게이트는 도메인에 다 있다(`rolePolicy`·`roleChangePolicy`·`frameEditPolicy`). 화면은 **렌더 가드 + 액션 첫 줄 가드** 2중으로 쓴다(M10).
+### Step 14~16
+- 설정 저장은 `settingsStore.save(patch, { isGuest, webExtras? })`만 부르면 된다 — 게스트 제한 키 보존은 `settingsRepo`가 처리한다(Step 13 절 참고).
+- 권한 게이트는 도메인에 다 있다(`rolePolicy`·`roleChangePolicy`·`frameEditPolicy`·**`settingsEditPolicy`**). 화면은 **렌더 가드 + 액션 첫 줄 가드** 2중으로 쓴다(M10).
 - 프레임 이름 판정은 **세 축**이다: 서버 등록 = `validateFrameNameForServer`(`_` 하드 거부) / 로컬 저장 = `validateFrameName` + `underscoreWarning`(비차단) / **저장 전 선검증 = `isFileNameSafe`**(길이 무관, 빈 값·금지문자만).
 
 ---
@@ -222,11 +254,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **1051**(45파일) · 서버 **316** · Windows **938**(Step 12 시점 3스위트 전부 실측. Step 12는 `docs/spec-vectors/`를 건드리지 않았고 서버·WPF 코드도 무변경이다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **1297**(54파일, Step 13 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13은 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 13~17, 실측 V1~V21 |
+| 미완 | Step 14~17, 실측 V1~V22 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 
@@ -236,4 +268,4 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | Step 15 | 불러오기 = 신규 생성으로 재정의, 서버 등록 확인 모달 신설, 저장 전 검증 7단, `isFileNameSafe` 분리 |
 | Step 9 | 변화 없음. 참고로 **웹 타임랩스 경로에는 GPL 노출이 없다**(브라우저 내장 인코더 — `12 B14`) |
 
-화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·Result·Qr·Done·**Login**이 실물이고, 나머지(Account·Settings·FrameEditor·UserMgmt)는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 + 로그인 화면은 이로써 전부 실물이다** — 남은 더미는 Step 13·15·16이 채운다.
+화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·Result·Qr·Done·**Login**·**Settings**가 실물이고, 나머지(Account·FrameEditor·UserMgmt)는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 + 로그인 + 설정은 이로써 전부 실물이다** — 남은 더미는 Step 15·16이 채운다. `Account`는 더미지만 **PIN 게이트 배선은 이미 걸려 있다**(Step 16은 안쪽 내용만 채우면 된다).

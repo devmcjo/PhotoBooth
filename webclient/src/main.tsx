@@ -6,6 +6,7 @@ import { installGlobalErrorHandler } from "@shell/globalErrorHandler";
 import { classifyRoute, installRouter } from "@shell/router";
 import { installTokenLifecycle } from "@shell/authStore";
 import { installQrUsageLifecycle } from "@shell/qrUsageStore";
+import { installPinGateLifecycle } from "@shell/pinGate";
 import { getFullscreenController } from "@shell/fullscreenController";
 import {
   applyOauthCallbackOutcome,
@@ -49,6 +50,8 @@ function installShellHandlers(): void {
   installTokenLifecycle();
   // TempUser 무료 한도 캐시: 계정이 temp_user로 바뀔 때만 1회 조회한다(07 §7).
   installQrUsageLifecycle();
+  // PIN 승인 폐기 배선: 화면·사용자가 바뀌면 승인을 버린다 → 규격의 "매번 확인"(07 §6.1).
+  installPinGateLifecycle();
   installRouter();
   installVisibilityHandlers();
   getFullscreenController().install();

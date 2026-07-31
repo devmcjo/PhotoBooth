@@ -1,0 +1,155 @@
+/* 설정 화면 — 03 §12 (스크롤 영역 + 하단 sticky 저장 바) */
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  /* 가로 스크롤 금지(01 §8) — 넓은 내용은 각자 줄바꿈한다. */
+  overflow-x: hidden;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-lg);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.banner {
+  margin: 0;
+  padding: var(--gap-sm) var(--gap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-size: var(--fs-body);
+}
+
+.section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: var(--gap);
+}
+
+.sectionTitle {
+  margin: 0 0 var(--gap-sm);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.note {
+  margin: var(--gap-sm) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.warning {
+  margin: var(--gap-sm) 0 0;
+  color: var(--danger);
+  font-size: var(--fs-caption);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  margin-top: var(--gap-sm);
+}
+
+/* ── 서버 상태 · 저장소 표 ── */
+
+.statusList {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 0.25rem var(--gap);
+  margin: 0;
+  font-size: var(--fs-caption);
+}
+
+.statusKey {
+  color: var(--fg-muted);
+}
+
+.statusValue {
+  margin: 0;
+  /* 긴 URL이 화면을 밀지 않게 한다. */
+  overflow-wrap: anywhere;
+}
+
+/* ── 보관된 결과물 ── */
+
+.resultList {
+  list-style: none;
+  margin: var(--gap-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  /* 세션이 200개까지 쌓일 수 있다 — 이 영역만 스크롤한다. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.resultItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.resultName {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.resultBytes {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+/* ── 가져오기 미리보기 ── */
+
+.previewList {
+  list-style: none;
+  margin: var(--gap-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: var(--fs-caption);
+}
+
+.previewItem {
+  overflow-wrap: anywhere;
+}
+
+/* ── 하단 sticky 저장 바(03 §12.4) ── */
+
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: var(--gap-sm);
+  justify-content: flex-end;
+  padding: var(--gap-sm) var(--gap);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  /* 스크롤 영역 위에 항상 떠 있어야 한다. */
+  z-index: 1;
+}

@@ -1,14 +1,13 @@
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { APP_STATES, type AppState } from "@domain/navigation/appState";
 import { canTransition, isTopBarVisible } from "@domain/navigation/stateMachine";
-import { getDirHandleRepo } from "@adapters/storage/dirHandleRepo";
 import { logger } from "@adapters/storage/logStore";
 import { getFullscreenController } from "@shell/fullscreenController";
 import { getIdleWatchdog } from "@shell/idleWatchdog";
 import { shellStore, useShellStore } from "@shell/shellStore";
 import { useSessionStore } from "@shell/sessionStore";
-import { useSettingsStore } from "@shell/settingsStore";
 import { CameraTestModal } from "@screens/modals/cameraTest/CameraTestModal";
+import { PinPromptModal } from "@screens/modals/pinPrompt/PinPromptModal";
 import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
 import {
   CaptureView,
@@ -21,6 +20,8 @@ import {
 import { QrView } from "@ui/views/QrView";
 import { DoneView } from "@ui/views/DoneView";
 import { LoginView } from "@ui/views/LoginView";
+import { PinGate } from "@ui/views/PinGate";
+import { SettingsView } from "@ui/views/SettingsView";
 import { formatCount, STRINGS } from "@ui/strings";
 import { env, versionCaption } from "./env";
 import type { Branding } from "@adapters/platform/branding";
@@ -62,34 +63,17 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { failed: b
 }
 
 /**
- * ② 계층(사용자 지정 폴더 복사)의 폴더 지정. **사용자 제스처에서만** 호출한다 —
- * `showDirectoryPicker`는 클릭 없이는 열리지 않는다.
+ * 더미 화면 — 전이 검증 전용. 남은 것은 `Account`·`UserMgmt`·`FrameEditor`이고 Step 15·16이 교체한다.
  *
- * ⚠️ `LocalSavePath`에는 **폴더 이름만** 들어간다. 브라우저는 실 경로를 노출하지 않는다(05 §5.3).
+ * ⚠️ 여기에 기능 진입점을 두지 마라. Step 6·10이 임시로 두었던 카메라 테스트·로컬 폴더 지정
+ *    버튼은 Step 13에서 설정 화면의 정식 위치로 옮겼다(정적 검사 SET-3이 재발을 막는다).
  */
-async function pickLocalSaveFolder(): Promise<void> {
-  const repo = getDirHandleRepo();
-  const handle = await repo.pick();
-  if (handle === null) return; // 취소 — 설정을 건드리지 않는다
-
-  if (!(await repo.store(handle))) {
-    shellStore.getState().toast("error", STRINGS.save.failed);
-    return;
-  }
-  // `LocalSavePath`는 게스트 제한 키가 아니다.
-  const saved = useSettingsStore.getState().save({ LocalSavePath: handle.name }, { isGuest: false });
-  shellStore
-    .getState()
-    .toast(saved ? "success" : "error", saved ? STRINGS.save.succeeded : STRINGS.save.failed);
-}
-
-/** 더미 화면 — 전이 검증 전용. Step 7부터 실제 화면으로 교체된다. */
 function DummyScreen({ screen }: { readonly screen: AppState }) {
   const targets = APP_STATES.filter((to) => to !== screen && canTransition(screen, to));
   return (
     <main className="boot">
       <h1 className="boot__title">{screen}</h1>
-      <p className="boot__subtitle">전이 검증용 임시 화면 (Step 7부터 교체)</p>
+      <p className="boot__subtitle">전이 검증용 임시 화면 (Step 15·16에서 교체)</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "center" }}>
         {targets.map((to) => (
           <Button key={to} onClick={() => shellStore.getState().go(to)}>
@@ -100,21 +84,6 @@ function DummyScreen({ screen }: { readonly screen: AppState }) {
       <Button variant="ghost" onClick={() => void shellStore.getState().returnHome("사용자 취소")}>
         홈으로
       </Button>
-
-      {/* Step 6 실측용 진입점. Step 13에서 설정 화면의 [카메라 테스트]로 옮긴다. */}
-      <Button
-        onClick={() =>
-          shellStore.getState().pushModal({ id: "cameraTest", dismissible: true })
-        }
-      >
-        카메라 테스트 열기
-      </Button>
-
-      {/* Step 10 ② 계층 실측용 진입점. Step 13에서 설정 화면의 [로컬 저장 폴더 선택]으로 옮긴다.
-          미지원 브라우저(Safari·Firefox·모바일)에서는 렌더하지 않는다 — 05 §5.3. */}
-      {screen === "Settings" && getDirHandleRepo().isSupported() && (
-        <Button onClick={() => void pickLocalSaveFolder()}>로컬 저장 폴더 선택</Button>
-      )}
     </main>
   );
 }
@@ -153,8 +122,10 @@ function ModalStack() {
       return <IdleWarningModal />;
     case "cameraTest":
       return <CameraTestModal />;
+    case "pinPrompt":
+      return <PinPromptModal />;
     default:
-      // 나머지 모달은 Step 6·13·15·16이 채운다. 그때까지 열려도 앱이 깨지지 않게 스텁을 둔다.
+      // 나머지 모달은 Step 15·16이 채운다. 그때까지 열려도 앱이 깨지지 않게 스텁을 둔다.
       return (
         <Modal
           id={top.id}
@@ -173,8 +144,13 @@ function ModalStack() {
 }
 
 /**
- * 화면 라우팅. 촬영 흐름 전체(Home~Done)와 `Login`은 실물이고,
- * 남은 더미(`Settings`·`Account`·`UserMgmt`·`FrameEditor`)는 Step 13·15·16이 교체한다.
+ * 화면 라우팅. 촬영 흐름 전체(Home~Done)와 `Login`·`Settings`는 실물이고,
+ * 남은 더미(`Account`·`UserMgmt`·`FrameEditor`)는 Step 15·16이 교체한다.
+ *
+ * ⚠️ `Settings`·`Account`는 **`<PinGate>`로 감싼다**(07 §6.1). 게이트를 화면 렌더에 걸어야
+ *    OAuth 복귀처럼 `go()`를 거치지 않는 진입로까지 구조적으로 덮인다.
+ *    `Account`는 아직 더미지만 **배선을 지금 넣는다** — 나중에 붙이면 "한 경로가 게이트를
+ *    빼먹는" 정확히 그 실패가 난다.
  */
 function ScreenRouter({
   screen,
@@ -202,6 +178,18 @@ function ScreenRouter({
       return <DoneView appName={branding.appName} />;
     case "Login":
       return <LoginView />;
+    case "Settings":
+      return (
+        <PinGate screen="Settings">
+          <SettingsView />
+        </PinGate>
+      );
+    case "Account":
+      return (
+        <PinGate screen="Account">
+          <DummyScreen screen="Account" />
+        </PinGate>
+      );
     default:
       return <DummyScreen screen={screen} />;
   }

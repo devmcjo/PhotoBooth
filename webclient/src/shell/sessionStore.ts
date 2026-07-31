@@ -16,9 +16,10 @@ import type { OutputFormat } from "@domain/settings/appSettings";
  *    두 번째 인자를 Zustand가 **조용히 무시**해서 M1(토큰 폐기) 구독이 한 번도 실행되지 않는다.
  *    `authStore.test.ts`가 이 배선을 기계적으로 고정한다.
  *
- * ⚠️ `currentUser` 변경 진입점은 **`login` / `logout` / `expireSession`뿐**이다. 규칙의 요지는
- *    "진입점 개수"가 아니라 **`currentUser` 필드를 통해서만 바꾼다**는 것이다(02 §5.1) —
- *    그래야 M1 구독 한 곳이 모든 경로를 덮는다.
+ * ⚠️ `currentUser` 변경 진입점은 **`login` / `logout` / `expireSession` / `markPinSet`뿐**이다.
+ *    규칙의 요지는 "진입점 개수"가 아니라 **`currentUser` 필드를 통해서만 바꾼다**는 것이다(02 §5.1) —
+ *    그래야 M1 구독 한 곳이 모든 경로를 덮는다. `markPinSet`은 **null을 만들지 않으므로**
+ *    M1(토큰 폐기) 구독의 판정("필드가 null이 되는 것")에 영향이 없다.
  */
 
 /** 컷 1개. 실제 픽셀은 OPFS에 있고 여기서는 참조만 든다(모바일 메모리 한계 — WR8). */
@@ -70,6 +71,14 @@ export interface SessionState {
    * ⚠️ 토큰은 여기서 지우지 않는다 — `currentUser`가 null이 되면 M1 구독이 폐기한다.
    */
   expireSession(): void;
+  /**
+   * 최초 PIN 설정 성공을 세션에 반영한다(`hasPin = true` — 07 §6.2).
+   *
+   * ⚠️ **이 경로가 없으면 최초 설정 다음 진입이 401 데드락이 된다.** 서버에는 이미 `pinHash`가
+   *    있는데 클라가 `hasPin=false`를 믿으면 `currentPin` 없는 PUT을 보내고 서버는 401을 준다.
+   * ⚠️ **멱등**이고 `currentUser`를 null로 만들지 않는다(M1 구독 무영향).
+   */
+  markPinSet(): void;
   setSession(session: CaptureSessionState<CapturedCut>): void;
   setSessionId(sessionId: string | null): void;
   setFilter(filter: FilterKind): void;
@@ -109,6 +118,13 @@ export const sessionStore = createStore<SessionState>()(
     expireSession() {
       // 촬영 데이터는 그대로 둔다(02 §5.2) — 게스트가 되어 QR만 사라진다.
       set({ currentUser: null });
+    },
+
+    markPinSet() {
+      const user = get().currentUser;
+      // 게스트이거나 이미 반영돼 있으면 아무 일도 하지 않는다(멱등 — 불필요한 구독 통지 방지).
+      if (user === null || user.hasPin) return;
+      set({ currentUser: { ...user, hasPin: true } });
     },
 
     setSession(session) {

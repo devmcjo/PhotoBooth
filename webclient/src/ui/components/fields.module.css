@@ -1,0 +1,96 @@
+/* 설정 폼 컨트롤 — 03 §12 (터치 48px · 가로 스크롤 금지) */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.rowLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-sm);
+  min-width: 40%;
+  flex: 1 1 220px;
+}
+
+.labelText {
+  font-size: var(--fs-body);
+}
+
+.lockBadge {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+}
+
+.description {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.rowControl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-sm);
+  justify-content: flex-end;
+}
+
+.toggle {
+  min-width: 88px;
+}
+
+.choiceGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+}
+
+.choice {
+  min-width: 64px;
+}
+
+.textField {
+  min-height: var(--touch-min);
+  min-width: 0;
+  width: min(360px, 100%);
+  padding: 0 var(--gap-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-body);
+}
+
+.textField:disabled {
+  opacity: 0.55;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.stepperButton {
+  min-width: var(--touch-min);
+}
+
+.stepperValue {
+  min-width: 3ch;
+  text-align: center;
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+}

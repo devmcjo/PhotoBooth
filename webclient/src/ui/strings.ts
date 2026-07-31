@@ -46,6 +46,124 @@ export const STRINGS = {
     },
   },
 
+  /** 진입 PIN 게이트 — 03 §15.3 · 07 §6.4. ⚠️ PIN 값을 담는 문구는 만들지 않는다. */
+  pin: {
+    /** 모드 3종 제목. */
+    titleVerify: "설정 진입 PIN을 입력하세요.",
+    titleSetup: "새 PIN을 설정하세요. (숫자 4자리)",
+    titleSetupConfirm: "새 PIN을 다시 입력하세요.",
+    confirm: "확인",
+    backspace: "지움",
+    /** `{n}`을 입력된 자리 수로 치환한다(스크린리더 안내). */
+    indicator: "입력 4자리 중 {n}자리",
+    /** `{n}`을 남은 시간 문구("4분 32초")로 치환한다. */
+    locked: "PIN 입력이 일시적으로 차단되었습니다. {n} 후 다시 시도해 주세요.",
+    /** `{n}`을 남은 쿨다운 초로 치환한다. */
+    cooldown: "{n}초 후 다시 시도할 수 있습니다.",
+    /** `{n}`을 연속 실패 횟수로 치환한다 — "(2/5)". */
+    failCount: "({n}/5)",
+    /** 키는 `PinMessageKey`와 1:1이다. */
+    messages: {
+      mismatch: "PIN이 일치하지 않습니다.",
+      /** ⚠️ 규격 문구다(03 §15.3) — 줄이지 않는다. */
+      unavailable: "확인할 수 없습니다. 네트워크를 확인하세요.",
+      alreadySet: "이미 설정된 PIN이 있습니다. 기존 PIN을 입력해 주세요.",
+      invalidFormat: "PIN은 숫자 4자리입니다.",
+      confirmMismatch: "두 번 입력한 PIN이 서로 다릅니다.",
+    },
+  },
+
+  /** 설정 화면 — 03 §12 · analysis/41 §2. */
+  settings: {
+    title: "설정",
+    guestBanner: "게스트로 사용 중입니다. 일부 항목은 로그인한 뒤에 변경할 수 있습니다.",
+    loginRequired: "로그인 필요",
+    qrLimitBadge: "한도 초과",
+    qrLimitNotice: "무료 사용 한도를 초과해 QR 전송 설정을 변경할 수 없습니다.",
+    sections: {
+      capture: "촬영",
+      device: "장치",
+      output: "출력·전송",
+      filters: "필터",
+      advanced: "고급",
+      storage: "저장소·데이터",
+    },
+    cutCount: "컷 수",
+    cutCountAuto: "자동",
+    countdown: "컷당 카운트다운(초)",
+    mirrorMode: "거울모드",
+    flashMode: "플래시",
+    shutterSound: "셔터음",
+    retakeEnabled: "재촬영 사용",
+    retakeLimit: "재촬영 횟수",
+
+    cameraDevice: "카메라 장치",
+    cameraRescan: "재검색",
+    cameraTest: "카메라 테스트",
+    cameraFacing: "전면/후면",
+    cameraFacingUser: "전면",
+    cameraFacingEnvironment: "후면",
+    cameraLabelHint: "권한을 허용하면 장치 이름이 표시됩니다.",
+    cameraNone: "사용할 수 있는 카메라를 찾지 못했습니다.",
+
+    outputFormat: "출력 포맷",
+    enableQrDelivery: "QR 전송",
+    sendPhoto: "사진 전송",
+    sendTimelapse: "타임랩스 전송",
+    retentionHours: "보관 시간(시간)",
+    saveLocalCopy: "기기에 로컬 저장",
+    localSaveFolder: "로컬 저장 폴더",
+    localSaveFolderPick: "폴더 선택",
+    localSaveFolderClear: "폴더 해제",
+    localSaveFolderNone: "지정되지 않음",
+
+    filterNone: "원본",
+    filterNoneNote: "원본은 항상 표시됩니다.",
+    filterGrayscale: "흑백",
+    filterBrightness: "밝게",
+    filterBeauty: "뷰티",
+
+    hostingBaseUrl: "다운로드 페이지 Base URL",
+    storageBucket: "Storage 버킷",
+    serverStatus: "서버 연결 상태",
+    serverRecheck: "다시 확인",
+    serverChecking: "확인 중…",
+    /** ⚠️ "구성됨"은 "도달 성공"이 아니다 — 두 줄로 나눠 표시한다. */
+    serverConfigured: "구성됨",
+    serverNotConfigured: "미구성",
+    serverReachable: "도달 성공",
+    serverUnreachable: "도달 실패",
+    serverUnknown: "알 수 없음",
+    /** ⚠️ 게이트 키는 "설정됨/미설정"만 표시한다. 값은 절대 표시하지 않는다(analysis/41 §2.5). */
+    gateKeySet: "설정됨",
+    gateKeyUnset: "미설정",
+    gateKeyInvalid: "거부됨",
+    deployedAt: "서버 배포 시각",
+
+    storagePersist: "저장소 영속",
+    storagePersistRequest: "영속 요청",
+    storageUsage: "사용량",
+    storageLowWarning: "저장소 여유가 10% 미만입니다. 보관된 결과물을 정리해 주세요.",
+    storedResults: "보관된 결과물",
+    /** `{n}`을 폴더 수로 치환한다. */
+    storedResultsCount: "{n}개 세션",
+    storedResultsEmpty: "보관된 결과물이 없습니다.",
+    storedResultsDeleteAll: "전체 삭제",
+    storedResultsConfirm: "정말 삭제할까요?",
+    storedResultsDeleteFailed: "삭제하지 못했습니다.",
+    /** `{n}`을 "N개를 삭제했고 M개는 실패했습니다."로 조립하지 않는다 — 아래 두 문구를 쓴다. */
+    exportSettings: "설정 내보내기",
+    importSettings: "설정 가져오기",
+    importPreviewTitle: "적용될 항목",
+    importApply: "지금 적용",
+    importCancel: "가져오기 취소",
+    importTooNew: "더 새 버전의 설정 파일입니다.",
+    importMalformed: "설정 파일을 읽을 수 없습니다.",
+    importNoChanges: "변경될 항목이 없습니다.",
+    /** 게스트가 제한 항목을 조작하려 했을 때(액션 가드에서). */
+    editBlocked: "이 항목은 변경할 수 없습니다.",
+  },
+
   idle: {
     title: "계속 진행하시겠어요?",
     /** `{n}`을 남은 초로 치환한다. */
@@ -141,7 +259,12 @@ export const STRINGS = {
   },
 } as const;
 
-/** `{n}` 치환. 문구 카탈로그를 문자열 조립으로 오염시키지 않기 위한 단일 헬퍼. */
-export function formatCount(template: string, count: number): string {
+/**
+ * `{n}` 치환. 문구 카탈로그를 문자열 조립으로 오염시키지 않기 위한 단일 헬퍼.
+ *
+ * 문자열도 받는다 — 잠금 남은 시간처럼 **이미 서식이 끝난 값**("4분 32초")을 끼울 때 쓴다
+ * (여기서 다시 조립하면 서식 규칙이 두 곳으로 갈라진다).
+ */
+export function formatCount(template: string, count: number | string): string {
   return template.replace("{n}", String(count));
 }

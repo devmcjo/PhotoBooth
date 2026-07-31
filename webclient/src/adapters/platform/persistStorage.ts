@@ -62,6 +62,43 @@ export async function requestPersistentStorage(
   return { persistState, usage, quota };
 }
 
+/**
+ * **요청하지 않고** 현재 상태만 읽는다(설정·진단 화면 표시용).
+ *
+ * ⚠️ `requestPersistentStorage`와 섞지 마라 — 그쪽은 미승인 시 `persist()`를 **실제로 호출**해
+ *    일부 브라우저에서 프롬프트를 띄운다. 화면을 열었을 뿐인데 권한 창이 뜨면 안 된다.
+ */
+export async function readStorageStatus(
+  manager: StorageManagerLike | undefined,
+): Promise<StorageStatus> {
+  if (manager === undefined || typeof manager.persist !== "function") {
+    return { persistState: "unsupported", usage: null, quota: null };
+  }
+
+  let persistState: PersistState = "denied";
+  if (typeof manager.persisted === "function") {
+    try {
+      persistState = (await manager.persisted()) ? "granted" : "denied";
+    } catch {
+      persistState = "denied";
+    }
+  }
+
+  let usage: number | null = null;
+  let quota: number | null = null;
+  if (typeof manager.estimate === "function") {
+    try {
+      const estimate = await manager.estimate();
+      usage = typeof estimate.usage === "number" ? estimate.usage : null;
+      quota = typeof estimate.quota === "number" ? estimate.quota : null;
+    } catch {
+      // 추정 실패는 무시한다("알 수 없음"으로 표시된다).
+    }
+  }
+
+  return { persistState, usage, quota };
+}
+
 /** 남은 여유 비율(0~1). 알 수 없으면 null. */
 export function freeRatio(status: StorageStatus): number | null {
   if (status.quota === null || status.usage === null || status.quota <= 0) return null;

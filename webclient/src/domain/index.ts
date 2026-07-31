@@ -35,6 +35,8 @@ export * from "./settings/appSettings";
 export * from "./settings/cutCountPolicy";
 export * from "./settings/qrDeliveryPolicy";
 export * from "./settings/qrEffectivePolicy";
+export * from "./settings/settingsEditPolicy";
+export * from "./settings/settingsImport";
 
 export * from "./roles/userRole";
 export * from "./roles/roleChangePolicy";
@@ -47,5 +49,6 @@ export * from "./upload/exportFileName";
 export * from "./results/resultNaming";
 export * from "./results/resultSavePlan";
 export * from "./results/resultsRetention";
+export * from "./results/byteFormat";
 
 export * from "./filters/filterParams";

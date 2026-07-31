@@ -631,20 +631,71 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 ## Step 13: PIN 게이트 + 설정 화면
 
 - **Context Brief**: 설정·계정 진입 PIN 게이트(fail-closed, 5회/1.5초 + **기기 5분 잠금**)와 설정 화면 전체를 만든다. 게스트 편집 제한은 **저장 시 해당 키를 기록하지 않아 관리자 값을 보존**하는 것이 핵심이다. 규격은 **[07 §6](./07-auth-and-permissions-web.md)**, **[03 §12](./03-screens-spec.md)**, **[05 §2](./05-storage-and-persistence.md)**.
-- **대상 파일**: `src/screens/modals/pinPrompt/*`, `src/shell/pinGate.ts`, `src/screens/settings/*`, `src/ui/views/SettingsView.tsx`
-- **선행 조건**: Step 12(계정 API), Step 3(설정 저장)
+- **대상 파일**: `src/domain/auth/pinGatePolicy.ts`, `src/domain/settings/settingsEditPolicy.ts`, `src/adapters/storage/pinLockRepo.ts`, `src/screens/modals/pinPrompt/*`, `src/shell/pinGate.ts`, `src/screens/settings/*`, `src/ui/views/{PinGate,SettingsView}.tsx`
+- **선행 조건**: Step 12(계정 API), Step 3(설정 저장), Step 10(`resultsStore` — [보관된 결과물] 패널 이월분)
+- **상세 설계**: [`docs/design/web-step13-settings-pin-gate.md`](../design/web-step13-settings-pin-gate.md) — 9단계 WBS·설계 이탈 6건·정적 불변식 8건 포함
 - **구현 내용**:
-  - `pinGate.ensure(user)`: [07 §6.2](./07-auth-and-permissions-web.md) 의사코드 그대로. 계정 서비스·모달 사용 불가 시 `false`(fail-closed).
+  - `ensurePinGate(deps)`: [07 §6.2](./07-auth-and-permissions-web.md) 의사코드 그대로. 계정 서비스·모달 사용 불가 시 `false`(fail-closed).
+  - ⚠️ 게이트는 **네비게이션 가드가 아니라 `<PinGate>` 렌더 게이트**다 — OAuth 복귀가 `returnTo="Settings"`로 **직행**하므로(`screens/oauthCallback/oauthCallbackRunner.ts`) 호출부마다 붙이면 그 경로가 빠진다. `Account`도 함께 감싼다(화면 본체는 Step 16).
+  - ⚠️ `sessionStore.markPinSet()` 신설 필수: `hasPin`을 갱신하지 않으면 최초 설정 다음 진입이 `currentPin` 없는 PUT → **401 데드락**이 된다.
+  - ⚠️ `accountService.setMyPin`에 **`unauthorized: "reject"` 를 추가**한다(Step 12에서 `verifyMyPin`에만 붙었다) — 없으면 `currentPin` 불일치 401이 로그아웃을 유발한다(E17의 PUT 판).
   - PIN 모달: 온스크린 숫자 키패드, 4자리, 확인/최초설정 2모드, 1.5초 쿨다운, 5회 → 닫힘 + **localStorage 5분 잠금**, 네트워크 오류는 카운트 미가산.
   - 설정 화면: [03 §12.1](./03-screens-spec.md) 그룹 5개 + 웹 전용 항목. 미노출 4항목은 렌더하지 않되 **값은 보존**. 게스트 제한 11개 항목. QR 연동 정규화·재활성. 저장 순서·성공/실패 정직 표시. 하단 sticky 저장 바.
-  - 카메라 장치 선택(재검색·테스트·라벨 폴백).
-- **검증 명령**: `npx vitest run tests/unit/settings` · `npx playwright test e2e/pin.spec.ts`(E16·E17) · 게스트/로그인 상태에서 설정 저장 후 값 비교
+  - 카메라 장치 선택(재검색·테스트·라벨 폴백) + **`App.tsx`의 임시 진입점 2개**([카메라 테스트 열기]·[로컬 저장 폴더 선택])를 여기로 이사하고 원본 제거.
+  - **[보관된 결과물] 패널**(Step 10 이월): `resultsStore`의 `usage`/`removeFolder` 위에 얹기만 한다. 새 저장소 코드 금지.
+  - **이월(의도)**: [프레임 내보내기]/[가져오기] → Step 15(프레임 저장소 선행) · [앱 업데이트 확인] → Step 16(SW 선행) · [진단·상태] 버튼 → Step 16(모달 본체 선행).
+- **검증 명령**: `npx tsc --noEmit` · `npx vitest run`(baseline 1051에서 증가) · `npx vite build` · 게스트/로그인 상태에서 설정 저장 후 `localStorage["mcphoto.settings.v1"]` 비교
+  - ⚠️ **Playwright는 쓰지 않는다** — 아직 설치돼 있지 않고 도입은 Step 17이다. E16·E17은 node 단위 테스트로 등가 보장하고 화면 관측은 **V22 실측**([14 §10.8](./14-handoff-and-user-actions.md))으로 분리한다.
 - **완료 기준**:
   - [관측] 로그인 사용자는 설정 진입 시 **매번 PIN**을 요구받고, 게스트는 무가드로 진입한다. PIN 5회 실패 시 모달이 닫히고 **재시작 후에도 5분간 차단**된다. 컷 수 8로 저장하면 `Guide`에 반영된다.
   - [non-goal] **게스트로 저장해도 관리자 설정값(거울모드·QR 등)이 바뀌지 않는다**(저장 전후 localStorage 비교). 네트워크 오류가 실패 횟수를 늘리지 않는다. 미노출 4항목의 값이 저장 후에도 보존된다.
   - [trigger] PIN 게이트는 **로그인 사용자의 설정·계정 진입**에만. 재활성 규칙은 사용자가 QR 토글을 off→on 할 때만.
 - **롤백**: 설정 화면·PIN 모달 제거(설정 편집 불가 상태).
-- [ ] 완료
+- [x] **완료(2026-08-01)**
+  - **산출물(신규 20)**: 도메인 `auth/pinGatePolicy.ts`(배럴 **미등재** — `domain/auth/*` 관례) · `settings/settingsEditPolicy.ts` · `settings/settingsImport.ts` · `results/byteFormat.ts` /
+    어댑터 `storage/pinLockRepo.ts` / 셸 `pinGate.ts` / 화면 `screens/modals/pinPrompt/{pinPromptRunner.ts,PinPromptModal.tsx,pinPrompt.module.css}` ·
+    `screens/settings/{settingsForm,storedResultsPanel,cameraDevicePanel,serverStatusPanel,settingsTransfer,useSettingsScreen}.ts` /
+    UI `ui/views/{PinGate.tsx,SettingsView.tsx,settings.module.css}` · `ui/components/{fields.tsx,fields.module.css}` /
+    테스트 `tests/unit/settings/{pinGatePolicy,pinLockRepo,pinPromptRunner,pinGate,settingsEditPolicy,settingsForm,storedResultsPanel,settingsTransfer,settingsInvariants}.test.ts`(9파일)
+  - **수정(8)**: `adapters/http/accountService.ts`(**`setMyPin`에 `unauthorized: "reject"`**) · `adapters/platform/persistStorage.ts`(`readStorageStatus` — 요청 없는 조회) ·
+    `shell/sessionStore.ts`(**`markPinSet()`**) · `shell/settingsStore.ts`(`save`에 `webExtras` 병합 · **메모리에도 clamp** · 죽은 코드 2개 제거 · `currentSettingsRepo()`) ·
+    `domain/index.ts`(3개 등재) · `main.tsx`(`installPinGateLifecycle`) · `App.tsx`(`<PinGate>` 2곳 · `pinPrompt` 모달 · **임시 진입점 2개 제거**) · `ui/strings.ts`(`pin`·`settings` 절 + `formatCount` 타입 확장)
+  - **검증 실측(2026-08-01)**: `npx tsc --noEmit` 오류 0 · `npx vitest run` **54파일 1297 통과**(baseline 45파일 1051 → **+9파일 +246**) · `npx vite build` 성공(172 모듈, 1.47s).
+    `docs/spec-vectors/` **무변경** → `dotnet test`·`web/functions npm test` 재실행 불요(서버·WPF 코드도 무변경).
+  - **버그 수정 3건(이번 Step 범위)**:
+    ① `setMyPin`에 `unauthorized: "reject"` 누락 → `currentPin` 불일치/이미 설정된 PIN의 **401이 로그아웃을 유발**하던 것(E17의 PUT 판)을 고치고 **정적 PIN-2**로 고정.
+    ② `SessionUser.hasPin` 갱신 경로 부재 → 최초 설정 다음 진입이 **401 데드락**. `sessionStore.markPinSet()`(멱등·null 미생성) 신설.
+    ③ `settingsStore.reEnableQr()`·`saveWebExtras()`의 **`isGuest: false` 하드코딩**(호출자 0곳) → 두 함수를 제거하고 `save(patch, { isGuest, webExtras })` 하나로 합침. **정적 SET-4**로 재발 차단.
+  - **정적 불변식 10건 신설**(`settingsInvariants.test.ts`) — **전부 일시 변형으로 실패를 확인한 뒤 되돌렸다**:
+    **PIN-1** PIN 6파일의 `logger` 컨텍스트에 `pin`·`newPin`·`currentPin`·`code`·`state`·`nonce`·`token` 0건 ·
+    **PIN-2** `verifyMyPin`·`setMyPin` 둘 다 `unauthorized: "reject"` · **PIN-2b** `resetOtherPin`은 무변경 ·
+    **PIN-3** `mcphoto.pinLock.v1` 문자열이 `pinLockRepo.ts` 한 파일에만 · **PIN-4** `pinPrompt` `pushModal`은 `shell/pinGate.ts` 한 곳뿐 ·
+    **PIN-5** 게이트 판정 파일에 `localStorage` 0건 · **SET-1** `SettingsView`·`settingsForm`에 `clampSettings(`·`closestFrom(`·`normalizeQrToggles(` 0건 ·
+    **SET-2** `GUEST_LOCKED_KEYS` 11개 전부가 `SettingsView`의 `badge("…")`·`locked("…")`를 지난다 ·
+    **SET-3** `App.tsx`에 임시 진입점 문자열 0건 · **SET-4** `settingsStore`에 `isGuest: false` 0건 · **SET-5** `screens/settings/*`가 `settingsRepo.save`를 직접 부르지 않는다
+  - ⚠️ **설계 이탈 ①(가장 중요)**: 게이트를 **네비게이션 가드가 아니라 `<PinGate>` 렌더 게이트**로 만들었다(설계 §3.1과 동일). OAuth 복귀가 `returnTo="Settings"`로 직행하므로
+    호출부 가드는 그 경로를 덮지 못한다. 게이트 미통과 시 `SettingsView`가 **마운트조차 되지 않아** 설정값이 노출되지 않는다.
+  - ⚠️ **설계 이탈 ②**: `settingsStore.save`가 **메모리 값에도 `clampSettings`를 적용**하도록 고쳤다(설계에 없던 수정). 기존 구현은 저장소에만 clamp를 적용해
+    "저장된 값 6 / 화면이 읽는 값 7"이 갈라졌고, 그러면 03 §12.4의 **재반영 단계가 보정 사실을 보여주지 못한다**. `settingsForm.test.ts`의 "컷 수 7 → 6" 케이스가 이것을 고정한다.
+  - ⚠️ **설계 이탈 ③**: `PinPromptModal`이 `Modal`의 내장 `Esc`(→ `popModal`)를 쓰지 않고 **자체 keydown으로 `resolvePinPrompt`** 를 부른다.
+    내장 경로는 대기 중인 약속을 해제하지 않아 게이트가 스피너에 고착된다. 또 언마운트 취소를 **다음 태스크로 미뤄** `<StrictMode>` 이중 effect가 1회차를 취소하지 못하게 했다(15 §6 동종 함정).
+  - ⚠️ **설계 이탈 ④(사소)**: 잠금 안내 토스트를 `ensurePinGate` **한 곳에서만** 낸다(설계는 셸이 한 번 더 내는 형태였다 — 그대로면 잠금 시 토스트가 2개가 된다).
+    `cancelled`(사용자가 [닫기]·`Esc`)에는 토스트를 내지 않는다.
+  - ⚠️ **설계 이탈 ⑤(사소)**: `settingsTransfer`가 저장소 원문을 읽기 위해 `shell/settingsStore`에 **`currentSettingsRepo()`** 를 추가했다(설계에는 없던 접근자).
+    저장은 여전히 `save()`만 지나며, 정적 **SET-5**가 `screens/settings/*`의 `settingsRepo.save` 직접 호출 0건을 고정한다.
+  - ⚠️ **설계 이탈 ⑥(사소)**: [로컬 저장 폴더 선택]/[해제]만 **즉시 저장**한다. 폴더 핸들이 그 순간 IndexedDB에 들어가므로 표시값을 sticky [저장]까지 미루면
+    "표시는 비었는데 복사는 된다"는 어긋남이 생긴다. 편집 중인 다른 draft 값은 건드리지 않는다.
+  - ⚠️ **`serverStatusPanel`의 취소는 결과 폐기 방식이다** — `healthService.probe()`가 `AbortSignal`을 받지 않아 진행 중 요청 자체는 끊지 못한다(화면 상태는 건드리지 않는다).
+    실제 요청 취소가 필요하면 Step 16에서 `healthService`에 신호를 뚫는다.
+  - **이월(의도 — 스텁 문구를 운영자에게 노출하지 않기 위함)**: [프레임 내보내기]/[가져오기] → **Step 15** · [앱 업데이트 확인] → **Step 16** · [진단·상태] 버튼 → **Step 16**.
+    `Account` 화면 본체도 Step 16이지만 **게이트 배선만 지금 넣었다**(나중에 붙이면 한 경로가 빠진다).
+  - **미검증(사용자 액션 V22)**: 매번 PIN · 게스트 무가드 · **PIN 1회 오입력이 로그아웃을 유발하지 않음(E17 화면 관측)** · 최초 설정 후 재진입(A5) · 5회 → 5분 잠금 재시작 유지(E16) ·
+    오프라인 입력 · 게스트 저장 후 운영자 값 보존(E23) · 컷 수 자동 왕복 · 카메라 2대 전환 · 보관 결과물 삭제 · 폴더 선택 3브라우저 · 설정 내보내기/가져오기 · 키패드 접근성 —
+    **13건 전부 브라우저·실계정·실기기가 필요해 추정 통과 처리하지 않았다.** 절차는 [14 §10.8](./14-handoff-and-user-actions.md)에 **V22-1~V22-13**으로 등재했다.
+  - **📌 다음 작업자에게**: ① `pinPrompt` 모달을 직접 `pushModal` 하지 마라 — 게이트 우회 경로가 되고 **PIN-4**가 실패한다.
+    ② 설정 저장은 반드시 `settingsStore.save(patch, { isGuest })`를 지난다. `isGuest`를 하드코딩하면 **SET-4**가 실패한다.
+    ③ 새 게스트 제한 키를 추가하면 `GUEST_LOCKED_KEYS`에 넣는 것만으로 **SET-2**가 렌더 가드 누락을 잡아 준다.
+    ④ `<PinGate>`의 effect에 **cleanup을 넣지 마라** — StrictMode 이중 effect가 1회차를 취소해 설정 화면에서 즉시 튕겨 나간다. 승인 폐기는 `installPinGateLifecycle`이 한다.
 
 ---
 

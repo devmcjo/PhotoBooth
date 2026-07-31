@@ -1,0 +1,68 @@
+/* PIN 입력 모달 — 03 §15.3 · 07 §6.4 (키오스크에 물리 키보드가 없다) */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+}
+
+/* ── 4칸 마스킹 인디케이터 ── */
+
+.indicator {
+  display: flex;
+  gap: var(--gap-sm);
+  justify-content: center;
+  padding: var(--gap-sm) 0;
+}
+
+.dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+}
+
+.dotFilled {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* ── 온스크린 키패드 ── */
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(var(--touch-min), 84px));
+  gap: var(--gap-sm);
+  justify-content: center;
+}
+
+.key {
+  /* 터치 타깃 48px 이상(01 §8). */
+  min-width: var(--touch-min);
+  min-height: 56px;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.keyWide {
+  font-size: var(--fs-body);
+}
+
+/* ── 안내 ── */
+
+.message {
+  margin: 0;
+  min-height: 1.5em;
+  text-align: center;
+  color: var(--danger);
+  font-size: var(--fs-body);
+}
+
+.hint {
+  margin: 0;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}

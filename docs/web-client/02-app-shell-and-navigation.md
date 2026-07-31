@@ -171,7 +171,10 @@ export function canTransition(from: Screen, to: Screen): boolean {
 ### 5.1 M1 배선 (가장 중요한 배선)
 
 ```ts
-// shell/sessionStore.ts — currentUser 변경 진입점은 login / logout / resetUserForTest 3개뿐
+// shell/sessionStore.ts — currentUser 변경 진입점은 login / logout / expireSession / markPinSet 4개뿐
+//   · expireSession(Step 12): 401 만료 전용. 촬영 데이터는 **유지**한다(§5.2 매트릭스).
+//   · markPinSet(Step 13):    최초 PIN 설정 반영. **멱등이고 null을 만들지 않는다** → M1 구독 무영향.
+//   규칙의 요지는 "진입점 개수"가 아니라 **currentUser 필드를 통해서만 바꾼다**는 것이다.
 // ⚠️ 셀렉터 구독은 subscribeWithSelector 미들웨어가 있어야만 동작한다.
 //    미들웨어 없이 subscribe(selector, listener)를 쓰면 Zustand가 두 번째 인자를 "조용히 무시"해
 //    토큰 폐기가 한 번도 실행되지 않는다 — M1이 소리 없이 깨진다.

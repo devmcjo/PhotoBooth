@@ -24,6 +24,7 @@
 | 웹 클라이언트(키오스크)의 타임랩스를 바꾼다 | [Step 9 타임랩스 인코더](./web-step9-timelapse-encoder-design.md) → [`web-client/04 §7`](../web-client/04-media-pipeline-web.md) + [`analysis/14 §7`](../analysis/14-media-pipeline-spec.md) |
 | 웹 클라이언트(키오스크)의 업로드·QR을 바꾼다 | [Step 11 업로드·QR·Done](./web-step11-upload-qr-done-design.md) → [`web-client/06 §4·§5`](../web-client/06-backend-integration-web.md) + [`analysis/31 §5·§7`](../analysis/31-backend-api-reference.md) |
 | 웹 클라이언트(키오스크)의 로그인·JWT를 바꾼다 | [Step 12 Google SSO·JWT](./web-step12-google-sso-auth.md) → [`web-client/07`](../web-client/07-auth-and-permissions-web.md) + [`analysis/61 §3.4·§6`](../analysis/61-auth-platform-integration.md) + [`analysis/31 §4.2`](../analysis/31-backend-api-reference.md) |
+| 웹 클라이언트(키오스크)의 PIN 게이트·설정 화면을 바꾼다 | [Step 13 PIN 게이트·설정](./web-step13-settings-pin-gate.md) → [`web-client/07 §6`](../web-client/07-auth-and-permissions-web.md)·[`03 §12`](../web-client/03-screens-spec.md) + [`analysis/41 §2`](../analysis/41-local-data-and-file-formats.md)(설정 진실원) + [`analysis/61 §7`](../analysis/61-auth-platform-integration.md) |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
 
 ---
@@ -54,6 +55,7 @@
 | [web-it17-download-share-design](./web-it17-download-share-design.md) | **it17** 원클릭 자동 저장(fetch→Blob→`<a download>`)·전역 degrade 폴백·상단 공유 버튼(링크 복사+토스트)·파일명 규칙·`MCPhoto` 네이밍. **버킷 CORS(GET) 선행 조건 포함** |
 | [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
 | [web-wbs](./web-wbs.md) | 웹 작업 분해 |
+| [web-step13-settings-pin-gate](./web-step13-settings-pin-gate.md) | **키오스크 웹 클라이언트 WBS Step 13** 상세 설계. 진입 PIN 게이트(4자리·5회/1.5초·**기기 5분 잠금** WD16·**fail-closed 5경로**)를 **네비게이션 가드가 아니라 `<PinGate>` 렌더 게이트**로 만든 근거(OAuth 복귀 `returnTo="Settings"` 경로를 구조적으로 덮는다), `pushModal`이 결과를 돌려주지 않는 문제를 **1개짜리 pending 채널 + 멱등 해제 + 마운트 감시 5초**로 푼 구조, `hasPin` 갱신 경로 부재로 인한 **최초 설정 후 401 데드락**과 `markPinSet()` 신설, **`setMyPin`에 `unauthorized:"reject"` 누락(E17의 PUT 판) 버그 수정**, 설정 화면 6섹션 + 게스트 **4중 방어**(렌더·액션·패치·저장소) + 저장 4단(**재반영 필수**) + **[보관된 결과물] 패널(Step 10 이월)** 포함 |
 | [web-step12-google-sso-auth](./web-step12-google-sso-auth.md) | **키오스크 웹 클라이언트 WBS Step 12** 상세 설계. Google SSO **전체 페이지 리디렉트**(PKCE S256·`state`·`nonce`·`prompt=select_account`·`clientKind:"web"`) → `/oauth2callback` 동기 1회 소비 → 메모리 JWT(M2). **콜백을 화면 상태가 아니라 URL 경로로 처리한 근거**(`OauthCallback` 상태 미신설), StrictMode 이중 실행을 React 밖 동기 소비로 막은 구조, **401 → `expireSession()`(촬영 데이터 유지 — `logout()`과 다른 이유)** 배선, PIN 401 예외 처리, 개발 포트 5273↔5173 불일치 정정 포함 |
 | [web-step11-upload-qr-done-design](./web-step11-upload-qr-done-design.md) | **키오스크 웹 클라이언트 WBS Step 11**(★마일스톤 A) 상세 설계. 업로드 3단계(prepare → **XHR 서명 PUT**(진행률·`requiredHeaders` 전량 순회 — M14) → commit)·ECC **Q** QR·`Done` 자동 홈. **업로드 실행 주체를 `Qr` 화면으로 확정한 근거**(Windows `QrPopupViewModel`·[재시도] 중복 진입점), `qrUsageStore`로 `isTempUserBlocked` 실배선, `qrcode-generator@2.0.4`(MIT) 도입 근거 포함 |
 | [web-step10-local-save-design](./web-step10-local-save-design.md) | **키오스크 웹 클라이언트 WBS Step 10** 상세 설계. 합성 결과·타임랩스의 OPFS 보관(Worker 경계 필수 — Safari에 `createWritable` 없음), 폴더명 규칙(Windows `LocalSaveService`와 동일 유도), 보관 한도·회수, 사용자 지정 폴더 핸들을 **로그 DB와 분리된** IndexedDB에 두는 근거 |

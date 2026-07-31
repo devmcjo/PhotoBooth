@@ -55,6 +55,10 @@ export function createAccountService(client: BackendClient = getBackendClient())
         // 최초 설정(미보유)일 때만 currentPin을 생략한다.
         body: currentPin === undefined ? { newPin } : { newPin, currentPin },
         auth: "required",
+        // ⚠️ 이 호출의 401은 **PIN 문제**(currentPin 누락·불일치 / 서버에 이미 PIN 있음)이지
+        //    세션 만료가 아니다. 기본값(`expired`)에 맡기면 PIN을 한 번 틀렸을 때
+        //    로그아웃되는 회귀가 난다(E17의 PUT 판 — `verifyMyPin`과 같은 축이다).
+        unauthorized: "reject",
       });
     },
 
