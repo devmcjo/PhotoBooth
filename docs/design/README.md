@@ -21,6 +21,7 @@
 | 프레임 기능을 바꾼다 | [it15 프레임 UX](./wpf-it15-frame-ux-design.md) · [프레임 신규 생성·서버 등록 팝업](./wpf-frame-create-from-existing-and-server-register-design.md) · [it20 다운로드 대기 UI](./wpf-it20-frame-download-waiting-design.md) · [프레임 편집 완성](./wpf-frame-edit-completion-design.md) |
 | 촬영 컷 수·슬롯 관계를 바꾼다 | [it17 컷 수 자동 모드](./wpf-it17-auto-cutcount-design.md) |
 | 웹 다운로드 페이지를 바꾼다 | [it17 자동 저장·공유](./web-it17-download-share-design.md) → [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
+| 웹 클라이언트(키오스크)의 타임랩스를 바꾼다 | [Step 9 타임랩스 인코더](./web-step9-timelapse-encoder-design.md) → [`web-client/04 §7`](../web-client/04-media-pipeline-web.md) + [`analysis/14 §7`](../analysis/14-media-pipeline-spec.md) |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
 
 ---
@@ -51,6 +52,7 @@
 | [web-it17-download-share-design](./web-it17-download-share-design.md) | **it17** 원클릭 자동 저장(fetch→Blob→`<a download>`)·전역 degrade 폴백·상단 공유 버튼(링크 복사+토스트)·파일명 규칙·`MCPhoto` 네이밍. **버킷 CORS(GET) 선행 조건 포함** |
 | [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
 | [web-wbs](./web-wbs.md) | 웹 작업 분해 |
+| [web-step9-timelapse-encoder-design](./web-step9-timelapse-encoder-design.md) | **키오스크 웹 클라이언트**([`docs/web-client/`](../web-client/README.md)) **WBS Step 9** 상세 설계. 스풀(≤15fps JPEG→OPFS) + 종료 시 실경과 선별 → WebCodecs/mp4-muxer(Worker) → MediaRecorder(메인) → `null` 3경로. **`mp4-muxer@5.2.2`(MIT) 도입 근거·`THIRD-PARTY.md` 신설** 포함 |
 
 ### 3.2 Windows 데스크톱 (WPF)
 

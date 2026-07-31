@@ -14,6 +14,8 @@ export * from "./capture/centerCrop";
 export * from "./capture/previewReadiness";
 export * from "./capture/captureSession";
 export * from "./capture/timelapseSpeed";
+export * from "./capture/timelapsePlan";
+export * from "./capture/timelapseSpool";
 export * from "./capture/slotPlacement";
 
 export * from "./frames/types";

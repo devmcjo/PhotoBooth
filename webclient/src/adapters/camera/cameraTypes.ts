@@ -38,6 +38,20 @@ export interface CameraStartOptions {
 /** 프레임 1개를 Worker로 넘기는 전달체. */
 export type FramePayload = ImageBitmap | VideoFrame;
 
+/** 타임랩스 스풀 프레임 1장(가공 결과 JPEG). 픽셀은 프리뷰·스틸과 같은 것이다. */
+export interface SpoolFrame {
+  readonly blob: Blob;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** 스풀 채널 설정(04 §7.2). `enabled:false`면 Worker가 JPEG를 만들지 않는다. */
+export interface SpoolOptions {
+  readonly enabled: boolean;
+  readonly intervalMs: number;
+  readonly quality: number;
+}
+
 /**
  * `<video>` + 프레임 도착 루프. 브라우저 전용이라 인터페이스로 분리해
  * `cameraService`를 노드 환경에서 테스트할 수 있게 한다.
@@ -66,6 +80,13 @@ export interface FrameProcessor {
   requestStill(quality: number): Promise<Blob | null>;
   /** 프리뷰 캔버스 제어권을 넘긴다(zero-copy 경로). 미지원이면 무시된다. */
   bindPreview(canvas: OffscreenCanvas): void;
+  /**
+   * 타임랩스 스풀 채널 on/off(04 §7.2).
+   * **스틸 채널과 분리돼 있다** — 스풀이 컷 촬영 요청을 덮어써 컷을 잃는 사고를 막는다.
+   */
+  configureSpool(options: SpoolOptions): void;
+  /** 스풀 프레임 도착 구독. */
+  onSpoolFrame(listener: (frame: SpoolFrame) => void): () => void;
   terminate(): void;
 }
 

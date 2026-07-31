@@ -16,13 +16,14 @@ import {
   type FrameLoadPhase,
 } from "@domain/frames/frameLoadPolicy";
 import { getCameraService } from "@adapters/camera/cameraService";
+import { getTimelapseService } from "@adapters/encode/timelapseService";
 import { requestWakeLock } from "@adapters/platform/wakeLock";
 import { unlockAudio } from "@adapters/platform/shutterSound";
 import { logger } from "@adapters/storage/logStore";
 import { fixFrameAndResolveCutCount } from "@shell/captureSessionController";
 import { useSettingsStore } from "@shell/settingsStore";
 import { sessionStore, useSessionStore, type CapturedCut } from "@shell/sessionStore";
-import { shellStore } from "@shell/shellStore";
+import { currentScreen, shellStore } from "@shell/shellStore";
 import { Button, Spinner } from "@ui/components";
 import { STRINGS } from "@ui/strings";
 import { CameraPreview } from "./CameraPreview";
@@ -360,6 +361,8 @@ export function ResultView() {
   const result = useResultCompose();
   const rawEnableQr = useSettingsStore((s) => s.values.EnableQrDelivery);
   const user = useSessionStore((s) => s.currentUser);
+  /** [다음] 1단계(타임랩스 생성) 진행 중. 이중 클릭을 막는다. */
+  const [finishing, setFinishing] = useState(false);
 
   const filterLabels: Record<FilterKind, string> = {
     None: "원본",
@@ -368,7 +371,17 @@ export function ResultView() {
     Beauty: "뷰티",
   };
 
-  function goNext(): void {
+  async function goNext(): Promise<void> {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      // 03 §8.1 1단계 — 타임랩스 생성. **실패해도 계속한다**(`timelapseUrl=null`은 계약상 합법 — VF-6).
+      await getTimelapseService().finish();
+    } finally {
+      setFinishing(false);
+    }
+    // 대기 중 홈 복귀·유휴 만료가 일어났을 수 있다 — 그때는 전이하지 않는다.
+    if (currentScreen() !== "Result") return;
     // TempUser 한도는 Step 11에서 qr-usage 조회로 채운다(지금은 미차단).
     const qrOn = isQrEffectivelyEnabled(rawEnableQr, user !== null, false);
     shellStore.getState().go(qrOn ? "Qr" : "Done");
@@ -378,6 +391,7 @@ export function ResultView() {
     <main className={styles.screen}>
       <div className={styles.captureStage}>
         {result.composing && <Spinner label="합성 중입니다…" />}
+        {finishing && <Spinner label={STRINGS.result.timelapseBusy} />}
         {result.error !== null && (
           <p className={styles.note} role="alert">
             {result.error}
@@ -407,8 +421,8 @@ export function ResultView() {
         </Button>
         <Button
           variant="primary"
-          disabled={result.composing || result.imageUrl === null}
-          onClick={goNext}
+          disabled={result.composing || result.imageUrl === null || finishing}
+          onClick={() => void goNext()}
         >
           {STRINGS.common.next}
         </Button>

@@ -12,6 +12,11 @@
  * ⚠️ `OffscreenCanvas` 1개를 **재사용**한다(매 프레임 새로 만들면 GC 압력으로 fps가 떨어진다).
  */
 import { centerCrop } from "@domain/capture/centerCrop";
+import {
+  shouldSpoolFrame,
+  TIMELAPSE_SPOOL_INTERVAL_MS,
+} from "@domain/capture/timelapseSpool";
+import { SPOOL_JPEG_QUALITY } from "./frameProcessorProtocol";
 import type {
   FrameProcessorRequest,
   FrameProcessorResponse,
@@ -30,6 +35,15 @@ let previewCtx: OffscreenCanvasRenderingContext2D | null = null;
 
 /** 대기 중인 스틸 요청. 다음 가공 프레임에서 완성한다(04 §5.1 원자성). */
 let pendingStill: { id: number; quality: number } | null = null;
+
+/**
+ * 타임랩스 스풀 채널 상태(04 §7.2) — 스틸과 **완전히 분리**돼 있다.
+ * 초기값이 `-Infinity`인 이유: 0으로 두면 시계 원점 근처에서 첫 프레임을 먹는다(15 §4 함정 #4).
+ */
+let spoolEnabled = false;
+let spoolIntervalMs = TIMELAPSE_SPOOL_INTERVAL_MS;
+let spoolQuality = SPOOL_JPEG_QUALITY;
+let lastSpoolAtMs = Number.NEGATIVE_INFINITY;
 
 function ensureCanvas(width: number, height: number): OffscreenCanvasRenderingContext2D | null {
   if (canvas === null) {
@@ -108,7 +122,26 @@ async function processFrame(payload: ImageBitmap | VideoFrame): Promise<void> {
       }
     }
 
-    // ── 소비자 3: 타임랩스 샘플러는 Step 9가 이 통지에 붙는다 ──
+    // ── 소비자 3: 타임랩스 스풀(≤15fps) ──
+    // **스틸 분기 뒤**에 둔다. 컷 촬영이 항상 우선이고, 스풀 JPEG 인코딩이 컷을 지연시키면 안 된다.
+    if (spoolEnabled) {
+      const nowMs = performance.now();
+      if (shouldSpoolFrame(lastSpoolAtMs, nowMs, spoolIntervalMs)) {
+        // 시각을 **await 전에** 기록한다. 뒤에 기록하면 인코딩 소요만큼 간격이 밀려 fps가 떨어진다.
+        lastSpoolAtMs = nowMs;
+        try {
+          const blob = await canvas.convertToBlob({
+            type: "image/jpeg",
+            quality: spoolQuality,
+          });
+          post({ type: "spoolFrame", blob, width: crop.width, height: crop.height });
+        } catch {
+          // 스풀 1장 실패는 촬영과 무관하다 — 조용히 넘기고 다음 프레임을 노린다.
+          // (여기서 로그를 남겨도 Worker에는 로그 스토어가 붙지 않아 진단에 도달하지 않는다.)
+        }
+      }
+    }
+
     post({ type: "processed", width: crop.width, height: crop.height });
   } finally {
     payload.close();
@@ -157,6 +190,14 @@ self.addEventListener("message", (event: MessageEvent<FrameProcessorRequest>) =>
     case "requestStill":
       // 이전 요청이 아직 안 끝났으면 덮어쓴다(가장 최근 요청만 유효).
       pendingStill = { id: request.id, quality: request.quality };
+      break;
+
+    case "configureSpool":
+      spoolEnabled = request.enabled;
+      spoolIntervalMs = request.intervalMs;
+      spoolQuality = request.quality;
+      // off로 내려갈 때 마지막 시각을 지운다 — 다음 세션의 첫 프레임이 간격 판정에 걸리지 않게.
+      if (!request.enabled) lastSpoolAtMs = Number.NEGATIVE_INFINITY;
       break;
 
     case "reset":

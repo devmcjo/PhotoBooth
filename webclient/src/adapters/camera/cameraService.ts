@@ -12,6 +12,8 @@ import type {
   FrameProcessor,
   FrameSource,
   ProcessedSize,
+  SpoolFrame,
+  SpoolOptions,
 } from "./cameraTypes";
 import { createFpsMeter, type FpsMeter } from "./fpsMeter";
 import { spawnFrameProcessor } from "./frameProcessorClient";
@@ -59,8 +61,15 @@ export interface CameraService {
   /** 최근 1초 가공 fps. */
   fps(): number;
   onState(listener: CameraStateListener): () => void;
-  /** 가공 완료 통지(타임랩스 샘플러·계측용). */
+  /** 가공 완료 통지(계측용). */
   onProcessedFrame(listener: (size: ProcessedSize) => void): () => void;
+  /**
+   * 타임랩스 스풀 채널 on/off(04 §7.2). 카메라가 열려 있지 않으면 **무해한 no-op**이다
+   * (촬영 종료 뒤 off를 부르는 경로가 있다 — 그때 예외가 나면 안 된다).
+   */
+  configureTimelapseSpool(options: SpoolOptions): void;
+  /** 스풀 프레임 도착 구독. 카메라 재시작을 넘어 유지된다. */
+  onTimelapseFrame(listener: (frame: SpoolFrame) => void): () => void;
 }
 
 function buildConstraints(options: CameraStartOptions): MediaStreamConstraints {
@@ -94,6 +103,7 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
   let processor: FrameProcessor | null = null;
   let unsubscribeFrames: (() => void) | null = null;
   let unsubscribeProcessed: (() => void) | null = null;
+  let unsubscribeSpool: (() => void) | null = null;
   let readiness: PreviewReadinessState = createPreviewReadiness();
   let meter: FpsMeter = createFpsMeter();
   let startedAt = 0;
@@ -104,6 +114,11 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
 
   const stateListeners = new Set<CameraStateListener>();
   const processedListeners = new Set<(size: ProcessedSize) => void>();
+  /**
+   * 스풀 구독자는 **서비스가 들고 있다**(프로세서가 아니라). 프로세서는 카메라 재시작마다
+   * 새로 만들어지므로, 프로세서에 직접 붙이면 재시작 한 번에 구독이 조용히 사라진다.
+   */
+  const spoolListeners = new Set<(frame: SpoolFrame) => void>();
 
   function setState(next: CameraState, detail?: string): void {
     if (state === next) return;
@@ -147,8 +162,10 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
     clearReadyTimer();
     unsubscribeFrames?.();
     unsubscribeProcessed?.();
+    unsubscribeSpool?.();
     unsubscribeFrames = null;
     unsubscribeProcessed = null;
+    unsubscribeSpool = null;
 
     source?.detach();
     source = null;
@@ -206,6 +223,16 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       return () => processedListeners.delete(listener);
     },
 
+    onTimelapseFrame(listener) {
+      spoolListeners.add(listener);
+      return () => spoolListeners.delete(listener);
+    },
+
+    configureTimelapseSpool(options) {
+      // 카메라가 이미 멈춰 프로세서가 없을 수 있다(수집 종료가 정지 뒤에 오는 경로).
+      processor?.configureSpool(options);
+    },
+
     async start(options) {
       // 멱등: 이미 열려 있으면 성공으로 본다. 장치 변경은 호출측이 stop() 후 부른다.
       if (state === "Starting" || state === "Ready") {
@@ -250,6 +277,9 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       processor = makeProcessor();
       processor.configure({ targetAspect: options.targetAspect, mirror: options.mirror });
       unsubscribeProcessed = processor.onProcessed(onProcessed);
+      unsubscribeSpool = processor.onSpoolFrame((frame) => {
+        for (const listener of spoolListeners) listener(frame);
+      });
 
       source = makeFrameSource();
       unsubscribeFrames = source.onFrame((payload) => processor?.process(payload));

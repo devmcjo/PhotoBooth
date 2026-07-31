@@ -16,22 +16,21 @@
 
 ```bash
 cd webclient && npm ci
-npx tsc --noEmit && npx vitest run     # 492 통과
+npx tsc --noEmit && npx vitest run     # 645 통과(26파일)
 cd ../web/functions && npm test         # 316 통과
-cd ../.. && dotnet test tests/MCPhoto.Tests   # 937 통과
+cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
 
 세 개가 다 녹색이면 재개 지점이 건강한 것이다. 그다음 **[11 · WBS](./11-wbs.md)의 체크박스**에서 다음 Step을 고른다(각 Step에 산출물·검증·이탈 사항이 기록돼 있다).
 
 | 다음 | 선행 조건 |
 |------|-----------|
-| **Step 8.5 main 머지분 반영** | 없음 — 도메인 2파일 + 벡터 1 + 불변식 테스트. **Step 14·15 착수 전에 끝나 있어야 한다** |
-| Step 9 타임랩스 · 10 로컬 보관 | 없음 |
+| **Step 10 로컬 보관** | 없음 — Step 9의 `getTimelapseService().current()`가 타임랩스 입력이다 |
 | **Step 11 업로드·QR** ★마일스톤 A | A4(버킷 CORS) — [14 §5](./14-handoff-and-user-actions.md) |
 | Step 12~16 | A1·A2·A3(OAuth·시크릿·게이트 키) |
 | Step 17 E2E·실기기 | 실기기 3대(사람) |
 
-권장 분할: **9+10을 한 세션**, 11 / 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
+권장 분할: 10 / 11 / 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
 
 ---
 
@@ -97,6 +96,10 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | **WM1** CSS 반전 금지 | `src/` 전체에 `scaleX(-1)`·`rotateY(180deg)` 없음 + `CameraPreview`가 `<video>` 미렌더 |
 | **M2** JWT 메모리 전용 | `authStore.ts` 소스에 저장소 API 문자열 0건 |
 | 도메인 순수성 | §2 |
+| **유휴 상한** 총 대기 60초 < `IDLE_TIMEOUT_MS` 120초 | `shell.test.ts`(도메인 사본 = 셸 실제값 동기화까지) |
+| MP4 muxer import는 **`encode.worker.ts` 하나뿐** | `timelapseService.test.ts` — 코어를 node 테스트 가능 상태로 고정 |
+| Worker에서 도는 코어에 **로거 0건** | 동상. `logger`는 메인에만 붙어 Worker 로그는 진단에 도달하지 않는다 |
+| `encode.worker.ts`는 **OPFS를 읽기만** 한다 | 동상(`createWritable`·`createSyncAccessHandle` 0건) |
 
 새 불변식을 만들면 **같은 방식으로 고정**하는 것이 이 저장소의 관례다.
 
@@ -116,6 +119,8 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | 8 | `defineSecret` 추가가 **배포 전제조건**을 만든다 | 시크릿을 선언하면 등록 전 배포가 실패한다. 문서에 순서를 남긴다 |
 | 9 | hosting 멀티사이트 전환이 **기존 배포 스크립트를 깨뜨렸다** | `--only hosting`은 전 타깃이다. 기존 스크립트를 `hosting:default`로 고정 |
 | 10 | vitest는 `expect(actual, msg)`를 받지만 **jest는 아니다** | `web/functions`는 jest다. 두 프로젝트의 단언 문법이 다르다 |
+| 11 | 가공 Worker의 스틸 슬롯은 **1개짜리 덮어쓰기**다 | 다른 소비자가 `requestStill`을 재사용하면 컷 요청이 소멸해 **세션이 홈으로 복귀한다**. 새 소비자는 **전용 채널**을 만든다(Step 9의 스풀 채널이 선례) |
+| 12 | Worker에서 남긴 `logger` 로그는 **어디에도 도달하지 않는다** | `attachLogStore`는 메인 프로세스에만 붙는다. Worker는 사유를 **응답 페이로드로** 넘기고 메인이 기록한다 |
 
 ---
 
@@ -130,12 +135,14 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 ## 6. Step 9~16에서 미리 알아야 할 것
 
-### Step 9 타임랩스
-- **의존성 추가 필요**: MP4 muxer(`mp4-muxer` 등). `01 §7`대로 **버전 핀 고정** + `webclient/THIRD-PARTY.md`에 라이선스 기록(상용화 요구).
-- 경로 판정은 `VideoEncoder.isConfigSupported("avc1.42001E")` → `MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")` → 미지원. **경로 A(MediaRecorder)는 메인 스레드 전용**이다(VF-15).
-- 스풀은 이미 준비돼 있다: `sessionWorkspace.writeTimelapseFrame/listTimelapseFrames/removeTimelapseFrame`, 파일명은 0 패딩이라 **문자열 정렬 = 시간 정렬**.
-- 수집 지점도 있다: `cameraService.onProcessedFrame(...)`.
-- 미지원은 **예외가 아니라 `null`**이다(`timelapseUrl=null`은 계약상 합법 — VF-6).
+### Step 9 타임랩스 — **완료(2026-07-31)**. 뒤 Step이 알아야 할 것만 남긴다
+- 의존성 `mp4-muxer@5.2.2`(MIT, 캐럿 없는 정확 핀)가 들어왔고 `webclient/THIRD-PARTY.md`가 신설됐다. **새 런타임 의존을 추가하면 거기에 먼저 적는다.**
+- **결과 mp4는 `sessionStore`에 없다.** `getTimelapseService().current()`로 읽는다(`TimelapseResult`). 홈 복귀(`stopEncoder` 훅)에서 폐기된다 → Step 10·11은 [다음] 처리 안에서 소비해야 한다.
+- 인코딩은 **`Result`의 [다음] 1단계**에서만 일어난다(`ResultView.goNext` → `finish()`, 멱등). 화면 진입만으로는 시작되지 않는다.
+- 가공 Worker에 **전용 스풀 채널**이 생겼다(`configureSpool`/`onSpoolFrame`). ⚠️ **스틸 채널(`requestStill`)을 다른 용도로 재사용하지 마라** — 1개짜리 덮어쓰기 슬롯이라 컷 촬영 요청과 충돌하면 세션이 홈으로 복귀한다.
+- 미지원은 **예외가 아니라 `null`**이다(`timelapseUrl=null`은 계약상 합법 — VF-6). `null`이어도 [다음]은 정상 전이한다.
+- 진단용 `getTimelapseService().encoderProbe()`(= `lastEncoderProbe()`)가 준비돼 있다 → Step 16 진단 모달과 [12 C3] `Guide` 안내가 소비한다.
+- **실측 V18 7건이 남아 있다**([14 §10.3](./14-handoff-and-user-actions.md)). 브라우저 실행이 필요해 자동화 불가.
 
 ### Step 10 로컬 보관
 - `resultSaver`는 반드시 **`opfsWriter` Worker 경계**를 지나야 한다(`getOpfsClient()`). 메인에서 OPFS에 쓰면 iOS에서 전 저장이 실패한다.
@@ -154,9 +161,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 ### Step 14 프레임 선택 — **it20 대기 국면이 절반이다**(2026-07-31 main 머지분)
 - `analysis/13 §4.2`에 **로딩 4국면**(`Loading`/`Ready`/`Degraded`/`Failed`) 규격이 신설됐다. 웹 반영은 [03 §4.1](./03-screens-spec.md)·[06 §6.1](./06-backend-integration-web.md)·[02 §6.2](./02-app-shell-and-navigation.md).
-- Windows에 **순수 함수 2개가 새로 생겼고 웹에는 아직 없다**: `FrameLoadPolicy`(판정·상한·문구, 테스트 13건) · `FrameCatalogProgress`(진행 문구, 5건). 도메인으로 이식하고 `docs/spec-vectors/frame-load-policy.json`으로 교차 고정한다.
+- **판정 계층은 Step 8.5에서 이미 이식됐다**(다시 만들지 마라): `domain/frames/frameLoadPolicy.ts`(`classifyFrameLoad`·`finalizeFrameLoad`·`nextFrameLoadDeadlineMs`·`frameLoadNotice` + 상한 상수) · `domain/frames/frameCatalogProgress.ts`(`catalogProgressLabel`). 벡터 `docs/spec-vectors/frame-load-policy.json` 52케이스가 Windows와 교차 고정한다. **이번 Step은 그 위에 어댑터·화면만 얹는 것이다.**
+  - 함수명이 WBS 약칭(`classify`/`finalize`)이 아니라 **한정형**이다 — `domain/index.ts`가 평면 `export *` 배럴이라 짧은 이름은 충돌한다.
+  - `finalizeFrameLoad`는 어떤 입력에서도 `Loading`을 반환하지 않는다. 화면의 `finally`가 이 함수로 국면을 닫으면 오버레이 고착이 **구조적으로 불가능**하다.
 - **웹이 Windows보다 이 규격이 급하다**: Windows는 "최초 실행 1회"지만 웹은 **신규 기기·시크릿 창·저장소 비우기마다** 첫 방문이다.
-- 불변식 **총 대기 60초 < `IDLE_TIMEOUT_MS` 120초** — 값은 이미 정합이므로 **정적 테스트로 고정만** 하면 된다(§3.4 관례).
+- 불변식 **총 대기 60초 < `IDLE_TIMEOUT_MS` 120초**는 `shell.test.ts`가 이미 고정하고 있다(§3.4).
 - 상한 타이머는 `setTimeout` 누적이 아니라 **실경과 기준**으로 판정한다(WM3와 동종 — 탭 백그라운드 스로틀).
 - 카탈로그 로더는 **단일 비행 + 진행 replay**다. 부트스트랩 prefetch와 화면 진입이 **한 작업을 공유**하고, [기다리지 않고 시작]의 취소는 **호출자별**이라 공유 작업은 계속 진행해 캐시를 완성한다.
 
@@ -177,11 +186,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **492** · 서버 **316** · Windows **937** |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **645**(26파일) · 서버 **316** · Windows **938**(Windows 수치는 Step 8.5 시점 실측. Step 9는 `docs/spec-vectors/`를 건드리지 않아 재측정 대상이 아니다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 9~17, 실측 V1~V17 |
+| 미완 | Step 10~17, 실측 V1~V18 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 

@@ -13,7 +13,10 @@ import type {
   FrameProcessor,
   FrameSource,
   ProcessedSize,
+  SpoolFrame,
+  SpoolOptions,
 } from "@adapters/camera/cameraTypes";
+import { SPOOL_JPEG_QUALITY } from "@adapters/camera/frameProcessorProtocol";
 import { createFpsMeter, FPS_WINDOW_MS } from "@adapters/camera/fpsMeter";
 import {
   displayLabel,
@@ -102,7 +105,9 @@ class FakeProcessor implements FrameProcessor {
   stillResult: Blob | null = new Blob(["x"]);
   processedCount = 0;
   boundPreview = false;
+  spoolConfigs: SpoolOptions[] = [];
   private listeners = new Set<(size: ProcessedSize) => void>();
+  private spoolListeners = new Set<(frame: SpoolFrame) => void>();
 
   configure(options: { targetAspect: number; mirror: boolean }): void {
     this.configured.push(options);
@@ -124,9 +129,21 @@ class FakeProcessor implements FrameProcessor {
   bindPreview(): void {
     this.boundPreview = true;
   }
+  configureSpool(options: SpoolOptions): void {
+    this.spoolConfigs.push(options);
+  }
+  onSpoolFrame(listener: (frame: SpoolFrame) => void): () => void {
+    this.spoolListeners.add(listener);
+    return () => this.spoolListeners.delete(listener);
+  }
+  /** 테스트에서 스풀 프레임 도착을 흉내낸다. */
+  emitSpool(frame: SpoolFrame): void {
+    for (const listener of this.spoolListeners) listener(frame);
+  }
   terminate(): void {
     this.terminated = true;
     this.listeners.clear();
+    this.spoolListeners.clear();
   }
 }
 
@@ -495,6 +512,52 @@ describe("cameraService — 스틸 캡처", () => {
     driveToReady(h);
     h.processor.stillResult = null;
     expect(await h.camera.captureStill()).toBeNull();
+  });
+});
+
+describe("cameraService — 타임랩스 스풀 채널(04 §7.2)", () => {
+  it("스풀 설정을 가공 Worker로 위임한다", async () => {
+    const h = harness();
+    await h.camera.start({ targetAspect: 0.75, mirror: false });
+    h.camera.configureTimelapseSpool({ enabled: true, intervalMs: 66.67, quality: SPOOL_JPEG_QUALITY });
+    expect(h.processor.spoolConfigs).toEqual([
+      { enabled: true, intervalMs: 66.67, quality: 0.8 },
+    ]);
+  });
+
+  it("카메라가 열려 있지 않으면 무해한 no-op이다(예외 금지)", () => {
+    const h = harness();
+    expect(() =>
+      h.camera.configureTimelapseSpool({ enabled: false, intervalMs: 66.67, quality: 0.8 }),
+    ).not.toThrow();
+  });
+
+  it("스풀 프레임이 구독자에게 전달되고 해제된다", async () => {
+    const h = harness();
+    await h.camera.start({ targetAspect: 0.75, mirror: false });
+
+    const received: SpoolFrame[] = [];
+    const off = h.camera.onTimelapseFrame((frame) => received.push(frame));
+    h.processor.emitSpool({ blob: new Blob(["a"]), width: 810, height: 1080 });
+    expect(received).toHaveLength(1);
+    expect(received[0]!.width).toBe(810);
+
+    off();
+    h.processor.emitSpool({ blob: new Blob(["b"]), width: 810, height: 1080 });
+    expect(received).toHaveLength(1);
+  });
+
+  it("스틸 요청과 스풀이 서로를 침범하지 않는다(전용 채널)", async () => {
+    // 스풀을 스틸 채널로 구현했다면 컷 요청이 덮여 사라진다(F4·F5).
+    const h = harness();
+    await h.camera.start({ targetAspect: 0.75, mirror: false });
+    driveToReady(h);
+
+    h.camera.configureTimelapseSpool({ enabled: true, intervalMs: 66.67, quality: 0.8 });
+    h.processor.emitSpool({ blob: new Blob(["spool"]), width: 810, height: 1080 });
+
+    expect(await h.camera.captureStill()).not.toBeNull();
+    expect(h.processor.stillRequests).toBe(1);
   });
 });
 

@@ -36,6 +36,11 @@ metadata:
 **How to apply:** 경고를 없애려고 파일을 CRLF로 되돌리지 말 것 — 오히려 불필요한 작업이다.
 단 **BOM은 절대 금지**(`.ts`/`.mjs`/`.md` 모두 UTF-8 without BOM). 검사: `head -c 3 <file> | od -An -tx1`에 `ef bb bf`가 없어야 한다.
 
+⚠️ 2026-07-31 재확인: `Edit` 도구도 **파일 전체를 LF로 바꿔 놓는다**(부분 수정인데도). 그래도 위 결론은 그대로다 —
+`git diff --stat`으로 **변경 줄수가 실제 수정분과 일치하면** 줄바꿈 노이즈가 없다는 증거이므로 거기서 멈춘다.
+굳이 통일하고 싶으면 `node -e "...replace(/\r\n/g,'\n').replace(/\n/g,'\r\n')"` 일괄 변환이 안전하지만, **검증 가치는 없다**.
+`webclient/package.json`·`package-lock.json`은 애초에 **LF**다(npm이 관리) — 이 둘은 건드리지 말 것.
+
 ## `lib/`는 tsc가 청소하지 않는다
 
 소스 파일을 **삭제**하면 `lib/`에 컴파일 산출물(`.js`/`.d.ts`/`.js.map`)이 그대로 남고, `firebase deploy`가

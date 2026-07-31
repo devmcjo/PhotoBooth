@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { addCut, slotCount as slotCountOf } from "@domain/capture/captureSession";
 import { slotAspectRatio } from "@domain/frames/types";
 import { getCameraService } from "@adapters/camera/cameraService";
+import { getTimelapseService } from "@adapters/encode/timelapseService";
 import { playShutterSound } from "@adapters/platform/shutterSound";
 import { cutFileName } from "@adapters/storage/sessionWorkspace";
 import { logger } from "@adapters/storage/logStore";
@@ -72,6 +73,7 @@ export function useCaptureRunner(): CaptureRunner {
     startedRef.current = true;
 
     const camera = getCameraService();
+    const timelapse = getTimelapseService();
     const shell = shellStore.getState();
     const session = sessionStore.getState().session;
     const frame = session.frame;
@@ -111,7 +113,9 @@ export function useCaptureRunner(): CaptureRunner {
       const args = newSessionArgs();
       const workspace = createWorkspace(args.now, args.uuid);
 
-      // 4. 타임랩스 프레임 수집은 Step 9가 여기에 붙는다(WD2 — 녹화가 아니라 샘플링).
+      // 4. 타임랩스 프레임 수집 시작(WD2 — 녹화가 아니라 샘플링).
+      //    실경과는 여기부터 `stopCollection()`까지로 잰다.
+      timelapse.startCollection(workspace);
 
       // 5. 컷 루프
       const sequence = createCaptureSequence({
@@ -139,7 +143,14 @@ export function useCaptureRunner(): CaptureRunner {
 
       // 이탈·탭 hidden·유휴 만료에서 시퀀스를 먼저 끊는다(02 §2.5 1단계).
       configureShell({
-        cancelCaptureSequence: () => sequence.cancel(),
+        // ⚠️ 여기서도 수집을 멈춘다. `returnHome`은 `cancelCaptureSequence` →
+        //    `cleanupWorkspace`(폴더 삭제) → `stopEncoder` 순이라(02 §2.5),
+        //    `stopEncoder`에서만 끊으면 **삭제 후 도착한 스풀 쓰기가 `tl/`을 되살린다**.
+        cancelCaptureSequence: () => {
+          sequence.cancel();
+          timelapse.stopCollection();
+        },
+        stopEncoder: () => timelapse.stop(),
         stopCamera: () => camera.stop(),
       });
 
@@ -149,9 +160,11 @@ export function useCaptureRunner(): CaptureRunner {
           flash: values.FlashMode,
           shutterSound: values.ShutterSound,
         });
+        // 6. 수집 종료 — **마지막 컷 직후**에 실경과를 확정한다.
+        timelapse.stopCollection();
         if (disposed) return;
 
-        // 6·7. 수집 종료 → 컷 선택
+        // 7. 컷 선택
         if (cuts.length < slotCountOf(sessionStore.getState().session)) {
           // 슬롯 수만큼 고를 수 없으면 진행해도 합성이 불가능하다(M12).
           logger.error("촬영된 컷이 슬롯 수보다 적다", { cuts: cuts.length });
@@ -166,6 +179,9 @@ export function useCaptureRunner(): CaptureRunner {
           return;
         }
         throw err;
+      } finally {
+        // 예외·취소 경로에서도 수집을 반드시 끊는다(멱등이라 정상 경로의 중복 호출은 무해하다).
+        timelapse.stopCollection();
       }
     }
 
@@ -176,6 +192,9 @@ export function useCaptureRunner(): CaptureRunner {
       sequenceRef.current?.cancel();
       sequenceRef.current = null;
       startedRef.current = false;
+      // 카메라를 놓기 **전에** 수집을 끊는다. 순서가 반대면 스풀 프레임이 카메라 정지 뒤에
+      // 도착해 실경과가 늘어난다(결과 mp4가 실제보다 느려진다).
+      timelapse.stopCollection();
       // 화면을 벗어나면 카메라를 놓는다(다음 화면이 다시 빌린다).
       camera.stop();
     };

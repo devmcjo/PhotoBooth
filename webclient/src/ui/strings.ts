@@ -62,6 +62,11 @@ export const STRINGS = {
     testNotSaved: "저장되지 않았습니다.",
   },
 
+  result: {
+    /** [다음] 1단계(타임랩스 생성) 대기 문구. 실패해도 흐름은 계속된다(03 §8.1). */
+    timelapseBusy: "타임랩스를 만드는 중입니다…",
+  },
+
   upload: {
     nothingToSend: "전송할 결과물이 없습니다.",
     inProgress: "전송 중입니다…",

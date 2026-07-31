@@ -382,7 +382,65 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] `session.mp4`를 만들지 않는다. 인코더 미지원 브라우저에서 **촬영이 정상 완주**하고 타임랩스만 `null`이 된다. 인코딩 실패가 촬영을 중단시키지 않는다.
   - [trigger] 수집은 촬영 시퀀스 시작~종료 사이에만. `stride` 프레임마다만 인코딩한다.
 - **롤백**: `src/adapters/encode` 삭제(타임랩스 미제공 상태로 동작).
-- [ ] 완료
+- [x] **완료 (2026-07-31)** — 설계: [`docs/design/web-step9-timelapse-encoder-design.md`](../design/web-step9-timelapse-encoder-design.md)
+  - **도메인 2파일 신설**(순수 · `purity.test.ts`가 자동 포함): `capture/timelapsePlan.ts`
+    (`planTimelapse`·`evenlySample`·`timelapseBitrate`·`evenDimensions` + 상수 4종),
+    `capture/timelapseSpool.ts`(`shouldSpoolFrame`·`planDecimation`·`decimatedInterval` + 상수 3종).
+    배속은 기존 `timelapseSpeed.ts`를 **재사용**했다(새로 만들지 않음). `src/domain/index.ts`에 2줄 추가.
+  - **어댑터 7파일 신설**(`src/adapters/encode/`): `encodeProtocol.ts`(타입·상수) ·
+    `encoderSupport.ts`(경로 판정 + `lastEncoderProbe`) · `webCodecsMp4.ts`(경로 B 코어, **전부 포트 주입**) ·
+    `encode.worker.ts`(경로 B 실행 껍데기) · `encodeClient.ts`(Worker RPC, 작업당 1회성 spawn/terminate) ·
+    `mediaRecorderMp4.ts`(경로 A 코어 + 브라우저 포트) · `timelapseEncoder.ts`(오케스트레이터·**로그 유일 지점**) ·
+    `timelapseService.ts`(수집 수명 + 결과 보관 싱글턴).
+  - **의존성 1개 추가**: `mp4-muxer@5.2.2`(**MIT**, `--save-exact` — 캐럿 없음). `webclient/THIRD-PARTY.md`를
+    **신설**해 react/react-dom/zustand/mp4-muxer 4행 + deprecated 채택 사유를 기록했다(상용 배포 요구 — 01 §7).
+  - **검증 수치**: `npx tsc --noEmit` 0, `npx vitest run` **19파일 530 → 26파일 645 전부 통과**
+    (encode +7파일 107건, camera 36 → 40, purity 69 → 73). `npx vite build` 성공 —
+    `web/kiosk/assets/encode.worker-*.js`(35.0 kB) 청크가 생성되고 muxer 코드(`moov` 문자열)가
+    그 안에 들어갔음을 확인했다(**A1 검증 완료**). `npx vitest run --coverage` 임계 통과
+    (도메인 lines 98.57 / branches 97.58, `timelapsePlan.ts`는 100%).
+  - **정적 불변식 3건 신설**(15 §3.4 관례): ① `src/adapters/encode/**` 중 `mp4-muxer`를 import하는 파일은
+    `encode.worker.ts` **하나뿐** ② 코어 `webCodecsMp4.ts`에 `logStore`·`logger.` 0건
+    ③ `encode.worker.ts`에 OPFS 쓰기(`createWritable`·`createSyncAccessHandle`)와 `logger` 0건.
+  - ⚠️ **설계 이탈 ①(가공 Worker 스풀 채널 신설 — 대상 파일 밖)**: `frameProcessorProtocol`·
+    `frameProcessor.worker`·`frameProcessorClient`·`cameraTypes`·`cameraService`에 `configureSpool`/
+    `spoolFrame` 전용 채널을 추가했다. **이유**: 기존 스틸 슬롯(`pendingStill`)은 1개짜리 덮어쓰기라
+    스풀러가 15fps로 `captureStill`을 부르면 컷 촬영 요청과 충돌해 **먼저 온 요청이 소멸**하고,
+    그것이 컷이면 5초 타임아웃 뒤 `null` → 컷 수 < 슬롯 수 → **세션이 홈으로 강제 복귀**한다
+    (`captureSequence.ts:134` · `useCaptureRunner.ts:155`). 타임랩스를 붙이다 촬영을 깨뜨리는 것은
+    이 Step의 non-goal 정면 위반이다. `tsconfig`의 `include`에 `tests`가 있어
+    `cameraService.test.ts`의 `FakeProcessor`도 함께 확장했다(기존 단언 무수정, 스풀 테스트 4건 추가).
+  - ⚠️ **설계 이탈 ②(`ResultView.goNext` [다음] 1단계 배선 — 대상 파일 밖)**: `FlowViews.tsx`·
+    `useCaptureRunner.ts`·`strings.ts`를 수정했다. **이유**: 여기서 부르지 않으면 Step 9 산출물이
+    실행되는 경로가 아예 없어 [관측] 기준을 만족할 수 없다. `goNext`를 async로 바꿔 03 §8.1 1단계
+    (`finish()`)를 수행하고, 대기 중 홈 복귀가 일어나면 **전이하지 않는다**(`currentScreen() !== "Result"`).
+    수집 시작·종료는 `useCaptureRunner`에 붙였고, **`cancelCaptureSequence`에서도** 수집을 끊는다 —
+    `returnHome`이 `cancelCaptureSequence → cleanupWorkspace(폴더 삭제) → stopEncoder` 순이라
+    (02 §2.5) `stopEncoder`에서만 멈추면 삭제 **후** 도착한 스풀 쓰기가 `tl/`을 되살린다.
+  - ⚠️ **설계 이탈 ③(타임스탬프 산출식)**: WBS 본문의 `timestamp = i * 33333μs` 대신
+    `round(i * outputSeconds * 1e6 / count)`를 쓴다. **이유**: [04 §7.2]가 "프레임 duration =
+    outputSec / frames.length … 스풀이 부족하면 duration이 길어질 뿐 **길이는 유지**"로 더 구체적이며,
+    `i * 33333`을 쓰면 스풀 부족 세션의 출력이 의도보다 짧아진다(40장 선별 시 12.5초 → 1.33초).
+    스풀이 충분한 정상 경로에서는 두 식이 **같은 33333μs**다(테스트로 고정). 같은 이유로 muxer에
+    **`frameRate`를 넘기지 않는다** — 넘기면 타임스탬프가 30fps 격자로 반올림돼 위 규격이 무의미해진다.
+  - ⚠️ **설계 이탈 ④(실패 사유 우선 보고)**: 설계 의사코드는 `encoded === 0`을 `failure`보다 먼저
+    검사하는데, 그러면 인코더 오류로 루프가 끊긴 경우 사유가 "인코딩된 프레임이 없습니다"로 덮여
+    **진짜 원인이 사라진다**(05 §7.2가 요구하는 "실패 사유"가 무의미해진다). 순서를 뒤집었다.
+  - ⚠️ **설계 이탈 ⑤(사소)**: `TimelapseServiceDeps.camera`의 `Pick`에서 `processedSize`를 뺐다
+    (`size`는 마지막 스풀 프레임에서 오므로 실제로 쓰지 않는다 — 미사용 의존을 남기지 않았다).
+    `encodeTimelapse`는 설계에 없던 **최상위 `try/catch`** 로 감쌌다(§6.7의 "절대 throw하지 않는다"를
+    기계적으로 보장. `timelapseService.finish()`의 `.catch()`는 이중 방어로 남겼다).
+  - **설계 결정 고정(리뷰 지점)**: **경로 B 실패 시 경로 A로 자동 재시도하지 않는다.** 판정은 처음 1회다.
+    B 실패는 통상 인코더 자체의 문제이고 A는 최대 15초를 더 쓰면서 결과 보장도 없다([04 §7.5]의
+    "실패 → `null`"). 테스트로 고정했다(`timelapseEncoder.test.ts`).
+  - **미구현(의도)**: 로컬 보관·업로드(Step 10·11 — `current()` getter만 노출), 진단 모달(Step 16 —
+    `encoderProbe()` getter + 로그까지만), `Guide`의 "타임랩스 미제공" 안내([12 C3] — 문구 미확정),
+    `session.mp4`(non-goal). `docs/spec-vectors/` **무변경**(Windows 대응 함수가 없어 교차 고정 대상이
+    아니다 — Windows는 ffmpeg `setpts,fps=30` 필터가 처리한다) → 이번 Step에 `dotnet test`는 불필요했다.
+  - **미검증(사용자 액션 V18)**: 생성된 mp4의 실제 재생·`moov` 정상·코덱 h264·오디오 0트랙·길이,
+    [바로 촬영] 5초 세션 원속 산출, 모바일/데스크톱 재생, 인코딩 ≤6초·프리뷰 ≥24fps·`droppedSpool`,
+    미지원 브라우저 완주, 경로 A 실동작 — **7건 전부 브라우저 실행이 필요해 추정 통과 처리하지 않았다.**
+    절차는 [14 §10.3](./14-handoff-and-user-actions.md)에 **V18**로 등재했다.
 
 ---
 

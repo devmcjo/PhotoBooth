@@ -37,9 +37,18 @@ export function timelapseFrameName(index: number): string {
   return `${String(index).padStart(5, "0")}.jpg`;
 }
 
+/**
+ * 타임랩스 스풀 디렉터리(OPFS 절대 경로).
+ * 인코딩 Worker가 이 경로로 디렉터리 핸들을 직접 열어 **읽는다**(쓰기는 여전히 `opfsWriter` 전용).
+ * 경로 정의를 한 곳에 두려고 `createSessionWorkspace` 내부도 이 함수를 쓴다.
+ */
+export function timelapseDirPath(sessionId: string): string {
+  return `${OPFS_DIRS.sessions}/${sessionId}/tl`;
+}
+
 export function createSessionWorkspace(client: OpfsClient, sessionId: string): SessionWorkspace {
   const root = `${OPFS_DIRS.sessions}/${sessionId}`;
-  const timelapseDir = `${root}/tl`;
+  const timelapseDir = timelapseDirPath(sessionId);
 
   return {
     sessionId,

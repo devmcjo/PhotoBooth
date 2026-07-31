@@ -1,5 +1,5 @@
 import { logger } from "@adapters/storage/logStore";
-import type { FrameProcessor, FramePayload, ProcessedSize } from "./cameraTypes";
+import type { FrameProcessor, FramePayload, ProcessedSize, SpoolFrame } from "./cameraTypes";
 import {
   STILL_JPEG_QUALITY,
   type FrameProcessorRequest,
@@ -32,6 +32,7 @@ const STILL_TIMEOUT_MS = 5000;
 
 export function createFrameProcessorClient(worker: WorkerLike): FrameProcessor {
   const processedListeners = new Set<(size: ProcessedSize) => void>();
+  const spoolListeners = new Set<(frame: SpoolFrame) => void>();
   const pendingStills = new Map<number, (blob: Blob | null) => void>();
   let nextStillId = 1;
 
@@ -40,6 +41,12 @@ export function createFrameProcessorClient(worker: WorkerLike): FrameProcessor {
     if (response.type === "processed") {
       for (const listener of processedListeners) {
         listener({ width: response.width, height: response.height });
+      }
+      return;
+    }
+    if (response.type === "spoolFrame") {
+      for (const listener of spoolListeners) {
+        listener({ blob: response.blob, width: response.width, height: response.height });
       }
       return;
     }
@@ -95,11 +102,27 @@ export function createFrameProcessorClient(worker: WorkerLike): FrameProcessor {
       worker.postMessage({ type: "bindPreview", canvas }, { transfer: [canvas] });
     },
 
+    configureSpool(options) {
+      worker.postMessage({
+        type: "configureSpool",
+        enabled: options.enabled,
+        intervalMs: options.intervalMs,
+        quality: options.quality,
+      });
+    },
+
+    onSpoolFrame(listener) {
+      spoolListeners.add(listener);
+      return () => spoolListeners.delete(listener);
+    },
+
     terminate() {
       worker.postMessage({ type: "reset" });
       pendingStills.forEach((resolve) => resolve(null));
       pendingStills.clear();
       processedListeners.clear();
+      // 스풀 구독을 남기면 Worker가 죽은 뒤에도 참조가 살아 있어 세션 Blob이 회수되지 않는다.
+      spoolListeners.clear();
       worker.terminate();
     },
   };
