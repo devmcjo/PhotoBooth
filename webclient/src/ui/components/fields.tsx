@@ -113,6 +113,46 @@ export function ChoiceGroup<T extends string | number>({
   );
 }
 
+export interface SelectProps<T extends string> {
+  readonly label: string;
+  readonly value: T;
+  readonly options: readonly ChoiceOption<T>[];
+  readonly disabled?: boolean;
+  readonly onChange: (next: T) => void;
+}
+
+/**
+ * 네이티브 `<select>`. **사용자 관리 표의 역할 변경 전용**이다.
+ *
+ * ⚠️ `ChoiceGroup`(터치 우선 버튼 나열)을 쓰지 않는 이유: 행마다 버튼 4개를 깔면 표가 무너지고,
+ *    사용자 관리는 손님이 아니라 **운영자** 화면이라 터치 우선 근거가 적용되지 않는다.
+ * ⚠️ 값 비교는 값 자체로 한다(인덱스가 아니다 — B9와 동종 함정).
+ * ⚠️ 옵션이 비면 렌더하지 않는 것이 호출측 책임이다(빈 콤보는 조작 가능해 보인다).
+ */
+export function Select<T extends string>({
+  label,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: SelectProps<T>) {
+  return (
+    <select
+      className={styles.select}
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value as T)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export interface TextFieldProps {
   readonly label: string;
   readonly value: string;

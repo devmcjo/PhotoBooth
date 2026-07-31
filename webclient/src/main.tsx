@@ -7,6 +7,7 @@ import { classifyRoute, installRouter } from "@shell/router";
 import { installTokenLifecycle } from "@shell/authStore";
 import { installQrUsageLifecycle } from "@shell/qrUsageStore";
 import { installPinGateLifecycle } from "@shell/pinGate";
+import { installServiceWorker } from "@shell/swUpdate";
 import { getFullscreenController } from "@shell/fullscreenController";
 import {
   applyOauthCallbackOutcome,
@@ -24,7 +25,7 @@ import "./main.css";
 
 /**
  * 앱 진입점 — 부트스트랩 순서는 01 §4.2가 규격이다.
- *   1~6 `shell/bootstrap.ts` · 7 SW(Step 16) · **8 전역 예외** · 9 OAuth 콜백
+ *   1~6 `shell/bootstrap.ts` · **7 Service Worker** · **8 전역 예외** · 9 OAuth 콜백
  *   · **10 React 마운트** · **11 첫 제스처(전체화면·오디오·WakeLock)**
  *
  * ⚠️ 이 파일에 `location.assign`·`location.replace`·`location.href =` 를 두지 않는다 —
@@ -45,6 +46,9 @@ function mount(branding: Branding, callbackPending: Promise<void> | null): void 
 }
 
 function installShellHandlers(): void {
+  // 7. Service Worker 등록(운영 빌드에서만 — dev 서버에는 `/sw.js`가 없다).
+  //    ⚠️ 앱 셸만 캐시한다. API 응답·서명 URL은 SW가 손대지 않는다(`swPolicy` 기본 bypass).
+  installServiceWorker();
   // 8. 전역 예외 — 마운트 **전에** 설치해 렌더 중 오류도 잡는다(M16).
   installGlobalErrorHandler();
   // M1 배선: 세션 사용자 해제 → JWT 폐기. 구독 1곳이 모든 경로를 덮는다.

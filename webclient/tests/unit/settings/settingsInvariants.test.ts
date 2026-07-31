@@ -50,6 +50,10 @@ const PIN_FILES: readonly string[] = [
   "screens/modals/pinPrompt/pinPromptRunner.ts",
   "screens/modals/pinPrompt/PinPromptModal.tsx",
   "screens/settings/settingsForm.ts",
+  // Step 16이 추가한 PIN 경로 3종(설계 §14.1 — PIN-1이 자동 확장된다).
+  "screens/account/pinChangeRunner.ts",
+  "screens/userMgmt/pinResetRunner.ts",
+  "ui/components/PinKeypad.tsx",
 ];
 
 const ACCOUNT_SERVICE = "adapters/http/accountService.ts";

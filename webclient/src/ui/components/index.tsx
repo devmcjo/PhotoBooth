@@ -1,9 +1,11 @@
 import {
   useEffect,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
+import type { AppState } from "@domain/navigation/appState";
 import { shellStore, useShellStore, type ModalId, type Toast } from "@shell/shellStore";
 import { STRINGS } from "@ui/strings";
 import styles from "./components.module.css";
@@ -128,22 +130,119 @@ export function ToastHost() {
   );
 }
 
-export interface TopBarProps {
+/** 계정 팝오버 항목(표현용). 목록·권한 판정은 `screens/account/accountMenu`가 소유한다. */
+export interface TopBarMenuItem<T extends string> {
+  readonly id: T;
+  readonly label: string;
+}
+
+export interface TopBarProps<T extends string> {
   readonly title: string;
   readonly accountLabel: string;
+  /** 현재 화면. 바뀌면 팝오버를 닫는다(화면을 떠났는데 메뉴가 떠 있으면 안 된다). */
+  readonly screen: AppState;
+  /** **빈 배열이면 팝오버를 열지 않고** `onAccount()`를 곧바로 부른다(게스트 → Login). */
+  readonly accountMenuItems: readonly TopBarMenuItem<T>[];
+  readonly onAccountMenuSelect: (id: T) => void;
   readonly onAccount: () => void;
   readonly onSettings: () => void;
 }
 
-/** 상단바. `Capture`·`Qr`에서는 렌더하지 않는다(호출측이 판정 — 02 §4). */
-export function TopBar({ title, accountLabel, onAccount, onSettings }: TopBarProps) {
+/**
+ * 상단바. `Capture`·`Qr`에서는 렌더하지 않는다(호출측이 판정 — 02 §4).
+ *
+ * 계정 버튼은 **팝오버 3항목**(계정 관리 · 관리자 도구 · 로그아웃 — 02 §5.1)을 연다.
+ * ⚠️ 권한 판정을 여기서 하지 않는다 — 항목 배열을 그대로 렌더할 뿐이다(ACC-1과 같은 정신).
+ * ⚠️ 셸 모달 스택을 쓰지 않는다(`ModalId`를 늘리지 않는다 — FR-8 정신).
+ */
+export function TopBar<T extends string>({
+  title,
+  accountLabel,
+  screen,
+  accountMenuItems,
+  onAccountMenuSelect,
+  onAccount,
+  onSettings,
+}: TopBarProps<T>) {
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // 화면이 바뀌면 닫는다.
+  useEffect(() => {
+    setOpen(false);
+  }, [screen]);
+
+  // 항목이 사라지면(로그아웃) 닫는다 — 빈 팝오버가 남지 않게.
+  useEffect(() => {
+    if (accountMenuItems.length === 0) setOpen(false);
+  }, [accountMenuItems.length]);
+
+  useEffect(() => {
+    if (!open) return () => undefined;
+    // 열릴 때 첫 항목으로 포커스를 옮긴다(키보드 조작 가능).
+    popoverRef.current?.querySelector("button")?.focus();
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  const handleAccountClick = (): void => {
+    if (accountMenuItems.length === 0) {
+      onAccount();
+      return;
+    }
+    setOpen((current) => !current);
+  };
+
   return (
     <header className={styles.topBar}>
       <p className={styles.topBarTitle}>{title}</p>
       <div className={styles.topBarActions}>
-        <Button variant="ghost" onClick={onAccount} aria-label={`계정: ${accountLabel}`}>
-          {accountLabel}
-        </Button>
+        <div className={styles.popoverAnchor}>
+          <Button
+            variant="ghost"
+            onClick={handleAccountClick}
+            aria-label={`계정: ${accountLabel}`}
+            aria-haspopup={accountMenuItems.length > 0 ? "menu" : undefined}
+            aria-expanded={accountMenuItems.length > 0 ? open : undefined}
+          >
+            {accountLabel}
+          </Button>
+
+          {open && accountMenuItems.length > 0 && (
+            <>
+              {/* 바깥 클릭 닫기. 투명 backdrop이라 시야를 가리지 않는다. */}
+              <button
+                type="button"
+                className={styles.popoverBackdrop}
+                aria-label={STRINGS.common.close}
+                onClick={() => setOpen(false)}
+              />
+              <div ref={popoverRef} className={styles.popover} role="menu">
+                {accountMenuItems.map((item) => (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    className={styles.popoverItem}
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      onAccountMenuSelect(item.id);
+                    }}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         <Button variant="ghost" onClick={onSettings}>
           {STRINGS.common.settings}
         </Button>

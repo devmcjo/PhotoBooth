@@ -1,14 +1,15 @@
+import type { TempUserLimits } from "@domain/accounts/tempUserLimitsPolicy";
 import { getBackendClient, type BackendClient } from "./backendClient";
 
 /**
  * 전역 무료 한도 — `GET/PATCH /config/temp-user-limits` (analysis/31 §4.8·§4.9)
  * 조회는 모든 로그인 사용자, 수정은 **admin 전용**(서버가 강제한다).
+ *
+ * ⚠️ 값 타입의 정본은 **도메인**(`accounts/tempUserLimitsPolicy`)이다. 여기서 재수출만 하므로
+ *    범위 상수·검증과 필드가 갈라지지 않는다(기존 import 경로는 그대로 유효하다).
  */
 
-export interface TempUserLimits {
-  readonly qrHours: number;
-  readonly qrCount: number;
-}
+export type { TempUserLimits };
 
 /** 서버 설정 문서가 없을 때의 폴백(서버와 동일 값). */
 export const DEFAULT_TEMP_USER_LIMITS: TempUserLimits = { qrHours: 48, qrCount: 30 };

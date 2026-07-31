@@ -7,6 +7,7 @@ import {
   PIN_LENGTH,
   type PinAttemptState,
 } from "@domain/auth/pinGatePolicy";
+import { PinKeypad } from "@ui/components/PinKeypad";
 import { createAccountService } from "@adapters/http/accountService";
 import { getPinLockRepo } from "@adapters/storage/pinLockRepo";
 import {
@@ -33,8 +34,6 @@ import styles from "./pinPrompt.module.css";
  */
 
 type PromptStep = "verify" | "setup" | "setupConfirm";
-
-const KEYPAD_DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 
 /**
  * `<StrictMode>`의 이중 effect가 **1회차 cleanup으로 게이트를 취소**하는 것을 막는다.
@@ -253,59 +252,14 @@ export function PinPromptModal() {
       }
     >
       <div className={styles.body}>
-        <div
-          className={styles.indicator}
-          role="img"
-          aria-label={formatCount(STRINGS.pin.indicator, buffer.length)}
-        >
-          {Array.from({ length: PIN_LENGTH }, (_, index) => (
-            <span
-              key={index}
-              className={[styles.dot, index < buffer.length ? styles.dotFilled : ""]
-                .filter(Boolean)
-                .join(" ")}
-            />
-          ))}
-        </div>
-
-        <div className={styles.keypad}>
-          {KEYPAD_DIGITS.map((digit) => (
-            <Button
-              key={digit}
-              className={styles.key}
-              aria-label={digit}
-              disabled={disabled}
-              onClick={() => append(digit)}
-            >
-              {digit}
-            </Button>
-          ))}
-          <Button
-            className={[styles.key, styles.keyWide].join(" ")}
-            aria-label={STRINGS.pin.backspace}
-            disabled={disabled}
-            onClick={() => backspace()}
-          >
-            {STRINGS.pin.backspace}
-          </Button>
-          <Button
-            className={styles.key}
-            aria-label="0"
-            disabled={disabled}
-            onClick={() => append("0")}
-          >
-            0
-          </Button>
-          <Button
-            variant="primary"
-            className={[styles.key, styles.keyWide].join(" ")}
-            aria-label={STRINGS.pin.confirm}
-            disabled={disabled || buffer.length !== PIN_LENGTH}
-            onClick={() => void submit()}
-          >
-            {STRINGS.pin.confirm}
-          </Button>
-        </div>
+        {/* 표현은 공용 `PinKeypad`가 담당한다 — 판정·서버 왕복은 여전히 여기 밖(runner)이다. */}
+        <PinKeypad
+          value={buffer}
+          disabled={disabled}
+          onDigit={(digit) => append(digit)}
+          onBackspace={() => backspace()}
+          onSubmit={() => void submit()}
+        />
 
         {/* 실패 사유는 스크린리더가 즉시 읽어야 한다(07 §6.4). */}
         <p className={styles.message} role="alert" aria-live="assertive">

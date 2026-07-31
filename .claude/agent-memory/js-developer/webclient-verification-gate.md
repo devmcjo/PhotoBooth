@@ -12,7 +12,9 @@ eslint 의존도 없다. 품질 게이트는 다음 4종이 전부다(작업 디
 npx tsc --noEmit          # strict + noUnusedLocals/Parameters. 미사용 import를 여기서 잡는다
 npx vitest run            # tests/**/*.test.ts(x). environment=node가 기본, jsdom은 파일 상단 주석 opt-in
 npx vitest run --coverage # src/domain만 계측. 임계 95/95/95/90 — 도메인 파일 추가 시 분기까지 채워야 한다
-npx vite build            # 산출물이 webclient/가 아니라 ../web/kiosk/ 로 나간다(배포 디렉터리, gitignore됨)
+npm run build             # ⚠️ Step 16부터 **2단**이다: vite build && vite build --config vite.sw.config.ts
+                          #    산출물은 ../web/kiosk/ (배포 디렉터리, gitignore됨). 2단째가 sw.js를 만들고
+                          #    1단이 남긴 precache-manifest.json을 읽으므로 **순서가 규격**이다.
 ```
 
 **Why**: 기본 운영 지침이 "eslint 오류 0"을 요구하지만 이 프로젝트에는 실행할 린터가 없다. 모르면 매
@@ -24,3 +26,8 @@ npx vite build            # 산출물이 webclient/가 아니라 ../web/kiosk/ �
 
 관련: 저장소는 `core.autocrlf=true`(index=LF, worktree=CRLF)라 Write/Edit로 만든 파일이 CRLF여도
 diff가 오염되지 않는다 — [[ops-scripts-and-encoding]] 참조.
+
+⚠️ **`tsc`는 소스에 섞인 NUL 바이트를 잡지 못한다.** 문자열 리터럴 안에 들어가면 유효한 TS라 컴파일이
+통과하고 동작만 조용히 달라진다(2026-08-01 `zipStore.ts`에서 공백 한 칸이어야 할 문자열 리터럴이 U+0000으로 생성됐다).
+신호는 `grep`이 그 파일에 대해 **"Binary file matches"** 를 내는 것이다. 대량 생성 파일을 만든 뒤
+`node -e "fs.readFileSync(p).includes(0)"` 로 한 번 훑으면 즉시 드러난다.

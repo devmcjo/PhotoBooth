@@ -13,7 +13,9 @@ import {
   type StorageStatus,
 } from "@adapters/platform/persistStorage";
 import { logger } from "@adapters/storage/logStore";
+import { canWriteFrames } from "@domain/roles/userRole";
 import { isTempUserQrBlocked } from "@shell/qrUsageStore";
+import { checkForUpdate } from "@shell/swUpdate";
 import { useSessionStore } from "@shell/sessionStore";
 import { useSettingsStore } from "@shell/settingsStore";
 import { shellStore } from "@shell/shellStore";
@@ -48,6 +50,14 @@ import {
   previewImport,
   type ImportPreview,
 } from "./settingsTransfer";
+import {
+  applyFramePreview,
+  frameImportDoneMessage,
+  frameImportRejectionMessage,
+  runFrameExport,
+  startFrameImport,
+  type FrameImportPreview,
+} from "./frameTransfer";
 
 /**
  * 설정 화면 상태를 묶는 **얇은** 훅 — 판정·조립은 전부 위 모듈들이 한다(15 §3.1).
@@ -64,7 +74,10 @@ function toast(kind: "success" | "error" | "info", message: string): void {
 export function useSettingsScreen() {
   const storedValues = useSettingsStore((s) => s.values);
   const storedWebExtras = useSettingsStore((s) => s.webExtras);
-  const isGuest = useSessionStore((s) => s.currentUser === null);
+  const user = useSessionStore((s) => s.currentUser);
+  const isGuest = user === null;
+  const role = user?.role ?? null;
+  const userId = user?.id ?? null;
 
   const ctx = useMemo<SettingsEditContext>(
     // TempUser 한도는 계정 변경 시 1회 캐시된 **동기 판정**이다(07 §7).
@@ -84,6 +97,8 @@ export function useSettingsScreen() {
   const [storage, setStorage] = useState<StorageStatus | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [framePreview, setFramePreview] = useState<FrameImportPreview | null>(null);
+  const [frameImportError, setFrameImportError] = useState<string | null>(null);
   const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
 
   const folderSupported = useMemo(() => getDirHandleRepo().isSupported(), []);
@@ -330,9 +345,79 @@ export function useSettingsScreen() {
     shellStore.getState().pushModal({ id: "cameraTest", dismissible: true });
   }, []);
 
+  // ── 진단·상태 모달(로그인 전용) ───────────────────────────────────────
+  const openDiagnostics = useCallback((): void => {
+    // 렌더 가드 + 액션 첫 줄 가드 2중(M10). 게스트에게는 버튼이 없다.
+    if (isGuest) {
+      toast("error", STRINGS.settings.editBlocked);
+      return;
+    }
+    shellStore.getState().pushModal({ id: "diagnostics", dismissible: true });
+  }, [isGuest]);
+
+  // ── 프레임 내보내기 / 가져오기 ────────────────────────────────────────
+  const exportFrames = useCallback((): void => {
+    void runFrameExport(userId).then((report) => {
+      if (!mountedRef.current) return;
+      toast(report.ok ? "success" : "error", report.message);
+    });
+  }, [userId]);
+
+  const startFrameImportFile = useCallback(
+    (file: File): void => {
+      setFrameImportError(null);
+      void startFrameImport(file, role, userId).then((result) => {
+        if (!mountedRef.current) return;
+        if (!result.ok) {
+          setFramePreview(null);
+          setFrameImportError(frameImportRejectionMessage(result.reason));
+          return;
+        }
+        setFramePreview(result.preview);
+      });
+    },
+    [role, userId],
+  );
+
+  const applyFrameImport = useCallback((): void => {
+    const preview = framePreview;
+    if (preview === null) return;
+    setFramePreview(null);
+    void applyFramePreview(preview, role, userId).then((outcome) => {
+      if (!mountedRef.current) return;
+      if (outcome === null) {
+        toast("error", STRINGS.error.forbidden);
+        return;
+      }
+      toast(outcome.failed === 0 ? "success" : "error", frameImportDoneMessage(outcome));
+    });
+  }, [framePreview, role, userId]);
+
+  const cancelFrameImport = useCallback((): void => {
+    setFramePreview(null);
+    setFrameImportError(null);
+  }, []);
+
+  // ── 앱 업데이트 확인 ──────────────────────────────────────────────────
+  const checkAppUpdate = useCallback((): void => {
+    void checkForUpdate().then((found) => {
+      if (!mountedRef.current) return;
+      toast("info", found ? STRINGS.pwa.updateFound : STRINGS.pwa.upToDate);
+    });
+  }, []);
+
   return {
     draft,
     ctx,
+    canWriteFrames: !isGuest && role !== null && canWriteFrames(role),
+    framePreview,
+    frameImportError,
+    exportFrames,
+    startFrameImportFile,
+    applyFrameImport,
+    cancelFrameImport,
+    openDiagnostics,
+    checkAppUpdate,
     devices,
     folderSupported,
     storedResults,

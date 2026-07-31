@@ -355,8 +355,182 @@ export const STRINGS = {
     backToFrameSelect: "프레임 선택으로",
   },
 
+  /**
+   * 계정 화면 — 03 §13.
+   * ⚠️ 로그인 방식 값("Google SSO"/"알 수 없음")은 **도메인** `authMethodLabel`이 소유한다
+   *    (`roleLabel`과 같은 자리 — 카탈로그 중복을 만들지 않는다. 설계 §3.1).
+   */
+  account: {
+    title: "계정",
+    tabInfo: "내 정보",
+    tabAdmin: "관리자 도구",
+
+    id: "계정 id",
+    email: "이메일",
+    authMethod: "로그인 방식",
+    role: "역할",
+    createdAt: "가입일",
+    /** 값이 없거나 파싱 실패. */
+    unknown: "알 수 없음",
+    /** 이메일 미보유 표시. */
+    none: "—",
+
+    changePin: "PIN 변경",
+    pinCurrent: "현재 PIN을 입력하세요.",
+    pinNew: "새 PIN을 입력하세요. (숫자 4자리)",
+    pinConfirm: "새 PIN을 다시 입력하세요.",
+    pinChanged: "PIN을 변경했습니다.",
+    /** ⚠️ 규격 문구다(analysis/13 §14) — 줄이지 않는다. */
+    pinCurrentWrong: "현재 PIN이 올바르지 않습니다.",
+
+    adminTitle: "관리자 도구",
+    openUserMgmt: "사용자 관리",
+    globalLimits: "전역 무료 한도",
+    qrHours: "무료 사용 시간(시간)",
+    qrCount: "무료 사용 횟수",
+    limitsSaved: "한도를 저장했습니다.",
+    limitsRange: "한도 값이 허용 범위를 벗어났습니다.",
+    limitsNoChange: "변경된 항목이 없습니다.",
+    limitsLoadFailed: "현재 한도를 불러올 수 없습니다.",
+    limitsSaveFailed: "한도를 저장하지 못했습니다.",
+    logoutDone: "로그아웃했습니다.",
+  },
+
+  /** 사용자 관리 — 03 §14. */
+  userMgmt: {
+    title: "사용자 관리",
+    /** `{n}`을 인원 수로 치환한다. */
+    total: "총 {n}명",
+    colId: "계정 id",
+    colEmail: "이메일",
+    colRole: "역할",
+    colCreatedAt: "가입일",
+    colActions: "작업",
+    resetPin: "PIN",
+    /** ⚠️ 규격 문구다(analysis/13 §10.3) — 실패를 빈 목록으로 위장하지 않는다. */
+    loadFailed: "사용자 목록을 불러올 수 없습니다.",
+    /** `{n}`을 계정 id로 치환한다. */
+    deleteConfirm: "'{n}' 계정을 삭제할까요? 소유 프레임도 함께 삭제됩니다.",
+    /** `{n}`을 계정 id로 치환한다. cascade를 명시한다(03 §14). */
+    deleted: "{n} 삭제됨(소유 프레임 포함).",
+    roleChanged: "역할을 변경했습니다.",
+    roleLabel: "역할 변경",
+    pinResetTitle: "PIN 재설정",
+    pinResetDone: "PIN을 재설정했습니다.",
+    notFound: "대상 계정을 찾을 수 없습니다.",
+    empty: "표시할 계정이 없습니다.",
+    back: "뒤로",
+  },
+
+  /** 진단·상태 모달 — 03 §15.2. ⚠️ 게이트 키 **값**을 담는 문구는 만들지 않는다. */
+  diagnostics: {
+    title: "진단·상태",
+    open: "진단·상태",
+    recheck: "다시 확인",
+    sections: {
+      camera: "카메라",
+      encoder: "비디오 인코더",
+      server: "서버 연결",
+      logStorage: "로그·저장소",
+      contact: "개발자 문의",
+      app: "앱",
+    },
+
+    cameraCount: "장치 수",
+    cameraList: "장치 목록",
+    cameraState: "상태",
+    cameraPermission: "권한",
+    cameraResolution: "획득 해상도",
+    processedSize: "가공 해상도",
+    cameraFps: "fps",
+
+    encoderPath: "경로",
+    encoderCodec: "코덱",
+    encoderReason: "판정 사유",
+    encoderCandidates: "후보",
+    encoderNotProbed: "아직 판정 전(촬영 후 표시)",
+    encoderNone: "미지원",
+
+    bucket: "Storage 버킷",
+    currentAccount: "현재 계정",
+    guest: "게스트",
+
+    logCount: "로그 건수",
+    /** `{n}`을 건수로 치환한다. */
+    logCountValue: "{n}건",
+    logRange: "로그 기간",
+    exportLogs: "로그 내보내기",
+    exportLogsDone: "로그를 내보냈습니다.",
+    exportLogsFailed: "로그를 내보내지 못했습니다.",
+    persistState: "저장소 영속",
+    storageUsage: "사용량",
+    sessionLeftovers: "세션 잔재",
+    storedResults: "보관 결과물",
+    frameCacheUsage: "프레임 캐시",
+
+    developer: "개발자",
+    developerEmail: "devmcjo@gmail.com",
+    copy: "복사",
+    copied: "복사했습니다.",
+    copyFailed: "복사할 수 없습니다. 주소를 길게 눌러 복사해 주세요.",
+
+    version: "Version",
+    buildDate: "Build Date",
+    webDeployDate: "Web Deploy Date",
+    serviceWorker: "Service Worker",
+    installed: "PWA 설치",
+  },
+
+  /** PWA·Service Worker — 01 §6. */
+  pwa: {
+    swActive: "최신 상태",
+    swWaiting: "업데이트 대기 중",
+    swRegistering: "등록 중…",
+    swUnsupported: "미지원",
+    swDisabled: "개발 모드(등록 안 함)",
+    swFailed: "등록 실패",
+    applyNow: "지금 적용",
+    /** ⚠️ 상시 캡션이다 — 누르기 전에 결과를 알려야 한다. */
+    applyCaption: "적용하면 앱이 새로 시작되고 로그인이 해제됩니다.",
+    applyBlocked: "촬영이 끝난 뒤 적용할 수 있습니다.",
+    checkUpdate: "앱 업데이트 확인",
+    upToDate: "최신 버전입니다.",
+    updateFound: "새 버전을 찾았습니다.",
+    installed: "설치됨",
+    notInstalled: "브라우저에서 실행 중",
+  },
+
+  /** 프레임 내보내기 / 가져오기 — 05 §2.5·§4.6·§7. */
+  transfer: {
+    exportFrames: "프레임 내보내기",
+    importFrames: "프레임 가져오기",
+    /** `{n}`을 개수로 치환한다. */
+    exportedFrames: "{n}개를 내보냈습니다.",
+    /** `{n}`을 성공 개수로 치환한다. 부분 실패를 숨기지 않는다(M4). */
+    exportedPartial: "{n}개를 내보냈고 일부는 이미지를 읽지 못했습니다.",
+    exportFailed: "프레임을 내보내지 못했습니다.",
+    exportEmpty: "내보낼 프레임이 없습니다.",
+    importPreviewTitle: "가져올 프레임",
+    importRenamed: "이름 변경됨",
+    importApply: "지금 적용",
+    importCancel: "가져오기 취소",
+    /** `{n}`을 개수로 치환한다. */
+    importDone: "{n}개를 가져왔습니다.",
+    /** `{n}`을 실패 개수로 치환한다. */
+    importPartial: "{n}개는 저장하지 못했습니다.",
+    malformedZip: "zip 파일을 읽을 수 없습니다.",
+    noEntries: "가져올 프레임이 없습니다.",
+    compressionUnsupported:
+      "압축된 zip은 이 브라우저에서 읽을 수 없습니다. 압축 없이 저장한 zip을 사용해 주세요.",
+    noWritePermission: "프레임을 가져올 권한이 없습니다.",
+    notLoggedIn: "로그인이 필요합니다.",
+  },
+
   kiosk: {
     exit: "키오스크 종료",
+    exitConfirm: "키오스크를 종료할까요? 로그아웃되고 처음 화면으로 돌아갑니다.",
+    /** ⚠️ 탭은 스크립트로 닫을 수 없다 — 마지막은 안내다(WD5). */
+    exitNotice: "키오스크를 종료했습니다. 브라우저(또는 앱)를 직접 닫아 주세요.",
   },
 } as const;
 

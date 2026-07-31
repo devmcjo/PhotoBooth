@@ -30,5 +30,13 @@
       "@ui/*": ["src/ui/*"]
     }
   },
-  "include": ["src", "tests", "vite.config.ts", "vitest.config.ts", "vite.aliases.ts"]
+  "include": [
+    "src",
+    "tests",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vite.aliases.ts",
+    "vite.precache.ts",
+    "vite.sw.config.ts"
+  ]
 }

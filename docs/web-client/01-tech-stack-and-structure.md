@@ -87,7 +87,7 @@ src/adapters/     플랫폼 어댑터 — 카메라 · 인코더 · 합성 · �
 | `settings/cutCountPolicy.ts`(자동 컷 수 해석, it17) | `src/MCPhoto.Core/Settings/CutCountPolicy.cs` | `analysis/41 §2.7` | `CutCountPolicyTests.cs` |
 | `settings/qrDeliveryPolicy.ts` | `src/MCPhoto.Core/Settings/QrDeliveryPolicy.cs` | `analysis/41 §2.4` | `QrDeliveryPolicyTests.cs` |
 | `settings/qrEffectivePolicy.ts`(**런타임 QR on/off** — 게스트·TempUser 초과 오버라이드) | `src/MCPhoto.Core/Settings/QrEffectivePolicy.cs` | `design/wpf-it13-temp-user-role-design.md §7.1b` | `QrEffectivePolicyTests.cs` |
-| `roles/rolePolicy.ts`(`isPower`·`canWriteFrames`·`canManage`·`canResetPin`) | `src/MCPhoto.Core/Models/UserRole.cs` | `analysis/60 §1` | `RoleManagementTests.cs` |
+| `roles/userRole.ts`(`isPower`·`canWriteFrames`·`canManage`·`canResetPin`) | `src/MCPhoto.Core/Models/UserRole.cs` | `analysis/60 §1` | `RoleManagementTests.cs` |
 | `roles/roleChangePolicy.ts`(`assignableRoles`) | `src/MCPhoto.Core/Models/RoleChangePolicy.cs` | `analysis/60 §1.4` | `RoleManagementTests.cs`, `UserMgmtViewModelTests.cs` |
 | `upload/uploadContract.ts`(세션 ID·경로·토큰 URL·다운로드 페이지 URL·만료) | `src/MCPhoto.Core/Upload/UploadContract.cs` | `analysis/31 §7` | `UploadContractTests.cs` |
 | `upload/uploadOrchestration.ts`(3단계 순서·최소 1개·진행률 합산) | `src/MCPhoto.Core/Upload/UploadService.cs` | `analysis/31 §5` | `UploadServiceTests.cs` |

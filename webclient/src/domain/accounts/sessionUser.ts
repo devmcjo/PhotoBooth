@@ -46,14 +46,18 @@ export function accountLabel(user: SessionUser): string {
   return user.id;
 }
 
-/** 로그인 방식 표시 라벨. 미지원 값은 "알 수 없음"으로 폴백한다(03 §13). */
+/**
+ * 로그인 방식 표시 라벨. 미지원 값은 "알 수 없음"으로 폴백한다(03 §13.1 · analysis/13 §10.1).
+ *
+ * ⚠️ 값은 Windows `AuthMethodExtensions.ToLabel()`(`Models/User.cs`)과 **문자열 일치**다:
+ *    `"google"` → **"Google SSO"**, 그 외 전부 "알 수 없음".
+ *    Step 16 이전에는 `"Google 계정"`이었으나 **호출자가 0이라 한 번도 렌더된 적이 없었다** —
+ *    보호할 현행 동작이 없으므로 규격(analysis/13 §14 문구 카탈로그)에 맞췄다.
+ * ⚠️ `"password"` 분기는 **삭제됐다**. it15에서 비밀번호 로그인 자체가 폐지되어, 남겨 두면
+ *    서버가 그 값을 보낼 수 있다는 오해를 만든다.
+ * ⚠️ 문구를 `ui/strings.ts`로 옮기지 않는다 — `roleLabel`과 같은 자리이며 카탈로그 중복을
+ *    만들면 두 곳이 갈라진다.
+ */
 export function authMethodLabel(user: SessionUser): string {
-  switch (user.authMethod) {
-    case "google":
-      return "Google 계정";
-    case "password":
-      return "아이디/비밀번호";
-    default:
-      return "알 수 없음";
-  }
+  return user.authMethod === "google" ? "Google SSO" : "알 수 없음";
 }

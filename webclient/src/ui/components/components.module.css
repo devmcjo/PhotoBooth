@@ -152,6 +152,102 @@
   justify-content: flex-end;
 }
 
+/*
+ * ── PIN 키패드(`PinKeypad`) ──
+ *
+ * 진입 게이트 모달 · 계정 PIN 변경 · 타 계정 PIN 재설정이 **같은 표현**을 쓴다.
+ * 키오스크에 물리 키보드가 없으므로 온스크린 키패드가 기본 입력 수단이다(03 §15.3).
+ */
+
+.pinPad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+}
+
+.pinIndicator {
+  display: flex;
+  gap: var(--gap-sm);
+  justify-content: center;
+  padding: var(--gap-sm) 0;
+}
+
+.pinDot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+}
+
+.pinDotFilled {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.pinKeypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(var(--touch-min), 84px));
+  gap: var(--gap-sm);
+  justify-content: center;
+}
+
+.pinKey {
+  /* 터치 타깃 48px 이상(01 §8). */
+  min-width: var(--touch-min);
+  min-height: 56px;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.pinKeyWide {
+  font-size: var(--fs-body);
+}
+
+/*
+ * ── 상단바 계정 팝오버 ──
+ *
+ * 셸 모달 스택을 쓰지 않는다(`ModalId`를 늘리지 않는다 — FR-8 정신).
+ * 바깥 클릭은 전체 화면 투명 backdrop 버튼이 받는다.
+ */
+
+.popoverAnchor {
+  position: relative;
+}
+
+.popoverBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 12rem;
+  padding: var(--gap-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.popoverItem {
+  justify-content: flex-start;
+  text-align: left;
+  width: 100%;
+}
+
 /* ── 토스트 ── */
 
 .toastHost {

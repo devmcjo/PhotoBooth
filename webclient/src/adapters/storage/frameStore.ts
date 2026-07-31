@@ -197,6 +197,14 @@ export interface FrameStore {
   saveLocal(input: SaveFrameInput): Promise<FrameTemplate | null>;
   /** 05 §4.7. 성공 판정은 **실제 부재 확인**이다. */
   deleteLocal(frame: FrameTemplate): Promise<boolean>;
+  /**
+   * 목록의 템플릿 → 저장된 PNG 바이트(Step 16 프레임 내보내기). 없거나 실패면 `null`.
+   *
+   * ⚠️ **`fetch(frame.imageUrl)`로 blob URL을 읽지 마라.** ① kiosk CSP `connect-src`가 `blob:`을
+   *    덮는지 브라우저별로 갈린다 ② 이미 디스크에 있는 바이트를 메모리로 한 번 더 왕복시킨다.
+   *    여기는 레코드의 `imageFile`을 알고 있고 `opfs.readFile`은 메인 스레드 읽기가 허용된다(05 §3.1).
+   */
+  readImageBytes(frame: FrameTemplate): Promise<Blob | null>;
   /** 개인 프레임 개수(10개 상한 판정 — Step 15가 쓴다). */
   countPersonal(userId: string): Promise<number>;
   /** `frames/` OPFS 사용량(Step 16 진단). 실패는 0. */
@@ -465,6 +473,20 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
     }
   }
 
+  async function readImageBytes(frame: FrameTemplate): Promise<Blob | null> {
+    try {
+      const record = await findRecord(frame);
+      if (record === null) {
+        // 번들·fallback 프레임이다(저장소에 없다). 내보내기 대상이 아니다.
+        return null;
+      }
+      return await deps.opfs.readFile(record.imageFile);
+    } catch (err) {
+      logger.warn("프레임 이미지 읽기 실패", { id: frame.id, reason: describe(err) });
+      return null;
+    }
+  }
+
   async function countPersonal(userId: string): Promise<number> {
     if (userId.length === 0) return 0;
     try {
@@ -491,6 +513,7 @@ export function createFrameStore(deps: FrameStoreDeps): FrameStore {
     cacheServerFrame,
     saveLocal,
     deleteLocal,
+    readImageBytes,
     countPersonal,
     usageBytes,
   };

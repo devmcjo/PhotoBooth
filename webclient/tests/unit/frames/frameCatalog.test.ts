@@ -112,6 +112,10 @@ function harness(
     async deleteLocal() {
       return true;
     },
+    async readImageBytes() {
+      // 카탈로그는 원본 바이트를 읽지 않는다(내보내기 전용 — Step 16).
+      return null;
+    },
     async countPersonal() {
       return 0;
     },

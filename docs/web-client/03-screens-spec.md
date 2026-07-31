@@ -54,7 +54,7 @@ interface ScreenLogic {
 3) 서버 강제   : 403 응답을 우아하게 안내
 ```
 
-권한 판정은 전부 `domain/roles/rolePolicy.ts`(순수 함수)로 하고 컴포넌트에서 직접 역할 문자열을 비교하지 않는다.
+권한 판정은 전부 `domain/roles/userRole.ts`·`roles/roleChangePolicy.ts`·`accounts/accountAdminPolicy.ts`(순수 함수)로 하고 컴포넌트에서 직접 역할 문자열을 비교하지 않는다(정적 검사 ACC-1).
 
 ---
 

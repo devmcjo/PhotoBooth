@@ -16,7 +16,7 @@
 
 ```bash
 cd webclient && npm ci
-npx tsc --noEmit && npx vitest run     # 1297 통과(54파일)
+npx tsc --noEmit && npx vitest run     # 1926 통과(84파일)
 cd ../web/functions && npm test         # 316 통과
 cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
@@ -25,11 +25,9 @@ cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 
 | 다음 | 선행 조건 |
 |------|-----------|
-| **Step 14 프레임 저장소·선택** | Step 3·5·12 + Step 8.5(판정 도메인 이식 완료 — 다시 만들지 마라) |
-| Step 15~16 | 동상 |
-| Step 17 E2E·실기기 | 실기기 3대(사람). Playwright 도입도 이 Step이다 |
+| **Step 17 E2E·실기기** | Step 1~16 전부 + 실기기 3대(사람). Playwright 도입도 이 Step이다 |
 
-권장 분할: 14 / 15 / 16을 각각 한 세션. Step 15·16은 화면이 커서 한 세션을 다 쓴다.
+구현 Step은 **전부 끝났다**. 남은 것은 E2E 자동화와 실기기 수락이다.
 
 ---
 
@@ -136,6 +134,17 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | **FR-15** `frameImageLoader.ts`에 `mode: "cors"` 존재 | 동상 — WM2 규약 복제. 없어지면 원격 프레임을 그린 canvas가 오염된다 |
 | **VF-12** `fixFrameAndResolveCutCount(` 호출부가 **1곳**(`useFrameSelect.ts`) | 동상 — 해석 지점이 늘면 설정 변경이 진행 중 세션의 컷 수를 바꾼다(it17) |
 | `frameRepository.getUserFrames(` 호출 0건 | 동상 — `auth:"required"`라 401이면 **프레임 목록을 여는 것만으로 로그아웃 토스트**가 뜬다 |
+| **ACC-1** 계정·사용자 관리 화면에 역할 문자열 리터럴·`.role ===` 비교 0건 | `accountInvariants.test.ts` — 판정은 `accountAdminPolicy`가 소유한다. 화면이 비교하면 서버 매트릭스와 조용히 갈라진다 |
+| **ACC-2** `runDeleteAccount`·`runSetRole`·`runPinReset`이 **첫 실행문에서** 도메인 판정을 부른다 | 동상(FR-10과 같은 등장 순서 검사) — 가드가 뒤로 밀리면 서버 왕복이 먼저 일어난다 |
+| **ACC-3** `screens/account/*`·`screens/userMgmt/*`에 `pushModal(` 0건 | 동상 — PIN 재설정·삭제 확인·키오스크 종료는 전부 **화면 로컬 오버레이**다(FR-5·FR-8 계열) |
+| **ACC-4** `App.tsx`의 `Account`·`UserMgmt` 케이스가 둘 다 `<PinGate`로 감싸져 있다 | 동상 — 새 보호 화면의 게이트 누락 방지 |
+| **SW-1** `sw.ts`의 `install` 리스너에 `skipWaiting` 0건 + 파일 전체 등장 1회(`message` 핸들러) | 동상 — 자동 갱신이 되살아나면 **촬영 중 앱이 바뀐다** |
+| **SW-2** `sw.ts`에서 `classifySwRequest(`가 `respondWith(`보다 먼저 등장 | 동상 — 분류를 건너뛴 `respondWith`는 API 응답까지 캐시한다 |
+| **SW-3** `sw.ts`에 `logger` import·`console.` 0건 | 동상 — SW 로그는 진단에 도달하지 않는다(§4 함정 12) |
+| **WD5** `src/` 전체에 `window.close` 0건 | 동상 — 스크립트가 열지 않은 탭은 닫을 수 없다. 부르면 조용히 실패해 "버튼이 안 먹는다"가 된다 |
+| **DIAG-1** 진단·뷰·`serverStatusPanel`에서 `backendApiKey`가 등장하는 줄에 `.length`·`.trim()`이 반드시 있다 | 동상 — 게이트 키 **값**이 화면·로그로 새는 것을 막는다 |
+| **PIN-1**(확장) `PIN_FILES`에 `pinChangeRunner.ts`·`pinResetRunner.ts`·`PinKeypad.tsx` 추가 | `settingsInvariants.test.ts` — Step 16의 새 PIN 경로 3종이 자동으로 검사에 들어온다 |
+| `exportImport.ts`에 `fetch(` 0건 · `zipStore.ts`·`swPolicy.ts`는 **import 0** | `accountInvariants.test.ts` — 프레임 바이트는 OPFS에서 직접 읽고(A1 회피), 순수 코덱·분류기는 의존성을 갖지 않는다 |
 
 새 불변식을 만들면 **같은 방식으로 고정**하는 것이 이 저장소의 관례다.
 
@@ -157,6 +166,10 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | 10 | vitest는 `expect(actual, msg)`를 받지만 **jest는 아니다** | `web/functions`는 jest다. 두 프로젝트의 단언 문법이 다르다 |
 | 11 | 가공 Worker의 스틸 슬롯은 **1개짜리 덮어쓰기**다 | 다른 소비자가 `requestStill`을 재사용하면 컷 요청이 소멸해 **세션이 홈으로 복귀한다**. 새 소비자는 **전용 채널**을 만든다(Step 9의 스풀 채널이 선례) |
 | 12 | Worker에서 남긴 `logger` 로그는 **어디에도 도달하지 않는다** | `attachLogStore`는 메인 프로세스에만 붙는다. Worker는 사유를 **응답 페이로드로** 넘기고 메인이 기록한다 |
+| 13 | `cache.addAll`은 **원자적**이라 URL 하나가 404면 SW install 전체가 실패한다 | 존재하지 않을 수 있는 자산(`/sounds/shutter.wav`)이 섞이면 첫날부터 깨진다 → 개별 `cache.add` + `Promise.allSettled` |
+| 14 | `sw.js` 바이트가 같으면 브라우저가 **업데이트를 감지하지 않는다** | 자산 목록을 `sw.js`에 인라인해 내용이 바뀌면 파일도 바뀌게 만든다(빌드 타임스탬프는 no-op 재빌드를 churn시킨다) |
+| 15 | PIN 승인이 **화면 단위**라 `Account ↔ UserMgmt` 왕복마다 PIN을 다시 물었다 | 승인 단위는 화면이 아니라 **그룹**이다(`pinGateGroup`). 하위 페이지를 새로 만들면 그룹에 넣는다 |
+| 16 | `authMethodLabel`이 호출자 0인 채로 규격과 다른 문구("Google 계정")를 들고 있었다 | **렌더된 적 없는 헬퍼는 "현행 동작"이 아니다** — 우선순위 규칙(소스 > analysis)을 적용할 대상이 아니다 |
 
 ---
 
@@ -282,7 +295,7 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 ### Step 14~16
 - 설정 저장은 `settingsStore.save(patch, { isGuest, webExtras? })`만 부르면 된다 — 게스트 제한 키 보존은 `settingsRepo`가 처리한다(Step 13 절 참고).
-- 권한 게이트는 도메인에 다 있다(`rolePolicy`·`roleChangePolicy`·`frameEditPolicy`·**`settingsEditPolicy`**). 화면은 **렌더 가드 + 액션 첫 줄 가드** 2중으로 쓴다(M10).
+- 권한 게이트는 도메인에 다 있다(`userRole`·`roleChangePolicy`·**`accountAdminPolicy`**·`frameEditPolicy`·**`settingsEditPolicy`**). ⚠️ `rolePolicy.ts`라는 파일은 **존재한 적이 없다**(문서 4곳의 오기를 2026-08-01에 정정했다). 화면은 **렌더 가드 + 액션 첫 줄 가드** 2중으로 쓴다(M10).
 - 프레임 이름 판정은 **세 축**이다: 서버 등록 = `validateFrameNameForServer`(`_` 하드 거부) / 로컬 저장 = `validateFrameName` + `underscoreWarning`(비차단) / **저장 전 선검증 = `isFileNameSafe`**(길이 무관, 빈 값·금지문자만).
 
 ---
@@ -291,18 +304,12 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + **15**(프레임 편집기·피커·삭제 — WD20 15a+15b 전량) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **1655**(69파일, Step 15 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13·14·15는 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + **15**(프레임 편집기·피커·삭제) + **16**(계정·사용자 관리·진단 모달·PWA/SW·내보내기/가져오기) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **1926**(84파일, Step 16 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13~16은 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
 | 브랜치 | `feature/web-client-foundation` |
-| `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 16~17, 실측 V1~V24 |
+| `main` | 머지 완료(2026-07-31, `e5efdfd`) |
+| 미완 | **Step 17(E2E·실기기·수락)뿐**. 실측 V1~V25 |
 
-**main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
-
-| 대상 | 늘어난 것 |
-|------|-----------|
-| Step 14 | `frameLoadPolicy`·`frameCatalogProgress` 도메인 이식 + 벡터 1파일 + 대기/실패 오버레이 + 단일 비행 로더 + 유휴 상한 불변식 테스트 |
-| Step 15 | 불러오기 = 신규 생성으로 재정의, 서버 등록 확인 모달 신설, 저장 전 검증 7단, `isFileNameSafe` 분리 |
-| Step 9 | 변화 없음. 참고로 **웹 타임랩스 경로에는 GPL 노출이 없다**(브라우저 내장 인코더 — `12 B14`) |
-
-화면은 Home·FrameSelect·Guide·Capture·CutSelect·Result·Qr·Done·**Login**·**Settings**·**FrameEditor**가 실물이고, 남은 더미는 **Account·UserMgmt 둘뿐**이다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 + 로그인 + 설정 + 프레임 저작은 이로써 전부 실물이다** — 남은 더미는 Step 16이 채운다. `Account`는 더미지만 **PIN 게이트 배선은 이미 걸려 있다**(Step 16은 안쪽 내용만 채우면 된다).
+**13개 화면이 전부 실물이다** — `App.tsx`의 `ScreenRouter`에 `DummyScreen`으로 남은 상태가 **0개**이고,
+`ModalStack`의 미구현 스텁 분기도 사라졌다(셸 모달 4종 전부 실물). 남은 것은 **Step 17(E2E·실기기·수락)**뿐이다.
+`DummyScreen` 함수 자체는 라우터의 `default` 분기 안전망으로만 남는다 — **여기에 기능 진입점을 두지 마라.**

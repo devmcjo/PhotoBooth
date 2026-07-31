@@ -1,12 +1,18 @@
-import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useMemo, type ErrorInfo, type ReactNode } from "react";
 import { APP_STATES, type AppState } from "@domain/navigation/appState";
 import { canTransition, isTopBarVisible } from "@domain/navigation/stateMachine";
 import { logger } from "@adapters/storage/logStore";
 import { getFullscreenController } from "@shell/fullscreenController";
 import { getIdleWatchdog } from "@shell/idleWatchdog";
+import { writeAccountModeIntent } from "@shell/accountModeIntent";
 import { shellStore, useShellStore } from "@shell/shellStore";
-import { useSessionStore } from "@shell/sessionStore";
+import { sessionStore, useSessionStore } from "@shell/sessionStore";
+import {
+  buildAccountMenuItems,
+  type AccountMenuItemId,
+} from "@screens/account/accountMenu";
 import { CameraTestModal } from "@screens/modals/cameraTest/CameraTestModal";
+import { DiagnosticsModal } from "@screens/modals/diagnostics/DiagnosticsModal";
 import { PinPromptModal } from "@screens/modals/pinPrompt/PinPromptModal";
 import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
 import {
@@ -23,6 +29,8 @@ import { DoneView } from "@ui/views/DoneView";
 import { LoginView } from "@ui/views/LoginView";
 import { PinGate } from "@ui/views/PinGate";
 import { SettingsView } from "@ui/views/SettingsView";
+import { AccountView } from "@ui/views/AccountView";
+import { UserMgmtView } from "@ui/views/UserMgmtView";
 import { formatCount, STRINGS } from "@ui/strings";
 import { env, versionCaption } from "./env";
 import type { Branding } from "@adapters/platform/branding";
@@ -30,8 +38,8 @@ import type { Branding } from "@adapters/platform/branding";
 /**
  * 앱 셸 — 상단바 · 현재 화면 · 모달 스택 · 토스트 · 전체화면 배너 (02 §1)
  *
- * 화면 내용은 Step 7~16이 채운다. 지금은 **전이만 검증할 수 있는 더미 화면**이다
- * (13개 상태 전부가 렌더되고, 합법 전이만 버튼으로 노출된다).
+ * **13개 화면이 전부 실물이다**(Step 16에서 `Account`·`UserMgmt`가 채워졌다).
+ * `DummyScreen`은 라우터 `default` 분기의 안전망으로만 남는다.
  */
 
 /** React 트리 오류에서 셸만 남기고 홈으로 리셋한다(M16 — 화이트스크린 금지). */
@@ -64,7 +72,7 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { failed: b
 }
 
 /**
- * 더미 화면 — 전이 검증 전용. 남은 것은 `Account`·`UserMgmt`이고 Step 16이 교체한다.
+ * 더미 화면 — 라우터 `default` 분기의 **안전망**이다. 실물이 없는 상태는 이제 0개다.
  *
  * ⚠️ 여기에 기능 진입점을 두지 마라. Step 6·10이 임시로 두었던 카메라 테스트·로컬 폴더 지정
  *    버튼은 Step 13에서 설정 화면의 정식 위치로 옮겼다(정적 검사 SET-3이 재발을 막는다).
@@ -118,6 +126,9 @@ function ModalStack() {
   const top = modals.at(-1);
   if (top === undefined) return null;
 
+  // ⚠️ 셸 모달 4종이 **전부 실물**이다. 미구현 스텁 분기는 Step 16에서 사라졌다.
+  //    프레임 불러오기·삭제 확인·서버 등록 확인은 **화면 로컬 오버레이**다(03 §790) —
+  //    셸 모달 식별자로 되살리지 마라(FR-8).
   switch (top.id) {
     case "idleWarning":
       return <IdleWarningModal />;
@@ -125,35 +136,26 @@ function ModalStack() {
       return <CameraTestModal />;
     case "pinPrompt":
       return <PinPromptModal />;
+    case "diagnostics":
+      return <DiagnosticsModal />;
     default:
-      // 남은 모달(`diagnostics`)은 Step 16이 채운다. 그때까지 열려도 앱이 깨지지 않게 스텁을 둔다.
-      // ⚠️ 프레임 불러오기·삭제 확인·서버 등록 확인은 **화면 로컬 오버레이**다(03 §790) —
-      //    셸 모달 식별자로 되살리지 마라(FR-8).
-      return (
-        <Modal
-          id={top.id}
-          title={top.id}
-          dismissible={top.dismissible}
-          actions={
-            <Button onClick={() => shellStore.getState().popModal(top.id)}>
-              {STRINGS.common.close}
-            </Button>
-          }
-        >
-          <p>이 모달은 아직 구현되지 않았습니다.</p>
-        </Modal>
-      );
+      // 5번째 모달을 추가하고 케이스를 빠뜨리면 **여기서 타입 오류가 난다.**
+      // `default`가 진단 모달을 렌더하던 시절에는 그 실수가 조용히 통과했다.
+      return assertNoModal(top.id);
   }
 }
 
+/** `ModalId`를 전부 다루지 않으면 컴파일이 깨지게 하는 소진 검사. */
+function assertNoModal(id: never): null {
+  logger.warn("알 수 없는 모달 식별자 — 렌더하지 않는다", { modalId: String(id) });
+  return null;
+}
+
 /**
- * 화면 라우팅. 촬영 흐름 전체(Home~Done)와 `Login`·`Settings`·`FrameEditor`는 실물이고,
- * 남은 더미(`Account`·`UserMgmt`)는 Step 16이 교체한다.
+ * 화면 라우팅. **13개 상태가 전부 실물**이다.
  *
- * ⚠️ `Settings`·`Account`는 **`<PinGate>`로 감싼다**(07 §6.1). 게이트를 화면 렌더에 걸어야
- *    OAuth 복귀처럼 `go()`를 거치지 않는 진입로까지 구조적으로 덮인다.
- *    `Account`는 아직 더미지만 **배선을 지금 넣는다** — 나중에 붙이면 "한 경로가 게이트를
- *    빼먹는" 정확히 그 실패가 난다.
+ * ⚠️ `Settings`·`Account`·`UserMgmt`는 **`<PinGate>`로 감싼다**(07 §6.1 · 정적 검사 ACC-4).
+ *    게이트를 화면 렌더에 걸어야 OAuth 복귀처럼 `go()`를 거치지 않는 진입로까지 구조적으로 덮인다.
  */
 function ScreenRouter({
   screen,
@@ -192,11 +194,43 @@ function ScreenRouter({
     case "Account":
       return (
         <PinGate screen="Account">
-          <DummyScreen screen="Account" />
+          <AccountView />
+        </PinGate>
+      );
+    case "UserMgmt":
+      // ⚠️ `pinGateGroup("UserMgmt") === "Account"`이므로 `Account`의 승인을 공유한다 —
+      //    왕복마다 PIN을 다시 묻지 않는다(07 §6.1 · 설계 §5.5).
+      return (
+        <PinGate screen="UserMgmt">
+          <UserMgmtView />
         </PinGate>
       );
     default:
       return <DummyScreen screen={screen} />;
+  }
+}
+
+/**
+ * 계정 팝오버 선택 처리 — 02 §5.1.
+ *
+ * ⚠️ 로그아웃이 **토큰을 직접 지우지 않는다.** `logout()`이 `currentUser`를 null로 만들면
+ *    M1 구독(`installTokenLifecycle`)이 JWT를 폐기한다. 두 곳에서 지우면 순서 의존이 생긴다.
+ */
+function handleAccountMenuSelect(id: AccountMenuItemId): void {
+  const shell = shellStore.getState();
+  switch (id) {
+    case "manage":
+      writeAccountModeIntent("account");
+      shell.go("Account");
+      return;
+    case "adminTools":
+      writeAccountModeIntent("admin");
+      shell.go("Account");
+      return;
+    default:
+      sessionStore.getState().logout();
+      void shell.returnHome("로그아웃");
+      shell.toast("info", STRINGS.account.logoutDone);
   }
 }
 
@@ -214,6 +248,9 @@ export function App({ branding }: { readonly branding: Branding }) {
 
   const accountLabel = user === null ? STRINGS.common.login : user.id;
 
+  // 팝오버 항목·권한 판정은 순수 함수가 소유하고 `TopBar`는 렌더만 한다(02 §5.1 · ACC-1 정신).
+  const accountMenuItems = useMemo(() => buildAccountMenuItems(user), [user]);
+
   return (
     <>
       {fullscreenLost && (
@@ -228,9 +265,11 @@ export function App({ branding }: { readonly branding: Branding }) {
         <TopBar
           title={branding.appName}
           accountLabel={accountLabel}
-          onAccount={() =>
-            shellStore.getState().go(user === null ? "Login" : "Account")
-          }
+          screen={screen}
+          accountMenuItems={accountMenuItems}
+          onAccountMenuSelect={handleAccountMenuSelect}
+          /* 게스트는 팝오버 없이 곧바로 로그인으로 간다(항목이 빈 배열이다). */
+          onAccount={() => shellStore.getState().go("Login")}
           onSettings={() => shellStore.getState().go("Settings")}
         />
       )}

@@ -1,6 +1,29 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { aliases } from "./vite.aliases";
+import { buildPrecacheManifest } from "./vite.precache";
+
+/**
+ * precache 매니페스트 방출 — 01 §6.
+ *
+ * 산출된 자산 목록을 `precache-manifest.json`으로 남기고, 두 번째 빌드
+ * (`vite.sw.config.ts`)가 그것을 읽어 **`sw.js` 안에 인라인**한다.
+ * ⚠️ Hosting에서 이 파일은 **no-cache**여야 한다(`web/firebase.json`) — 옛 매니페스트가
+ *    캐시되면 새 SW가 없는 자산을 precache하려다 실패한다.
+ */
+function precacheManifestPlugin(): Plugin {
+  return {
+    name: "mcphoto-precache-manifest",
+    generateBundle(_options, bundle) {
+      const manifest = buildPrecacheManifest(Object.keys(bundle));
+      this.emitFile({
+        type: "asset",
+        fileName: "precache-manifest.json",
+        source: JSON.stringify(manifest),
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
@@ -10,7 +33,7 @@ export default defineConfig(({ mode }) => {
   const buildDate = env.VITE_BUILD_DATE?.trim() || new Date().toISOString();
 
   return {
-    plugins: [react()],
+    plugins: [react(), precacheManifestPlugin()],
     resolve: { alias: aliases },
     define: {
       "import.meta.env.VITE_BUILD_DATE": JSON.stringify(buildDate),

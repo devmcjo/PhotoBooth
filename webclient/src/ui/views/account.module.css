@@ -1,0 +1,106 @@
+/* `Account` 화면 — 03 §13. 세로 스크롤 + 하단 sticky 바(설정 화면과 같은 골격). */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.sectionTitle {
+  margin: var(--gap-sm) 0 0;
+  font-size: 1.1rem;
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.warning {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-caption);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+/* 내 정보 — 라벨/값 2열. 좁은 화면에서는 1열로 접힌다(가로 스크롤 금지 — 03 §1.2). */
+.infoList {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: var(--gap-sm) var(--gap);
+  margin: 0;
+}
+
+.infoKey {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.infoValue {
+  margin: 0;
+  word-break: break-all;
+}
+
+@media (max-width: 480px) {
+  .infoList {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+
+  .infoValue {
+    margin-bottom: var(--gap-sm);
+  }
+}
+
+.bottomBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap-sm);
+  padding: var(--gap);
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.pinMessage {
+  margin: 0;
+  min-height: 1.5em;
+  text-align: center;
+  color: var(--danger);
+  font-size: var(--fs-body);
+}

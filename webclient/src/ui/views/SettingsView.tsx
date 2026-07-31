@@ -17,6 +17,7 @@ import {
 import { formatBytes } from "@domain/results/byteFormat";
 import { describePersistState } from "@adapters/platform/persistStorage";
 import { buildCameraOptions, needsPermissionHint } from "@screens/settings/cameraDevicePanel";
+import { frameImportWarningMessage } from "@screens/settings/frameTransfer";
 import { describeServerStatus } from "@screens/settings/serverStatusPanel";
 import { useSettingsScreen } from "@screens/settings/useSettingsScreen";
 import { Button, Spinner } from "@ui/components";
@@ -34,10 +35,8 @@ import styles from "./settings.module.css";
  * ⚠️ 게스트 제한은 4중이다: 렌더 가드(여기) + 액션 가드(`changeSetting`) +
  *    패치 제외(`buildSavePatch`) + 저장소 `omitKeys`. 렌더 가드만으로는 부족하다(M10).
  *
- * 이번 Step에서 **만들지 않은 것**(의도적 이월 — 스텁 문구를 운영자에게 노출하지 않기 위함):
- *   · [프레임 내보내기]/[가져오기] → **Step 15**(로컬 프레임 저장소가 선행)
- *   · [앱 업데이트 확인]          → **Step 16**(Service Worker 등록이 선행)
- *   · [진단·상태]                 → **Step 16**(모달 본체가 선행)
+ * Step 16에서 채워진 것: §5 [진단·상태](로그인 전용) · §6 [프레임 내보내기]/[가져오기] ·
+ * §6 [앱 업데이트 확인]. 로그 내보내기는 **진단 모달에만** 둔다(03 §15.2 — 두 곳에 두지 않는다).
  */
 
 function lockBadgeOf(
@@ -55,6 +54,7 @@ export function SettingsView() {
   const { ctx, draft } = screen;
   const values = draft.values;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const frameInputRef = useRef<HTMLInputElement>(null);
 
   const locked = (key: keyof AppSettingsValues): boolean => !isSettingEditable(key, ctx);
   const badge = (key: keyof AppSettingsValues): string | null => lockBadgeOf(key, ctx);
@@ -399,6 +399,12 @@ export function SettingsView() {
             >
               {STRINGS.settings.serverRecheck}
             </Button>
+            {/* 진단·상태는 **로그인 전용**이다(03 §15.2). 렌더 가드 + 액션 가드 2중. */}
+            {!ctx.isGuest && (
+              <Button onClick={() => screen.openDiagnostics()}>
+                {STRINGS.diagnostics.open}
+              </Button>
+            )}
           </div>
         </section>
 
@@ -556,6 +562,74 @@ export function SettingsView() {
               </div>
             </>
           )}
+
+          {/* ── 프레임 내보내기 / 가져오기(05 §4.6) ─────────────────── */}
+          <h3 className={styles.sectionTitle}>{STRINGS.transfer.exportFrames}</h3>
+          <div className={styles.actions}>
+            {/* 내보내기는 `!isGuest`, 가져오기는 `canWriteFrames` — **축이 다르다**. */}
+            {!ctx.isGuest && (
+              <Button onClick={() => screen.exportFrames()}>
+                {STRINGS.transfer.exportFrames}
+              </Button>
+            )}
+            {screen.canWriteFrames && (
+              <Button onClick={() => frameInputRef.current?.click()}>
+                {STRINGS.transfer.importFrames}
+              </Button>
+            )}
+            <input
+              ref={frameInputRef}
+              type="file"
+              accept="application/zip,.zip"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // 같은 파일을 다시 골라도 change가 오도록 값을 비운다.
+                event.target.value = "";
+                if (file !== undefined) screen.startFrameImportFile(file);
+              }}
+            />
+          </div>
+
+          {screen.frameImportError !== null && (
+            <p className={styles.warning} role="alert">
+              {screen.frameImportError}
+            </p>
+          )}
+
+          {screen.framePreview !== null && (
+            <>
+              <h3 className={styles.sectionTitle}>{STRINGS.transfer.importPreviewTitle}</h3>
+              <ul className={styles.previewList}>
+                {screen.framePreview.candidates.map((candidate) => (
+                  <li key={candidate.sourceName} className={styles.previewItem}>
+                    {candidate.sourceName} → {candidate.name}
+                    {candidate.renamed ? ` (${STRINGS.transfer.importRenamed})` : ""}
+                  </li>
+                ))}
+              </ul>
+              {screen.framePreview.warnings.map((warning) => (
+                <p key={`${warning.kind}-${"sourceName" in warning ? warning.sourceName : ""}`} className={styles.note}>
+                  {frameImportWarningMessage(warning)}
+                </p>
+              ))}
+              <div className={styles.actions}>
+                <Button variant="primary" onClick={() => screen.applyFrameImport()}>
+                  {STRINGS.transfer.importApply}
+                </Button>
+                <Button variant="ghost" onClick={() => screen.cancelFrameImport()}>
+                  {STRINGS.transfer.importCancel}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* ── 앱 업데이트(01 §6) ──────────────────────────────────── */}
+          <h3 className={styles.sectionTitle}>{STRINGS.pwa.checkUpdate}</h3>
+          <div className={styles.actions}>
+            <Button onClick={() => screen.checkAppUpdate()}>{STRINGS.pwa.checkUpdate}</Button>
+          </div>
+          <p className={styles.note}>{STRINGS.pwa.applyCaption}</p>
         </section>
       </div>
 

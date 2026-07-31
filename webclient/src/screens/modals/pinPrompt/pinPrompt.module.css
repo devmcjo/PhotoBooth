@@ -7,48 +7,11 @@
   gap: var(--gap);
 }
 
-/* ── 4칸 마스킹 인디케이터 ── */
-
-.indicator {
-  display: flex;
-  gap: var(--gap-sm);
-  justify-content: center;
-  padding: var(--gap-sm) 0;
-}
-
-.dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  background: transparent;
-}
-
-.dotFilled {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-/* ── 온스크린 키패드 ── */
-
-.keypad {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(var(--touch-min), 84px));
-  gap: var(--gap-sm);
-  justify-content: center;
-}
-
-.key {
-  /* 터치 타깃 48px 이상(01 §8). */
-  min-width: var(--touch-min);
-  min-height: 56px;
-  font-size: 1.35rem;
-  font-weight: 600;
-}
-
-.keyWide {
-  font-size: var(--fs-body);
-}
+/*
+ * ⚠️ 인디케이터·키패드 스타일은 Step 16에서 `components.module.css`(`.pinPad` 계열)로 옮겼다.
+ *    세 화면(게이트 모달 · 계정 PIN 변경 · 타 계정 재설정)이 같은 표현을 공유해야 하기 때문이다.
+ *    여기에 다시 만들지 마라.
+ */
 
 /* ── 안내 ── */
 

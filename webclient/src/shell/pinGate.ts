@@ -4,6 +4,7 @@ import type { SessionUser } from "@domain/accounts/sessionUser";
 import type { AppState } from "@domain/navigation/appState";
 import {
   formatPinLockRemaining,
+  pinGateGroup,
   pinLockRemainingMs,
   PIN_LOCK_MS,
 } from "@domain/auth/pinGatePolicy";
@@ -231,7 +232,10 @@ export function defaultPinGateDeps(overrides: Partial<PinGateDeps> = {}): PinGat
 export type PinGateStatus = "idle" | "checking" | "granted" | "denied";
 
 export interface PinGateState {
-  /** 승인이 유효한 화면. */
+  /**
+   * 승인이 유효한 **게이트 그룹**(`pinGateGroup`의 결과). 화면 자체가 아니다 —
+   * `UserMgmt`는 `Account` 그룹으로 기록되어 두 화면이 승인을 공유한다(07 §6.1).
+   */
   readonly screen: AppState | null;
   /** 승인이 유효한 사용자(게스트는 null). */
   readonly userId: string | null;
@@ -242,28 +246,30 @@ const IDLE: PinGateState = { screen: null, userId: null, status: "idle" };
 
 export const pinGateStore = createStore<PinGateState>()(() => IDLE);
 
-/** 이 화면에 대한 게이트 상태. 다른 화면의 승인은 보이지 않는다. */
+/** 이 화면에 대한 게이트 상태. **다른 그룹**의 승인은 보이지 않는다. */
 export function usePinGateStatus(screen: AppState): PinGateStatus {
-  return useStore(pinGateStore, (s) => (s.screen === screen ? s.status : "idle"));
+  const group = pinGateGroup(screen);
+  return useStore(pinGateStore, (s) => (s.screen === group ? s.status : "idle"));
 }
 
-async function runGate(screen: AppState, userId: string | null): Promise<void> {
+/** `group`은 이미 `pinGateGroup()`을 지난 값이다(호출자가 정규화한다). */
+async function runGate(group: AppState, userId: string | null): Promise<void> {
   const result = await ensurePinGate(defaultPinGateDeps());
 
   // 대기 중 화면·사용자가 바뀌었으면 결과를 버린다(경합 방어 — `qrUsageStore`와 같은 형태).
   const state = pinGateStore.getState();
-  if (state.screen !== screen || state.userId !== userId || state.status !== "checking") return;
+  if (state.screen !== group || state.userId !== userId || state.status !== "checking") return;
 
   if (result.kind === "denied") {
     // ⚠️ **상태를 먼저** 바꾸고 화면을 되돌린다. 순서를 뒤집으면 화면 변경 구독이 상태를
     //    idle로 만든 뒤 여기서 denied를 덮어써, 그 화면이 영구히 재판정 불가가 된다.
-    pinGateStore.setState({ screen, userId, status: "denied" });
-    logger.warn("PIN 게이트 거부", { gateScreen: screen, denyReason: result.reason });
+    pinGateStore.setState({ screen: group, userId, status: "denied" });
+    logger.warn("PIN 게이트 거부", { gateScreen: group, denyReason: result.reason });
     shellStore.getState().closeOverlay();
     return;
   }
 
-  pinGateStore.setState({ screen, userId, status: "granted" });
+  pinGateStore.setState({ screen: group, userId, status: "granted" });
 }
 
 /**
@@ -273,21 +279,23 @@ async function runGate(screen: AppState, userId: string | null): Promise<void> {
  * ⚠️ 짝이 되는 cleanup을 만들지 마라. 승인 폐기는 `installPinGateLifecycle`이 담당한다.
  */
 export function ensureScreenPinGate(screen: AppState): void {
+  // 승인 단위는 화면이 아니라 **그룹**이다 — `Account ↔ UserMgmt`가 승인을 공유한다(07 §6.1).
+  const group = pinGateGroup(screen);
   const user = sessionStore.getState().currentUser;
   const userId = user?.id ?? null;
 
   const state = pinGateStore.getState();
-  if (state.status !== "idle" && state.screen === screen && state.userId === userId) return;
+  if (state.status !== "idle" && state.screen === group && state.userId === userId) return;
 
   // 게스트 무가드(07 §6.1). 스피너 한 프레임도 보이지 않게 **동기로** 승인한다.
   // (`ensurePinGate`도 같은 규칙을 갖고 있어 이 지름길이 판정을 느슨하게 만들지 않는다.)
   if (user === null) {
-    pinGateStore.setState({ screen, userId: null, status: "granted" });
+    pinGateStore.setState({ screen: group, userId: null, status: "granted" });
     return;
   }
 
-  pinGateStore.setState({ screen, userId, status: "checking" });
-  void runGate(screen, userId);
+  pinGateStore.setState({ screen: group, userId, status: "checking" });
+  void runGate(group, userId);
 }
 
 /** 승인을 폐기하고 열려 있는 PIN 모달을 취소한다(멱등). */
@@ -315,7 +323,9 @@ export function installPinGateLifecycle(): () => void {
   if (uninstall !== null) return uninstall;
 
   const unsubscribeScreen = shellStore.subscribe((state, previous) => {
-    if (state.screen !== previous.screen) discardPinGate("screen");
+    // ⚠️ **그룹이 바뀔 때만** 폐기한다. 화면 단위로 비교하면 `Account ↔ UserMgmt` 왕복마다
+    //    PIN을 다시 묻는다(설계 §5.5 · 15 §4 함정 15).
+    if (pinGateGroup(state.screen) !== pinGateGroup(previous.screen)) discardPinGate("screen");
   });
   const unsubscribeUser = sessionStore.subscribe(
     (state) => state.currentUser,

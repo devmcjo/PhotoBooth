@@ -1,3 +1,4 @@
+import type { AppState } from "../navigation/appState";
 import { clamp } from "../mathCompat";
 
 /**
@@ -30,6 +31,21 @@ export const PIN_LOCK_MS = 5 * 60 * 1_000;
  */
 export function isPinFormatValid(value: string): boolean {
   return /^\d{4}$/.test(value);
+}
+
+/**
+ * PIN 승인이 공유되는 단위 — 07 §6.1 "계정 관리 / 관리자 도구 = 진입 시 1회 판정"
+ *
+ * 승인 단위가 **화면**이면 `Account → UserMgmt → [뒤로] → Account` 왕복마다 PIN을 다시 묻는다
+ * (`installPinGateLifecycle`이 화면 변경에서 승인을 폐기하기 때문). `UserMgmt`는 `Account`의
+ * 하위 페이지이므로(03 §14의 [뒤로]는 Account 직행) **같은 그룹**으로 묶는다.
+ *
+ * ⚠️ `Settings`는 "매번 확인"이므로 자기 자신 그룹이다 — 여기에 묶지 마라.
+ * ⚠️ 그룹 공유가 우회로를 만들지 않는다: `UserMgmt`는 `canTransition`상 `Account`에서만 진입
+ *    가능하고, 그 `Account`는 이미 게이트를 통과한 상태다.
+ */
+export function pinGateGroup(screen: AppState): AppState {
+  return screen === "UserMgmt" ? "Account" : screen;
 }
 
 /** 최초 설정 2단계(새 PIN → 재입력)의 일치 판정. 빈 값끼리는 일치로 보지 않는다. */

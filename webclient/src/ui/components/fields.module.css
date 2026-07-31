@@ -61,6 +61,24 @@
   min-width: 64px;
 }
 
+/* 네이티브 드롭다운(사용자 관리 역할 변경 전용). 터치 타깃 48px을 지킨다(01 §8). */
+.select {
+  min-height: var(--touch-min);
+  min-width: 0;
+  width: min(220px, 100%);
+  padding: 0 var(--gap-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-body);
+}
+
+.select:disabled {
+  opacity: 0.55;
+}
+
 .textField {
   min-height: var(--touch-min);
   min-width: 0;

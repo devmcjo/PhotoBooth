@@ -833,13 +833,25 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - 진단 모달: [03 §15.2](./03-screens-spec.md)의 **6섹션**(카메라·인코더·서버·로그/저장소·개발자 문의·앱) + `/health`·`/frames/default` 두 프로브. **게이트 키 값 미표시**.
   - PWA: manifest + SW precache(앱 셸·번들 프레임·셔터음), **`skipWaiting` 미사용**, 업데이트 대기 표시 + [지금 적용].
   - 내보내기/가져오기: 설정 JSON · 프레임 zip(Windows `Frame\` 규칙) · 로그 `.log`.
-- **검증 명령**: `npx playwright test e2e/role-matrix.spec.ts`(E18) · Lighthouse PWA 확인 · 오프라인에서 앱 로드 확인 · 프레임 zip을 Windows `Frame\`에 풀어 인식 확인
+- **검증 명령**: `npx tsc --noEmit` · `npx vitest run` · `npm run build`(앱 → SW 2단) · Lighthouse PWA 확인(V25-7) · 오프라인에서 앱 로드 확인(V25-1) · 프레임 zip을 Windows `Frame\`에 풀어 인식 확인(V25-3)
 - **완료 기준**:
   - [관측] manager 로그인 시 다른 manager 행에 **[PIN]이 없고 [삭제]는 있다**. 역할 콤보에 `admin`이 없다. 진단 모달이 카메라·인코더·서버·저장소 상태를 표시하고 게이트 키는 "설정됨"만 보인다. 네트워크를 끊어도 앱이 로드된다(SW).
   - [non-goal] **앱 종료 버튼이 없다**(WD5). 목록 조회 실패가 빈 목록으로 표시되지 않는다. SW가 촬영 중 앱을 갱신하지 않는다. 게이트 키 값이 화면·로그에 없다.
   - [trigger] 사용자 관리 진입은 power만. 전역 한도 편집은 admin만. SW 갱신 적용은 [지금 적용] 또는 다음 시작에만.
-- **롤백**: 해당 화면·SW 제거.
-- [ ] 완료
+- **롤백**: 해당 화면·SW 제거. ⚠️ **배포된 SW를 회수하려면** `sw.js`를 "모든 캐시를 지우고 `registration.unregister()`" 하는 kill-switch 버전으로 한 번 더 배포해야 한다 — 파일 삭제만으로는 이미 설치된 SW가 사라지지 않는다.
+- **산출물(2026-08-01 완료)**:
+  - 도메인 2: `accounts/accountAdminPolicy.ts`(`canOpenUserMgmt`·`canEditGlobalLimits`·`canExitKiosk`·`sortManagedUsers`·`buildUserRow(s)`) · `accounts/tempUserLimitsPolicy.ts`(범위 상수·`parseLimitInput`·`validateTempUserLimits`·`buildLimitsPatch`). `auth/pinGatePolicy.ts`에 **`pinGateGroup`** 추가 — PIN 승인 단위가 화면에서 **그룹**으로 바뀌어 `Account ↔ UserMgmt` 왕복에 PIN을 다시 묻지 않는다(07 §6.1).
+  - 화면: `AccountView`(내 정보 5행 + PIN 변경 오버레이 + 관리자 도구 3항목) · `UserMgmtView`(표/카드 이중 마크업, 조작부는 `UserRowActions` 하나를 공유) · `DiagnosticsModal`(6섹션) · 상단바 **계정 팝오버**(앱에 **로그아웃 경로가 없던 결함** F22 정정).
+  - PWA: `adapters/platform/swPolicy.ts`(9단 분류기, **기본 bypass**) · `src/sw.ts`(iife, `cache.addAll` 미사용) · `vite.precache.ts` + `vite.sw.config.ts` + `vite.config.ts` 플러그인 · `shell/swUpdate.ts`. `npm run build`가 **2단**(`vite build && vite build --config vite.sw.config.ts`)이 됐다.
+  - 내보내기/가져오기: `adapters/storage/zipStore.ts`(무압축 store zip, **import 0** · 읽기는 deflate도) · `exportImport.ts`(로그 `.log` · 프레임 zip · 파싱→미리보기→[적용]) · `frameStore.readImageBytes`.
+  - `web/firebase.json`: kiosk CSP `connect-src`에 **`blob:`** 추가(A1 예방) · `/precache-manifest.json` **no-cache**.
+- **검증 수치(2026-08-01 실측)**: `npx tsc --noEmit` 오류 0 · `npx vitest run` **1926 통과(84파일)** — Step 15 기준선 **1655(69파일)** 에서 +271 · `npm run build` 성공(`web/kiosk/{index.html,sw.js,precache-manifest.json}` 생성 확인, `sw.js` 2.8KB에 자산 목록 인라인).
+- **설계 이탈(3건)**:
+  - ① `FrameImportPreview.warnings`가 `string[]`이 아니라 **판별 유니온**(`FrameImportWarning`)이다. 어댑터가 `@ui/strings`를 import하지 않는 이 저장소 관례를 지키기 위함이고, 문구 매핑은 `screens/settings/frameTransfer.ts`가 한다.
+  - ② `AccountMode` 값은 `ACCOUNT_MODE_INFO`/`ACCOUNT_MODE_ADMIN` **상수로만** 참조한다. `"admin"` 리터럴이 화면에 남으면 정적 검사 **ACC-1**(역할 문자열 0건)이 역할 비교와 구분할 수 없다.
+  - ③ `STRINGS.account`에 `authMethodGoogle`을 만들지 **않았다**. 설계 §3.1의 판정대로 값은 도메인 `authMethodLabel`이 소유한다(카탈로그 중복 금지 — `roleLabel`과 같은 자리).
+- **미검증(사람 필요)**: [14 §10.11](./14-handoff-and-user-actions.md)의 **V25 8건** — 오프라인 로드 · [지금 적용] · Windows `Frame\` 인식 · 탐색기 재압축 zip · manager 실계정 행 · A1 blob CSP · Lighthouse PWA · 게이트 키 미노출.
+- [x] 완료
 
 ---
 

@@ -46,7 +46,7 @@ Windows 테스트와 **1:1 대응**시킨다. 왼쪽이 웹 테스트 파일, �
 | `cutCountPolicy.test.ts` | `CutCountPolicyTests.cs` | `isAuto`(0만 자동, -1 아님) · `resolve` 자동/고정 각 케이스(슬롯 0~6, 7 산출 포함) · 슬롯 미확정(≤0) 폴백 |
 | `qrDeliveryPolicy.test.ts` | `QrDeliveryPolicyTests.cs` | 정규화 · 재활성 · 하위 값 보존 |
 | `qrEffectivePolicy.test.ts` | `QrEffectivePolicyTests.cs` | 진리표: **미로그인 → false(raw 무관)** · TempUser 한도 초과 → false · 정상 TempUser·`user` 이상 → raw 그대로 · **raw=true·초과 시 effective=false지만 입력 raw는 불변**(오버라이드 확인) |
-| `rolePolicy.test.ts` | `RoleManagementTests.cs` | `isPower` · `canWriteFrames` · `canManage`(**동급 허용**) · `canResetPin`(**동급 차단**) · 알 수 없는 역할 → `user` |
+| `tests/unit/domain/settingsAndRoles.test.ts`·`accounts.test.ts` | `RoleManagementTests.cs` | `isPower` · `canWriteFrames` · `canManage`(**동급 허용**) · `canResetPin`(**동급 차단**) · 알 수 없는 역할 → `user` |
 | `roleChangePolicy.test.ts` | `RoleManagementTests.cs` | `assignableRoles` 전수 매트릭스 · admin 지정 불가 · 순서 오름차순 |
 | `uploadContract.test.ts` | `UploadContractTests.cs` | 세션 ID 정규식 · 경로 조립 · 토큰 URL 인코딩(`%2F`) · 다운로드 페이지 URL · 만료 계산 |
 | `uploadOrchestration.test.ts` | `UploadServiceTests.cs` | 최소 1개 불변식 · 3단계 순서 · 진행률 합산(**순서 비의존**) |
