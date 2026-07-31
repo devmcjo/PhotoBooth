@@ -1928,6 +1928,142 @@ public void FrameSelectView_Waiting_Bindings_Exist_On_Vm()
 
 **미조치 항목: 없음.** 동의하지 않아 남긴 지적도 없다.
 
-**여전히 남는 미확인 리스크(인수 대상)**: **A-2 — 무진행 30초가 실회선에서 정상 다운로드를 자르지 않는지.**
-자동 테스트로 대체 불가하며 실기에서 `기본 프레임 캐시: {Name}` 로그 간격 실측이 필요하다.
-어긋나면 `FrameLoadPolicy.NoProgressTimeoutSeconds` 1개 + T-9~T-12 기대값만 고치면 된다. A-1·A-4도 실기 시각 확인 대상이다.
+**남는 미확인 리스크(A-1·A-2·A-4)와 실기 인수 절차는 §17.4에 통합했다.**
+
+---
+
+## §17 코드 리뷰 라운드 2 판정과 실기 인수 항목 (이터레이션 종결)
+
+### 17.1 판정: ✅ PASS — 사이클 2/2 종료, 3회차 불필요
+
+🔴 Critical **0** · 🟠 Major **0** · 🟡 Minor **0** · 🔵 Suggestion **2**(조치 불필요).
+근거 등급: semi_direct + **변이 검증 direct**. 코드 수정 요청 없음.
+
+리뷰어가 직접 재실행한 기계 검증:
+
+| 항목 | 결과 |
+|------|------|
+| `dotnet build -c Debug --no-incremental` | 경고 0 / 오류 0 |
+| `dotnet build -c Release --no-incremental` | 경고 0 / 오류 0 |
+| `dotnet test -c Debug` | **920 통과 / 0 실패 / 0 건너뜀** (베이스라인 857 → **+63**), 4s |
+| SafetyScan | 변경 소스 5개에 `.Result`/`.Wait()`/`GetAwaiter().GetResult()`/`async void` **0건** |
+| 인코딩 | 변경·신규 소스 10개 전부 UTF-8 no BOM + 전 줄 CRLF (**직접 바이트 검사**) |
+
+라운드 1의 13건(🟠2 · 🟡11) **전부 코드로 닫힘** 판정. 수정이 만든 새 문제 **없음** 판정 —
+`Frames.Clear()` 이동의 부수 효과(stale 가드 발동 시 이전 목록 유지)는 종전보다 **개선**으로,
+`Finalize`가 도달 가능한 모든 경로에서 교체 후 개수를 받는다는 점(가드~교체 사이 유일한 await인
+`GetUserFramesAsync`가 자체 try/catch로 감싸짐)까지 확인됐다. N10 클램프가 정상 경로에서 발동하지
+않음도 산술로 확인됐다(`NextDeadline`은 항상 `min(60−elapsed, 30) ≤ 30 < 60`).
+
+커밋 구조(`docs` → `feat` → `fix`)와 재량 판단 2건도 타당 판정을 받았다 —
+(a) 라운드1 수정 대부분을 커밋 2에 합친 것은 "빈 목록 창 + 공허한 스피너 테스트를 담은 상태"를
+의도적으로 히스토리에 남기지 않는다는 점에서 적절, (b) `FallbackCacheCollection.cs`를 커밋 2에 둔 것은
+적절을 넘어 **필수**(미루면 커밋 2가 컴파일 불가가 되어 "각 커밋 green"이 깨진다).
+
+### 17.2 Major 1이 어떻게 닫혔는지 — 스피너 트리거 체인 (이 절이 이 문서에서 가장 실용적인 기록이다)
+
+> **앞으로 `Spinner.Ring`의 트리거를 건드리는 사람이 반드시 읽을 절.**
+> 무엇이 테스트로 보장돼 있고, 왜 그 보장이 공허하지 않은지가 여기 있다.
+
+`Spinner_Ring_Transform_Is_Animatable`은 `Storyboard.SetTarget`으로 트랜스폼을 **직접** 겨냥하므로
+템플릿 자신의 트리거 체인을 한 줄도 실행하지 않는다. 그래서 라운드 1은 두 메커니즘을 미검증으로 지적했다 —
+① `EventTrigger(Loaded)` → `BeginStoryboard x:Name="SpinnerSpin"` → `Storyboard.TargetName="SpinnerRotate"`의
+**템플릿 namescope 이름 해석** ② `Trigger(IsVisible=False)`의 `PauseStoryboard`가 **다른 종류의
+트리거(EventTrigger)에 선언된 `BeginStoryboard`를 이름으로 참조**하는 형태.
+
+②가 깨지면 `InvalidOperationException`이 **Loading→Ready 전이**(가장 많이 지나가는 경로)에서 UI 스레드로
+던져지고 → `DispatcherUnhandledException` → `TryReturnHome()` → **손님이 촬영을 누르면 홈으로 튕긴다.**
+
+`Spinner_Ring_Trigger_Chain_Runs_Without_Exception`이 이를 닫는다.
+**developer가 변이 검증으로 비-공허성을 입증하고, 리뷰어가 독립 재현해 확증했다:**
+
+**변이 1** — `Storyboard.TargetName="SpinnerRotate"` → `"SpinnerRotateWRONG"`
+```
+실패 Spinner_Ring_Trigger_Chain_Runs_Without_Exception
+---- System.InvalidOperationException : 'SpinnerRotateWRONG' 이름이
+     'System.Windows.Controls.ControlTemplate'의 이름 범위 안에 없습니다.
+   at XamlResourceTests...() in XamlResourceTests.cs:line 411      ← ctl.RaiseEvent(LoadedEvent)
+```
+
+**변이 2** — `PauseStoryboard BeginStoryboardName="SpinnerSpin"` → `"SpinnerSpinWRONG"`
+```
+실패 Spinner_Ring_Trigger_Chain_Runs_Without_Exception  (+ Transform_Is_Animatable 동반 실패)
+---- System.InvalidOperationException : 'SpinnerSpinWRONG' 이름이 ... 이름 범위 안에 없습니다.
+   at System.Windows.Media.Animation.Storyboard.ResolveBeginStoryboardName(...)
+   at System.Windows.Media.Animation.ControllableStoryboardAction.GetStoryboard(...)
+   at XamlResourceTests...() in XamlResourceTests.cs:line 419      ← host.Visibility = Collapsed
+```
+
+**변이 2의 스택 트레이스가 결정적이다.** `ResolveBeginStoryboardName` → `ControllableStoryboardAction.GetStoryboard`가
+실제로 호출된다는 것은 `IsVisible=False` 트리거의 `EnterActions`가 **headless 하네스에서 실제로 발화하고**
+`BeginStoryboardName`이 **실제로 해석된다**는 뜻이다. 즉 테스트는 형식적 통과가 아니라 라운드 1이 지목한
+두 메커니즘을 정확히 실행한다.
+
+**따라서 Major 1의 잔여 위험은 "테스트로 덮었다"가 아니라 "메커니즘이 실제 WPF 런타임에서 동작함을
+확인했다"로 닫혔다.** 예외로 홈에 튕기는 실패 모드는 제거됐고, 실기 기동으로 남은 것은 시각·타이밍 항목뿐이다.
+
+⚠️ 이 템플릿의 `x:Name`(`SpinnerRing`·`SpinnerRotate`·`SpinnerSpin`)이나 트리거 구조를 바꿀 때는
+그 테스트를 **먼저 실패시켜 보고**(이름 하나를 일부러 틀리게) 검출력이 살아 있는지 확인한 뒤 진행할 것.
+
+### 17.3 Suggestion 2건 — 조치하지 않음
+
+| # | 제안 | 판정과 사유 |
+|---|------|-------------|
+| S1 | `FrameCatalogPhase.Completed`의 이름과 라벨("프레임 목록을 정리하는 중…")이 어긋나 보인다 | **조치 불필요.** 이 국면은 `ResolveLocalFrames` **직전**에 보고되므로 라벨이 정확하고 이름이 덜 정확한 쪽이다. XML 주석이 이미 "모든 준비가 끝났다(마지막 보고 — 늦게 합류한 구독자의 replay용)"로 역할을 설명한다. 이름을 바꾸면 열거형 값·테스트·replay 서술이 함께 움직여 비용이 이득을 넘는다 |
+| S2 | N8 상세 기록이 §15(구현 단계 이탈)에 있고 §16 표가 교차 참조 — 분류상 §16이 자연스럽다 | **조치 불필요.** 정합성은 확보돼 있고(양방향 참조 존재), 옮기면 §15에 남은 다른 이탈 기록과의 문맥이 끊긴다. N8은 "단일 비행 교체가 조용히 바꾼 계약"이라 구현 단계 기록으로도 읽을 여지가 있다 |
+
+### 17.4 실기 인수 항목 — 확인 순서 (§16의 인수 항목을 여기로 통합)
+
+판정에서 제외된 **A-1**(첫 페인트 타이밍) · **A-2**(무진행 30초 적정성) · **A-4**(오버레이 대비)는
+자동 검증으로 대체 불가하며 실기 기동 1회로 함께 닫힌다. 전체 소요 **15~20분**.
+
+**준비**: 실행 폴더 `Frame\` 하위 `*.png`/`*.slots`를 비우고
+`%ProgramData%\MCPhoto\cache\fallback_frame.png`를 삭제한다(= 최초 실행 재현).
+로그는 `%ProgramData%\MCPhoto\logs\mcphoto-{날짜}.log`.
+
+**1. A-1 + A-4 (최우선, 동시 확인)** — 앱 실행 → 즉시 [촬영하기]
+관측: 진입과 **동시에** 카드형 오버레이가 보이는가(A-1) · 스피너가 **실제로 회전**하는가 ·
+카드 안 문구가 읽히는가(A-4).
+이 단계가 먼저인 이유: 오버레이가 안 보이면 나머지를 관측할 화면 자체가 없다.
+실패 시 — A-1: 첫 페인트 전 UI 스레드 점유 지점 추적(`Task.Run` 경계 부족).
+A-4: `Card` 배경/글자색 토큰 1~2줄 조정.
+
+**2. 문구 진행** — 같은 진입에서
+`설치된 프레임을 확인하는 중…` → `서버에서 기본 프레임 목록을 확인하는 중…` →
+`기본 프레임 내려받는 중… (n/m)` → `프레임 목록을 정리하는 중…`으로 변하는가.
+⚠️ 시작 prefetch가 이미 받고 있으면 **`(n/m)`부터 보일 수 있다** — replay가 동작한 **정상 결과**이며 오류가 아니다.
+
+**3. A-2 (무진행 30초 적정성)** — 로그의 `기본 프레임 캐시: {Name}` 타임스탬프 **간격** 실측.
+프레임 간 간격이 30초에 근접하면 상한을 올려야 한다.
+조정 비용: `FrameLoadPolicy.NoProgressTimeoutSeconds` 1줄 + `NextDeadline` 테스트 기대값(T-9·T-10).
+`MaxTotalWaitSeconds`(60)도 올리는 경우 `< IdleWarningSeconds`(120) 불변식은
+`Idle_Warning_Reference_Matches_Shell_Default`가 잡아준다.
+
+**4. 탈출 경로 3종** — (a) 로딩 중 [기다리지 않고 시작] → 즉시 Degraded + 인라인 안내 + [다시 시도]
+(b) 랜 케이블 분리 후 재현 → **30초 이내 자동 종료**(무한 대기 없음)
+(c) 로딩 중 상단 바 [홈] → 재진입 시 예외·프리즈 없음
+
+**5. 회귀 무증상** — (a) 오프라인 + 로컬 캐시 있는 상태 진입 → **안내 없이** 바로 목록(조용한 폴백 보존)
+(b) 프레임 삭제 → 오버레이 번쩍임 없음 + **목록이 비지 않음**(Major 2 확인)
+(c) 편집기 [기존 프레임 불러오기] → 종전 텍스트 그대로
+(d) 촬영 이후 흐름(Guide→Capture→CutSelect→Result→QR) 무변화
+
+**6. Failed 카드 (우선순위 낮음)** — 재현이 어렵다(캐시 폴더를 읽기 전용으로 만들어 유도 가능).
+`Local_Fallback_Failure_Yields_Failed`가 국면 전이를 이미 고정하므로 **시각 확인만** 남았다.
+
+**인수 없이 릴리스할 경우 남는 위험** (모두 기능 차단이 아니며 상수·토큰 조정으로 해소된다):
+
+| 우선순위 | 항목 | 증상 |
+|:---:|------|------|
+| 1 | **A-2** | 느린 회선에서 30초 초과 → Degraded 오분류. 손님이 fallback 흰 프레임으로 촬영한다 |
+| 2 | **A-4** | 카드 안 문구 가독성 저하 |
+| 3 | **A-1** | 오버레이 첫 페인트 지연 |
+
+### 17.5 파이프라인 종결
+
+`wpf-architect`(설계 rev1) → `wpf-code-reviewer`(설계 리뷰 P2, 15건) → `wpf-architect`(rev2 반영) →
+`wpf-developer`(구현, WBS 9단계) → `wpf-code-reviewer`(코드 리뷰 라운드 1, 13건) →
+`wpf-developer`(수정) → `wpf-code-reviewer`(**라운드 2 PASS**).
+
+최종: 테스트 **920 통과 / 0 실패**(베이스라인 857 → +63), Debug·Release 빌드 경고 0 · 오류 0.
+남은 것은 §17.4의 실기 인수 3항목뿐이다.
