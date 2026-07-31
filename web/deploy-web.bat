@@ -22,6 +22,13 @@ REM  sat 8 days behind (old product name, no share button, no one-click save)
 REM  while the deploy log said "Deploy complete". "web deploy" now means the
 REM  whole web surface; pass an explicit target to narrow it.
 REM
+REM  Hosting is now a MULTI-SITE config (2026-07-30):
+REM    target "default" = public\      -> the P1 download page (this script)
+REM    target "kiosk"   = kiosk\       -> the web client app (webclient\deploy.bat)
+REM  So every deploy here is pinned to "hosting:default". A bare
+REM  "--only hosting" would push BOTH sites and would fail (or publish a stale
+REM  build) because kiosk\ is a gitignored build output of webclient\.
+REM
 REM  Requires: firebase login done + functions secrets registered
 REM  Project: mcphoto-955fb (.firebaserc default)
 REM
@@ -99,11 +106,11 @@ call firebase deploy --only functions --project %PROJECT%
 set "RC=%ERRORLEVEL%"
 goto :after
 :deployAll
-call firebase deploy --only functions,hosting --project %PROJECT%
+call firebase deploy --only functions,hosting:default --project %PROJECT%
 set "RC=%ERRORLEVEL%"
 goto :after
 :deployHosting
-call firebase deploy --only hosting --project %PROJECT%
+call firebase deploy --only hosting:default --project %PROJECT%
 set "RC=%ERRORLEVEL%"
 goto :after
 

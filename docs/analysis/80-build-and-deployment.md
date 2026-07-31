@@ -184,9 +184,27 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 ---
 
+## 6.5 Hosting 멀티사이트 (2026-07-30 — 웹 클라이언트 도입)
+
+웹 클라이언트(`webclient/`, [docs/web-client](../web-client/README.md))가 추가되면서 Firebase Hosting이 **두 사이트**가 됐다. `web/firebase.json`의 `hosting`은 이제 **배열**이다.
+
+| 타깃 | public | 내용 | 배포 명령 |
+|------|--------|------|-----------|
+| `default` | `web/public/` | P1 다운로드 페이지(현행) | `web/deploy-web.bat` (내부적으로 `--only hosting:default`) |
+| `kiosk` | `web/kiosk/` | 웹 클라이언트 앱(빌드 산출물) | `webclient/deploy.bat` (내부적으로 `--only hosting:kiosk`) |
+
+- `web/kiosk/`는 `webclient`의 `npm run build` 산출물이며 **`.gitignore` 대상**이다(커밋하지 않는다).
+- **`deploy-web.bat`의 배포 대상을 `hosting:default`로 고정했다.** 그대로 `--only hosting`을 쓰면 두 사이트를 동시에 배포하는데, `web/kiosk/`가 없는 환경(클론 직후·CI)에서는 실패하거나 낡은 빌드를 공개한다.
+- `.firebaserc`에 **두 타깃이 모두** 등록돼 있어야 한다(`firebase target:apply hosting default mcphoto-955fb` + `… kiosk mcphoto-955fb-kiosk`). 하나만 등록하면 나머지 타깃의 배포가 타깃 미해결로 거부된다.
+- CSP·캐시 헤더는 사이트별로 독립이다. kiosk 사이트는 카메라·Worker·서명 URL PUT이 필요해 P1보다 넓은 CSP를 쓴다([web-client/01 §5.3](../web-client/01-tech-stack-and-structure.md)).
+
+---
+
 ## 7. 상호 참조
 
 - ffmpeg 를 쓰는 타임랩스·캡처 파이프라인: [10 · Exe 앱 아키텍처](./10-exe-app-architecture.md) §4.5·§4.8, 기능 관점은 [11](./11-exe-app-features.md).
 - 백엔드 게이트 키·인증 계약: [30 · 백엔드 API 연동](./30-backend-firebase-integration.md) §2.1·§3.
 - 앱 설정 파일(`MCPhoto.ini`·`branding.ini`)과 버전 표기: [12 · 설정/구성](./12-exe-app-settings-and-config.md).
 - 웹·Functions 배포는 WPF 빌드와 별개 파이프라인(`web/deploy-web.bat`): [20 · 프론트엔드](./20-frontend-web-download-page.md) §9.
+- 웹 클라이언트(키오스크 앱) 빌드·배포와 Hosting 멀티사이트: §6.5 + [web-client/01 §5](../web-client/01-tech-stack-and-structure.md).
+- **공유 테스트 벡터** `docs/spec-vectors/*.json`: Windows(`tests/MCPhoto.Tests/SpecVectorTests.cs`)와 웹(`webclient/tests/unit/domain/vectors.test.ts`)이 **같은 파일**을 읽어 순수 로직 동일성을 고정한다. 규격을 바꿀 때는 벡터를 먼저 고쳐 양쪽을 동시에 실패시킨다([web-client/10 §3](../web-client/10-testing-and-acceptance.md)).

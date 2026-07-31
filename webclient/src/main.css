@@ -1,0 +1,76 @@
+/*
+ * Step 1 최소 스타일. Step 4에서 `src/ui/theme/`의 CSS 변수 팔레트로 대체된다(01 §3).
+ */
+:root {
+  color-scheme: dark light;
+  --bg: #0e0e12;
+  --fg: #f4f4f7;
+  --muted: #8b8b98;
+  font-family: system-ui, "Segoe UI", "Malgun Gothic", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  /* 키오스크: 가로 스크롤 금지(01 §8 접근성) */
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.boot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.boot__title {
+  margin: 0;
+  font-size: clamp(1.75rem, 6vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.boot__subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(0.95rem, 2.5vw, 1.15rem);
+}
+
+/* 버전 캡션: 화면 하단 흐린 캡션 · 로그인 무관 상시 · 클릭 비간섭(05 §8.2) */
+.version-caption {
+  position: fixed;
+  inset: auto 0 0 0;
+  padding: 0.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -63,6 +63,11 @@ TEMP/
 publish/
 installer/Output/
 
+# 웹 클라이언트 빌드 산출물(webclient → Hosting kiosk 사이트, docs/web-client/01 §5.2)
+web/kiosk/
+webclient/node_modules/
+webclient/coverage/
+
 # OS
 Thumbs.db
 Desktop.ini
