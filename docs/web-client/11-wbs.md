@@ -62,6 +62,7 @@ Step 1 (스캐폴드 + 배포)  ───┤                                    
 Step 4+5 → Step 6 (카메라 파이프라인 + 카메라 테스트)                        │
 Step 6   → Step 7 (촬영 + 컷 선택 + 최소 FrameSelect·fallback 프레임)        │
 Step 7   → Step 8 (합성 + 필터 + 골든)                                       │
+Step 8   → Step 8.5 (main 머지분 반영 — 도메인 2 + 벡터 1 + 셸 불변식)  ← 독립 │
 Step 6   → Step 9 (타임랩스 인코더)            ← Step 7과 병렬 가능           │
 Step 3+8 → Step 10 (결과물 로컬 보관 M6-W)                                   │
 Step 5+8+9+10 → Step 11 (업로드 + QR + Done)   ★ 마일스톤 A: 게스트 완주      │
@@ -324,6 +325,30 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - ⚠️ **설계 판단**: 픽셀 연산을 `composeCore`(순수)로 몰아 **브라우저와 골든 테스트가 같은 코드 경로**를 지나게 했다. 브라우저 `createImageBitmap` resize를 쓰면 테스트가 검증하지 못하는 경로가 생긴다.
   - ⚠️ **발견**: 최초 픽스처(컷 480×640 < 슬롯 490×653)가 **확대 경로**를 타 MAE 21로 실패했다. 실제 컷은 카메라 해상도라 축소가 정상 — 픽스처를 1080×1440으로 고쳐 현실과 맞췄다.
   - **미구현(의도)**: 뷰티 WebGL2 가속. CPU 구현이 **정확도 기준**이고 골든을 통과한다. 실기기 성능 예산(1.2초)을 넘으면 그때 WebGL2 경로를 CPU 폴백과 함께 추가한다.
+
+---
+
+## Step 8.5: main 머지분 반영 (Step 0~8 산출물 보정)
+
+- **Context Brief**: `main`(`e5efdfd`) 머지로 **규격이 늘었다**. it20 프레임 로딩 국면과 프레임 편집기 재정의가 그것인데, 화면 본편은 Step 14·15지만 **Step 2(도메인 전량 이식)와 Step 4(셸)의 완료 기준이 다시 미충족 상태**가 됐다. 그 차이만 메운다. 규격은 **[01 §2](./01-tech-stack-and-structure.md)** 매핑표(2행 추가 + `isFileNameSafe` 주석), **[03 §4.1](./03-screens-spec.md)**, **[02 §6.2](./02-app-shell-and-navigation.md)**, **[10 §2·§3.2](./10-testing-and-acceptance.md)**.
+- **대상 파일**: `src/domain/frames/{frameLoadPolicy.ts,frameCatalogProgress.ts,frameNaming.ts}`, `src/domain/index.ts`, `docs/spec-vectors/frame-load-policy.json`(신규), `tests/MCPhoto.Tests/SpecVectorTests.cs`, `webclient/tests/unit/domain/{frames.test.ts,vectors.test.ts}`, `webclient/tests/unit/shell/shell.test.ts`, `src/ui/views/FlowViews.tsx`
+- **선행 조건**: 없음(순수 도메인 + 기존 화면 보정)
+- **구현 내용**:
+  - **`frameLoadPolicy` 이식**: `FrameLoadPhase` 4값, 상한 상수 3종(무진행 30초·총 60초·유휴 참조 120초), `nextDeadline(elapsed)`(둘 중 **먼저 오는 쪽**, 0 이하 → 즉시 취소), `classify(count, interrupted)`, `finalize(current, count, interrupted, quiet)`(**반환값에 `Loading`이 없다** — 오버레이 고착 불가), `noticeFor(phase)`.
+  - **`frameCatalogProgress` 이식**: 단계 4값 + `toLabel()`(`total>0`일 때만 `(n/m)`) + 시작 문구 상수.
+  - **`isFileNameSafe` 분리**: 빈 값·공백만·파일시스템 금지문자만 판정하고 **길이는 보지 않는다**. `validateFrameName`이 이 함수를 쓰도록 재작성하되 **기존 판정 결과는 불변**(길이 검사는 그대로 남는다).
+  - **벡터 `frame-load-policy.json`**: `classify`·`finalize`·`nextDeadline` 케이스. **Windows `FrameLoadPolicyTests.cs`가 고정한 판정이 기준**이며 `SpecVectorTests.cs`가 같은 파일을 읽어 통과해야 한다. `genVectors.ts`로 웹 구현을 덤프하지 않는다(교차 검증 무력화 — [15 §3.3](./15-implementation-conventions.md)).
+  - **유휴 상한 불변식 정적 테스트**: `MAX_TOTAL_WAIT_SECONDS * 1000 < IDLE_TIMEOUT_MS`. 문서에만 두면 어느 한쪽 상수를 고칠 때 조용히 깨진다.
+  - **Step 7 최소 `FrameSelect` 보정**: fallback 이미지 생성이 실패해 `imageUrl`이 빈 프레임은 **목록에 올리지 않는다**. 지금은 그 프레임으로 [다음]이 활성이라 손님이 **6컷을 다 찍은 뒤 `Result`에서야** 합성 실패를 만난다. 프레임 0개 = `Failed`(§4.1)의 정신대로 **선택 화면에서** 안내 + [다시 시도]로 끝낸다.
+- **검증 명령**: `npx tsc --noEmit && npx vitest run` · `dotnet test tests/MCPhoto.Tests --filter SpecVectorTests`
+- **완료 기준**:
+  - [관측] 웹·Windows가 `frame-load-policy.json`을 **양쪽에서 읽어 통과**한다. 벡터 값 하나를 일부러 틀리면 **양쪽이 동시에 실패**한다.
+  - [관측] `finalize`가 어떤 입력 조합에서도 `Loading`을 반환하지 않는다(전수 테스트).
+  - [관측] 유휴 불변식 테스트가 존재하고 통과한다.
+  - [관측] fallback 이미지 생성을 강제 실패시키면 `FrameSelect`에서 안내가 뜨고 **[다음]이 활성화되지 않는다**.
+  - [non-goal] 대기 오버레이·카탈로그 로더·편집기 화면은 **만들지 않는다**(Step 14·15). 도메인 순수성 검사를 통과해야 한다.
+- **롤백**: 신규 도메인 2파일·벡터 1파일 삭제, `frameNaming`·`FlowViews` revert.
+- [ ] 완료
 
 ---
 

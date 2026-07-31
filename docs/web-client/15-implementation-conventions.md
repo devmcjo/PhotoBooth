@@ -25,6 +25,7 @@ cd ../.. && dotnet test tests/MCPhoto.Tests   # 937 통과
 
 | 다음 | 선행 조건 |
 |------|-----------|
+| **Step 8.5 main 머지분 반영** | 없음 — 도메인 2파일 + 벡터 1 + 불변식 테스트. **Step 14·15 착수 전에 끝나 있어야 한다** |
 | Step 9 타임랩스 · 10 로컬 보관 | 없음 |
 | **Step 11 업로드·QR** ★마일스톤 A | A4(버킷 CORS) — [14 §5](./14-handoff-and-user-actions.md) |
 | Step 12~16 | A1·A2·A3(OAuth·시크릿·게이트 키) |
