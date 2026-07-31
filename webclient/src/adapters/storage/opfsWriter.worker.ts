@@ -10,10 +10,13 @@
  *    닫지 않으면 같은 파일의 다음 쓰기가 `NoModificationAllowedError`로 실패한다.
  */
 import {
+  OPFS_USAGE_MAX_DEPTH,
   splitOpfsPath,
   splitParentAndName,
   type OpfsRequest,
   type OpfsResponse,
+  type OpfsUsage,
+  type OpfsUsageEntry,
   type OpfsWriteCapability,
 } from "./opfsProtocol";
 
@@ -156,6 +159,62 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/** `entries()`는 TS DOM lib 선언에 없다(런타임에는 있다) — `keys()`와 같은 방식으로 좁힌다. */
+type DirEntries = { entries(): AsyncIterable<[string, FileSystemHandle]> };
+
+/**
+ * 디렉터리 하위 전체 크기. 읽기 전용 walk다.
+ *
+ * ⚠️ **`createSyncAccessHandle().getSize()`를 쓰지 않는다.** 그것은 파일당 배타 잠금을 잡아
+ *    같은 파일의 다음 쓰기를 `NoModificationAllowedError`로 실패시킨다. 크기는 `getFile().size`로 읽는다.
+ */
+async function directoryUsage(
+  dir: FileSystemDirectoryHandle,
+  depth: number,
+): Promise<{ bytes: number; fileCount: number }> {
+  if (depth > OPFS_USAGE_MAX_DEPTH) return { bytes: 0, fileCount: 0 };
+
+  let bytes = 0;
+  let fileCount = 0;
+  for await (const [, entry] of (dir as unknown as DirEntries).entries()) {
+    if (entry.kind === "file") {
+      const file = await (entry as FileSystemFileHandle).getFile();
+      bytes += file.size;
+      fileCount++;
+    } else {
+      const sub = await directoryUsage(entry as FileSystemDirectoryHandle, depth + 1);
+      bytes += sub.bytes;
+      fileCount += sub.fileCount;
+    }
+  }
+  return { bytes, fileCount };
+}
+
+/** 경로의 직속 자식별 용량. 디렉터리 부재는 오류가 아니라 **빈 결과**다(첫 실행에 `results/`가 없다). */
+async function usage(path: string): Promise<OpfsUsage> {
+  let dir: FileSystemDirectoryHandle;
+  try {
+    dir = await resolveDir(path === "" ? [] : splitOpfsPath(path), false);
+  } catch {
+    return { totalBytes: 0, entries: [] };
+  }
+
+  const entries: OpfsUsageEntry[] = [];
+  let totalBytes = 0;
+  for await (const [name, entry] of (dir as unknown as DirEntries).entries()) {
+    if (entry.kind === "file") {
+      const file = await (entry as FileSystemFileHandle).getFile();
+      entries.push({ name, kind: "file", bytes: file.size, fileCount: 1 });
+      totalBytes += file.size;
+    } else {
+      const sub = await directoryUsage(entry as FileSystemDirectoryHandle, 2);
+      entries.push({ name, kind: "directory", bytes: sub.bytes, fileCount: sub.fileCount });
+      totalBytes += sub.bytes;
+    }
+  }
+  return { totalBytes, entries };
+}
+
 async function handle(request: OpfsRequest): Promise<unknown> {
   switch (request.op) {
     case "write":
@@ -168,6 +227,8 @@ async function handle(request: OpfsRequest): Promise<unknown> {
       return listDir(request.path);
     case "exists":
       return exists(request.path);
+    case "usage":
+      return usage(request.path);
     case "probe":
       return probeCapability();
     default: {

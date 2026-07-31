@@ -461,7 +461,59 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] 보관이 **업로드 시도 이전**에 끝난다(요청 순서 로그로 확인). 폴더 저장 미지원 브라우저에서 버튼이 렌더되지 않는다. 용량 정리가 `frames/`·로그를 건드리지 않는다.
   - [trigger] 보관은 `SaveLocalCopy` on일 때만. 폴더 권한 재요청은 **사용자 버튼**에만.
 - **롤백**: `resultSaver`·`dirHandleRepo` 삭제(로컬 보관 없이 업로드만).
-- [ ] 완료
+- [x] **완료 (2026-07-31)** — 설계: [`docs/design/web-step10-local-save-design.md`](../design/web-step10-local-save-design.md)
+  - **도메인 3파일 신설**(순수 · `purity.test.ts`가 자동 포함): `results/resultNaming.ts`
+    (`resultFolderName`·`resultFolderNameFromSessionId`·`resolveResultFolderName`·`finalFileName`·
+    `isResultFolderName` + 상수 3종), `results/resultSavePlan.ts`(`planResultSave` — `skip`/`save`
+    **판별 유니온**), `results/resultsRetention.ts`(`planResultsRetention` + 한도 2종).
+    `src/domain/index.ts`에 3줄 추가(평면 배럴이라 **한정형 이름** 유지 — 충돌 0건 확인).
+  - **어댑터 3파일 신설**: `storage/resultsStore.ts`(목록·용량·삭제·읽기 + 보존 정책 집행) ·
+    `storage/dirHandleRepo.ts`(② 계층 — 피커·IndexedDB 영속·권한·폴더 쓰기) ·
+    `storage/resultSaver.ts`(①·②·③ 오케스트레이션 · **절대 throw하지 않는다**).
+  - **화면 1파일 신설**: `screens/result/resultNext.ts`(`runResultNext`·`defaultResultNextDeps`) —
+    [다음] 순서를 React 밖으로 빼내 node에서 검증 가능하게 만들었다.
+  - **OPFS `usage` op 추가**(`opfsProtocol`·`opfsWriter.worker`·`opfsClient`): 경로를 받아 직속
+    자식별 용량을 **왕복 1회**로 돌려주는 읽기 전용 op. `getFile().size`만 쓴다
+    (`createSyncAccessHandle().getSize()`는 파일당 배타 잠금이라 다음 쓰기를 막는다).
+    실패·미지원은 빈 결과 → 상위에서 "정리 불필요"로 축소되어 **삭제를 덜 하는 안전한 방향**이다.
+  - **배선**: `FlowViews.tsx`의 `ResultView.goNext`를 `runResultNext(defaultResultNextDeps(...))`
+    한 줄로 교체하고 `try/finally` 범위를 **보관까지** 넓혔다(보관 중 이중 클릭 차단).
+    `App.tsx`의 `DummyScreen`에 **임시** [로컬 저장 폴더 선택] 버튼(`Settings` 한정 + 기능 감지 게이트).
+  - **검증 수치**: `npx tsc --noEmit` 0, `npx vitest run` **26파일 645 → 29파일 758 전부 통과**
+    (도메인 +31, 어댑터 +56, 순서 +15, `opfs.test.ts` +11). `npx vite build` 성공.
+    `npx vitest run --coverage` 임계 통과(`domain/results` stmts 100 / branch 97.22 / funcs 100 / lines 100).
+  - **정적 불변식 6건 신설**(15 §3.4 관례): ① `resultSaver.ts`·`resultsStore.ts`에 내부 저장소 직접
+    접근 문자열 0건(VF-14) ② `resultSaver.ts`는 `OpfsClient` 경유·Worker 직접 import 0건
+    ③ `dirHandleRepo.ts`는 내부 저장소 미접촉(⚠️ **이 파일만 `createWritable` 허용** — 대상이 OPFS가
+    아니라 사용자 디렉터리이고 Worker가 그 핸들에 닿을 수 없다) ④ `DIR_HANDLE_DB_NAME !== LOG_DB_NAME`
+    ⑤ 신규 3파일에 `console.*` 0건 ⑥ `usage` 핸들러 안에 쓰기·삭제 API 0건.
+  - ⚠️ **설계 이탈 ①(WBS의 `src/screens/result/next.ts` → `resultNext.ts`)**: 평면 배럴·import
+    가독성 때문에 한정형 파일명을 썼다. 설계 문서(§2.1)가 지정한 이름이다.
+  - ⚠️ **설계 이탈 ②([보관된 결과물] 패널 Step 13 이월)**: 설정 화면 자체가 아직 `DummyScreen`이라
+    패널만 만들면 진입점이 없어 검증할 수 없다. 어댑터(`resultsStore`)는 이번에 완성해 패널이
+    얹히기만 하면 된다.
+  - ⚠️ **설계 이탈 ③([폴더 선택] 정식 UI·권한 재요청 배너 Step 13 이월)**: 대신 `DummyScreen`에
+    임시 진입점을 뒀다(Step 6의 [카메라 테스트] 선례). 진입점이 없으면 ② 계층을 **한 번도 실행할 수
+    없어** 완료 기준을 확인할 방법이 사라진다.
+  - ⚠️ **설계 이탈 ④(부트스트랩 `queryPermission` → 보관 시점 lazy 조회)**: 그 결과의 유일한 소비자
+    (설정 배너)가 Step 13이다. `bootstrap.ts`·`bootstrap.test.ts`를 건드리지 않아 회귀 표면이 줄었다.
+  - ⚠️ **설계 이탈 ⑤(`docs/spec-vectors/` 무변경)**: Windows의 충돌 접미 로직(`MakeUniqueFolder`)이
+    private + 파일시스템 의존이라 벡터로 절반밖에 못 고정하고, 벡터 1개 추가는 `EXPECTED_VECTOR_NAMES`와
+    `SpecVectorTests.cs`를 **함께** 고쳐야 해 C#을 전혀 건드리지 않는 이 Step에 교차 변경을 끌어들인다.
+    대신 웹 테스트에 Windows와 **같은 리터럴**(`mcphoto_260720_1445`)을 두고
+    `// ↔ tests/MCPhoto.Tests/LocalSaveTests.cs:33` 주석으로 짝을 명시했다 → `dotnet test`는 불필요했다.
+  - ⚠️ **설계 이탈 ⑥(사소)**: 임시 진입점의 `settingsStore.save()` **반환값을 확인**해 실패면 오류
+    토스트를 띄운다(설계는 성공 토스트만 명시). 저장 실패를 성공으로 보이게 하지 않기 위해서다(M4).
+    `dirHandleRepo`의 신규 IndexedDB 연결에는 `onversionchange`를 **걸었다**(로그 DB가 빠진 함정).
+  - **📌 다음 작업자에게**: `logStore.ts`가 `mcphoto` DB를 열 때 `db.onversionchange = () => db.close()`가
+    **아직 없다**. **Step 14가 "프레임 메타 스토어를 같은 DB에 버전 올려 추가"하기 전에 반드시 처리해야
+    한다** — 그러지 않으면 업그레이드가 영구 blocked 된다.
+  - **미구현(의도)**: 업로드·QR 일체(Step 11 — `resultNext.ts`에 주석 자리만 남겼다),
+    E8 [기기에 저장] 다운로드 버튼(Step 11), [보관된 결과물] 패널·정식 폴더 UI(Step 13),
+    `isTempUserBlocked`는 아직 상수 `false`(Step 11이 `qrUsageService`로 교체).
+  - **미검증(사용자 액션 V19)**: 네트워크 차단 완주 후 OPFS `results/` 실제 생성, 폴더 지정 후 실제
+    파일 생성·권한 상실 경로, `usage` walk 실기기 소요 — **3건 전부 브라우저 실행이 필요해 추정 통과
+    처리하지 않았다.** 절차는 [14 §10.4](./14-handoff-and-user-actions.md)에 **V19**로 등재했다.
 
 ---
 

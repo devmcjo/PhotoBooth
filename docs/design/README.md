@@ -52,6 +52,7 @@
 | [web-it17-download-share-design](./web-it17-download-share-design.md) | **it17** 원클릭 자동 저장(fetch→Blob→`<a download>`)·전역 degrade 폴백·상단 공유 버튼(링크 복사+토스트)·파일명 규칙·`MCPhoto` 네이밍. **버킷 CORS(GET) 선행 조건 포함** |
 | [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
 | [web-wbs](./web-wbs.md) | 웹 작업 분해 |
+| [web-step10-local-save-design](./web-step10-local-save-design.md) | **키오스크 웹 클라이언트 WBS Step 10** 상세 설계. 합성 결과·타임랩스의 OPFS 보관(Worker 경계 필수 — Safari에 `createWritable` 없음), 폴더명 규칙(Windows `LocalSaveService`와 동일 유도), 보관 한도·회수, 사용자 지정 폴더 핸들을 **로그 DB와 분리된** IndexedDB에 두는 근거 |
 | [web-step9-timelapse-encoder-design](./web-step9-timelapse-encoder-design.md) | **키오스크 웹 클라이언트**([`docs/web-client/`](../web-client/README.md)) **WBS Step 9** 상세 설계. 스풀(≤15fps JPEG→OPFS) + 종료 시 실경과 선별 → WebCodecs/mp4-muxer(Worker) → MediaRecorder(메인) → `null` 3경로. **`mp4-muxer@5.2.2`(MIT) 도입 근거·`THIRD-PARTY.md` 신설** 포함 |
 
 ### 3.2 Windows 데스크톱 (WPF)

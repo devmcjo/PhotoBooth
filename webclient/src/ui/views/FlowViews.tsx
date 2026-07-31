@@ -16,19 +16,18 @@ import {
   type FrameLoadPhase,
 } from "@domain/frames/frameLoadPolicy";
 import { getCameraService } from "@adapters/camera/cameraService";
-import { getTimelapseService } from "@adapters/encode/timelapseService";
 import { requestWakeLock } from "@adapters/platform/wakeLock";
 import { unlockAudio } from "@adapters/platform/shutterSound";
 import { logger } from "@adapters/storage/logStore";
 import { fixFrameAndResolveCutCount } from "@shell/captureSessionController";
 import { useSettingsStore } from "@shell/settingsStore";
 import { sessionStore, useSessionStore, type CapturedCut } from "@shell/sessionStore";
-import { currentScreen, shellStore } from "@shell/shellStore";
+import { shellStore } from "@shell/shellStore";
 import { Button, Spinner } from "@ui/components";
 import { STRINGS } from "@ui/strings";
 import { CameraPreview } from "./CameraPreview";
 import { useResultCompose } from "@screens/result/useResultCompose";
-import { isQrEffectivelyEnabled } from "@domain/settings/qrEffectivePolicy";
+import { defaultResultNextDeps, runResultNext } from "@screens/result/resultNext";
 import type { FilterKind } from "@domain/filters/filterParams";
 import { useCaptureRunner } from "@screens/capture/useCaptureRunner";
 import styles from "./screens.module.css";
@@ -359,9 +358,7 @@ export function useStopCameraOnUnmount(): void {
  */
 export function ResultView() {
   const result = useResultCompose();
-  const rawEnableQr = useSettingsStore((s) => s.values.EnableQrDelivery);
-  const user = useSessionStore((s) => s.currentUser);
-  /** [다음] 1단계(타임랩스 생성) 진행 중. 이중 클릭을 막는다. */
+  /** [다음] 처리(타임랩스 생성 + 로컬 보관) 진행 중. 이중 클릭을 막는다. */
   const [finishing, setFinishing] = useState(false);
 
   const filterLabels: Record<FilterKind, string> = {
@@ -375,16 +372,13 @@ export function ResultView() {
     if (finishing) return;
     setFinishing(true);
     try {
-      // 03 §8.1 1단계 — 타임랩스 생성. **실패해도 계속한다**(`timelapseUrl=null`은 계약상 합법 — VF-6).
-      await getTimelapseService().finish();
+      // 순서 전체(타임랩스 → 로컬 보관 → 전이)를 resultNext가 소유한다.
+      // 여기서 순서를 다시 조립하지 마라 — M6-W는 resultNext.test.ts가 고정한다.
+      await runResultNext(defaultResultNextDeps({ finalBlob: result.currentBlob }));
     } finally {
+      // ⚠️ 보관까지 끝난 뒤에 푼다. 타임랩스 생성만 감싸면 보관 중 이중 클릭이 들어온다.
       setFinishing(false);
     }
-    // 대기 중 홈 복귀·유휴 만료가 일어났을 수 있다 — 그때는 전이하지 않는다.
-    if (currentScreen() !== "Result") return;
-    // TempUser 한도는 Step 11에서 qr-usage 조회로 채운다(지금은 미차단).
-    const qrOn = isQrEffectivelyEnabled(rawEnableQr, user !== null, false);
-    shellStore.getState().go(qrOn ? "Qr" : "Done");
   }
 
   return (

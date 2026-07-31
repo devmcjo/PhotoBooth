@@ -12,6 +12,7 @@ export type OpfsRequest =
   | { readonly id: number; readonly op: "remove"; readonly path: string; readonly recursive: boolean }
   | { readonly id: number; readonly op: "list"; readonly path: string }
   | { readonly id: number; readonly op: "exists"; readonly path: string }
+  | { readonly id: number; readonly op: "usage"; readonly path: string }
   | { readonly id: number; readonly op: "probe" };
 
 /**
@@ -31,6 +32,25 @@ export type OpfsResponse =
 
 /** Worker가 보고하는 쓰기 능력. `none`이면 OPFS 미지원으로 취급한다(10 §6.2 축소 동작). */
 export type OpfsWriteCapability = "sync-access-handle" | "writable-stream" | "none";
+
+/** `usage` 응답의 항목 하나. */
+export interface OpfsUsageEntry {
+  readonly name: string;
+  readonly kind: "file" | "directory";
+  /** 디렉터리는 하위 전체 합계. */
+  readonly bytes: number;
+  /** 디렉터리는 하위 파일 개수, 파일은 1. */
+  readonly fileCount: number;
+}
+
+/** `usage` 응답. 경로의 **직속 자식**만 담고 디렉터리는 재귀 합계로 접힌다. */
+export interface OpfsUsage {
+  readonly totalBytes: number;
+  readonly entries: readonly OpfsUsageEntry[];
+}
+
+/** 재귀 walk 깊이 상한. `results/{folder}/{file}`은 2다. 방어적 상한. */
+export const OPFS_USAGE_MAX_DEPTH = 8;
 
 /**
  * 경로를 세그먼트로 나눈다. 빈 세그먼트·`.`·`..`를 **거부**한다 —

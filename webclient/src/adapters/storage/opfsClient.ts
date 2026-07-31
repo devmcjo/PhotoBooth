@@ -3,6 +3,7 @@ import {
   type OpfsRequest,
   type OpfsRequestWithoutId,
   type OpfsResponse,
+  type OpfsUsage,
   type OpfsWriteCapability,
 } from "./opfsProtocol";
 
@@ -29,10 +30,21 @@ export interface OpfsClient {
   remove(path: string, options?: { recursive?: boolean }): Promise<boolean>;
   list(path: string): Promise<string[]>;
   exists(path: string): Promise<boolean>;
+  /**
+   * 경로의 용량(직속 자식별 + 총량). **실패·미지원은 빈 결과**다 — 예외를 던지지 않는다.
+   * ⚠️ 빈 결과는 상위에서 "정리 불필요"로 해석된다. 즉 실패가 **삭제를 덜 하는** 방향으로
+   *    축소되므로 데이터 손실이 없는 안전한 폴백이다.
+   */
+  usage(path: string): Promise<OpfsUsage>;
   /** 쓰기 능력. `none`이면 OPFS 미지원으로 취급한다(촬영 전 경고 — 10 §6.2). */
   capability(): Promise<OpfsWriteCapability>;
   /** 메인 스레드 읽기(Worker 불요). 부재·실패는 `null`. */
   readFile(path: string): Promise<File | null>;
+}
+
+/** `usage` 실패·미지원의 축소값. 호출마다 새 객체를 만들어 공유 상태를 남기지 않는다. */
+function emptyUsage(): OpfsUsage {
+  return { totalBytes: 0, entries: [] };
 }
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -112,6 +124,15 @@ class WorkerOpfsClient implements OpfsClient {
     return response.ok && response.value === true;
   }
 
+  async usage(path: string): Promise<OpfsUsage> {
+    const response = await this.send({ op: "usage", path });
+    if (!response.ok) return emptyUsage();
+    // Worker 응답을 경계에서 검증한다 — 형태가 어긋나면 빈 결과로 축소한다(조용한 오독 금지).
+    const value = response.value as Partial<OpfsUsage> | undefined;
+    if (typeof value?.totalBytes !== "number" || !Array.isArray(value.entries)) return emptyUsage();
+    return { totalBytes: value.totalBytes, entries: value.entries };
+  }
+
   async capability(): Promise<OpfsWriteCapability> {
     const response = await this.send({ op: "probe" });
     return response.ok ? (response.value as OpfsWriteCapability) : "none";
@@ -140,6 +161,7 @@ export const UNSUPPORTED_OPFS_CLIENT: OpfsClient = {
   remove: async () => false,
   list: async () => [],
   exists: async () => false,
+  usage: async () => emptyUsage(),
   capability: async () => "none",
   readFile: async () => null,
 };

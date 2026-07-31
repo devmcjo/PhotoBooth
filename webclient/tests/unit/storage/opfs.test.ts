@@ -11,6 +11,7 @@ import {
   splitParentAndName,
   type OpfsRequest,
   type OpfsResponse,
+  type OpfsUsage,
 } from "@adapters/storage/opfsProtocol";
 import {
   createSessionWorkspace,
@@ -132,6 +133,66 @@ describe("opfsClient — Worker RPC", () => {
     expect(await UNSUPPORTED_OPFS_CLIENT.write("a", new Uint8Array())).toBe(false);
     expect(await UNSUPPORTED_OPFS_CLIENT.capability()).toBe("none");
     expect(await UNSUPPORTED_OPFS_CLIENT.readFile("a")).toBeNull();
+    expect(await UNSUPPORTED_OPFS_CLIENT.usage("results")).toEqual({ totalBytes: 0, entries: [] });
+  });
+});
+
+describe("opfsClient — usage op (05 §5.4 용량 정책)", () => {
+  function usageWorker(value: unknown, ok = true): FakeWorker {
+    const worker = new FakeWorker();
+    worker.respond = (r) =>
+      ok ? { id: r.id, ok: true, value } : { id: r.id, ok: false, error: "NotFoundError" };
+    return worker;
+  }
+
+  it("경로를 담은 usage 요청을 보낸다", async () => {
+    const worker = usageWorker({ totalBytes: 0, entries: [] });
+    await createOpfsClient(worker).usage(OPFS_DIRS.results);
+    expect(worker.requests[0]!.op).toBe("usage");
+    expect((worker.requests[0] as { path: string }).path).toBe("results");
+  });
+
+  it("성공 응답을 그대로 돌려준다", async () => {
+    const value: OpfsUsage = {
+      totalBytes: 300,
+      entries: [
+        { name: "mcphoto_260720_1445", kind: "directory", bytes: 200, fileCount: 2 },
+        { name: "stray.txt", kind: "file", bytes: 100, fileCount: 1 },
+      ],
+    };
+    expect(await createOpfsClient(usageWorker(value)).usage("results")).toEqual(value);
+  });
+
+  it("실패 응답은 빈 결과로 축소된다(예외 없음 — 정리를 덜 하는 안전한 방향)", async () => {
+    expect(await createOpfsClient(usageWorker(null, false)).usage("results")).toEqual({
+      totalBytes: 0,
+      entries: [],
+    });
+  });
+
+  it("형태가 어긋난 응답도 빈 결과로 축소된다", async () => {
+    expect(await createOpfsClient(usageWorker({ totalBytes: "많음" })).usage("results")).toEqual({
+      totalBytes: 0,
+      entries: [],
+    });
+    expect(await createOpfsClient(usageWorker(undefined)).usage("results")).toEqual({
+      totalBytes: 0,
+      entries: [],
+    });
+  });
+
+  it("400 엔트리 응답을 왕복 1회로 그대로 통과시킨다(A1 규모)", async () => {
+    const entries = Array.from({ length: 400 }, (_, i) => ({
+      name: `mcphoto_2607${String(1 + (i % 28)).padStart(2, "0")}_${String(i).padStart(4, "0")}`,
+      kind: "directory" as const,
+      bytes: 1024,
+      fileCount: 2,
+    }));
+    const worker = usageWorker({ totalBytes: 400 * 1024, entries });
+    const result = await createOpfsClient(worker).usage("results");
+    expect(result.entries).toHaveLength(400);
+    expect(result.totalBytes).toBe(409_600);
+    expect(worker.requests).toHaveLength(1);
   });
 });
 

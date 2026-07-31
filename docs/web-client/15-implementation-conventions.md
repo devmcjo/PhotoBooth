@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |------|-----|
-| 문서 | **다음 작업자(사람 또는 에이전트)가 Step 9부터 이어가기 위해 알아야 할 것** |
+| 문서 | **다음 작업자(사람 또는 에이전트)가 Step 11부터 이어가기 위해 알아야 할 것** |
 | 대상 | 이 폴더의 설계 문서를 읽었지만 **코드를 처음 보는** 사람 |
-| 작성일 | 2026-07-31 (Step 1~8 완료 시점) |
+| 작성일 | 2026-07-31 (Step 1~10 완료 시점) |
 | 성격 | 설계 문서(00~14)가 "무엇을"이라면, 이 문서는 **"이 저장소에서는 어떻게"** 다 |
 
 > 왜 필요한가: Step 1~8을 구현하며 굳어진 관례와, 실제로 밟은 함정들이 커밋 메시지에만 남아 있다.
@@ -16,7 +16,7 @@
 
 ```bash
 cd webclient && npm ci
-npx tsc --noEmit && npx vitest run     # 645 통과(26파일)
+npx tsc --noEmit && npx vitest run     # 758 통과(29파일)
 cd ../web/functions && npm test         # 316 통과
 cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
@@ -25,12 +25,11 @@ cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 
 | 다음 | 선행 조건 |
 |------|-----------|
-| **Step 10 로컬 보관** | 없음 — Step 9의 `getTimelapseService().current()`가 타임랩스 입력이다 |
-| **Step 11 업로드·QR** ★마일스톤 A | A4(버킷 CORS) — [14 §5](./14-handoff-and-user-actions.md) |
+| **Step 11 업로드·QR** ★마일스톤 A | A4(버킷 CORS) — [14 §5](./14-handoff-and-user-actions.md). 진입 자리는 `screens/result/resultNext.ts`의 주석 블록이다 |
 | Step 12~16 | A1·A2·A3(OAuth·시크릿·게이트 키) |
 | Step 17 E2E·실기기 | 실기기 3대(사람) |
 
-권장 분할: 10 / 11 / 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
+권장 분할: 11 / 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
 
 ---
 
@@ -100,6 +99,9 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | MP4 muxer import는 **`encode.worker.ts` 하나뿐** | `timelapseService.test.ts` — 코어를 node 테스트 가능 상태로 고정 |
 | Worker에서 도는 코어에 **로거 0건** | 동상. `logger`는 메인에만 붙어 Worker 로그는 진단에 도달하지 않는다 |
 | `encode.worker.ts`는 **OPFS를 읽기만** 한다 | 동상(`createWritable`·`createSyncAccessHandle` 0건) |
+| `resultSaver.ts`·`resultsStore.ts`가 **메인 스레드에서 OPFS를 직접 만지지 않는다**(VF-14) | `resultSaver.test.ts` — 소스에 `navigator.storage`·`createWritable`·`createSyncAccessHandle`·`getDirectory(` 0건 |
+| `dirHandleRepo.ts`는 **OPFS를 건드리지 않는다** | 동상. ⚠️ 이 파일만 `createWritable`이 **허용**된다(대상이 사용자 디렉터리이고 Worker가 그 핸들에 닿을 수 없다) |
+| 폴더 핸들 DB ≠ 로그 DB | 동상(`DIR_HANDLE_DB_NAME !== LOG_DB_NAME`) — 같은 DB 버전업의 영구 blocked 회피 |
 
 새 불변식을 만들면 **같은 방식으로 고정**하는 것이 이 저장소의 관례다.
 
@@ -144,9 +146,16 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - 진단용 `getTimelapseService().encoderProbe()`(= `lastEncoderProbe()`)가 준비돼 있다 → Step 16 진단 모달과 [12 C3] `Guide` 안내가 소비한다.
 - **실측 V18 7건이 남아 있다**([14 §10.3](./14-handoff-and-user-actions.md)). 브라우저 실행이 필요해 자동화 불가.
 
-### Step 10 로컬 보관
-- `resultSaver`는 반드시 **`opfsWriter` Worker 경계**를 지나야 한다(`getOpfsClient()`). 메인에서 OPFS에 쓰면 iOS에서 전 저장이 실패한다.
-- 순서가 불변식이다(**M6-W**): 합성 → **로컬 보관** → 업로드 분기. `useResultCompose`의 결과 Blob(`currentBlob()`)이 입력이다.
+### Step 10 로컬 보관 — **완료(2026-07-31)**. 뒤 Step이 알아야 할 것만 남긴다
+- **[다음]의 순서는 `screens/result/resultNext.ts`가 소유한다.** `ResultView.goNext`는 `runResultNext(defaultResultNextDeps({ finalBlob }))` 한 줄이다. **여기서 순서를 다시 조립하지 마라** — `resultNext.test.ts`가 `["finishTimelapse","save","go"]`를 고정한다(M6-W).
+  - Step 11의 업로드는 `resultNext.ts`의 **주석 블록 자리**(보관 뒤·전이 앞)에 들어간다. `isTempUserBlocked`는 지금 상수 `false`이고 `qrUsageService`로 갈아끼우면 된다. deps 주입 구조라 `defaultResultNextDeps`의 오버라이드로 확장한다.
+- `resultSaver.saveResultLocally()`는 **절대 throw하지 않는다.** 결과는 `ResultSaveOutcome.status`(`saved`/`partial`/`failed`/`skipped`)다. `partial`(타임랩스만 실패)에는 **토스트를 띄우지 않는다** — 손님이 할 조치가 없고 타임랩스 부재는 계약상 합법이다(VF-6).
+- **`OpfsClient`에 `usage(path)`가 생겼다**(왕복 1회로 직속 자식별 용량). Step 14 프레임 캐시 용량·Step 16 진단이 그대로 재사용한다. 실패·미지원은 빈 결과이고, 그것은 "정리 불필요"로 해석되어 **삭제를 덜 하는 안전한 방향**이다.
+- **`resultsStore`가 완성돼 있다**(`listFolders`/`usage`/`removeFolder`/`readFile`/`enforceRetention`). Step 13의 [보관된 결과물] 패널은 이 인터페이스에 **얹기만** 하면 된다. `removeFolder`는 `isResultFolderName` 게이트를 통과한 이름만 지운다.
+- **`App.tsx`의 [로컬 저장 폴더 선택] 버튼은 임시 진입점이다** — Step 13에서 설정 화면으로 옮기고 `DummyScreen`에서 제거한다(Step 6의 [카메라 테스트]와 같은 처지).
+- ⚠️ **Step 14는 `logStore`에 `onversionchange`를 걸기 전에 `mcphoto` DB 버전을 올리면 안 된다.** 로그 스토어가 앱 수명 내내 그 연결을 붙들고 있는데 `db.onversionchange` 핸들러가 없어(`logStore.ts:160-174`) 업그레이드가 **영구 blocked** 된다. Step 10이 폴더 핸들을 **별 DB(`mcphoto-handles` v1)** 에 둔 것이 이 이유다. `dirHandleRepo.openHandleDb()`가 올바른 형태의 예시다.
+- 폴더명 규약(`mcphoto_YYMMDD_HHMM`, 충돌 `-2`…`-999` → 32 hex)은 `domain/results/resultNaming.ts`에 있고 **Windows `LocalSaveService`와 같은 값**을 낸다. 벡터 파일은 없고 웹 테스트가 같은 리터럴 + `// ↔ LocalSaveTests.cs:33` 주석으로 짝을 명시한다 — 규약을 바꾸면 **양쪽을 함께** 고친다.
+- **실측 V19 6건이 남아 있다**([14 §10.4](./14-handoff-and-user-actions.md)). 브라우저 실행이 필요해 자동화 불가.
 
 ### Step 11 업로드·QR
 - `uploadGateway.prepare/commit`은 이미 있다. **서명 PUT만** 남았고 **XHR로** 해야 한다(진행률 — WM5).
@@ -186,11 +195,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **645**(26파일) · 서버 **316** · Windows **938**(Windows 수치는 Step 8.5 시점 실측. Step 9는 `docs/spec-vectors/`를 건드리지 않아 재측정 대상이 아니다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **758**(29파일) · 서버 **316** · Windows **938**(Windows 수치는 Step 8.5 시점 실측. Step 9·10은 `docs/spec-vectors/`를 건드리지 않아 재측정 대상이 아니다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 10~17, 실측 V1~V18 |
+| 미완 | Step 11~17, 실측 V1~V19 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 

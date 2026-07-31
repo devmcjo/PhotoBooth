@@ -42,4 +42,8 @@ export * from "./roles/roleChangePolicy";
 export * from "./upload/uploadContract";
 export * from "./upload/uploadOrchestration";
 
+export * from "./results/resultNaming";
+export * from "./results/resultSavePlan";
+export * from "./results/resultsRetention";
+
 export * from "./filters/filterParams";

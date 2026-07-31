@@ -1,11 +1,13 @@
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { APP_STATES, type AppState } from "@domain/navigation/appState";
 import { canTransition, isTopBarVisible } from "@domain/navigation/stateMachine";
+import { getDirHandleRepo } from "@adapters/storage/dirHandleRepo";
 import { logger } from "@adapters/storage/logStore";
 import { getFullscreenController } from "@shell/fullscreenController";
 import { getIdleWatchdog } from "@shell/idleWatchdog";
 import { shellStore, useShellStore } from "@shell/shellStore";
 import { sessionStore, useSessionStore } from "@shell/sessionStore";
+import { useSettingsStore } from "@shell/settingsStore";
 import { CameraTestModal } from "@screens/modals/cameraTest/CameraTestModal";
 import { Banner, Button, Modal, ToastHost, TopBar } from "@ui/components";
 import {
@@ -55,6 +57,28 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { failed: b
   }
 }
 
+/**
+ * ② 계층(사용자 지정 폴더 복사)의 폴더 지정. **사용자 제스처에서만** 호출한다 —
+ * `showDirectoryPicker`는 클릭 없이는 열리지 않는다.
+ *
+ * ⚠️ `LocalSavePath`에는 **폴더 이름만** 들어간다. 브라우저는 실 경로를 노출하지 않는다(05 §5.3).
+ */
+async function pickLocalSaveFolder(): Promise<void> {
+  const repo = getDirHandleRepo();
+  const handle = await repo.pick();
+  if (handle === null) return; // 취소 — 설정을 건드리지 않는다
+
+  if (!(await repo.store(handle))) {
+    shellStore.getState().toast("error", STRINGS.save.failed);
+    return;
+  }
+  // `LocalSavePath`는 게스트 제한 키가 아니다.
+  const saved = useSettingsStore.getState().save({ LocalSavePath: handle.name }, { isGuest: false });
+  shellStore
+    .getState()
+    .toast(saved ? "success" : "error", saved ? STRINGS.save.succeeded : STRINGS.save.failed);
+}
+
 /** 더미 화면 — 전이 검증 전용. Step 7부터 실제 화면으로 교체된다. */
 function DummyScreen({ screen }: { readonly screen: AppState }) {
   const targets = APP_STATES.filter((to) => to !== screen && canTransition(screen, to));
@@ -81,6 +105,12 @@ function DummyScreen({ screen }: { readonly screen: AppState }) {
       >
         카메라 테스트 열기
       </Button>
+
+      {/* Step 10 ② 계층 실측용 진입점. Step 13에서 설정 화면의 [로컬 저장 폴더 선택]으로 옮긴다.
+          미지원 브라우저(Safari·Firefox·모바일)에서는 렌더하지 않는다 — 05 §5.3. */}
+      {screen === "Settings" && getDirHandleRepo().isSupported() && (
+        <Button onClick={() => void pickLocalSaveFolder()}>로컬 저장 폴더 선택</Button>
+      )}
     </main>
   );
 }

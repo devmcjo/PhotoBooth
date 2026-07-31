@@ -533,13 +533,36 @@ Step 9 구현이 끝났다(2026-07-31). **단위 테스트는 판정 규칙만 �
 > ⚠️ **`ffprobe`는 개발 PC에서 돌린다.** 브라우저에서 생성한 mp4를 내려받는 경로는 Step 10·11이
 > 붙기 전까지 없으므로, DevTools 콘솔에서 `Blob`을 직접 저장하거나 Step 10 완료 후 확인한다.
 
-### 10.4 아직 불가능한 실측
+### 10.4 V19 · Step 10(결과물 로컬 보관) 실기기 실측 — 지금 가능
+
+Step 10 구현이 끝났다(2026-07-31). 단위 테스트는 **순서·판정·경로 문자열**만 고정한다 —
+브라우저가 실제로 파일을 남기는지, `usage` walk가 [다음] 체감을 해치지 않는지는 코드로 증명할 수 없다.
+
+`npm run dev` 또는 A5 배포본에서 세션을 완주하고 `Result`에서 [다음]을 누른 뒤 확인한다.
+OPFS는 DevTools → Application → Storage → **Origin Private File System**에서 본다(Chromium).
+
+| # | 확인 | 기대 | 왜 자동화가 안 되나 |
+|---|------|------|---------------------|
+| V19-1 | **네트워크를 끊고**(DevTools → Network → Offline) 촬영을 완주하면 OPFS `results/mcphoto_YYMMDD_HHMM/final.jpg`가 **존재**한다(E8·A5) | 파일이 보이고 크기가 0이 아니다. 타임랩스가 있으면 `timelapse.mp4`도 같은 폴더에 있다 | 실제 OPFS 쓰기가 필요하다 |
+| V19-2 | 로그 `결과물 로컬 보관`의 `status`가 `saved`이고 `elapsedMs`가 **[다음] 체감을 해치지 않는다**(A1 — `usage` 재귀 walk 포함) | `elapsedMs`가 수백 ms 이내. **300ms를 넘으면** 보존 정리(`enforceRetention`)를 `void`로 돌리고 `evicted`를 `-1`로 보고하도록 후속 조치한다([설계 §5.3]) | 하드웨어·저장소 성능 계측 |
+| V19-3 | 데스크톱 Chromium에서 `Settings` 화면의 **[로컬 저장 폴더 선택]** 으로 폴더를 지정하면, 다음 촬영부터 **그 폴더에도 같은 파일이 생긴다** | 탐색기에서 `mcphoto_YYMMDD_HHMM/final.jpg` 확인. 로그 `folderCopy: "copied"` | `showDirectoryPicker`는 사용자 제스처가 필요하다 |
+| V19-4 | 폴더 권한을 잃은 뒤(브라우저 재시작 등) 촬영해도 **흐름이 멈추지 않는다** | 로그 `folderCopy: "permission-required"`, 손님 화면에 토스트 **없음**, `Qr`/`Done`으로 정상 전이 | 권한 상실 상태를 인위적으로 만들 수 없다 |
+| V19-5 | 폴더 저장 **미지원 브라우저**(Safari·Firefox·모바일)에서 [로컬 저장 폴더 선택] 버튼이 **렌더되지 않는다** | 버튼 부재 + 로그 `folderCopy: "unsupported"` | 브라우저별 기능 감지 결과 |
+| V19-6 | OPFS 쓰기 실패를 유발하면(저장소 할당량 소진 등) **실패 토스트**가 뜨고 그래도 전이한다 | "저장 위치에 쓸 수 없습니다." + 화면은 계속 진행 | 할당량 소진 상황 재현 |
+
+> **진단에 남는 항목**: `결과물 로컬 보관`(`status`·`folderName`·`finalSaved`·`timelapseSaved`·
+> `hadTimelapse`·`folderCopy`·`folderCopyName`·`evicted`·`bytes`·`elapsedMs`) ·
+> `결과물 로컬 보관 건너뜀`(`reason`) · `보관 결과물 정리`(`removed`·`keptCount`·`keptBytes`·`triggers`).
+>
+> ⚠️ **V18-1·V18-2(`ffprobe`)를 여기서 함께 처리할 수 있다.** V19-3으로 폴더를 지정해 두면
+> 타임랩스 mp4가 실제 파일로 떨어져 개발 PC에서 바로 `ffprobe`를 돌릴 수 있다.
+
+### 10.5 아직 불가능한 실측
 
 | 항목 | 필요 선행 |
 |------|-----------|
 | 업로드 `OPTIONS 204 → PUT 200` | A4(CORS) + Step 11 |
 | 폰으로 QR 스캔 → 다운로드 | A1~A5 + Step 11·12 |
-| 타임랩스 mp4 **파일로 내보내기** 후 `ffprobe` | Step 10(로컬 보관) |
 | 10컷 세션 메모리(iOS 탭 생존) | Step 7 |
 
 ---
