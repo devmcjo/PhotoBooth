@@ -17,15 +17,15 @@
         </Grid.ColumnDefinitions>
 
         <!-- it15 F1(정정): 프레임 편집 정책 안내 = **기존 프레임 수정 시에만** 노출한다.
-             신규 생성은 기존 로직 그대로(power=서버 등록 / user=개인 로컬)라 "해당 PC에서만"이 사실과 어긋나고
-             같은 화면의 SaveScopeNotice("서버에 등록됩니다")와도 모순된다 → IsCreateMode로 게이트.
-             F2로 카탈로그 프레임을 불러온 세션은 정체성이 "새 프레임"(_isEditing 불변)이고 저장이 fork로
-             원본을 건드리지 않으므로 배너는 계속 숨김이 맞다. 저장의 실제 결과는 SaveScopeNotice가 안내. -->
+             신규 생성은 power면 서버 등록이 가능한 경로(R2: 저장 시 확인 팝업에서 선택)라 "해당 PC에서만"이
+             사실과 어긋나고 같은 화면의 SaveScopeNotice와도 모순된다 → IsCreateMode로 게이트.
+             F2로 카탈로그 프레임을 불러온 세션은 정체성이 "새 프레임"(_isEditing 불변)이고 원본은 저장 전
+             이름 충돌 가드가 지키므로 배너는 계속 숨김이 맞다. 저장의 실제 결과는 SaveScopeNotice가 안내. -->
         <Border Grid.Row="0" Grid.ColumnSpan="2" Margin="40,88,40,12" Padding="16,10"
                 Background="{StaticResource Brush.Warning.Surface}"
                 CornerRadius="{StaticResource Radius.M}"
                 Visibility="{Binding IsCreateMode, Converter={StaticResource InverseBoolToVis}}">
-            <TextBlock Text="이 프레임 편집은 해당 PC에서만 적용됩니다. 서버의 기본 프레임은 변경되지 않으며, 다른 PC에는 반영되지 않습니다."
+            <TextBlock Text="이 프레임 편집은 이 PC에만 적용되며, 서버와 다른 PC에는 반영되지 않습니다."
                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Warning}"
                        TextWrapping="Wrap" />
         </Border>
@@ -46,73 +46,94 @@
             </Grid>
         </Border>
 
-        <!-- 컨트롤 패널 -->
-        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,40,40">
-            <TextBlock Text="{Binding EditorTitle}" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
+        <!-- 컨트롤 패널: 설정 스크롤 영역 + 항상 보이는 하단 고정 저장/취소 바.
+             SettingsView의 sticky 하단 바(A4)와 동일 패턴 — 항목이 많아 세로 공간이 부족해도
+             저장/취소가 화면 밖으로 밀려나지 않게 스크롤 영역 밖에 고정한다. -->
+        <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,40,40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <Button Content="이미지 불러오기" Click="OnLoadImage"
-                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,8" />
-            <!-- it15 F2: 기존 프레임의 이미지·슬롯을 복사해 새 프레임을 만든다(생성 모드 전용 — F2-D6). -->
-            <Button Content="기존 프레임 불러오기" Command="{Binding OpenFramePickerCommand}"
-                    Visibility="{Binding IsCreateMode, Converter={StaticResource BoolToVis}}"
-                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,20" />
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,4,16">
+                    <TextBlock Text="{Binding EditorTitle}" Style="{StaticResource Text.H2}" Margin="0,0,0,20" />
 
-            <TextBlock Text="프레임 이름" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20" />
+                    <Button Content="이미지 불러오기" Click="OnLoadImage"
+                            Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,8" />
+                    <!-- it15 F2: 기존 프레임의 이미지·슬롯을 복사해 새 프레임을 만든다(생성 모드 전용 — F2-D6). -->
+                    <Button Content="기존 프레임 불러오기" Command="{Binding OpenFramePickerCommand}"
+                            Visibility="{Binding IsCreateMode, Converter={StaticResource BoolToVis}}"
+                            Style="{StaticResource Button.Secondary}" HorizontalAlignment="Stretch" Margin="0,0,0,20" />
 
-            <TextBlock Text="슬롯 개수" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <!-- 값 기반 바인딩(SelectedValue): 초기화 시 index 흔들림으로 인한 SlotCount clobber 차단(it7 B9). -->
-            <ComboBox ItemsSource="{Binding SlotCountOptions}" SelectedValue="{Binding SlotCount}"
-                      Margin="0,0,0,20">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding StringFormat={}{0}개}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                    <!-- R1: F2로 불러온 원본 안내. 사본이 아니라 새 프레임을 만드는 중임을 알린다.
+                         숨김 시 간격이 깔끔히 접히도록 음수 Margin을 쓰지 않는다. -->
+                    <TextBlock Text="{Binding PickedSourceNotice}" Style="{StaticResource Text.Caption}"
+                               Foreground="{StaticResource Brush.Text.Muted}" TextWrapping="Wrap"
+                               Visibility="{Binding HasPickedSource, Converter={StaticResource BoolToVis}}"
+                               Margin="0,0,0,8" />
+                    <TextBlock Text="프레임 이름" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                    <TextBox Text="{Binding FrameName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20" />
 
-            <TextBlock Text="슬롯 비율" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
-            <ComboBox ItemsSource="{Binding AspectOptions}"
-                      SelectedItem="{Binding SlotAspect}"
-                      Margin="0,0,0,20">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Converter={StaticResource SlotAspectLabel}}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                    <TextBlock Text="슬롯 개수" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                    <!-- 값 기반 바인딩(SelectedValue): 초기화 시 index 흔들림으로 인한 SlotCount clobber 차단(it7 B9). -->
+                    <ComboBox ItemsSource="{Binding SlotCountOptions}" SelectedValue="{Binding SlotCount}"
+                              Margin="0,0,0,20">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StringFormat={}{0}개}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
 
-            <!-- 슬롯 크기 일괄 스케일(10~300%): 슬라이더 + 직접 입력(조절 편의). -->
-            <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="슬롯 크기" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBox Width="96" MinWidth="96" Height="36" Padding="8,0"
-                             VerticalContentAlignment="Center" TextAlignment="Right"
-                             Text="{Binding SlotScalePercent, StringFormat={}{0:0}, UpdateSourceTrigger=LostFocus}"
-                             AutomationProperties.Name="슬롯 크기 % 직접 입력" />
-                    <TextBlock Text="%" Style="{StaticResource Text.Body}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                    <TextBlock Text="슬롯 비율" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding AspectOptions}"
+                              SelectedItem="{Binding SlotAspect}"
+                              Margin="0,0,0,20">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Converter={StaticResource SlotAspectLabel}}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <!-- 슬롯 크기 일괄 스케일(10~300%): 슬라이더 + 직접 입력(조절 편의). -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="슬롯 크기" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBox Width="96" MinWidth="96" Height="36" Padding="8,0"
+                                     VerticalContentAlignment="Center" TextAlignment="Right"
+                                     Text="{Binding SlotScalePercent, StringFormat={}{0:0}, UpdateSourceTrigger=LostFocus}"
+                                     AutomationProperties.Name="슬롯 크기 % 직접 입력" />
+                            <TextBlock Text="%" Style="{StaticResource Text.Body}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                        </StackPanel>
+                    </Grid>
+                    <Slider Minimum="10" Maximum="300" Value="{Binding SlotScalePercent}"
+                            TickFrequency="10" IsSnapToTickEnabled="False"
+                            AutomationProperties.Name="슬롯 크기 배율" Margin="0,0,0,20" />
+
+                    <!-- it15 F1-D6: 이번 저장의 실제 결과(공용 목록 생성 / fork / 덮어쓰기 / 내 프레임).
+                         배너=정책, 이 캡션=결과. 파워 신규 생성의 서버 등록 여부는 저장 시 팝업에서 선택한다(R2). -->
+                    <TextBlock Text="{Binding SaveScopeNotice}" Foreground="{StaticResource Brush.Text.Muted}"
+                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
+                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" />
                 </StackPanel>
-            </Grid>
-            <Slider Minimum="10" Maximum="300" Value="{Binding SlotScalePercent}"
-                    TickFrequency="10" IsSnapToTickEnabled="False"
-                    AutomationProperties.Name="슬롯 크기 배율" Margin="0,0,0,20" />
+            </ScrollViewer>
 
-            <!-- it15 F1-D6: 이번 저장의 실제 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임). 배너=정책, 이 캡션=결과. -->
-            <TextBlock Text="{Binding SaveScopeNotice}" Foreground="{StaticResource Brush.Text.Muted}"
-                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,8" />
-
-            <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.Danger}"
-                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,16" />
-
-            <Button Content="저장" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}"
-                    Style="{StaticResource Button.Primary}" HorizontalAlignment="Stretch" Margin="0,0,0,12" />
-            <Button Content="취소" Command="{Binding CancelCommand}"
-                    Style="{StaticResource Button.Ghost}" HorizontalAlignment="Center" />
-        </StackPanel>
+            <!-- 저장/취소: 스크롤 영역 밖에 고정 — 항목이 늘어나도 항상 클릭 가능. -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                <Button Content="저장" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}"
+                        Style="{StaticResource Button.Primary}" Margin="0,0,12,0" />
+                <Button Content="취소" Command="{Binding CancelCommand}"
+                        Style="{StaticResource Button.Ghost}" />
+            </StackPanel>
+        </Grid>
 
         <!-- it15 F2: 기존 프레임 선택 모달(오버레이 — 새 Window 아님, 삭제 확인 팝업과 동일 패턴).
              ⚠️ DataContext를 오버레이 전체에 걸지 말 것 — 확인/취소 커맨드는 편집기 VM에 있어서
@@ -165,6 +186,38 @@
                                 Style="{StaticResource Button.Ghost}" />
                     </StackPanel>
                 </Grid>
+            </Border>
+        </Grid>
+
+        <!-- R2: 서버 등록 확인 오버레이(파워 + 신규 생성 저장 시에만 — 삭제 확인 팝업과 동일 패턴).
+             피커 오버레이 뒤에 선언 = 위에 렌더(둘이 동시에 열리지는 않지만 z-order를 결정적으로 고정).
+             ⚠️ DataContext를 이 오버레이의 어느 요소에도 걸지 말 것 — 확인/취소 커맨드와 상태가 모두
+             편집기 VM에 있어서 DataContext를 걸면 커맨드 바인딩이 조용히 실패한다(버튼만 비활성). -->
+        <Grid Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding IsServerRegisterConfirmVisible, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Padding="32" Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="420"
+                    Background="{StaticResource Brush.Bg}">
+                <StackPanel>
+                    <TextBlock Text="이 프레임을 저장하시겠습니까?" Style="{StaticResource Text.H2}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="{Binding FrameName}" Style="{StaticResource Text.Body}"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               MaxWidth="360" Margin="0,0,0,20" />
+                    <!-- D4: 기본 on(신규 생성은 대개 공용 배포가 목적). 열 때마다 VM이 기본값으로 리셋한다. -->
+                    <CheckBox Content="서버에도 등록(공용 기본 프레임)" IsChecked="{Binding RegisterToServer}"
+                              HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="체크하면 서버에 공용 기본 프레임으로 등록되어 다른 PC에서도 내려받습니다. 체크하지 않으면 이 PC에만 저장됩니다."
+                               Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360" Margin="0,0,0,20" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="저장" Command="{Binding ConfirmServerRegisterCommand}"
+                                Style="{StaticResource Button.Primary}" Margin="0,0,12,0" />
+                        <Button Content="취소" Command="{Binding CancelServerRegisterCommand}"
+                                Style="{StaticResource Button.Ghost}" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
     </Grid>

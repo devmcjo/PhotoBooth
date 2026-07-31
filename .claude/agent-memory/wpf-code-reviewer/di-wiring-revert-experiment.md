@@ -1,12 +1,21 @@
 ---
 name: di-wiring-revert-experiment
-description: 배선(DI 등록 형태) 결함 수정을 리뷰할 때 "등록을 옛 형태로 되돌려 테스트가 실제로 실패하는지" 실험해 indirect 근거를 direct로 승격하는 방법
+description: 리뷰 대상 변경을 일시적으로 되돌리는(mutation) 실험으로 "테스트가 그 불변식을 실제로 강제하는가"를 실측해 indirect 근거를 direct로 승격하는 방법
 metadata:
   type: feedback
 ---
 
-배선 결함(“코드는 다 맞는데 아무도 호출하지 않아 생기는 결함”) 수정 리뷰에서 **“이 테스트가 재발을 잡는가?”**는
-코드를 읽어서는 indirect 근거밖에 못 만든다. 등록 형태를 **실제로 되돌려 테스트를 돌리면** direct 근거가 된다.
+**“이 테스트가 재발을 잡는가?”**는 코드를 읽어서는 indirect 근거밖에 못 만든다. 리뷰 대상 코드를 **일시적으로
+되돌려(mutation) 테스트를 돌리면** direct 근거가 된다. DI 배선뿐 아니라 가드 조건·상태 리셋·XAML 불변식 전부에 쓴다.
+
+**되돌릴 가치가 있는 것**: 세션/상태 enum 대입, 가드의 예외 조건(`!= EditOwnLocal` → `!false`), 권한 축
+(`IsPower()` → `CanWriteFrames()`), 실패 후 `return` → 낙하, XAML `DataContext=` 부착. `sed -i` + 유일 ASCII 앵커로
+바이트 안전하게 치환하고 `cp` 백업에서 복원하면 CRLF·BOM이 보존된다(Edit 도구는 개행을 정규화할 위험이 있다).
+
+**이 실험만이 잡는 결함 유형 — 자명하게 통과하는(tautological) 테스트**: 2026-07-30 프레임 서버등록 팝업 리뷰에서
+“팝업 열 때 체크박스 리셋”을 검증한다는 테스트가, 리셋 코드를 **삭제해도 38/38 통과**했다. 시퀀스가
+`Cancel()`(자체 리셋 보유)을 먼저 거쳐서 단언이 이미 참이었기 때문이다. 제목·주석만 읽으면 절대 안 보인다.
+6개 mutation 중 5개는 정상적으로 실패(10 / 1 / 2 / 1 / 1건) → 커버리지 증명, 1개는 구멍 발견.
 
 ```bash
 cp src/<Proj>/ServiceRegistration.cs "$SCRATCH/ServiceRegistration.cs.bak"   # 1) 백업

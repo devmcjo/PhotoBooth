@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace MCPhoto.Core.Frames;
@@ -51,6 +52,16 @@ public static partial class FrameNaming
         var unique = Guid.NewGuid().ToString("N")[..8];
         return $"{root} {CopySuffix} {unique}";
     }
+
+    /// <summary>
+    /// 로컬 파일명으로 쓸 수 있는 이름인지(빈 값·공백 아님 + 파일시스템 금지문자 없음). 순수 함수.
+    /// <c>LocalFrameStore.EnsureFileNameSafe</c>의 판정과 **동일**하다 — 저장 전 선검증에 쓰기 위해 추출했다.
+    /// 파워 신규 생성은 서버 insert를 먼저 하고 로컬 저장을 나중에 하므로, 이 선검증 없이는 잘못된 이름에서
+    /// "서버에는 등록됐지만 로컬에는 없는" 반쪽 상태가 만들어진다.
+    /// </summary>
+    public static bool IsFileNameSafe(string? name)
+        => !string.IsNullOrWhiteSpace(name)
+           && name!.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     /// <summary>
     /// "{X} 사본" / "{X} 사본 N" 접미를 제거해 원형 이름을 얻는다(접미가 없으면 원문 그대로).
