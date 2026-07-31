@@ -186,6 +186,25 @@ Slot { Index, X, Y, Width, Height }   // 프레임 픽셀 좌표계, 프레임 �
 
 - 오프라인 시: 1번 불가 → 2·3번으로 게스트+번들 모드 동작(§8 네트워크).
 
+**동시성 모델 (it20 갱신)**: `FrameCatalogService.GetDefaultFramesAsync`는 종전 `SemaphoreSlim` **직렬화(줄 세우기)** 에서
+**단일 비행(single-flight) + 진행 중계**로 바뀌었다. 동시 호출은 하나의 작업(`_inFlight`)을 공유하므로 중복 다운로드는
+계속 0이고, 늦게 합류한 호출자는 최근 진행 국면(`IProgress<FrameCatalogProgress>`)을 즉시 replay 받는다.
+호출자별 취소는 `Task.WaitAsync(ct)` 경계가 담당하며 공유 작업 자체는 계속 진행해 캐시를 완성한다(캐시 워밍 보호).
+로컬 스캔·번들 디코드·fallback PNG 생성은 `Task.Run` 경계 안에서 실행되어 UI 스레드를 점유하지 않고,
+fallback PNG 쓰기는 전용 lock + 임시 파일 원자 교체로 경합을 제거한다.
+
+**화면별 오버레이 목록**(전역 busy 오버레이는 도입하지 않는다 — 대기는 각 화면 고유 관심사다):
+
+| 오버레이 | 소유 화면 | 조건 |
+|----------|-----------|------|
+| 카메라 초기화 대기 | `CaptureView` | `CameraState == Initializing` |
+| 삭제 확인 | `FrameSelectView` | `IsDeleteConfirmVisible` |
+| **프레임 준비 대기 (it20)** | `FrameSelectView` | `IsLoading` — 최초 실행 서버 다운로드 대기. 스피너(`Spinner.Ring` 공유 리소스) + 진행 문구 + [기다리지 않고 시작] |
+| **프레임 준비 실패 (it20)** | `FrameSelectView` | `IsLoadFailed` — 프레임 0개. [다시 시도]/[메인으로] |
+| 기존 프레임 불러오기 | `FrameEditorView` | `IsFramePickerVisible` |
+| 서버 등록 확인 | `FrameEditorView` | `IsServerRegisterConfirmVisible` |
+| 유휴 경고 | `MainWindow`(셸 소유) | `IsIdleWarningVisible` — `ContentControl` 뒤에 선언되어 화면 로컬 오버레이보다 **위**에 그려진다 |
+
 ### 3.3 프레임 편집기 (§F2, `Frame-slot-setting.png` 참조)
 
 - 프레임 이미지 업로드(PNG/JPG/JPEG, 임의 크기·비율, 장변 4000px·10MB 제한 — 초과 시 리사이즈/거부).

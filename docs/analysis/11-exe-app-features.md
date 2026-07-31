@@ -42,11 +42,13 @@
 - **흐름**: `FrameSelect` 진입 시 목록 로드 → 카드 선택 → [다음]으로 Guide 진입. [프레임 만들기]로 에디터 진입(**프레임 쓰기 권한 필요** — 고급 유저 이상, it16). 카드 ✕로 삭제(§4).
 - **화면·VM**: `FrameSelectView` · `FrameSelectViewModel`. 서비스: `FrameCatalogService`, `ILocalFrameStore`, `IFrameRepository`.
 - **핵심 규칙**:
-  - 진입(`OnEnterAsync` → `ReloadFramesAsync`, `FrameSelectViewModel.cs:70-93`): 공용 프레임(`catalog.GetDefaultFramesAsync`) + 로그인 시 본인 커스텀(`catalog.GetUserFramesAsync(user.Id)`) 로드, 첫 항목 자동 선택. **목록 로딩은 역할과 무관하다**(it16 E4) — 프레임 쓰기 권한이 없는 `user`·`temp_user`의 기존 프레임도 그대로 보이고 촬영에 쓸 수 있다(편집·삭제 UI만 사라진다).
-  - 권한 플래그(같은 함수, `:80-82`): `CanCreateFrame`·`CanDeleteFrames` = `Role.CanWriteFrames()`(고급 유저 이상), `IsPower` = manager/admin. 두 축은 별개다(§4.1·§4.2).
-  - 목록 우선순위(`FrameCatalogService.GetDefaultFramesAsync`, `FrameCatalogService.cs:45-84`): ① 로컬 공용(번들+파워캐시, 접두 없는 파일) → ② DB `isDefault` 중 **로컬에 이름 없는 것만** 다운로드·캐시(이름 dedup) → ③ 번들 폴더 이미지(slots 없으면 2×2 격자 자동) → ④ 코드 생성 fallback. 오프라인·백엔드 미도달 시 ②를 건너뛰고 ③④로 폴백.
-  - [다음](`FrameSelectViewModel.cs:170-177`): 선택 프레임을 `Session.SelectedFrame`에 고정 + `Session.Capture.Begin(frame, Settings.CutCount)`.
-- **근거**: `FrameSelectViewModel.cs`, `FrameCatalogService.cs`.
+  - 진입(`OnEnterAsync` → `ReloadFramesAsync`, `FrameSelectViewModel.cs:142-240`): 공용 프레임(`catalog.GetDefaultFramesAsync`) + 로그인 시 본인 커스텀(`catalog.GetUserFramesAsync(user.Id)`) 로드, 첫 항목 자동 선택. **목록 로딩은 역할과 무관하다**(it16 E4) — 프레임 쓰기 권한이 없는 `user`·`temp_user`의 기존 프레임도 그대로 보이고 촬영에 쓸 수 있다(편집·삭제 UI만 사라진다).
+  - 권한 플래그(같은 함수, `:177-179`): `CanCreateFrame`·`CanDeleteFrames` = `Role.CanWriteFrames()`(고급 유저 이상), `IsPower` = manager/admin. 두 축은 별개다(§4.1·§4.2).
+  - 목록 우선순위(`FrameCatalogService.LoadDefaultFramesCoreAsync` → `ResolveLocalFrames`, `FrameCatalogService.cs:132-207`): ① 로컬 공용(번들+파워캐시, 접두 없는 파일) → ② DB `isDefault` 중 **로컬에 이름 없는 것만** 다운로드·캐시(이름 dedup) → ③ 번들 폴더 이미지(slots 없으면 2×2 격자 자동) → ④ 코드 생성 fallback. 오프라인·백엔드 미도달 시 ②를 건너뛰고 ③④로 폴백.
+  - **최초 실행 대기 UI(it20)**: 신규 설치본은 로컬에 기본 프레임이 0개라 진입 후 서버 다운로드를 기다린다. 종전에는 빈 목록 + 활성 [다음]으로 수 초~수십 초 방치됐다. 이제 진입과 동시에 **대기 오버레이**(스피너 + 진행 문구 `기본 프레임 내려받는 중… (n/m)` + [기다리지 않고 시작])가 뜨고, 대기에 **무진행 30초 / 총 60초** 2단 상한이 걸린다(`FrameLoadPolicy`). 상한 초과·건너뛰기·예외면 로컬 프레임만으로 **축소 진행**(하단 인라인 안내 + [다시 시도])하고, 로컬 폴백까지 실패해 프레임이 0개면 **전면 실패 카드**([다시 시도]/[메인으로])를 띄운다. 국면 확정은 `finally`의 `FrameLoadPolicy.Finalize`가 **무조건** 수행하므로 대기 오버레이가 고착되는 경로가 없다.
+  - **동시성(it20)**: `GetDefaultFramesAsync`는 세마포어 직렬화에서 **단일 비행(single-flight) + 진행 중계**로 바뀌었다(`FrameCatalogService.cs:61-130`). 시작 prefetch(`App.OnStartup`)가 이미 다운로드 중이면 화면 진입은 줄 서지 않고 **그 작업에 합류**해 최근 국면을 즉시 replay 받는다. 호출자별 취소는 `Task.WaitAsync(ct)` 경계가 담당하고 공유 작업은 계속 진행해 캐시를 완성한다. 로컬 스캔·번들 디코드·fallback 생성은 `Task.Run` 경계 안으로 옮겨져 UI 스레드를 점유하지 않는다.
+  - [다음](`FrameSelectViewModel.cs:395-403`): 선택 프레임을 `Session.SelectedFrame`에 고정 + `Session.Capture.Begin(frame, Settings.CutCount)`. `Loading`·`Failed` 국면에서는 `IsInteractive` 가드가 [다음]·[프레임 만들기]·[선택 편집]·삭제 ✕를 모두 차단한다(it20 §5.4).
+- **근거**: `FrameSelectViewModel.cs`, `FrameCatalogService.cs`, `FrameLoadPolicy.cs`, `FrameCatalogProgress.cs`. 설계: `docs/design/wpf-it20-frame-download-waiting-design.md`.
 
 ## 4. 프레임 생성 · 편집(에디터) · 삭제
 

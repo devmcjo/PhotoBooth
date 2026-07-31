@@ -7,6 +7,13 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MCPhoto</AssemblyName>
     <RootNamespace>MCPhoto.App</RootNamespace>
+
+    <!-- 앱 아이콘(exe 리소스로 임베드 → 탐색기·작업표시줄·타이틀바에 모두 반영).
+         Window.Icon은 일부러 지정하지 않는다: XAML로 지정하면 WPF가 단일 프레임을 골라
+         축소하느라 16px 타이틀바가 흐려진다. 미지정 시 Windows가 exe의 멀티해상도
+         리소스(16~256px)에서 용도별 프레임을 정확히 선택한다.
+         원본·후보·재생성 방법은 tools/icon-forge/README.md 참조. -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

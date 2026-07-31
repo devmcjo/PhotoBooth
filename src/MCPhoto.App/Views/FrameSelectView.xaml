@@ -79,7 +79,71 @@
             </Border>
         </Grid>
 
+        <!-- it20: 기본 프레임 준비 대기 오버레이. 최초 실행은 로컬에 기본 프레임이 없어 서버 다운로드를 기다린다.
+             삭제 확인 팝업보다 **뒤에** 선언해 시각적으로 위에 온다. scrim이 3행 전체를 덮어 아래 목록·버튼
+             클릭을 차단하고, VM의 IsInteractive 가드가 커맨드 직접 호출까지 이중으로 막는다(설계 §5.4).
+             ⚠️ 이 화면의 하위 배경은 Brush.Bg(흰색)다 — CaptureView처럼 scrim 위에 흰 글자를 쓰면 대비가
+                무너진다. 불투명 Card를 깔고 기본 글자색을 쓴다(설계 §4.2). -->
+        <Grid Grid.RowSpan="3" Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Padding="32" Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="380"
+                    Background="{StaticResource Brush.Bg}">
+                <StackPanel>
+                    <!-- 공유 스피너 리소스(Themes/Controls.xaml). 장식이므로 탭 순서에서 제외. -->
+                    <Control Template="{StaticResource Spinner.Ring}" Width="56" Height="56"
+                             HorizontalAlignment="Center" Focusable="False" IsTabStop="False" />
+                    <TextBlock Text="{Binding LoadingMessage}" Style="{StaticResource Text.Body}"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                               Margin="0,20,0,0" />
+                    <TextBlock Text="처음 실행할 때는 기본 프레임을 서버에서 한 번 내려받습니다."
+                               Style="{StaticResource Text.Caption}"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                               Margin="0,8,0,0" />
+                    <Button Content="기다리지 않고 시작" Style="{StaticResource Button.Ghost}"
+                            Command="{Binding SkipServerWaitCommand}"
+                            HorizontalAlignment="Center" Margin="0,20,0,0"
+                            AutomationProperties.Name="서버 대기 건너뛰기" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- it20: 실패 카드. 도달 조건은 프레임 0개 — 로컬 폴백(fallback PNG 생성)까지 실패한 경우다
+             (디스크 꽉 참·권한·경로 잠김). 빈 목록 + 활성 [다음]으로 남지 않게 탈출 경로를 명시한다. -->
+        <Grid Grid.RowSpan="3" Background="{StaticResource Brush.Scrim}"
+              Visibility="{Binding IsLoadFailed, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Padding="32" Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="380"
+                    Background="{StaticResource Brush.Bg}">
+                <StackPanel>
+                    <TextBlock Text="프레임을 준비하지 못했습니다" Style="{StaticResource Text.H2}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="{Binding LoadNotice}" Style="{StaticResource Text.Body}"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                               Margin="0,0,0,20" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="다시 시도" Command="{Binding RetryLoadCommand}"
+                                Style="{StaticResource Button.Primary}" Margin="0,0,12,0" />
+                        <Button Content="메인으로" Command="{Binding CancelCommand}"
+                                Style="{StaticResource Button.Ghost}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <StackPanel Grid.Row="2" Margin="0,12,0,20">
+            <!-- it20: 축소 진행 안내(Degraded). 목록은 정상 표시하되 "프레임이 원래 이것뿐"으로 오인하지 않게
+                 한 줄로 알린다. 공유 작업은 백그라운드에서 계속 진행하므로 [다시 시도]가 곧 성공할 수 있다. -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8"
+                        Visibility="{Binding IsDegraded, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding LoadNotice}" Style="{StaticResource Text.Body}"
+                           Foreground="{StaticResource Brush.Text.Muted}" VerticalAlignment="Center" />
+                <Button Content="다시 시도" Style="{StaticResource Button.Ghost}"
+                        Command="{Binding RetryLoadCommand}" Margin="12,0,0,0"
+                        AutomationProperties.Name="프레임 목록 다시 불러오기" />
+            </StackPanel>
             <!-- 삭제 결과 안내(서버 삭제 성공/실패/미발견). 성공=성공색, 실패=danger색. -->
             <TextBlock Text="{Binding DeleteNotice}" HorizontalAlignment="Center" Margin="0,0,0,8"
                        Style="{StaticResource Text.Body}" TextWrapping="Wrap" TextAlignment="Center"

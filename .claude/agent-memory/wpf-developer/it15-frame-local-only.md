@@ -1,6 +1,6 @@
 ---
 name: it15-frame-local-only
-description: it15 프레임 편집=로컬 전용 계약(fork 저장·#dbid 미기록·서버 PUT 미호출)과 FrameCatalogService가 절대 빈 목록을 안 주는 테스트 함정
+description: it15 프레임 편집=로컬 전용 계약(fork 저장·#dbid 미기록·서버 PUT 미호출), DB insert는 팝업 체크 opt-in, F2는 fork 아님, FrameCatalogService가 절대 빈 목록을 안 주는 테스트 함정
 metadata:
   type: project
 ---
@@ -21,6 +21,12 @@ it2의 "로컬만 / DB도 업데이트" 팝업이 이 정책과 정면 충돌해
 - **서버 라우트 `PUT /frames/{id}`는 살아 있지만 앱은 호출하지 않는다**(운영/관리 전용).
   앱 동작을 근거로 이 라우트를 지우지 말 것 — `docs/design/firebase-contract.md` §2.2에 명시해 뒀다.
 - 앱이 `frameTemplates`에 쓰는 유일한 경로는 **파워의 프레임 신규 생성**(`POST /frames`)이다.
+  단 그 경로도 **무조건 insert가 아니다**: 저장 시 "서버에도 등록" 확인 팝업이 뜨고 체크(기본 off)했을 때만
+  `SaveAsync`를 호출한다. 미체크면 로컬 공용만(`Id=""` → `#dbid` 미기록). 게이트는 `IsPower()` + 세션 `New`
+  두 항이며 `CanWriteFrames()`로 바꾸면 DB 권한 없는 AdvancedUser에게 체크박스가 노출된다.
+- **F2 "기존 프레임 불러오기"는 fork가 아니다**(사본 아님). `ApplyPickedFrame`은 세션을 `New`로 두고
+  `FrameName`을 건드리지 않는다 → 사본 자동 네이밍이 없다. 원본 보호는 저장 전 **이름 충돌 가드**가
+  담당한다(`EditOwnLocal`만 덮어쓰기 예외). fork(`NextCopyName`)는 F1 `LoadForEdit` 전용이다.
 
 **테스트 함정**: `FrameCatalogService.GetDefaultFramesAsync()`는 **절대 빈 목록을 반환하지 않는다**
 (로컬 공용 → DB → 번들 폴더 → 마지막에 `EnsureFallbackFrame()`이 항상 1개를 만든다).

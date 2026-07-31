@@ -67,7 +67,8 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 
     /// <summary>
     /// 이번 저장의 실제 결과 안내(저장 버튼 위 캡션). 상단 배너가 정책(로컬 전용)을 말하고
-    /// 이 캡션이 결과(서버 등록 / fork / 덮어쓰기 / 내 프레임)를 말한다. (it15 §3.1(b))
+    /// 이 캡션이 결과(공용 목록 생성 / fork / 덮어쓰기 / 내 프레임)를 말한다. (it15 §3.1(b))
+    /// 파워 신규 생성의 서버 등록 여부는 저장 시 확인 팝업에서 선택하므로 여기서 단정하지 않는다(R2).
     /// 공용 스코프에서 이름에 '_'가 있으면 비차단 경고를 덧붙인다(§3.4) — 저장 직후 안내는
     /// 화면 전환으로 사라지므로 저장 전에 보이는 이 캡션이 유일한 노출 지점이다.
     /// </summary>
@@ -79,8 +80,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             var scope = isPower
                 ? _sessionSource switch
                 {
-                    // power 신규 생성은 it15 이후에도 공용 기본 프레임 DB 등록 경로다(배너만으론 부정확).
-                    FrameSessionSource.New => $"저장 시 '{FrameName}'이(가) 공용 기본 프레임으로 서버에 등록됩니다.",
+                    // power 신규 생성은 공용 기본 프레임 DB 등록이 가능한 유일한 경로지만, R2 이후 서버 등록은
+                    // 저장 시 확인 팝업의 체크박스에 달려 있다 → 여기서 "등록됩니다"로 단정하지 않는다.
+                    FrameSessionSource.New =>
+                        $"저장 시 '{FrameName}'을(를) 이 PC의 공용 목록에 만듭니다. 서버 등록 여부는 저장할 때 선택합니다.",
                     FrameSessionSource.ForkFromCatalog => $"원본은 그대로 두고 '{FrameName}'(으)로 이 PC의 공용 목록에 저장됩니다.",
                     _ => $"'{FrameName}'을(를) 이 PC에 덮어씁니다."
                 }
@@ -126,6 +129,16 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 
     /// <summary>선택 모달 오버레이 표시 여부.</summary>
     [ObservableProperty] private bool _isFramePickerVisible;
+
+    /// <summary>
+    /// F2로 불러온 원본 안내(이름 입력 필드 위 캡션). "사본이 아니라 새 프레임을 만드는 중"이라는 유일한 시각 신호다.
+    /// 불러오기가 성공한 순간에만 채워지고, 이미지를 다시 직접 불러오면(<see cref="LoadImage"/>) 비운다.
+    /// </summary>
+    [NotifyPropertyChangedFor(nameof(HasPickedSource))]
+    [ObservableProperty] private string _pickedSourceNotice = string.Empty;
+
+    /// <summary>불러온 원본 캡션 노출 게이트(문자열→Visibility 컨버터가 없어 bool로 노출한다).</summary>
+    public bool HasPickedSource => !string.IsNullOrEmpty(PickedSourceNotice);
 
     /// <summary>목록 로딩 취소용. 재오픈 시 교체(이전 것 Dispose)하고 취소·이탈 시 Cancel.</summary>
     private CancellationTokenSource? _pickerCts;
@@ -181,6 +194,9 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 
             ArrangeSlots();
             StatusMessage = string.Empty;
+            // 이미지를 직접 교체하면 "'{X}'의 이미지·슬롯을 불러왔습니다" 안내가 사실과 어긋난다 → 비운다.
+            // (ApplyPickedFrame은 이 메서드를 경유한 뒤 자기 안내를 다시 설정한다 — 순서상 안전하다.)
+            PickedSourceNotice = string.Empty;
             return true;
         }
         catch (Exception ex)
@@ -360,7 +376,8 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     /// <summary>
     /// 선택한 프레임의 이미지·슬롯을 현재 편집 세션으로 복사한다(디스크에 아무것도 쓰지 않는다).
     /// 원본 불변: 이미지는 <see cref="LoadImage"/>가 읽기만 하고, 슬롯은 새 <see cref="Slot"/> 인스턴스로 값 복사한다.
-    /// 세션 정체성은 항상 "새 프레임"(fork) — 저장 시 원본을 덮어쓰지 않는다. (it15 §4.6)
+    /// 세션 정체성 = 신규 생성(<see cref="FrameSessionSource.New"/>) — 이름은 사용자가 정한다(사본 자동 네이밍 없음, R1).
+    /// 저장 시 원본을 덮어쓰지 않는 방어는 이름 충돌 가드(<see cref="TryValidateForSave"/> ⑦)가 담당한다.
     /// </summary>
     /// <returns>복사 성공 여부(실패 사유는 <see cref="StatusMessage"/>).</returns>
     public bool ApplyPickedFrame(FrameTemplate src)
@@ -401,11 +418,14 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         }
         // src.ImageSize가 0(메타 없음)이면 LoadImage의 자동 배치 결과를 그대로 사용.
 
-        // 세션 정체성 — 항상 "새 프레임"(_isEditing 불변 → IsCreateMode·EditorTitle 유지).
-        _sessionSource = FrameSessionSource.ForkFromCatalog;
-        _sourceName = src.Name;
+        // 세션 정체성 = 신규 생성(_isEditing 불변 → IsCreateMode·EditorTitle 유지).
+        // R1: 사본(fork)이 아니라 "불러온 정보를 기본값으로 한 새 프레임"이다 → FrameName을 건드리지 않는다.
+        // 사용자가 이미 타이핑한 이름을 보존하고(먼저 이름 → 나중에 이미지 순서도 지원), 원본 이름을 그대로
+        // 채우면 이름 충돌 가드에 100% 걸리는 값을 제안하는 셈이 되므로 제안하지 않는다.
+        _sessionSource = FrameSessionSource.New;
+        _sourceName = src.Name; // 추적·안내용(New 세션이라 원본 이름 가드는 발동하지 않는다)
 
-        FrameName = FrameNaming.NextCopyName(src.Name, ExistingNamesForCurrentScope());
+        PickedSourceNotice = $"'{src.Name}'의 이미지·슬롯을 불러왔습니다. 새 프레임 이름을 입력해 주세요.";
         OnPropertyChanged(nameof(SaveScopeNotice));
 
         StatusMessage = string.Empty;
@@ -413,7 +433,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 현재 저장 스코프의 기존 프레임 이름들(사본 이름 충돌 검사용).
+    /// 현재 저장 스코프의 기존 프레임 이름들(사본 이름 계산 + 저장 전 충돌 검사용).
     /// power=공용 목록, user=본인 개인 목록. 조회 실패는 비차단(충돌 검사만 생략).
     /// </summary>
     private IEnumerable<string> ExistingNamesForCurrentScope()
@@ -433,44 +453,158 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         }
     }
 
+    // ── R2: 서버 등록 확인 팝업(파워 신규 생성 저장 시 — 프레임 삭제 확인 팝업과 동일 패턴) ──
+
+    /// <summary>서버 등록 확인 오버레이 표시 여부(새 Window 아님 — VM 상태 + 오버레이).</summary>
+    [ObservableProperty] private bool _isServerRegisterConfirmVisible;
+
     /// <summary>
-    /// 저장. it15 F1: 서버 업데이트 경로가 없다(확인 팝업 없이 한 번에 끝난다).
-    /// 스코프 = power 공용 / user 개인(현행 유지), 방식 = fork(새 이름) / 덮어쓰기.
-    /// power 신규 생성만 DB에 등록되고(공용 기본 프레임 배포의 유일한 경로) 나머지는 로컬 전용이다. (§3.6)
+    /// "서버에도 등록" 체크박스의 기본값(D4, 운영 판단으로 on 채택).
+    /// manager/admin이 프레임을 **새로 만드는** 목적은 대개 공용 배포이므로 매번 체크하게 하면 손이 번거롭다.
+    /// ⚠️ 삭제 팝업의 "서버에서도 제거"는 기본 off다 — 관례가 갈리는 것이 아니라 축이 다르다(그쪽은 파괴적
+    ///    행위라 opt-in, 이쪽은 생성 행위). 이 값을 다시 뒤집을 때는 N1·N2·N4·N13 기대값이 함께 움직인다.
     /// </summary>
-    [RelayCommand]
-    private async Task Save()
+    private const bool DefaultRegisterToServer = true;
+
+    /// <summary>
+    /// "서버에도 등록" 체크박스 상태. 팝업을 열 때마다 <see cref="DefaultRegisterToServer"/>로 리셋한다(값 잔존 금지).
+    /// </summary>
+    [ObservableProperty] private bool _registerToServer = DefaultRegisterToServer;
+
+    /// <summary>
+    /// 확인 팝업을 띄워야 하는 세션인지 = **DB insert 분기와 완전히 동일한 조건**.
+    /// 두 축이 갈라지면 "팝업은 떴는데 등록은 안 되는" 조용한 불일치가 생기므로 <c>IsCreateMode</c>가 아니라
+    /// 세션 축을 쓴다(현재 두 값은 동치이지만 동치에 의존하지 않는다).
+    /// 권한 축은 <c>IsPower()</c>만 쓴다 — <c>CanWriteFrames()</c>(AdvancedUser 포함)로 대체하면
+    /// DB 권한이 없는 계정에 서버 등록 체크박스를 노출한다(UserRole.cs 명시 경고).
+    /// </summary>
+    private bool RequiresServerRegisterPrompt
+        => _shell.Session.CurrentUser?.Role.IsPower() == true && _sessionSource == FrameSessionSource.New;
+
+    /// <summary>
+    /// 저장 전 검증을 한 곳으로 모은다(fail-closed). 진입점이 [저장] 커맨드와 서버 등록 확인 팝업 2개이므로
+    /// 양쪽에서 같은 판정을 재실행해야 우회가 생기지 않는다.
+    /// 순서 고정: ①로그인 → ②권한 → ③슬롯 유효성 → ④원본 이름 → ⑤빈 이름 → ⑥금지문자 → ⑦스코프 충돌.
+    /// ④를 ⑦보다 먼저 두는 이유: ④는 원본 이름이라는 확정 사실만 보고 판정하는 반면 ⑦은 디스크 열거에
+    /// 의존해 실패 시 조용히 꺼진다(비차단, 빈 집합) → ④가 남아 있어야 2중 방어가 성립하고, 기존 fork
+    /// 회귀 테스트가 검증하는 "원본과 같은 이름" 문구도 ⑦ 문구로 뒤바뀌지 않는다.
+    /// </summary>
+    /// <param name="error">차단 사유(통과 시 빈 문자열). 호출자가 <see cref="StatusMessage"/>에 그대로 넣는다.</param>
+    private bool TryValidateForSave(out string error)
     {
         var user = _shell.Session.CurrentUser;
-        if (user is null) { StatusMessage = "로그인이 필요합니다."; return; }
+        if (user is null) { error = "로그인이 필요합니다."; return false; }
         // it16 §4.5 3중 방어(fail-closed): 화면 게이트(CanCreateFrame·CanEditSelected)로 편집기에 도달할 수 없는
         // 역할이지만, 미래에 다른 진입점이 생겨도 **저장이 거부**되도록 정책을 저장 경로에도 둔다.
-        if (!user.Role.CanWriteFrames()) { StatusMessage = "프레임을 만들 권한이 없습니다."; return; }
+        if (!user.Role.CanWriteFrames()) { error = "프레임을 만들 권한이 없습니다."; return false; }
         if (_imageBytes is null || !SlotLayout.IsValid(Slots, FrameWidth, FrameHeight))
         {
-            StatusMessage = "슬롯이 겹치거나 프레임을 벗어났습니다.";
-            return;
+            error = "슬롯이 겹치거나 프레임을 벗어났습니다.";
+            return false;
         }
 
         bool isPower = user.Role.IsPower();
         bool isFork = _sessionSource == FrameSessionSource.ForkFromCatalog;
-        bool isNew = _sessionSource == FrameSessionSource.New;
 
-        // 원본 덮어쓰기 가드: 공용 스코프(power)에서는 사본이 원본 파일과 같은 이름이 될 수 있으므로 차단.
+        // ④ 원본 덮어쓰기 가드: 공용 스코프(power)에서는 사본이 원본 파일과 같은 이름이 될 수 있으므로 차단.
         // user 스코프는 파일명이 `{계정}_{이름}`이라 공용 원본과 물리적으로 겹치지 않는다(가드 불필요).
         if (isFork && isPower && string.Equals(FrameName, _sourceName, StringComparison.Ordinal))
         {
-            StatusMessage = "원본과 같은 이름은 사용할 수 없습니다. 이름을 변경해 주세요.";
+            error = "원본과 같은 이름은 사용할 수 없습니다. 이름을 변경해 주세요.";
+            return false;
+        }
+
+        // ⑤⑥ 이름 안전성 선검증: LocalFrameStore가 IOException으로 거부하는 조건을 저장 전에 걸러낸다.
+        // 파워 신규 생성은 서버 insert가 먼저이므로, 이 검증 없이는 "서버에만 문서가 남는 반쪽 상태"가
+        // 가능하다(D6 원자성과 짝). 판정은 LocalFrameStore와 같은 순수 함수를 쓴다.
+        if (string.IsNullOrWhiteSpace(FrameName)) { error = "프레임 이름을 입력해 주세요."; return false; }
+        if (!FrameNaming.IsFileNameSafe(FrameName))
+        {
+            error = "이름에 사용할 수 없는 문자가 있습니다.";
+            return false;
+        }
+
+        // ⑦ 스코프 이름 충돌 가드(최우선 데이터 손실 방지): SaveLocal은 같은 이름 파일을 **경고 없이
+        // 덮어쓴다** → 덮어쓰기가 세션의 의도인 EditOwnLocal만 예외로 두고, New·ForkFromCatalog에서
+        // 스코프 내 기존 이름과 겹치면 차단한다. 비교 축은 LocalFrameStore 파일명 규약과 같은 Ordinal.
+        if (_sessionSource != FrameSessionSource.EditOwnLocal
+            && ExistingNamesForCurrentScope().Contains(FrameName, StringComparer.Ordinal))
+        {
+            error = "이미 같은 이름의 프레임이 있습니다. 다른 이름을 입력해 주세요.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// [저장] 버튼: 검증 → (파워 신규 생성이면) 서버 등록 확인 팝업 → 그 밖에는 즉시 로컬 저장.
+    /// it15 F1: 서버 업데이트 경로가 없다(편집은 로컬 전용).
+    /// 스코프 = power 공용 / user 개인(현행 유지), 방식 = fork(새 이름) / 덮어쓰기.
+    /// power 신규 생성만 DB 등록 경로이며(공용 기본 프레임 배포의 유일한 경로) 나머지는 로컬 전용이다. (§3.6)
+    /// R2: 그 DB 등록조차 확인 팝업의 체크박스가 켜진 경우에만 수행한다.
+    /// </summary>
+    [RelayCommand]
+    private async Task Save()
+    {
+        if (!TryValidateForSave(out var error)) { StatusMessage = error; return; }
+
+        // R2: DB insert가 가능한 세션이면 "서버에도 만들지" 먼저 묻는다 — 이 시점에는 아무것도 저장하지 않는다.
+        if (RequiresServerRegisterPrompt)
+        {
+            RegisterToServer = DefaultRegisterToServer;   // D4: 열 때마다 기본값으로 리셋(직전 선택 잔존 금지)
+            IsServerRegisterConfirmVisible = true;
             return;
         }
+
+        await PersistAsync(registerToServer: false);
+    }
+
+    /// <summary>
+    /// [팝업 저장]: 체크 상태를 **닫히기 전에** 지역 변수로 확정한 뒤 저장한다(삭제 확인 팝업과 같은 관례 —
+    /// 리셋이 먼저 일어나면 체크가 조용히 무시된다).
+    /// </summary>
+    [RelayCommand]
+    private async Task ConfirmServerRegister()
+    {
+        var alsoServer = RegisterToServer;
+        IsServerRegisterConfirmVisible = false;
+        RegisterToServer = DefaultRegisterToServer;
+        await PersistAsync(alsoServer);
+    }
+
+    /// <summary>[팝업 취소]: 팝업만 닫는다. 저장·화면 전환·디스크 모두 무변경(편집 세션 그대로 유지).</summary>
+    [RelayCommand]
+    private void CancelServerRegister()
+    {
+        IsServerRegisterConfirmVisible = false;
+        RegisterToServer = DefaultRegisterToServer;
+    }
+
+    /// <summary>
+    /// 실제 저장. 진입점이 [저장] 커맨드와 확인 팝업 2개이므로 첫 줄에서 검증을 **재실행**한다(fail-closed).
+    /// </summary>
+    /// <param name="registerToServer">서버(DB) 공용 기본 프레임으로도 등록할지. 파워 신규 생성에서만 의미가 있다.</param>
+    private async Task PersistAsync(bool registerToServer)
+    {
+        if (!TryValidateForSave(out var error)) { StatusMessage = error; return; }
+
+        // 검증이 보장한 값을 지역 변수로 확정한다(재확인 자체가 fail-closed 방어이자 null 흐름의 근거).
+        var user = _shell.Session.CurrentUser;
+        var png = _imageBytes;
+        if (user is null || png is null) { StatusMessage = "저장할 수 없습니다."; return; }
+
+        bool isPower = user.Role.IsPower();
+        bool isNew = _sessionSource == FrameSessionSource.New;
 
         try
         {
             StatusMessage = "저장 중...";
 
-            if (isPower && isNew)
+            if (isPower && isNew && registerToServer)
             {
-                // 파워 신규 생성: 공용 기본 프레임 DB 등록(isDefault=true, userId=null) + 로컬 캐시(#dbid 기록).
+                // 파워 신규 생성 + 체크 on: 공용 기본 프레임 DB 등록(isDefault=true, userId=null) + 로컬 캐시(#dbid 기록).
                 var frame = new FrameTemplate
                 {
                     Id = string.Empty, // SaveAsync가 새 GUID 부여
@@ -480,13 +614,28 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
                     Slots = Slots.ToList()
                 };
-                var saved = await _repository.SaveAsync(frame, _imageBytes);
-                _localStore.SaveLocal(saved, _imageBytes, ownerName: null);
+
+                FrameTemplate saved;
+                try
+                {
+                    saved = await _repository.SaveAsync(frame, png);
+                }
+                catch (Exception ex)
+                {
+                    // D6 원자성: 서버 등록이 실패하면 로컬 저장도 화면 전환도 하지 않는다(부분 성공 금지).
+                    // 로컬만 저장해두면 재시도 시 이름 충돌 가드가 자기 자신과 충돌해 저장을 막는다.
+                    // 편집 세션(이미지·슬롯·이름·배율)이 그대로 남으므로 체크만 해제해 즉시 로컬 저장할 수 있다.
+                    _logger?.LogError(ex, "프레임 서버 등록 실패: {Name}", FrameName);
+                    StatusMessage = $"서버 등록 실패: {ex.Message} 이 PC에만 저장하려면 '서버에도 등록'을 해제하고 다시 저장해 주세요.";
+                    return;
+                }
+
+                _localStore.SaveLocal(saved, png, ownerName: null);
             }
             else if (isPower)
             {
-                // 파워 fork / 파워 자기 로컬 편집: 로컬 공용만. Id=""로 두면 #dbid를 기록하지 않아
-                // 서버 문서와 연결이 끊긴다(= 편집은 이 PC에만 적용). (§3.3)
+                // 파워 신규 생성(체크 off) / 파워 fork / 파워 자기 로컬 편집: 로컬 공용만.
+                // Id=""로 두면 #dbid를 기록하지 않아 서버 문서와 연결이 끊긴다(= 이 PC에만 적용). (§3.3)
                 var frame = new FrameTemplate
                 {
                     Id = string.Empty,
@@ -496,7 +645,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
                     Slots = Slots.ToList()
                 };
-                _localStore.SaveLocal(frame, _imageBytes, ownerName: null);
+                _localStore.SaveLocal(frame, png, ownerName: null);
             }
             else
             {
@@ -509,7 +658,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
                     Slots = Slots.ToList()
                 };
-                _localStore.SaveLocal(frame, _imageBytes, ownerName: user.Id);
+                _localStore.SaveLocal(frame, png, ownerName: user.Id);
             }
 
             // '_' 이름 경고는 저장 전에 SaveScopeNotice가 이미 안내한다 — 저장 직후 StatusMessage는

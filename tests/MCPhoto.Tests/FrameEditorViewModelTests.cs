@@ -14,11 +14,15 @@ namespace MCPhoto.Tests;
 /// it7 Step 1 (B9): 슬롯 개수 값 기반 바인딩 회귀. SlotCount 변경이 Slots 개수에 정확 반영되고
 /// Save가 그 개수만큼 저장하는지(초기화 clobber로 1개 되던 버그 방지) VM 레벨로 고정.
 /// </summary>
+[Collection(FallbackCacheCollection.Name)]   // it20 N2: 공유 fallback 캐시 경로 경합 제거
 public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 {
     private sealed class CapturingFrameRepository : IFrameRepository
     {
         public FrameTemplate? Saved { get; private set; }
+
+        /// <summary>서버 등록 실패(D6 원자성) 시나리오 주입 — SaveAsync가 던지고 Saved는 남지 않는다.</summary>
+        public bool ThrowOnSave { get; set; }
 
         public Task<IReadOnlyList<FrameTemplate>> GetDefaultFramesAsync(CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
@@ -26,6 +30,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
         {
+            if (ThrowOnSave) throw new InvalidOperationException("서버 오류");
             Saved = frame;
             return Task.FromResult(frame);
         }
@@ -170,12 +175,19 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     public async Task Power_Save_Persists_To_Db_And_Local_Cache()
     {
         // it8 A2: 파워는 DB(isDefault=true) + 로컬 캐시(ownerName=null).
-        // it15 C3 무회귀: 파워의 **신규 생성** 저장은 F1 이후에도 서버에 등록된다(공용 기본 프레임 배포 경로).
+        // it15 C3 무회귀: 파워의 **신규 생성** 저장은 F1 이후에도 서버에 등록될 수 있다(공용 기본 프레임 배포 경로).
+        // R2: 그 등록은 확인 팝업의 체크박스가 켜진 경우에만 일어난다 → [저장]은 팝업만 띄운다.
         var (vm, repo, local, _) = MakeVm(UserRole.Admin);
         Assert.True(vm.LoadImage(_imagePath));
 
         vm.SlotCount = 6;
         await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsServerRegisterConfirmVisible);  // 팝업 대기
+        Assert.Null(repo.Saved);                         // 아직 아무것도 저장하지 않았다
+
+        vm.RegisterToServer = true;
+        await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
 
         Assert.NotNull(repo.Saved);
         Assert.True(repo.Saved!.IsDefault);
@@ -261,8 +273,11 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     public void SaveScopeNotice_Reflects_Scope()
     {
         // C6: 배너(정책)와 별개로 이번 저장의 실제 결과를 안내.
+        // R2/D5: power 신규 생성은 "서버에 등록됩니다" 단정이 아니라 "선택합니다"로 바뀌었다.
         var (powerNew, _, _, _) = MakeVm(UserRole.Admin);
-        Assert.Contains("서버에 등록", powerNew.SaveScopeNotice);
+        Assert.Contains("이 PC의 공용 목록에 만듭니다", powerNew.SaveScopeNotice);
+        Assert.Contains("서버 등록 여부는", powerNew.SaveScopeNotice);
+        Assert.DoesNotContain("서버에 등록됩니다", powerNew.SaveScopeNotice);
 
         var (powerFork, _, _, _) = MakeVm(UserRole.Admin);
         powerFork.LoadForEdit(DbDefaultFrame());
@@ -274,19 +289,19 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         // it16 §8.2-23: AdvancedUser는 비power 분기를 타서 it15 User와 **같은 문구**다(스코프 판정 불변).
         var (advNew, _, _, _) = MakeVm(UserRole.AdvancedUser);
         Assert.Contains("내 프레임", advNew.SaveScopeNotice);
-        Assert.DoesNotContain("서버에 등록", advNew.SaveScopeNotice);
+        Assert.DoesNotContain("서버 등록", advNew.SaveScopeNotice);
     }
 
     [Fact]
     public void IsCreateMode_Gates_LocalOnly_Banner()
     {
         // it15 F1-D1(정정): "해당 PC에서만" 배너는 기존 프레임 수정 시에만 노출한다(배너 Visibility = !IsCreateMode).
-        // 신규 생성은 기존 로직(power=서버 등록 / user=개인 로컬) 그대로라 배너 문구가 사실과 어긋난다.
+        // 신규 생성은 서버 등록이 가능한 경로(power)라 "이 PC에만 적용" 배너 문구가 사실과 어긋난다.
 
-        // ① 신규 생성(power) → 배너 숨김. SaveScopeNotice가 "서버에 등록"을 안내하므로 모순이 없다.
+        // ① 신규 생성(power) → 배너 숨김. SaveScopeNotice가 서버 등록 선택 가능성을 안내하므로 모순이 없다.
         var (powerNew, _, _, _) = MakeVm(UserRole.Admin);
         Assert.True(powerNew.IsCreateMode);
-        Assert.Contains("서버에 등록", powerNew.SaveScopeNotice);
+        Assert.Contains("서버 등록 여부는", powerNew.SaveScopeNotice);
 
         // ② 기존 프레임 수정(power, DB 기본 → fork) → 배너 노출.
         var (powerEdit, _, _, _) = MakeVm(UserRole.Admin);
@@ -330,10 +345,281 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         userVm.FrameName = "내_프레임";
         Assert.DoesNotContain("'_'가 있어", userVm.SaveScopeNotice);
 
-        // 저장은 차단되지 않는다(비차단 경고).
+        // 저장은 차단되지 않는다(비차단 경고). Admin+신규 생성이므로 확인 팝업을 한 번 거친다(체크 off = 로컬만).
         vm.FrameName = "내_프레임";
         await vm.SaveCommand.ExecuteAsync(null);
+        Assert.True(vm.IsServerRegisterConfirmVisible);
+        await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
         Assert.NotNull(local.SavedFrame);
+    }
+
+    // ── R2: 서버 등록 확인 팝업(파워 신규 생성 저장 시에만, 체크 on일 때만 DB insert) ──
+
+    /// <summary>N1: [저장]은 팝업만 띄우고 로컬·서버 어느 쪽에도 쓰지 않는다. 체크박스는 기본 on(D4).</summary>
+    [Fact]
+    public async Task Power_Create_Save_Shows_Popup_And_Persists_Nothing()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsServerRegisterConfirmVisible);
+        Assert.True(vm.RegisterToServer);           // D4: 기본 on
+        Assert.Null(repo.Saved);                    // 팝업 시점엔 아직 아무것도 쓰지 않는다
+        Assert.Null(local.SavedFrame);
+    }
+
+    /// <summary>N2: 체크 off 확인 → 로컬 공용만. #dbid를 기록하지 않아 서버 문서와 연결되지 않는다.</summary>
+    [Fact]
+    public async Task Power_Confirm_Without_Checkbox_Saves_Local_Public_Only()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.RegisterToServer = false;                               // 기본 on(D4)을 사용자가 끈 상태
+        await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);                                   // DB 미호출
+        Assert.NotNull(local.SavedFrame);
+        Assert.Null(local.SavedOwner);                             // 공용 스코프(접두 없음)
+        Assert.Equal(string.Empty, local.SavedFrame!.Id);          // #dbid 미기록
+        Assert.False(vm.IsServerRegisterConfirmVisible);           // 팝업 닫힘
+    }
+
+    /// <summary>N3: 체크 on 확인 → DB insert + 서버가 돌려준 프레임으로 로컬 캐시(#dbid 기록).</summary>
+    [Fact]
+    public async Task Power_Confirm_With_Checkbox_Registers_To_Server()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.RegisterToServer = true;
+        await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
+
+        Assert.NotNull(repo.Saved);
+        Assert.True(repo.Saved!.IsDefault);
+        Assert.Null(repo.Saved.UserId);
+        Assert.Null(local.SavedOwner);                             // 공용 캐시
+        Assert.Same(repo.Saved, local.SavedFrame);                 // 서버 반환 프레임을 그대로 캐시
+        Assert.False(vm.IsServerRegisterConfirmVisible);
+    }
+
+    /// <summary>N4: 취소는 아무것도 저장하지 않고 편집 세션을 그대로 유지한다.</summary>
+    [Fact]
+    public async Task Cancel_Server_Register_Persists_Nothing_And_Keeps_Editor()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+        vm.SlotCount = 3;
+        vm.FrameName = "작업중";
+        var image = vm.FrameImage;
+        await vm.SaveCommand.ExecuteAsync(null);
+        vm.RegisterToServer = false;               // 기본값(on)과 다른 값으로 바꿔 둔다
+
+        vm.CancelServerRegisterCommand.Execute(null);
+
+        Assert.False(vm.IsServerRegisterConfirmVisible);
+        Assert.True(vm.RegisterToServer);          // 취소도 기본값(D4=on)으로 되돌린다
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.Equal("작업중", vm.FrameName);      // 편집 세션 불변
+        Assert.Equal(3, vm.Slots.Count);
+        Assert.Same(image, vm.FrameImage);
+    }
+
+    /// <summary>
+    /// N5(R1+R2): F2로 불러온 세션도 신규 생성이므로 저장 시 서버 등록 팝업이 뜬다
+    /// (= 세션이 New임을 행동으로 증명 — fork라면 팝업이 뜨지 않는다).
+    /// </summary>
+    [Fact]
+    public async Task Picked_Frame_Session_Stays_New_And_Prompts_Server_Register()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.ApplyPickedFrame(DbDefaultFrame()));
+        vm.FrameName = "새로만든프레임";       // 스코프 충돌 없는 이름
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsServerRegisterConfirmVisible);
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+    }
+
+    /// <summary>N10(D6 원자성): 서버 등록이 실패하면 로컬 저장도 하지 않고 편집기에 머문다.</summary>
+    [Fact]
+    public async Task Server_Register_Failure_Persists_Nothing_And_Reports()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+        repo.ThrowOnSave = true;
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.RegisterToServer = true;
+        await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);                       // 부분 성공 없음
+        Assert.Contains("서버 등록 실패", vm.StatusMessage);
+        Assert.Contains("서버 오류", vm.StatusMessage);        // 구체적 사유가 가려지지 않는다
+    }
+
+    /// <summary>
+    /// N13(D4): 체크 상태는 팝업을 **다시 열 때** 기본값(on)으로 초기화된다(직전 선택 잔존 금지).
+    /// 취소 커맨드도 같은 리셋을 하므로 취소 **뒤에** 값을 일부러 되돌려 놓고 재오픈한다 — 그래야 이 단언이
+    /// 통과하는 유일한 이유가 [저장]의 리셋이 된다(취소의 리셋에 기대면 불변식을 검증하지 못한다).
+    /// </summary>
+    [Fact]
+    public async Task RegisterToServer_Resets_On_Reopen()
+    {
+        var (vm, _, _, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+
+        await vm.SaveCommand.ExecuteAsync(null);
+        vm.CancelServerRegisterCommand.Execute(null);
+        vm.RegisterToServer = false;               // 취소의 리셋을 무력화 → 재오픈 리셋만이 단언을 통과시킨다
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsServerRegisterConfirmVisible);
+        Assert.True(vm.RegisterToServer);
+    }
+
+    /// <summary>비power와 F1 편집 세션은 팝업 없이 즉시 저장된다(it15 편집=로컬 전용 정책 유지).</summary>
+    [Fact]
+    public async Task Non_New_Sessions_Save_Immediately_Without_Popup()
+    {
+        // ① AdvancedUser 신규 생성 → 개인 로컬 즉시 저장
+        var (adv, advRepo, advLocal, _) = MakeVm(UserRole.AdvancedUser);
+        Assert.True(adv.LoadImage(_imagePath));
+        await adv.SaveCommand.ExecuteAsync(null);
+        Assert.False(adv.IsServerRegisterConfirmVisible);
+        Assert.Null(advRepo.Saved);
+        Assert.NotNull(advLocal.SavedFrame);
+
+        // ② power F1 편집(DB 기본 → fork) → 로컬 공용 즉시 저장
+        var (fork, forkRepo, forkLocal, _) = MakeVm(UserRole.Admin);
+        fork.LoadForEdit(DbDefaultFrame());
+        await fork.SaveCommand.ExecuteAsync(null);
+        Assert.False(fork.IsServerRegisterConfirmVisible);
+        Assert.Null(forkRepo.Saved);
+        Assert.NotNull(forkLocal.SavedFrame);
+    }
+
+    // ── D1: 이름 충돌 / 이름 안전성 저장 전 차단(데이터 손실 방지) ──
+    // SaveLocal은 같은 이름 파일을 경고 없이 덮어쓴다 → 덮어쓰기가 세션의 의도인 EditOwnLocal만 예외.
+
+    /// <summary>N7: power 신규 생성에서 공용 스코프에 동명 프레임이 있으면 저장·팝업 모두 없다.</summary>
+    [Fact]
+    public async Task Power_Save_Blocked_When_Name_Collides_With_Public_Frame()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+        local.PublicNames.Add("프레임A");
+
+        vm.FrameName = "프레임A";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.Contains("이미 같은 이름", vm.StatusMessage);
+    }
+
+    /// <summary>N8: 비power도 개인 스코프 기준으로 동일하게 차단된다(파일명 `{계정}_{이름}` 덮어쓰기 방지).</summary>
+    [Fact]
+    public async Task AdvancedUser_Save_Blocked_When_Name_Collides_With_Own_Frame()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
+        Assert.True(vm.LoadImage(_imagePath));
+        local.UserFrames["u1"] = new List<FrameTemplate>
+        {
+            new() { Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1" }
+        };
+
+        vm.FrameName = "내프레임";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.Contains("이미 같은 이름", vm.StatusMessage);
+    }
+
+    /// <summary>N9: EditOwnLocal 세션의 같은 이름 덮어쓰기는 세션의 의도 → 충돌 가드에서 명시적 예외.</summary>
+    [Fact]
+    public async Task EditOwnLocal_Same_Name_Is_Exempt_From_Collision_Guard()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
+        local.UserFrames["u1"] = new List<FrameTemplate>
+        {
+            new() { Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1" }
+        };
+        vm.LoadForEdit(new FrameTemplate
+        {
+            Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1", IsDefault = false,
+            ImageUrl = _imagePath,
+            ImageSize = new ImageSize { Width = 1200, Height = 1600 },
+            Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
+        });
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.NotNull(local.SavedFrame);
+        Assert.Equal("내프레임", local.SavedFrame!.Name);   // 덮어쓰기 성공(차단되지 않음)
+    }
+
+    /// <summary>N11: 파일시스템 금지문자는 저장 전에 차단한다(서버에만 남는 반쪽 상태 방지).</summary>
+    [Fact]
+    public async Task Save_Blocked_When_Name_Has_Invalid_Chars()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+
+        vm.FrameName = "a/b";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.False(vm.IsServerRegisterConfirmVisible);      // 팝업도 뜨지 않는다
+        Assert.Contains("사용할 수 없는 문자", vm.StatusMessage);
+    }
+
+    /// <summary>N12: 빈 이름(공백만)도 고유 문구로 차단한다.</summary>
+    [Fact]
+    public async Task Save_Blocked_When_Name_Is_Blank()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        Assert.True(vm.LoadImage(_imagePath));
+
+        vm.FrameName = "   ";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.False(vm.IsServerRegisterConfirmVisible);
+        Assert.Contains("이름을 입력", vm.StatusMessage);
+    }
+
+    /// <summary>
+    /// N14(D1의 F1 확장분): fork 세션에서 **원본이 아닌** 다른 공용 프레임 이름을 직접 타이핑해도 차단된다.
+    /// 자동 사본 이름은 충돌 회피값이므로 정상 흐름은 영향받지 않는다.
+    /// </summary>
+    [Fact]
+    public async Task Fork_Session_Blocked_When_Name_Collides_With_Other_Public_Frame()
+    {
+        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
+        local.PublicNames.Add("다른공용");
+        vm.LoadForEdit(DbDefaultFrame());
+        Assert.Equal("공용프레임 사본", vm.FrameName);   // 전제: fork 세션 진입 완료
+
+        vm.FrameName = "다른공용";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Null(repo.Saved);
+        Assert.Null(local.SavedFrame);
+        Assert.Contains("이미 같은 이름", vm.StatusMessage);
     }
 
     [Fact]
@@ -355,9 +641,10 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         => TestImageFile.CreateInTemp(width, height, extension, gray: 160);
 
     [Fact]
-    public void ApplyPickedFrame_Copies_Slots_And_Suggests_Copy_Name()
+    public void ApplyPickedFrame_Copies_Slots_And_Keeps_Editable_Name()
     {
-        // C7: 축소 없는 크기(1200×1600) → 슬롯 좌표가 원본과 일치, 이름은 사본, 생성 모드 유지.
+        // C7(R1 반영): 축소 없는 크기(1200×1600) → 슬롯 좌표가 원본과 일치, 생성 모드 유지.
+        // 이름은 **자동 사본 네이밍 없이** 기존 값을 그대로 둔다(사본이 아니라 새 프레임 생성).
         var (vm, _, _, _) = MakeVm(UserRole.User);
         var src = new FrameTemplate
         {
@@ -377,10 +664,51 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
             Assert.Equal(src.Slots[i].Width, vm.Slots[i].Width);
             Assert.Equal(src.Slots[i].Height, vm.Slots[i].Height);
         }
-        Assert.Equal("클래식 사본", vm.FrameName);
+        Assert.Equal("새 프레임", vm.FrameName);   // 기본값 유지("클래식 사본"으로 덮어쓰지 않는다)
+        Assert.True(vm.HasPickedSource);           // 무엇을 불러왔는지 캡션으로 안내
+        Assert.Contains("클래식", vm.PickedSourceNotice);
         Assert.True(vm.IsCreateMode);          // 편집 모드로 바뀌지 않는다(_isEditing 불변)
         Assert.Equal("새 프레임 만들기", vm.EditorTitle);
         Assert.True(vm.CanSave);
+    }
+
+    /// <summary>N6(R1): 사용자가 먼저 이름을 정한 뒤 기존 프레임을 불러와도 그 이름이 보존된다.</summary>
+    [Fact]
+    public void ApplyPickedFrame_Preserves_User_Typed_Name()
+    {
+        var (vm, _, _, _) = MakeVm(UserRole.User);
+        vm.FrameName = "내작품";
+
+        Assert.True(vm.ApplyPickedFrame(new FrameTemplate
+        {
+            Id = "bundle:classic", Name = "클래식", IsDefault = true,
+            ImageUrl = _imagePath,
+            ImageSize = new ImageSize { Width = 1200, Height = 1600 },
+            Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
+        }));
+
+        Assert.Equal("내작품", vm.FrameName);          // 사본 접미 없음, 원본 이름으로 덮어쓰지도 않음
+        Assert.DoesNotContain("사본", vm.FrameName);
+    }
+
+    /// <summary>이미지를 직접 다시 불러오면 "불러온 원본" 안내가 사실과 어긋나므로 사라진다.</summary>
+    [Fact]
+    public void LoadImage_Clears_Picked_Source_Notice()
+    {
+        var (vm, _, _, _) = MakeVm(UserRole.User);
+        Assert.True(vm.ApplyPickedFrame(new FrameTemplate
+        {
+            Id = "bundle:classic", Name = "클래식", IsDefault = true,
+            ImageUrl = _imagePath,
+            ImageSize = new ImageSize { Width = 1200, Height = 1600 },
+            Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
+        }));
+        Assert.True(vm.HasPickedSource);
+
+        Assert.True(vm.LoadImage(_imagePath));
+
+        Assert.False(vm.HasPickedSource);
+        Assert.Equal(string.Empty, vm.PickedSourceNotice);
     }
 
     [Fact]

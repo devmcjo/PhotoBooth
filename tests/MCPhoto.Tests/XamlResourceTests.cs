@@ -287,6 +287,41 @@ public class XamlResourceTests
     }
 
     /// <summary>
+    /// R2/§5.7 함정 회귀 방지: 서버 등록 확인 오버레이의 상태·커맨드는 **편집기 VM**이 갖는다.
+    /// 오버레이 어느 요소에든 DataContext를 걸면 그 서브트리의 커맨드 바인딩이 **예외 없이 조용히 실패**하고
+    /// (버튼만 비활성) 저장이 영구 대기 상태가 된다 — VM 단위 테스트로는 잡을 수 없어 소스 텍스트를 검사한다.
+    /// 허용되는 DataContext는 피커 목록 ListBox의 `{Binding Picker}` 단 하나다.
+    /// 함께 6개 바인딩 문자열의 존재를 고정해 XAML 쪽 바인딩 소실도 정적으로 검출한다.
+    /// </summary>
+    [Fact]
+    public void FrameEditor_Popup_Bindings_Resolve_On_Editor_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "FrameEditorView.xaml"));
+
+        var dataContexts = Regex.Matches(text, @"DataContext\s*=\s*""([^""]*)""")
+            .Select(m => m.Groups[1].Value)
+            .ToArray();
+
+        Assert.True(dataContexts.Length == 1,
+            "FrameEditorView.xaml 의 DataContext 는 피커 목록 ListBox 1곳뿐이어야 한다. 발견: "
+            + $"{dataContexts.Length}개 [{string.Join(" | ", dataContexts)}]. "
+            + "서버 등록 확인 오버레이(또는 다른 오버레이)에 DataContext 를 걸면 확인/취소 커맨드와 상태가 "
+            + "편집기 VM에 있어 바인딩이 조용히 실패한다(예외 없이 버튼만 비활성).");
+        Assert.Equal("{Binding Picker}", dataContexts[0]);
+
+        // 오버레이·캡션이 참조하는 편집기 VM 멤버가 XAML에서 사라지지 않았는지 고정.
+        foreach (var member in new[]
+                 {
+                     "IsServerRegisterConfirmVisible", "RegisterToServer",
+                     "ConfirmServerRegisterCommand", "CancelServerRegisterCommand",
+                     "PickedSourceNotice", "HasPickedSource",
+                 })
+        {
+            Assert.Contains(member, text);
+        }
+    }
+
+    /// <summary>
     /// it15 F2-D3: 프레임 카드 공유 리소스가 테마(Controls.xaml)에 있고 기대 타입으로 해석된다.
     /// FrameSelectView와 편집기 피커가 같은 시각을 쓰기 위한 전제 — 키가 사라지면 두 화면이 함께 깨진다.
     /// </summary>
@@ -301,6 +336,141 @@ public class XamlResourceTests
             // 카드 본체가 쓰는 컨버터는 Controls.xaml 자체 정의(형제 딕셔너리 교차 참조 회피).
             Assert.NotNull(theme["FrameCard.FilePathToImage"]);
         });
+    }
+
+    // ── it20 Step 5: 대기 스피너 공유 리소스(Spinner.Ring) ──
+
+    /// <summary>T-39: 스피너 템플릿이 테마에 있고 ControlTemplate으로 해석된다(키가 사라지면 대기 오버레이가 깨진다).</summary>
+    [Fact]
+    public void Spinner_Ring_Template_Exists_In_Theme()
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            Assert.IsType<System.Windows.Controls.ControlTemplate>(theme["Spinner.Ring"]);
+        });
+    }
+
+    /// <summary>
+    /// it20 M2: Spinner.Ring의 RotateTransform이 동결되지 않아 애니메이션 가능한지 headless로 확인한다.
+    /// 속성 경로 애니메이션((UIElement.RenderTransform).(RotateTransform.Angle))을 쓰면 템플릿 Seal로 동결된
+    /// Freezable에서 "Cannot animate on an immutable object instance"가 던져지고, 그 예외는 런타임에
+    /// DispatcherUnhandledException → 홈 복귀로 이어진다. x:Name 등록 방식이 이를 막는지 여기서 고정한다.
+    /// </summary>
+    [Fact]
+    public void Spinner_Ring_Transform_Is_Animatable()
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var template = (System.Windows.Controls.ControlTemplate)theme["Spinner.Ring"];
+
+            var ctl = new System.Windows.Controls.Control { Template = template, Width = 56, Height = 56 };
+            var host = new System.Windows.Controls.Border { Child = ctl };
+            host.Measure(new System.Windows.Size(100, 100));
+            host.Arrange(new System.Windows.Rect(0, 0, 100, 100));
+            ctl.ApplyTemplate();
+
+            var ring = template.FindName("SpinnerRing", ctl) as System.Windows.Shapes.Ellipse;
+            Assert.NotNull(ring);
+            var rot = ring!.RenderTransform as System.Windows.Media.RotateTransform;
+            Assert.NotNull(rot);
+            Assert.False(rot!.IsFrozen, "RotateTransform이 동결되면 Angle 애니메이션이 런타임 예외가 된다");
+
+            // 실제 애니메이션 시작 — immutable이면 여기서 InvalidOperationException.
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(
+                0, 360, new System.Windows.Duration(TimeSpan.FromSeconds(1)))
+            {
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+            };
+            var sb = new System.Windows.Media.Animation.Storyboard();
+            System.Windows.Media.Animation.Storyboard.SetTarget(anim, rot);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(
+                anim, new System.Windows.PropertyPath(System.Windows.Media.RotateTransform.AngleProperty));
+            sb.Children.Add(anim);
+            sb.Begin();      // 예외 없이 통과해야 한다
+            sb.Stop();
+        });
+    }
+
+    /// <summary>
+    /// it20 Major 1: 템플릿 **자신의 트리거 체인**을 실제로 발화시킨다.
+    /// `Spinner_Ring_Transform_Is_Animatable`은 `Storyboard.SetTarget`으로 트랜스폼을 직접 겨냥하므로
+    /// 템플릿의 트리거를 한 줄도 실행하지 않는다. 여기서 확인하는 것은 두 가지 —
+    /// ① `EventTrigger(Loaded)` → `BeginStoryboard x:Name="SpinnerSpin"` → `Storyboard.TargetName="SpinnerRotate"`의
+    ///    **템플릿 namescope 이름 해석**이 성공하고 `Angle`에 애니메이션 클록이 실제로 붙는지
+    /// ② `Trigger(IsVisible=False)`의 `PauseStoryboard`/`ResumeStoryboard`가 **다른 종류의 트리거(EventTrigger)에
+    ///    선언된 BeginStoryboard를 이름으로 참조**하는 형태에서 예외 없이 수행되는지
+    /// ②가 실패하면 `InvalidOperationException`이 Loading→Ready 전이(가장 많이 지나가는 경로)에서 UI 스레드로
+    /// 던져져 `DispatcherUnhandledException` → `TryReturnHome()` → **손님이 촬영을 누르면 홈으로 튕긴다.**
+    /// XAML 컴파일과 테마 로드는 BAML 파싱만 하므로 `BeginStoryboardName` 해석을 검증하지 않는다.
+    /// </summary>
+    [Fact]
+    public void Spinner_Ring_Trigger_Chain_Runs_Without_Exception()
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var template = (System.Windows.Controls.ControlTemplate)theme["Spinner.Ring"];
+
+            var ctl = new System.Windows.Controls.Control { Template = template, Width = 56, Height = 56 };
+            // 실제 사용처와 같은 조건: 부모가 Visibility를 토글하고, 스피너는 처음부터 보이는 상태로 로드된다.
+            var host = new System.Windows.Controls.Border { Child = ctl, Width = 100, Height = 100 };
+            host.Measure(new System.Windows.Size(100, 100));
+            host.Arrange(new System.Windows.Rect(0, 0, 100, 100));
+            ctl.ApplyTemplate();
+
+            var ring = (System.Windows.Shapes.Ellipse)template.FindName("SpinnerRing", ctl);
+            var rot = (System.Windows.Media.RotateTransform)ring.RenderTransform;
+
+            // ① EventTrigger(Loaded) 발화 — TargetName 해석이 실패하면 여기서 예외가 난다.
+            ctl.RaiseEvent(new System.Windows.RoutedEventArgs(
+                System.Windows.FrameworkElement.LoadedEvent, ctl));
+
+            // Angle에 애니메이션 클록이 실제로 붙었는지: 애니메이션이 걸린 DP는 기본값 대신
+            // AnimationBaseValue와 구분되는 현재값을 가지며, HasAnimatedProperties가 true가 된다.
+            Assert.True(rot.HasAnimatedProperties,
+                "Loaded 트리거의 Storyboard가 SpinnerRotate.Angle에 붙지 않았다 — TargetName 해석 실패");
+
+            // ② IsVisible=False 진입 → PauseStoryboard, 복귀 → ResumeStoryboard.
+            //    BeginStoryboardName("SpinnerSpin") 해석이 실패하면 InvalidOperationException.
+            host.Visibility = System.Windows.Visibility.Collapsed;
+            ctl.UpdateLayout();
+            host.Visibility = System.Windows.Visibility.Visible;
+            ctl.UpdateLayout();
+
+            // 재개 후에도 애니메이션이 유지된다(Resume이 클록을 떼지 않는다).
+            Assert.True(rot.HasAnimatedProperties,
+                "Visibility 토글 후 Angle 애니메이션이 사라졌다 — Pause/Resume 이름 해석 확인 필요");
+        });
+    }
+
+    /// <summary>
+    /// it20 M4: 대기 오버레이 바인딩이 ViewModel 멤버와 일치하는지 정적으로 고정한다.
+    /// 원래 결함이 "IsLoading 선언은 있는데 바인딩이 없는 조용한 실패"였으므로, XAML 오타
+    /// (IsLoadng 등)나 VM 멤버 개명이 테스트로 드러나게 한다. 테마 키 해석 테스트는 Path를 보지 않는다.
+    /// (FrameEditor_Popup_Bindings_Resolve_On_Editor_Vm과 같은 계열의 정적 안전망)
+    /// </summary>
+    [Fact]
+    public void FrameSelectView_Waiting_Bindings_Exist_On_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "FrameSelectView.xaml"));
+        var vmType = typeof(MCPhoto.App.ViewModels.FrameSelectViewModel);
+
+        foreach (var member in new[]
+                 {
+                     "IsLoading", "IsLoadFailed", "IsDegraded",
+                     "LoadingMessage", "LoadNotice",
+                     "SkipServerWaitCommand", "RetryLoadCommand",
+                 })
+        {
+            // ⚠️ 부분 문자열 검사(Assert.Contains)로는 부족하다 — 이 파일 주석에 IsLoading·IsInteractive 같은
+            //    이름이 등장하므로 바인딩이 사라져도 통과한다. 실제 `{Binding <멤버>...}` 형태를 요구한다.
+            var binding = new Regex(@"\{Binding\s+" + Regex.Escape(member) + @"\s*[,}]");
+            Assert.True(binding.IsMatch(text),
+                $"FrameSelectView.xaml 에 '{{Binding {member}}}' 바인딩이 없다(주석에만 있는 것은 무효)");
+            Assert.NotNull(vmType.GetProperty(member));          // VM에 같은 이름의 public 멤버가 있다
+        }
     }
 
     // ── it14: PinPromptWindow(설정 진입 PIN 게이트 모달) StaticResource 정적 안전망 ──

@@ -25,6 +25,11 @@ it15부터 **프레임 편집은 해당 PC 로컬 전용**이다. it2의 "로컬
 - **저장 스코프는 역할 유지**: power=공용 `{이름}.png`, user=개인 `{계정}_{이름}.png`.
   power의 **신규 생성만** 여전히 DB 등록(`SaveAsync`) — 배너(정책 고정)와 `SaveScopeNotice`(실제 결과)를
   분리해 두 문장 모두 참이 되게 했다.
+- **후속 변경 예고(2026-07-30 설계 확정, 구현 대기)**: `docs/design/wpf-frame-create-from-existing-and-server-register-design.md`
+  가 **F2 "기존 프레임 불러오기"를 fork/사본이 아닌 신규 생성(`New`)**으로 바꾸고(이름 자동 "사본" 제거 —
+  사용자가 직접 입력), **power 신규 생성의 DB 등록을 저장 시 확인 팝업 체크박스(기본 off) opt-in**으로 바꾼다.
+  F1 `LoadForEdit`의 fork·사본 규칙은 그대로다. 위의 "fork 규칙" 서술을 F2에 적용하지 말 것.
+  덮어쓰기 방지는 `_sourceName` 가드 + **저장 스코프 동명 차단**(EditOwnLocal만 예외) 2중 방어로 설계했다.
 - **모달은 오버레이로**: 새 `Window`를 만들면 테스트에서 인스턴스화가 불가하다
   (`.claude/agent-memory/wpf-developer/wpf-headless-window-test-pitfall.md`). 기존 팝업들과 같이
   `Brush.Scrim` Grid 오버레이 + VM 상태 프로퍼티로 설계하면 전 로직이 단위 테스트 가능하다.

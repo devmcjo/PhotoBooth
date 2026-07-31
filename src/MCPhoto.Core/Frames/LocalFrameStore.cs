@@ -130,12 +130,16 @@ public sealed class LocalFrameStore : ILocalFrameStore
         return list;
     }
 
-    /// <summary>파일시스템 금지문자(\ / : * ? " &lt; &gt; |) 포함 시 저장 거부. sanitize 아님(원문 유지).</summary>
+    /// <summary>
+    /// 파일시스템 금지문자(\ / : * ? " &lt; &gt; |) 포함 시 저장 거부. sanitize 아님(원문 유지).
+    /// 판정은 <see cref="FrameNaming.IsFileNameSafe"/>(순수 함수)에 위임한다 — 저장 전 선검증(VM)과
+    /// 같은 기준을 쓰기 위한 단일 출처. 빈 이름/금지문자 두 갈래 예외 메시지는 그대로 유지한다.
+    /// </summary>
     private static void EnsureFileNameSafe(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
             throw new IOException("이름이 비어 있습니다.");
-        if (value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        if (!FrameNaming.IsFileNameSafe(value))
             throw new IOException($"이름에 사용할 수 없는 문자가 있습니다: {value}");
     }
 

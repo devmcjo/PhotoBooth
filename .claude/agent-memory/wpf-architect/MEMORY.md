@@ -9,3 +9,4 @@
 - [백엔드 계정/인증 계약](backend-account-auth-contract.md) — 역할 강등 서버무변경·self-signup은 canCreate 게이트 우회 필요·SSO/이메일 격리 지점·PasswordResetView 2단계 패턴
 - [it15 프레임 로컬 전용 정책](it15-frame-local-only-policy.md) — DB업데이트 경로 제거·fork 저장(이름 사본)·이름 dedup으로 재다운로드 차단·모달은 오버레이
 - [설계 문서 증분 저장](design-doc-incremental-write.md) — 절마다 Edit append(호출당 8000자 미만) — 몰아 쓰다 연결 끊겨 산출물 유실 사례
+- [프레임 로딩 대기·오버레이 대비](frame-catalog-wait-and-overlay-contrast.md) — 줄세우기+wall-clock 예산은 오진 필연(단일 비행이 정답)·로딩 상태는 finally 확정·흰 배경엔 CaptureView 오버레이 패턴 금지·ControlTemplate Freezable 애니메이션 함정
