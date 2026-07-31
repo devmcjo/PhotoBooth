@@ -6,24 +6,25 @@
 | 대상 독자 | 저장소 소유자(콘솔·시크릿 권한 보유자) |
 | 작성일 | 2026-07-31 |
 | 브랜치 | `feature/web-client-foundation` |
-| 상태 | **WBS Step 1~8 + 서버 선행작업(B1·B2·B4) 코드 완료.** 아래 A1~A5를 처리하면 실기기·종단 검증이 열린다. 사람이 눈으로 봐야 하는 실측 항목은 §10 |
+| 상태 | **WBS Step 0~8 코드 완료 + 사용자 액션 A1~A5 전부 완료·검증(2026-07-31).** 남은 것은 Step 9~17 개발과 §10의 실측뿐이다 |
 
-> **왜 이 문서가 따로 있는가**: 남은 작업이 "덜 만든 코드"가 아니라 **Google Cloud Console 조작 · Secret Manager 등록 · 버킷 CORS · 공개 배포**다. 이들은 자동화 도구가 대신할 수 없거나(콘솔 UI), 대신하면 안 되는(공개 배포) 작업이다. 순서를 틀리면 **배포가 실패**하므로 A1 → A5 순서를 지킨다.
+> **왜 이 문서가 따로 있는가**: 코드로 끝낼 수 없는 작업(콘솔 UI·시크릿·공개 배포)의 절차를 남긴다.
+> **A1~A5는 2026-07-31에 모두 완료됐다.** 아래 절차는 재구축·다른 프로젝트 이관·문제 발생 시 참조용으로 유지한다.
+> 지금 남은 사용자 작업은 **§10의 실측뿐**이다.
 
 ---
 
 ## 1. 30초 요약
 
-| # | 사용자 액션 | 없으면 막히는 것 | 소요 |
+| # | 사용자 액션 | 없으면 막히는 것 | 상태 |
 |---|-------------|------------------|------|
-| **A1** | Google Cloud Console에 **Web application** OAuth 클라이언트 생성 | 웹 로그인(Step 12) 전체 | 5분 |
-| **A2** | 웹 OAuth **시크릿·env 등록** + functions 재배포 | ⚠️ **A2 없이 functions를 배포하면 실패한다**(§3.2) | 10분 |
-| **A3** | 웹 전용 **배포 게이트 키** 발급·등록 | 백엔드 호출 전부 401 | 5분 |
-| **A4** | Storage 버킷 **CORS**(업로드 PUT) | 업로드 3단계(Step 11) | 10분 |
-| **A5** | kiosk 사이트 **첫 배포** + P1 무변경 확인 | 실기기 검증·CSP 실측 | 5분 |
+| ~~**A1**~~ | Google Cloud Console에 **Web application** OAuth 클라이언트 생성 | — | **✅ 완료** |
+| ~~**A2**~~ | 웹 OAuth **시크릿·env 등록** + functions 재배포 | — | **✅ 완료** |
+| ~~**A3**~~ | 웹 전용 **배포 게이트 키** 발급·등록 | — | **✅ 완료** |
+| ~~**A4**~~ | Storage 버킷 **CORS**(업로드 PUT) | — | **✅ 2026-07-31 완료·검증됨**(§5.3) |
+| ~~**A5**~~ | kiosk 사이트 **첫 배포** + P1 무변경 확인 | — | **✅ 2026-07-31 완료**(CSP·nosniff·캐시 헤더 실측) |
 
-- A1~A3은 서로 이어진다(A1의 산출물이 A2의 입력).
-- **A4·A5는 A1~A3과 독립**이다. 급하면 A4·A5만 먼저 해도 된다 — 게스트 촬영 경로(마일스톤 A)는 로그인이 필요 없다.
+- 재수행이 필요하면 A1~A3은 순서대로(A1의 산출물이 A2의 입력), A4·A5는 독립이다.
 - **Step 9(타임랩스) 개발은 이 중 아무것도 기다리지 않는다.** Step 6~8(카메라·촬영·합성)은 완료됐고, 실측(§10.1)은 `npm run dev`로 지금 가능하다.
 
 ---
@@ -281,7 +282,36 @@ gcloud storage buckets describe gs://mcphoto-955fb.firebasestorage.app --format=
 
 ### 5.3 검증
 
-Step 11 구현 후 브라우저 Network 탭에서 `OPTIONS 204 → PUT 200`을 확인한다. 그 전에는 구성 조회(`describe`)로 충분하다.
+**✅ 2026-07-31 적용·검증 완료.** preflight를 직접 쏘면 `gcloud` 없이도 확인할 수 있다(어느 PC에서든).
+
+```powershell
+# 허용 오리진 → Access-Control-* 헤더가 돌아온다
+curl.exe -s -o NUL -D - -X OPTIONS `
+  -H "Origin: https://mcphoto-955fb-kiosk.web.app" `
+  -H "Access-Control-Request-Method: PUT" `
+  -H "Access-Control-Request-Headers: content-type,x-goog-meta-firebasestoragedownloadtokens" `
+  "https://storage.googleapis.com/mcphoto-955fb.firebasestorage.app/cors-probe-nonexistent" |
+  Select-String -Pattern "HTTP/|access-control"
+
+# 허용 목록 밖 → Access-Control 헤더가 **없어야** 한다(차단)
+curl.exe -s -o NUL -D - -X OPTIONS `
+  -H "Origin: https://evil.example.com" -H "Access-Control-Request-Method: PUT" `
+  "https://storage.googleapis.com/mcphoto-955fb.firebasestorage.app/cors-probe-nonexistent" |
+  Select-String -Pattern "HTTP/|access-control"
+```
+
+실측 결과(허용 오리진):
+
+```
+Access-Control-Allow-Origin: https://mcphoto-955fb-kiosk.web.app
+Access-Control-Allow-Methods: GET,PUT,HEAD
+Access-Control-Allow-Headers: Content-Type,x-goog-meta-firebaseStorageDownloadTokens,x-goog-resumable
+```
+
+> 객체가 없어도(`cors-probe-nonexistent`) preflight는 **버킷 수준**에서 처리되므로 인증 없이 확인된다.
+> M14가 요구하는 `x-goog-meta-firebaseStorageDownloadTokens`가 `Allow-Headers`에 있어야 서명 PUT이 통과한다.
+
+Step 11 구현 후에는 브라우저 Network 탭에서 실제 `OPTIONS 204 → PUT 200`을 최종 확인한다.
 
 ---
 
