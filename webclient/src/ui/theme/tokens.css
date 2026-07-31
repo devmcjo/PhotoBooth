@@ -1,0 +1,62 @@
+/*
+ * 팔레트·타이포·간격 토큰 — 03 §1
+ *
+ * 규칙(01 §8 접근성):
+ *  - 터치 타깃 최소 48px
+ *  - 가로 스크롤 금지
+ *  - 다크·라이트 양쪽 지원(`prefers-color-scheme`)
+ *  - `prefers-reduced-motion` 존중
+ */
+:root {
+  color-scheme: dark light;
+
+  /* 배경·전경 */
+  --bg: #0e0e12;
+  --bg-elevated: #1a1a22;
+  --bg-scrim: rgb(0 0 0 / 65%);
+  --fg: #f4f4f7;
+  --fg-muted: #8b8b98;
+  --border: #2c2c38;
+
+  /* 강조 */
+  --accent: #ff5c8a;
+  --accent-fg: #1a0a11;
+  --success: #2ec27e;
+  --danger: #ff5c5c;
+  --info: #5c9dff;
+
+  /* 치수 */
+  --touch-min: 48px;
+  --radius: 14px;
+  --radius-sm: 8px;
+  --gap: 1rem;
+  --gap-sm: 0.5rem;
+  --gap-lg: 2rem;
+
+  /* 타이포 */
+  --font: system-ui, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  --fs-title: clamp(1.75rem, 6vw, 3rem);
+  --fs-body: clamp(1rem, 2.4vw, 1.15rem);
+  --fs-caption: 0.75rem;
+
+  --shadow: 0 10px 30px rgb(0 0 0 / 35%);
+  --transition: 160ms ease;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f7fa;
+    --bg-elevated: #ffffff;
+    --bg-scrim: rgb(0 0 0 / 45%);
+    --fg: #16161c;
+    --fg-muted: #5c5c68;
+    --border: #dcdce4;
+    --accent-fg: #ffffff;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition: 0ms;
+  }
+}

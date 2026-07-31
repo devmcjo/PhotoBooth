@@ -1,0 +1,178 @@
+/* 공통 UI 컴포넌트 — 03 §1 (터치 48px · 다크/라이트 · reduced-motion) */
+
+.button {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+  padding: 0.75rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-body);
+  cursor: pointer;
+  transition: transform var(--transition), opacity var(--transition);
+  /* 터치 지연·더블탭 확대 방지 */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+.ghost {
+  background: transparent;
+}
+
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* ── 모달 ── */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  background: var(--bg-scrim);
+  /* 배경 클릭으로 닫지 않는다(오조작 방지 — 02 §10) */
+}
+
+.dialog {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: var(--gap-lg);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+}
+
+.dialogTitle {
+  margin: 0 0 var(--gap);
+  font-size: 1.35rem;
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  justify-content: flex-end;
+  margin-top: var(--gap-lg);
+}
+
+/* ── 토스트 ── */
+
+.toastHost {
+  position: fixed;
+  inset: auto 0 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 0 var(--gap);
+  pointer-events: none;
+  z-index: 100;
+}
+
+.toast {
+  max-width: min(520px, 100%);
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border-left: 6px solid var(--info);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+/* 색만으로 구분하지 않는다 — 아이콘 접두를 함께 쓴다(M4 · 접근성) */
+.toastSuccess {
+  border-left-color: var(--success);
+}
+
+.toastError {
+  border-left-color: var(--danger);
+}
+
+/* ── 상단바 ── */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) var(--gap);
+  border-bottom: 1px solid var(--border);
+  min-height: var(--touch-min);
+}
+
+.topBarTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.topBarActions {
+  display: flex;
+  gap: var(--gap-sm);
+}
+
+/* ── 전체화면 이탈 배너 ── */
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) var(--gap);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 0.95rem;
+}

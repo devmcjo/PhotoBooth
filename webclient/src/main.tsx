@@ -1,36 +1,74 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { env, versionCaption } from "./env";
+import { App, installFirstGestureHandlers } from "./App";
+import { bootstrap, DEFAULT_BRANDING } from "@shell/bootstrap";
+import { installGlobalErrorHandler } from "@shell/globalErrorHandler";
+import { installRouter } from "@shell/router";
+import { installTokenLifecycle } from "@shell/authStore";
+import { getFullscreenController } from "@shell/fullscreenController";
+import { installVisibilityHandlers } from "@adapters/platform/visibility";
+import { requestWakeLock } from "@adapters/platform/wakeLock";
+import { logger, getLogStore } from "@adapters/storage/logStore";
+import type { Branding } from "@adapters/platform/branding";
+import "@ui/theme/tokens.css";
 import "./main.css";
 
 /**
- * Step 1 부트스트랩(최소판).
- *
- * 규격 부트스트랩 11단계(01 §4.2)는 Step 3·Step 4에서 이 파일에 순서대로 채운다:
- *   1 env 검증(완료) → 2 로그 스토어 → 3 branding fetch(800ms) → 4 설정 로드+clamp
- *   → 5 storage.persist() → 6 OPFS sessions/ 잔재 삭제 → 7 SW 등록 → 8 전역 예외
- *   → 9 OAuth 콜백 → 10 React 마운트 → 11 첫 제스처(전체화면·오디오·WakeLock)
- *
- * 현재는 배포 경로·CSP·HTTPS 확정을 위한 버전 캡션 화면만 렌더한다(11-wbs Step 1).
- * `envWarnings`는 Step 3에서 로그 스토어 초기화 직후 flush한다.
+ * 앱 진입점 — 부트스트랩 순서는 01 §4.2가 규격이다.
+ *   1~6 `shell/bootstrap.ts` · 7 SW(Step 16) · **8 전역 예외** · 9 OAuth 콜백(Step 12)
+ *   · **10 React 마운트** · **11 첫 제스처(전체화면·오디오·WakeLock)**
  */
-function BootScreen() {
-  return (
-    <>
-      <main className="boot">
-        <h1 className="boot__title">MCPhoto</h1>
-        <p className="boot__subtitle">self custom photobooth</p>
-      </main>
-      <p className="version-caption">{versionCaption(env.appVersion)}</p>
-    </>
-  );
-}
 
-const container = document.getElementById("root");
-if (container) {
+function mount(branding: Branding): void {
+  const container = document.getElementById("root");
+  if (container === null) return;
   createRoot(container).render(
     <StrictMode>
-      <BootScreen />
+      <App branding={branding} />
     </StrictMode>,
   );
 }
+
+function installShellHandlers(): void {
+  // 8. 전역 예외 — 마운트 **전에** 설치해 렌더 중 오류도 잡는다(M16).
+  installGlobalErrorHandler();
+  // M1 배선: 세션 사용자 해제 → JWT 폐기. 구독 1곳이 모든 경로를 덮는다.
+  installTokenLifecycle();
+  installRouter();
+  installVisibilityHandlers();
+  getFullscreenController().install();
+
+  // 로그는 페이지를 떠날 때 반드시 flush한다(05 §7.1).
+  window.addEventListener("pagehide", () => void getLogStore()?.flush());
+}
+
+function installFirstGesture(): void {
+  // 11. 전체화면·Wake Lock·오디오는 모두 **사용자 제스처**를 요구한다.
+  //     Home의 [촬영 시작]과 별개로 화면 아무 곳이나 첫 터치에서 시도한다.
+  installFirstGestureHandlers(() => {
+    void getFullscreenController().request();
+    void requestWakeLock();
+    logger.info("첫 제스처 처리(전체화면·WakeLock 요청)");
+  });
+}
+
+bootstrap().then(
+  (result) => {
+    installShellHandlers();
+    mount(result.branding);
+    installFirstGesture();
+    logger.info("첫 화면 마운트 완료", {
+      opfsCapability: result.opfsCapability,
+      persistState: result.storage.persistState,
+    });
+  },
+  (err: unknown) => {
+    // 부트스트랩이 실패해도 **화면은 뜬다**(M16 정신 — 크래시 대신 복구).
+    installShellHandlers();
+    mount(DEFAULT_BRANDING);
+    installFirstGesture();
+    logger.fatal("부트스트랩 실패 — 기본값으로 진행", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  },
+);
