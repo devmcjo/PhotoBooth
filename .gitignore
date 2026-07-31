@@ -51,7 +51,10 @@ tools/ffmpeg/*.exe
 tools/ffmpeg/*.dll
 
 # 로컬 런타임 데이터
-result/
+# ⚠️ 앵커(`/`)를 반드시 유지한다. 앵커 없는 `result/`는 **모든 하위 경로의 result 폴더**를 삼켜
+#    `webclient/src/screens/result/`(제품 소스)가 통째로 추적에서 빠졌던 적이 있다(2026-07-31).
+#    Windows 앱이 실행 경로 옆에 만드는 것이 대상이며, bin/·publish/는 이미 위에서 무시된다.
+/result/
 *.log
 *.ini
 !appsettings.ini.sample
