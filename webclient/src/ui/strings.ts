@@ -69,10 +69,31 @@ export const STRINGS = {
 
   upload: {
     nothingToSend: "전송할 결과물이 없습니다.",
-    inProgress: "전송 중입니다…",
-    /** `{n}`을 보관 시간으로 치환한다. */
-    retentionNotice: "{n}시간 후 자동 삭제됩니다.",
+    /** ⚠️ 카탈로그 표기(analysis/13 §14)는 말줄임표 3점 "업로드 중..."이다. */
+    inProgress: "업로드 중...",
+    stagePhoto: "사진 업로드 중",
+    stageTimelapse: "영상 업로드 중",
+    stageFinalizing: "마무리 중",
+    /**
+     * `{n}`을 보관 시간으로 치환한다.
+     * ⚠️ 카탈로그 문구 **전체**를 쓴다(analysis/13 §14) — 짧게 줄이면 무엇이 삭제되는지 모호해진다.
+     */
+    retentionNotice: "업로드된 사진·영상은 {n}시간 후 자동 삭제됩니다.",
+    tempUserTimeExceeded: "무료 사용 시간이 지났습니다. 관리자에게 문의해주세요.",
+    tempUserCountExceeded: "무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요.",
+    failedSaved: "전송 실패 — 사진은 기기에 저장되었습니다.",
+    failedNotSaved: "전송에 실패했습니다. 로컬 저장을 켜면 기기에 보관됩니다.",
+    qrRenderFailed: "QR을 만들 수 없습니다. 아래 [기기에 저장]으로 받아 주세요.",
+    qrAltText: "다운로드 페이지 QR 코드",
     saveToDevice: "기기에 저장",
+    saveToDevicePhoto: "사진 저장",
+    saveToDeviceVideo: "영상 저장",
+  },
+
+  done: {
+    /** `{n}`을 앱 이름으로 치환하지 않는다 — 브랜딩은 화면이 앞에 붙인다. */
+    thanks: "이용해 주셔서 감사합니다.",
+    goHome: "처음으로",
   },
 
   storage: {

@@ -7,6 +7,7 @@ import {
   type CaptureSessionState,
 } from "@domain/capture/captureSession";
 import type { FilterKind } from "@domain/filters/filterParams";
+import type { OutputFormat } from "@domain/settings/appSettings";
 
 /**
  * 세션 컨텍스트 — `currentUser` + 촬영 세션 데이터의 **단일 소스** (02 §5)
@@ -28,12 +29,31 @@ export interface CapturedCut {
   readonly thumbnail?: ImageBitmap;
 }
 
+/**
+ * 합성 결과물 인계분.
+ *
+ * `useResultCompose`는 Blob을 React ref에 들고 있어 `Result`가 언마운트되면 접근 경로가
+ * 사라진다. 업로드는 `Qr` 화면이 하므로(03 §9.1) **합성 결과만** 세션 컨텍스트로 올린다.
+ * (타임랩스는 싱글턴 서비스가 들고 있어 인계가 필요 없다.)
+ */
+export interface FinalImageArtifact {
+  readonly blob: Blob;
+  /**
+   * 합성 시점의 출력 포맷. prepare의 `ext`·`contentType`은 **이 값**을 따라야 한다 —
+   * `Result → Settings → Result` 왕복으로 설정이 바뀌어도 이미 만들어진 바이트와
+   * `Content-Type` 선언이 어긋나지 않게 한다.
+   */
+  readonly format: OutputFormat;
+}
+
 export interface SessionState {
   readonly currentUser: SessionUser | null;
   readonly session: CaptureSessionState<CapturedCut>;
   /** 세션 ID(`{yyyyMMdd}_{HHmmss}_{uuid}` — M13). 촬영 시작 시 발급. */
   readonly sessionId: string | null;
   readonly selectedFilter: FilterKind;
+  /** 합성 결과 인계분(`Qr` 화면의 업로드 입력). 합성 전·폐기 후에는 null. */
+  readonly finalImage: FinalImageArtifact | null;
 
   /** 로그인. **유일한 사용자 설정 경로**다. */
   login(user: SessionUser): void;
@@ -42,6 +62,8 @@ export interface SessionState {
   setSession(session: CaptureSessionState<CapturedCut>): void;
   setSessionId(sessionId: string | null): void;
   setFilter(filter: FilterKind): void;
+  /** 합성 성공마다 교체한다. `Blob`은 `ImageBitmap`과 달리 명시 해제가 없다(GC). */
+  setFinalImage(artifact: FinalImageArtifact | null): void;
   /**
    * 촬영 데이터만 폐기한다(로그인 유지 — M3).
    * 홈 복귀·유휴 만료·전역 예외 복구가 모두 이 경로를 쓴다.
@@ -62,6 +84,7 @@ export const sessionStore = createStore<SessionState>()(
     session: createEmptySession<CapturedCut>(),
     sessionId: null,
     selectedFilter: "None",
+    finalImage: null,
 
     login(user) {
       set({ currentUser: user });
@@ -84,12 +107,18 @@ export const sessionStore = createStore<SessionState>()(
       set({ selectedFilter: filter });
     },
 
+    setFinalImage(artifact) {
+      set({ finalImage: artifact });
+    },
+
     discardCaptureData() {
       releaseThumbnails(get().session);
       set({
         session: createEmptySession<CapturedCut>(),
         sessionId: null,
         selectedFilter: "None",
+        // 인계분도 함께 버린다 — 다음 세션이 이전 사진을 올리면 안 된다.
+        finalImage: null,
       });
     },
   })),

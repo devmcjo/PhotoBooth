@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| 최종 업데이트 | 2026-07-31 (it20 프레임 다운로드 대기 UI·ffmpeg 라이선스 검토 문서 등재 — 등재 누락분 보완) |
+| 최종 업데이트 | 2026-07-31 (웹 클라이언트 Step 11 업로드·QR 설계 등재) |
 | 갱신 규칙 | 새 설계 문서를 추가하면 이 인덱스의 해당 절에 등재한다. 이터레이션이 완료돼 내용이 `docs/analysis`에 흡수되면 §4로 옮긴다 |
 
 ---
@@ -22,6 +22,7 @@
 | 촬영 컷 수·슬롯 관계를 바꾼다 | [it17 컷 수 자동 모드](./wpf-it17-auto-cutcount-design.md) |
 | 웹 다운로드 페이지를 바꾼다 | [it17 자동 저장·공유](./web-it17-download-share-design.md) → [웹 아키텍처](./web-architecture.md) + [Firebase 계약](./firebase-contract.md) |
 | 웹 클라이언트(키오스크)의 타임랩스를 바꾼다 | [Step 9 타임랩스 인코더](./web-step9-timelapse-encoder-design.md) → [`web-client/04 §7`](../web-client/04-media-pipeline-web.md) + [`analysis/14 §7`](../analysis/14-media-pipeline-spec.md) |
+| 웹 클라이언트(키오스크)의 업로드·QR을 바꾼다 | [Step 11 업로드·QR·Done](./web-step11-upload-qr-done-design.md) → [`web-client/06 §4·§5`](../web-client/06-backend-integration-web.md) + [`analysis/31 §5·§7`](../analysis/31-backend-api-reference.md) |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
 
 ---
@@ -52,6 +53,7 @@
 | [web-it17-download-share-design](./web-it17-download-share-design.md) | **it17** 원클릭 자동 저장(fetch→Blob→`<a download>`)·전역 degrade 폴백·상단 공유 버튼(링크 복사+토스트)·파일명 규칙·`MCPhoto` 네이밍. **버킷 CORS(GET) 선행 조건 포함** |
 | [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
 | [web-wbs](./web-wbs.md) | 웹 작업 분해 |
+| [web-step11-upload-qr-done-design](./web-step11-upload-qr-done-design.md) | **키오스크 웹 클라이언트 WBS Step 11**(★마일스톤 A) 상세 설계. 업로드 3단계(prepare → **XHR 서명 PUT**(진행률·`requiredHeaders` 전량 순회 — M14) → commit)·ECC **Q** QR·`Done` 자동 홈. **업로드 실행 주체를 `Qr` 화면으로 확정한 근거**(Windows `QrPopupViewModel`·[재시도] 중복 진입점), `qrUsageStore`로 `isTempUserBlocked` 실배선, `qrcode-generator@2.0.4`(MIT) 도입 근거 포함 |
 | [web-step10-local-save-design](./web-step10-local-save-design.md) | **키오스크 웹 클라이언트 WBS Step 10** 상세 설계. 합성 결과·타임랩스의 OPFS 보관(Worker 경계 필수 — Safari에 `createWritable` 없음), 폴더명 규칙(Windows `LocalSaveService`와 동일 유도), 보관 한도·회수, 사용자 지정 폴더 핸들을 **로그 DB와 분리된** IndexedDB에 두는 근거 |
 | [web-step9-timelapse-encoder-design](./web-step9-timelapse-encoder-design.md) | **키오스크 웹 클라이언트**([`docs/web-client/`](../web-client/README.md)) **WBS Step 9** 상세 설계. 스풀(≤15fps JPEG→OPFS) + 종료 시 실경과 선별 → WebCodecs/mp4-muxer(Worker) → MediaRecorder(메인) → `null` 3경로. **`mp4-muxer@5.2.2`(MIT) 도입 근거·`THIRD-PARTY.md` 신설** 포함 |
 

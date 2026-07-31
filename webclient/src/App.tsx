@@ -16,7 +16,10 @@ import {
   FrameSelectView,
   GuideView,
   HomeView,
+  ResultView,
 } from "@ui/views/FlowViews";
+import { QrView } from "@ui/views/QrView";
+import { DoneView } from "@ui/views/DoneView";
 import { formatCount, STRINGS } from "@ui/strings";
 import { env, versionCaption } from "./env";
 import type { Branding } from "@adapters/platform/branding";
@@ -190,6 +193,12 @@ function ScreenRouter({
       return <CaptureView />;
     case "CutSelect":
       return <CutSelectView />;
+    case "Result":
+      return <ResultView />;
+    case "Qr":
+      return <QrView />;
+    case "Done":
+      return <DoneView appName={branding.appName} />;
     default:
       return <DummyScreen screen={screen} />;
   }

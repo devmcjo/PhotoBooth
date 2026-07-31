@@ -279,6 +279,16 @@ describe("shellStore — 홈 복귀(02 §2.5)", () => {
     await shellStore.getState().returnHome("테스트");
     expect(shellStore.getState().modals).toHaveLength(0);
   });
+
+  it("합성 결과 인계분(finalImage)도 함께 폐기한다(Step 11)", async () => {
+    // `Qr` 화면의 업로드 입력이다 — 남아 있으면 다음 세션이 이전 사진을 올린다.
+    sessionStore.getState().setFinalImage({ blob: new Blob(["x"]), format: "Jpg" });
+    expect(sessionStore.getState().finalImage).not.toBeNull();
+
+    await shellStore.getState().returnHome("테스트");
+
+    expect(sessionStore.getState().finalImage).toBeNull();
+  });
 });
 
 describe("shellStore — 모달 스택·토스트", () => {

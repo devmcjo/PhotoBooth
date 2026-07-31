@@ -193,6 +193,37 @@
   font-size: 0.95rem;
 }
 
+/* ── 업로드 · QR ── */
+
+.qrStage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+  width: 100%;
+  max-width: 560px;
+  min-height: 0;
+}
+
+/*
+ * ⚠️ 배경 흰색 고정 — 다크모드에서도 반전하지 않는다(스캐너 호환 — 03 §9).
+ * `pixelated`: 정수 배율로 그린 모듈을 CSS가 부드럽게 뭉개면 인식률이 떨어진다.
+ */
+.qrCanvas {
+  display: block;
+  width: min(100%, 60vh);
+  height: auto;
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 0;
+}
+
+.uploadProgress {
+  width: min(100%, 320px);
+  height: 0.5rem;
+}
+
 /* ── 결과 ── */
 
 .resultImage {

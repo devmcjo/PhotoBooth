@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { runResultNext, type ResultNextDeps } from "@screens/result/resultNext";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  defaultResultNextDeps,
+  runResultNext,
+  type ResultNextDeps,
+} from "@screens/result/resultNext";
+import type { SessionUser } from "@domain/accounts/sessionUser";
+import type { QrUsage, QrUsageService } from "@adapters/http/qrUsageService";
+import { installQrUsageLifecycle, uninstallQrUsageLifecycle } from "@shell/qrUsageStore";
 import type { ResultSaveInput, ResultSaveOutcome } from "@adapters/storage/resultSaver";
 import type { TimelapseResult } from "@adapters/encode/timelapseEncoder";
 import { DEFAULT_SETTINGS } from "@domain/settings/appSettings";
@@ -224,5 +234,88 @@ describe("runResultNext — QR 분기(effective 판정)", () => {
   it("QR 설정이 꺼져 있으면 Done으로 간다", async () => {
     const h = harness({ settings: () => ({ ...DEFAULT_SETTINGS, EnableQrDelivery: false }) });
     expect((await runResultNext(h.deps)).destination).toBe("Done");
+  });
+});
+
+// ─────────────── Step 11 추가: isTempUserBlocked 실배선 · 업로드 위치 고정 ───────────────
+
+const RESULT_NEXT_SOURCE = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "..",
+    "src",
+    "screens",
+    "result",
+    "resultNext.ts",
+  ),
+  "utf8",
+);
+
+const TEMP_USER: SessionUser = {
+  id: "t1",
+  role: "temp_user",
+  createdAt: "2026-07-31T00:00:00Z",
+  email: null,
+  authMethod: "google",
+  hasPin: false,
+};
+
+const BLOCKED_USAGE: QrUsage = {
+  role: "temp_user",
+  blocked: true,
+  reason: "count",
+  remainingMs: 0,
+  remainingCount: 0,
+  limits: { qrHours: 24, qrCount: 10 },
+};
+
+function usageService(value: QrUsage): QrUsageService {
+  return { fetch: async () => value };
+}
+
+afterEach(() => {
+  uninstallQrUsageLifecycle();
+});
+
+describe("defaultResultNextDeps — isTempUserBlocked 실배선(Step 11)", () => {
+  it("미조회 상태에서는 허용한다(fail-open) → Qr", async () => {
+    const h = harness({
+      isTempUserBlocked: defaultResultNextDeps({ finalBlob: () => null }).isTempUserBlocked,
+    });
+    expect((await runResultNext(h.deps)).destination).toBe("Qr");
+  });
+
+  it("qrUsageStore가 차단 상태면 Done으로 간다", async () => {
+    const listeners: ((user: SessionUser | null) => void)[] = [];
+    installQrUsageLifecycle({
+      service: usageService(BLOCKED_USAGE),
+      subscribe: (listener) => {
+        listeners.push(listener);
+        return () => listeners.splice(0, listeners.length);
+      },
+    });
+
+    // temp_user 로그인 → 캐시가 채워진다(동기 판정의 근거).
+    listeners[0]?.(TEMP_USER);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const h = harness({
+      isTempUserBlocked: defaultResultNextDeps({ finalBlob: () => null }).isTempUserBlocked,
+    });
+    expect((await runResultNext(h.deps)).destination).toBe("Done");
+  });
+});
+
+describe("resultNext — 업로드는 여기서 하지 않는다 (03 §8.1 · §9.1)", () => {
+  it("소스에 업로드 호출이 0건이다(소유자는 Qr 화면)", () => {
+    for (const forbidden of ["uploads/prepare", "uploads/commit", "runUpload"]) {
+      expect(
+        RESULT_NEXT_SOURCE,
+        `${forbidden} — 업로드 3단계의 소유자는 'Qr' 화면(screens/qr/uploadRunner.ts)이다`,
+      ).not.toContain(forbidden);
+    }
   });
 });

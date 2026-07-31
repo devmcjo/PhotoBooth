@@ -535,7 +535,34 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] **게스트로 촬영하면 `Qr`을 건너뛰고 `Done`으로 가며 업로드 요청이 0건**이다(Network 확인). 업로드 실패 시 **QR이 뜨지 않고** [완료]로 진행 가능하며 결과물이 로컬에 남아 있다. 같은 세션 ID로 재commit하지 않는다. 로그에 서명 URL·토큰이 없다. **제품 코드에 QR 게이트 우회 경로가 없다**(grep 확인).
   - [trigger] QR 렌더는 commit 성공 후에만. 업로드는 **effective QR on** + 전송 대상이 1개 이상일 때만.
 - **롤백**: `Qr`·`Done` 화면과 PUT 코드 제거(결과 화면에서 종료).
-- [ ] 완료
+- [x] **완료 (2026-07-31)** — 설계: [`docs/design/web-step11-upload-qr-done-design.md`](../design/web-step11-upload-qr-done-design.md)
+  - **산출물(신규 11)**: `domain/upload/qrRenderPlan.ts`(여백 4모듈·정수 배율) · `domain/upload/exportFileName.ts`(P1 페이지와 같은 규칙, **UUID 미포함**) ·
+    `adapters/qr/qrService.ts`(ECC **Q** 고정 · canvas 직접 렌더) · `adapters/platform/fileExport.ts`(`<a download>` + revoke 지연) ·
+    `shell/qrUsageStore.ts`(계정 변경 1회 조회 · 동기 판정 · fail-open) · `screens/qr/uploadRunner.ts`(3단계 오케스트레이션, React 무관) ·
+    `screens/qr/useUploadRun.ts` · `screens/done/doneAutoHome.ts`(6초 실경과) · `ui/views/QrView.tsx` · `ui/views/DoneView.tsx` ·
+    `tests/unit/{http/uploadGateway,screens/uploadRunner,screens/doneAutoHome,shell/qrUsage,qr/qrService}.test.ts`
+  - **수정**: `adapters/http/uploadGateway.ts`(**XHR `put()`** 추가 — 진행률·`requiredHeaders` 전량 순회·판별 유니온) · `shell/sessionStore.ts`(`finalImage` 인계 + `discardCaptureData`에서 폐기) ·
+    `screens/result/useResultCompose.ts`(합성 성공 시 인계) · `screens/result/resultNext.ts`(`isTempUserBlocked` 실배선 + **잘못된 예약 주석 정정**) ·
+    `main.tsx`(`installQrUsageLifecycle`) · `App.tsx`(라우팅) · `ui/strings.ts` · `ui/views/screens.module.css` · `package.json`·`THIRD-PARTY.md`
+  - **검증(실측)**: `npx tsc --noEmit` 오류 0 · `npx vitest run` **873 통과(34파일)** — 758/29에서 **+115** · `npx vite build` 성공(번들 217→266 kB, gzip 74→92 kB) ·
+    `npx vitest run --coverage` `src/domain` 라인 **98.72%**(임계 95) · `grep -rn "forceQr\|skipQrGate\|bypass" src/` **0건** · `docs/spec-vectors/` **무변경 → `dotnet test`는 수행 대상 아님**
+  - **의존성**: `qrcode-generator@2.0.4`(MIT · 런타임 의존 0 · 자체 `.d.ts`) **캐럿 없는 정확 핀**. `THIRD-PARTY.md`에 등재(LICENSE 파일이 없고 소스 헤더에 MIT 고지가 있다는 점까지 기록).
+  - ⚠️ **설계 이탈 ①(가장 중요)**: **업로드 3단계의 실행 주체를 `Qr` 화면으로 확정**했다. 최초 지시와 `resultNext.ts`의 예약 주석은 `runResultNext` 안이었으나,
+    ① [03 §8.1](./03-screens-spec.md)의 [다음] 순서에 업로드가 **없고** ② [03 §9.1](./03-screens-spec.md)이 업로드를 `Qr` 진입 절차로 규정하며
+    ③ Windows도 `QrPopupViewModel.OnEnterAsync`가 수행하고 ④ [재시도]가 `Qr` 화면 액션이라 양쪽에 두면 **같은 부수효과의 진입점이 2개**가 된다.
+    M6-W는 `save`가 `go`보다 앞이므로 **구조적으로** 유지되고 `resultNext.test.ts`의 `["finishTimelapse","save","go"]`도 **무변경**이다.
+    잘못된 예약 주석은 `resultNext.ts`와 [15 §6](./15-implementation-conventions.md) Step 10 절에서 **정정**했고, `resultNext.ts` 소스에
+    `uploads/prepare`·`uploads/commit`·`runUpload`가 0건임을 **정적 테스트로 고정**했다.
+  - ⚠️ **설계 이탈 ②**: Playwright E2E 2종(`upload-qr`·`guest-flow`)을 만들지 않았다 — 저장소에 Playwright 설치·설정이 없다. **Step 17로 이월**(아래 Step 17 절에 명시).
+  - ⚠️ **설계 이탈 ③**: `prepare`의 `bucket`으로 설정 `StorageBucket`을 **갱신하지 않는다**. 웹은 URL을 재조립하지 않고 `downloadUrl`을 그대로 넘기므로 이득이 없고,
+    `StorageBucket`은 `GUEST_LOCKED_KEYS`라 손님 세션에서 쓰면 권한 축이 흐려진다. 값은 **로그로만** 남긴다.
+  - ⚠️ **설계 이탈 ④**: 서명 PUT이 예외 대신 **판별 유니온**(`SignedPutOutcome`)을 돌려준다 — [15 §2](./15-implementation-conventions.md) "어댑터는 예외를 전파하지 않는다"를 따랐다([06 §4.2](./06-backend-integration-web.md)의 `reject` 예시 코드와 다르다. 계약은 "XHR로 진행률"이다).
+  - ⚠️ **설계 이탈 ⑤**: `STRINGS.upload.retentionNotice`·`inProgress`를 `analysis/13 §14` 카탈로그 문구로 **정정**했다(사용처 0건이라 회귀 없음).
+  - ⚠️ **설계 이탈 ⑥**: 진행률 가중치는 이식된 `overallProgress`(**활성 단계 균등**)를 그대로 쓰고, 대신 **[06 §4.5](./06-backend-integration-web.md) 문서를 구현에 맞게 정정**했다(표시값이고 계약이 아니며 교차 벡터 대상도 아니다).
+  - ⚠️ **설계 이탈 ⑦(범위 외 발견 + 수정)**: `App.tsx`의 `ScreenRouter`에 **`Result` 케이스가 빠져 있었다** — Step 8/10이 `ResultView`를 만들고 라우팅을 붙이지 않아 `Result`가 더미 화면으로 렌더됐다.
+    그대로 두면 마일스톤 A 경로가 화면에서 도달 불가라 `Result`·`Qr`·`Done` 3케이스를 함께 붙였다.
+  - **미검증(사용자 액션 V20)**: 브라우저 서명 PUT 실동작(`OPTIONS 204 → PUT 200`)·`lengthComputable` 실관측·폰 QR 스캔·[기기에 저장] 실파일 — **5건 전부 브라우저/폰이 필요해 추정 통과 처리하지 않았다.**
+    절차는 [14 §10.5](./14-handoff-and-user-actions.md)에 **V20**으로 등재했다. ⚠️ **폰 스캔은 Step 12(로그인) 이후**에만 가능하다(게스트는 `Qr`에 도달하지 않는다 — VF-11).
 
 ---
 
@@ -657,8 +684,15 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
 - **Context Brief**: [10 §5](./10-testing-and-acceptance.md)의 **E1~E24 전부(E1b·E3b 포함)** 를 자동화하고, [10 §6](./10-testing-and-acceptance.md) 매트릭스의 실기기에서 수동 체크리스트를 수행한다. 마지막으로 [10 §8](./10-testing-and-acceptance.md) 수락 체크리스트를 채운다.
 - **대상 파일**: `webclient/tests/e2e/**`, `webclient/playwright.config.ts`, `docs/web-client/10-testing-and-acceptance.md`(성능 결과 기록), `docs/web-client/12-web-vs-windows-differences.md`(차이 최종 확인)
 - **선행 조건**: Step 1~16 전부
+- **⚠️ 앞 Step에서 이월된 것**: **Playwright 도입 자체가 이 Step이다.** 저장소에 Playwright 설치·설정이 없어 Step 11이 E2E를 만들지 않고 넘겼다(2026-07-31 승인).
+  구체적으로 이월된 시나리오 2종:
+  | 이월분 | 내용 | 원래 Step |
+  |--------|------|-----------|
+  | `e2e/upload-qr.spec.ts` | effective QR을 목으로 `true` 고정 → 촬영 완주 → `OPTIONS 204 → PUT 200` → QR 렌더 → 실패 시 QR 미표시 + [완료] 진행 가능 | Step 11 |
+  | `e2e/guest-flow.spec.ts` | **게스트는 `Qr`을 건너뛰고 `Done`으로 끝나며 업로드 요청이 0건**이다(VF-11) | Step 11 |
+  Step 11은 이 둘을 node 단위 테스트(`uploadRunner.test.ts`·`uploadGateway.test.ts`)와 [14 §10.5](./14-handoff-and-user-actions.md)의 **V20 실측**으로 대체했다.
 - **구현 내용**:
-  - Playwright: Chromium(fake device) + WebKit. E1~E24(E1b·E3b 포함) 시나리오 구현. CI에서 실행 가능하게(헤드리스).
+  - Playwright: Chromium(fake device) + WebKit. E1~E24(E1b·E3b 포함) 시나리오 구현. CI에서 실행 가능하게(헤드리스). **위 이월분 2종 포함.**
   - 실기기: Windows Chrome · Android 태블릿 Chrome · iPadOS Safari **최소 3대**에서 [10 §6.3](./10-testing-and-acceptance.md) 체크리스트 수행 및 성능 수치 기록(OA-3·OA-4·OA-6·OA-7 검증).
   - 미등재 동작 차이가 발견되면 [12](./12-web-vs-windows-differences.md)에 행을 추가한다.
 - **검증 명령**: `npx playwright test` · 실기기 체크리스트 · `npx vitest run --coverage`

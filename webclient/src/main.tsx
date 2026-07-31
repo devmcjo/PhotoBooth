@@ -5,6 +5,7 @@ import { bootstrap, DEFAULT_BRANDING } from "@shell/bootstrap";
 import { installGlobalErrorHandler } from "@shell/globalErrorHandler";
 import { installRouter } from "@shell/router";
 import { installTokenLifecycle } from "@shell/authStore";
+import { installQrUsageLifecycle } from "@shell/qrUsageStore";
 import { getFullscreenController } from "@shell/fullscreenController";
 import { installVisibilityHandlers } from "@adapters/platform/visibility";
 import { requestWakeLock } from "@adapters/platform/wakeLock";
@@ -34,6 +35,8 @@ function installShellHandlers(): void {
   installGlobalErrorHandler();
   // M1 배선: 세션 사용자 해제 → JWT 폐기. 구독 1곳이 모든 경로를 덮는다.
   installTokenLifecycle();
+  // TempUser 무료 한도 캐시: 계정이 temp_user로 바뀔 때만 1회 조회한다(07 §7).
+  installQrUsageLifecycle();
   installRouter();
   installVisibilityHandlers();
   getFullscreenController().install();

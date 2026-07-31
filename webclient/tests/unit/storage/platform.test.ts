@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyBrandingToDocument,
   BRANDING_TIMEOUT_MS,
@@ -6,6 +6,13 @@ import {
   loadBranding,
   parseBranding,
 } from "@adapters/platform/branding";
+import { canExportFile, exportBlob, type FileExportDeps } from "@adapters/platform/fileExport";
+import {
+  attachLogStore,
+  createLogStore,
+  createMemoryLogSink,
+  detachLogStore,
+} from "@adapters/storage/logStore";
 import {
   describePersistState,
   freeRatio,
@@ -180,6 +187,130 @@ describe("persistStorage — 영속 요청 (05 §5.5)", () => {
     });
     expect(status.usage).toBe(250);
     expect(status.quota).toBe(1000);
+  });
+});
+
+// ─────────────────── fileExport — [기기에 저장] (WD3 ③ · 03 §9.3) ───────────────────
+
+interface ExportHarness {
+  readonly deps: FileExportDeps;
+  readonly created: string[];
+  readonly revoked: string[];
+  readonly clicks: number;
+  readonly anchors: { href: string; download: string }[];
+  runDeferred(): void;
+}
+
+function exportHarness(options: { supported?: boolean; clickThrows?: boolean } = {}): ExportHarness {
+  const supported = options.supported ?? true;
+  const created: string[] = [];
+  const revoked: string[] = [];
+  const anchors: { href: string; download: string }[] = [];
+  const deferred: (() => void)[] = [];
+  let clicks = 0;
+  let nextUrl = 0;
+
+  const harness: ExportHarness = {
+    created,
+    revoked,
+    anchors,
+    get clicks() {
+      return clicks;
+    },
+    runDeferred() {
+      for (const fn of deferred.splice(0, deferred.length)) fn();
+    },
+    deps: {
+      doc: {
+        createElement: () => {
+          const anchor = {
+            href: "",
+            download: "",
+            rel: "",
+            click: () => {
+              clicks++;
+              // 기능 감지용 프로브 앵커는 click되지 않는다 — 실제 내보내기만 기록한다.
+              anchors.push({ href: anchor.href, download: anchor.download });
+              if (options.clickThrows === true) throw new Error("사용자 제스처 없음");
+            },
+          };
+          // 미지원 환경 흉내 — `download` 속성이 아예 없다.
+          return (supported ? anchor : { click: () => undefined }) as unknown as HTMLElement;
+        },
+      } as unknown as Pick<Document, "createElement">,
+      createObjectUrl: () => {
+        const url = `blob:fake/${nextUrl++}`;
+        created.push(url);
+        return url;
+      },
+      revokeObjectUrl: (url) => revoked.push(url),
+      defer: (fn) => deferred.push(fn),
+    },
+  };
+  return harness;
+}
+
+beforeEach(() => {
+  detachLogStore();
+  attachLogStore(createLogStore({ sink: createMemoryLogSink(), now: () => 0 }));
+});
+
+describe("fileExport — 기능 감지", () => {
+  it("`download` 속성이 있으면 지원이다", () => {
+    expect(canExportFile(exportHarness().deps)).toBe(true);
+  });
+
+  it("`download`가 없으면 미지원이다(타입을 믿지 않는다 — 함정 #2)", () => {
+    expect(canExportFile(exportHarness({ supported: false }).deps)).toBe(false);
+  });
+
+  it("document가 없으면 미지원이다(Worker·SSR)", () => {
+    expect(canExportFile({ doc: null })).toBe(false);
+  });
+});
+
+describe("fileExport — 내보내기와 URL 해제", () => {
+  it("objectURL 1회 생성 → click → revoke 1회다", () => {
+    const h = exportHarness();
+    const blob = new Blob([new Uint8Array(16)]);
+
+    expect(exportBlob(blob, "MCPhoto_20260730_143022.jpg", h.deps)).toBe(true);
+    expect(h.created).toHaveLength(1);
+    expect(h.clicks).toBe(1);
+    expect(h.anchors[0]!.download).toBe("MCPhoto_20260730_143022.jpg");
+    expect(h.anchors[0]!.href).toBe(h.created[0]);
+
+    // 즉시 revoke하면 일부 브라우저가 다운로드를 취소한다 → 다음 태스크로 미룬다.
+    expect(h.revoked).toEqual([]);
+    h.runDeferred();
+    expect(h.revoked).toEqual(h.created);
+  });
+
+  it("미지원 환경에서는 false이고 예외가 나지 않는다", () => {
+    const h = exportHarness({ supported: false });
+    expect(() => exportBlob(new Blob(["x"]), "MCPhoto.jpg", h.deps)).not.toThrow();
+    expect(exportBlob(new Blob(["x"]), "MCPhoto.jpg", h.deps)).toBe(false);
+    expect(h.created).toEqual([]);
+  });
+
+  it("click이 던져도 URL을 흘리지 않고 false를 돌려준다", () => {
+    const h = exportHarness({ clickThrows: true });
+    expect(exportBlob(new Blob(["x"]), "MCPhoto.jpg", h.deps)).toBe(false);
+    expect(h.revoked).toEqual(h.created);
+  });
+
+  it("파일 2개는 호출 2회다(한 클릭 = 한 파일)", () => {
+    const h = exportHarness();
+    exportBlob(new Blob(["a"]), "MCPhoto_20260730_143022.jpg", h.deps);
+    exportBlob(new Blob(["b"]), "MCPhoto_20260730_143022_timelapse.mp4", h.deps);
+    h.runDeferred();
+
+    expect(h.created).toHaveLength(2);
+    expect(h.revoked).toHaveLength(2);
+    expect(h.anchors.map((a) => a.download)).toEqual([
+      "MCPhoto_20260730_143022.jpg",
+      "MCPhoto_20260730_143022_timelapse.mp4",
+    ]);
   });
 });
 

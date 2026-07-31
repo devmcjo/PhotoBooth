@@ -226,9 +226,16 @@ function putSigned(url: string, blob: Blob, headers: Record<string,string>, onPr
 | 항목 | 규격 |
 |------|------|
 | 단계 라벨 | "사진 업로드 중" → "영상 업로드 중" → "마무리 중" |
-| 전체 % | 파일 크기 가중 합산(`domain/upload/uploadOrchestration.ts`의 순수 함수로 계산) |
+| 전체 % | **활성 단계 균등 가중** 합산(`domain/upload/uploadOrchestration.ts`의 `overallProgress`) |
 | 초기 상태 | 진행률 불확정(indeterminate) |
 | 콜백 순서 | **순서를 가정하지 않는다.** 단계 라벨을 순서 의존적으로 단언하지 말 것(`analysis/14 §9` 주석 — Windows에서 테스트 flakiness 원인이었다) |
+
+> **왜 파일 크기 가중이 아닌가**(2026-07-31 정정 — 이 문서가 틀렸다): 진행률은 **표시값이고 계약이 아니다.**
+> 파일 크기 가중은 ① prepare 전에는 타임랩스 크기를 알 수 없어 첫 프레임에 가중치를 못 정하고,
+> ② `docs/spec-vectors/`에 이 함수의 교차 벡터가 없어 Windows와 고정할 대상도 아니다.
+> 실제 구현(Step 2에서 이식·테스트로 고정된 `overallProgress`)은 **활성 단계 균등 가중**이며,
+> Windows `ComputeOverall`은 또 다른 값(사진 0~0.5 / 영상 0.5~1 / 마무리 1.0)이다.
+> 셋을 통일해서 얻는 것은 표시 곡선뿐이므로 **이식본을 기준으로 삼고 이 문서를 맞췄다.**
 
 ---
 

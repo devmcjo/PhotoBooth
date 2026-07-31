@@ -16,7 +16,7 @@
 
 ```bash
 cd webclient && npm ci
-npx tsc --noEmit && npx vitest run     # 758 통과(29파일)
+npx tsc --noEmit && npx vitest run     # 873 통과(34파일)
 cd ../web/functions && npm test         # 316 통과
 cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
@@ -25,11 +25,11 @@ cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 
 | 다음 | 선행 조건 |
 |------|-----------|
-| **Step 11 업로드·QR** ★마일스톤 A | A4(버킷 CORS) — [14 §5](./14-handoff-and-user-actions.md). 진입 자리는 `screens/result/resultNext.ts`의 주석 블록이다 |
-| Step 12~16 | A1·A2·A3(OAuth·시크릿·게이트 키) |
-| Step 17 E2E·실기기 | 실기기 3대(사람) |
+| **Step 12 인증** | A1·A2·A3(OAuth·시크릿·게이트 키). Step 11까지 끝나 **게스트 완주 경로(★마일스톤 A)가 코드상 완성**돼 있다 |
+| Step 13~16 | 동상 |
+| Step 17 E2E·실기기 | 실기기 3대(사람). Playwright 도입도 이 Step이다 |
 
-권장 분할: 11 / 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
+권장 분할: 12 / 13 / 14 / 15 / 16을 각각 한 세션. Step 13·15·16은 화면이 커서 한 세션을 다 쓴다.
 
 ---
 
@@ -148,7 +148,8 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 ### Step 10 로컬 보관 — **완료(2026-07-31)**. 뒤 Step이 알아야 할 것만 남긴다
 - **[다음]의 순서는 `screens/result/resultNext.ts`가 소유한다.** `ResultView.goNext`는 `runResultNext(defaultResultNextDeps({ finalBlob }))` 한 줄이다. **여기서 순서를 다시 조립하지 마라** — `resultNext.test.ts`가 `["finishTimelapse","save","go"]`를 고정한다(M6-W).
-  - Step 11의 업로드는 `resultNext.ts`의 **주석 블록 자리**(보관 뒤·전이 앞)에 들어간다. `isTempUserBlocked`는 지금 상수 `false`이고 `qrUsageService`로 갈아끼우면 된다. deps 주입 구조라 `defaultResultNextDeps`의 오버라이드로 확장한다.
+  - ⚠️ **정정(2026-07-31, Step 11 구현 시)**: 이 자리에 "Step 11의 업로드가 `resultNext.ts`의 주석 블록 자리에 들어간다"고 적혀 있었으나 **틀렸다.** 업로드 3단계의 소유자는 **`Qr` 화면**이다([03 §8.1](./03-screens-spec.md)의 [다음] 순서에 업로드가 없고, [03 §9.1](./03-screens-spec.md)이 업로드를 `Qr` 진입 절차로 규정한다. Windows도 `QrPopupViewModel.OnEnterAsync`가 수행한다). `resultNext.test.ts`가 `resultNext.ts` 소스에 `uploads/prepare`·`uploads/commit`·`runUpload`가 0건임을 정적으로 고정한다.
+  - `isTempUserBlocked`는 **실배선이 끝났다**(`shell/qrUsageStore.ts` — 아래 Step 11 절).
 - `resultSaver.saveResultLocally()`는 **절대 throw하지 않는다.** 결과는 `ResultSaveOutcome.status`(`saved`/`partial`/`failed`/`skipped`)다. `partial`(타임랩스만 실패)에는 **토스트를 띄우지 않는다** — 손님이 할 조치가 없고 타임랩스 부재는 계약상 합법이다(VF-6).
 - **`OpfsClient`에 `usage(path)`가 생겼다**(왕복 1회로 직속 자식별 용량). Step 14 프레임 캐시 용량·Step 16 진단이 그대로 재사용한다. 실패·미지원은 빈 결과이고, 그것은 "정리 불필요"로 해석되어 **삭제를 덜 하는 안전한 방향**이다.
 - **`resultsStore`가 완성돼 있다**(`listFolders`/`usage`/`removeFolder`/`readFile`/`enforceRetention`). Step 13의 [보관된 결과물] 패널은 이 인터페이스에 **얹기만** 하면 된다. `removeFolder`는 `isResultFolderName` 게이트를 통과한 이름만 지운다.
@@ -157,11 +158,17 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 - 폴더명 규약(`mcphoto_YYMMDD_HHMM`, 충돌 `-2`…`-999` → 32 hex)은 `domain/results/resultNaming.ts`에 있고 **Windows `LocalSaveService`와 같은 값**을 낸다. 벡터 파일은 없고 웹 테스트가 같은 리터럴 + `// ↔ LocalSaveTests.cs:33` 주석으로 짝을 명시한다 — 규약을 바꾸면 **양쪽을 함께** 고친다.
 - **실측 V19 6건이 남아 있다**([14 §10.4](./14-handoff-and-user-actions.md)). 브라우저 실행이 필요해 자동화 불가.
 
-### Step 11 업로드·QR
-- `uploadGateway.prepare/commit`은 이미 있다. **서명 PUT만** 남았고 **XHR로** 해야 한다(진행률 — WM5).
-- `requiredHeaders`는 **객체를 순회**해 전부 붙인다(M14). 키를 골라 담으면 서명이 깨진다.
-- 게스트는 `Qr`에 도달하지 않는다(VF-11). `ResultView.goNext()`가 이미 `isQrEffectivelyEnabled`로 분기한다 — **TempUser 한도만** `qrUsageService`로 채우면 된다(`isTempUserBlocked` 인자).
-- QR은 **ECC Q**(Windows `QrService.cs`와 일치 — VF-13).
+### Step 11 업로드·QR — **완료(2026-07-31)**. 뒤 Step이 알아야 할 것만 남긴다
+- **업로드 3단계의 소유자는 `Qr` 화면이다**(`screens/qr/uploadRunner.ts`의 `runUpload`). `resultNext.ts`가 **아니다** — 위 Step 10 절의 정정 참고. `runUpload`는 React를 import하지 않아 node에서 통째로 검증된다(`runResultNext`와 같은 형태).
+- **합성 Blob은 `sessionStore.finalImage`로 인계된다**(`{ blob, format }`). `useResultCompose`가 합성 성공마다 올리고 `discardCaptureData()`가 지운다. ⚠️ `format`을 **같이** 든다 — 설정이 나중에 바뀌어도 이미 만들어진 바이트와 `Content-Type` 선언이 어긋나면 안 된다. 타임랩스는 싱글턴 서비스에 있어 인계가 필요 없다.
+- **`isTempUserBlocked`는 `shell/qrUsageStore.ts`가 공급한다.** 계정이 `temp_user`로 바뀔 때만 1회 fire-and-forget 조회 → 캐시 → **동기 판정**(Windows `AppShellViewModel`과 동형). ⚠️ **비동기로 바꾸지 마라** — [다음]이 네트워크를 기다려 손님이 최대 100초 멈춘다. 미조회·실패·비TempUser는 전부 `false`(fail-open — M9). `main.tsx`가 `installQrUsageLifecycle()`로 1회 설치한다.
+- `uploadGateway.put()`이 **XHR**로 서명 PUT을 한다(진행률 — WM5). `requiredHeaders`는 `Object.entries` **순회로 전부** 붙인다(M14). ⚠️ **던지지 않는다** — 실패는 `SignedPutOutcome` 판별 유니온이다(15 §2). 정적 테스트가 소스에 자격 증명 조립·`fetch(`가 0건임을 고정한다.
+- **M8**: 어느 파일이든 PUT이 실패하면 **commit을 부르지 않는다.** "사진만 commit"하면 P1이 `timelapseUrl: null`을 "옵션 꺼짐"으로 표시해 실패를 은폐한다.
+- QR은 **ECC Q**(VF-13). `qrcode-generator@2.0.4`(MIT, 런타임 의존 0, 정확 핀)가 들어왔다 — `THIRD-PARTY.md` 참조. **canvas에 직접 그린다**(라이브러리의 `createImgTag`/`createSvgTag`는 HTML 문자열이라 쓰지 않는다).
+- 진행률 가중치는 **활성 단계 균등**(이식된 `overallProgress`)이다. [06 §4.5](./06-backend-integration-web.md)가 "파일 크기 가중"이라고 쓰고 있었으나 **문서를 구현에 맞춰 정정**했다(표시값이고 계약이 아니다).
+- `Done`은 **6초 실경과** 자동 홈이고 **로그아웃하지 않는다**(M3). `screens/done/doneAutoHome.ts`가 정리 함수 하나로 타이머 + `visibilitychange`를 걷는다.
+- ⚠️ **`App.tsx`의 `ScreenRouter`에 `Result` 케이스가 빠져 있었다**(Step 8/10이 `ResultView`를 만들고 라우팅을 붙이지 않았다 — `Result`가 더미 화면으로 렌더됐다). Step 11에서 `Result`·`Qr`·`Done` 3케이스를 함께 붙였다.
+- **실측 V20 5건이 남아 있다**([14 §10.5](./14-handoff-and-user-actions.md)). 브라우저·폰이 필요해 자동화 불가이며 **폰 스캔은 Step 12(로그인) 이후**다.
 
 ### Step 12 인증
 - 서버는 준비됐다. 클라이언트는 **`clientKind: "web"`을 보내야 한다**(미지정은 desktop이라 웹 client_id로 교환되지 않는다).
@@ -195,11 +202,11 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **758**(29파일) · 서버 **316** · Windows **938**(Windows 수치는 Step 8.5 시점 실측. Step 9·10은 `docs/spec-vectors/`를 건드리지 않아 재측정 대상이 아니다) |
+| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 **873**(34파일) · 서버 **316** · Windows **938**(Windows 수치는 Step 8.5 시점 실측. Step 9·10·11은 `docs/spec-vectors/`를 건드리지 않아 재측정 대상이 아니다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | **머지 완료**(2026-07-31, `e5efdfd` — it20 프레임 대기 UI · 프레임 불러오기 재정의 · 앱 아이콘 · ffmpeg 라이선스 검토 · v1.1.10). 충돌 없음, 세 스위트 전부 녹색 |
-| 미완 | Step 11~17, 실측 V1~V19 |
+| 미완 | Step 12~17, 실측 V1~V20 |
 
 **main 머지로 늘어난 작업**(코드는 무변경, 문서만 동기화됨 — 상세는 §6):
 
@@ -209,4 +216,4 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 | Step 15 | 불러오기 = 신규 생성으로 재정의, 서버 등록 확인 모달 신설, 저장 전 검증 7단, `isFileNameSafe` 분리 |
 | Step 9 | 변화 없음. 참고로 **웹 타임랩스 경로에는 GPL 노출이 없다**(브라우저 내장 인코더 — `12 B14`) |
 
-화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·Result가 실물이고, 나머지는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조).
+화면은 Home·FrameSelect(최소)·Guide·Capture·CutSelect·**Result·Qr·Done**이 실물이고, 나머지(Login·Account·Settings·FrameEditor·UserManagement)는 전이 검증용 더미다(`App.tsx`의 `ScreenRouter`가 하나씩 교체하는 구조). **촬영 흐름 화면은 이로써 전부 실물이다** — 남은 더미는 Step 12·13·15·16이 채운다.

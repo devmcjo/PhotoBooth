@@ -41,6 +41,8 @@ export * from "./roles/roleChangePolicy";
 
 export * from "./upload/uploadContract";
 export * from "./upload/uploadOrchestration";
+export * from "./upload/qrRenderPlan";
+export * from "./upload/exportFileName";
 
 export * from "./results/resultNaming";
 export * from "./results/resultSavePlan";

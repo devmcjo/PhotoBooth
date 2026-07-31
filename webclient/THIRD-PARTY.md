@@ -12,6 +12,7 @@
 | react-dom | 18.3.1 | MIT | UI 렌더링 | — |
 | zustand | 5.0.2 | MIT | 상태 관리 | — |
 | mp4-muxer | 5.2.2 | MIT | WebCodecs 출력(H.264 chunk)을 MP4 컨테이너로 muxing | 상류에서 deprecated(후속 `mediabunny`는 MPL-2.0이라 미채택). MIT이므로 필요 시 vendoring 가능 |
+| qrcode-generator | 2.0.4 | MIT | QR 코드 모듈 행렬 생성(ECC **Q** — Windows `QrService.cs`와 일치) | **런타임 의존 0**, 자체 `.d.ts` 동봉. 우리가 쓰는 표면은 `qrcode` · `addData` · `make` · `getModuleCount` · `isDark` **5개뿐**이라 교체 비용이 `src/adapters/qr/qrService.ts` 한 파일에 국한된다. HTML 문자열을 만드는 `createImgTag`/`createSvgTag`는 **쓰지 않는다**(`innerHTML` 경로 회피) |
 
 개발 전용 의존(`devDependencies`)은 배포물에 포함되지 않으므로 목록에서 제외한다.
 
@@ -30,4 +31,6 @@
 
 ## 라이선스 전문
 - MIT License 전문: 각 패키지의 `node_modules/{pkg}/LICENSE` 참조.
-  배포 패키징 시 위 4개 패키지의 LICENSE 파일을 함께 동봉한다.
+  배포 패키징 시 위 5개 패키지의 LICENSE 파일을 함께 동봉한다.
+  ⚠️ `qrcode-generator`는 별도 `LICENSE` 파일 없이 **소스 헤더 주석**(`dist/qrcode.js`·`dist/qrcode.d.ts`)에
+  MIT 고지가 들어 있다(Copyright (c) 2009 Kazuhiko Arase). 동봉 시 그 헤더를 옮겨 적는다.
