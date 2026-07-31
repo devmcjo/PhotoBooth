@@ -12,3 +12,5 @@
 - [dotnet format은 게이트 아님](dotnet-format-baseline-fails.md) — HEAD부터 실패(기존 한 줄 초기화자 관례). 재포맷 금지, WARN으로만 보고
 - [로그아웃 JWT 폐기 불변식](logout-token-invariant.md) — IBackendSession은 동기화기가 소유. AddSingleton 한 줄로 되돌리면 런타임에서만 조용히 깨진다
 - [합성 루트 테스트법](composition-root-testable.md) — 배선 결함은 ServiceRegistration을 조립해야 재현. IHttpClientFactory는 마지막 등록으로 덮어쓴다
+- [ImWrite 원자 교체 확장자](imwrite-atomic-replace-extension.md) — 임시파일도 .png 유지 필수. `경로+".tmp"`는 writer 없음 예외 → 최초 실행이 조용히 전부 실패
+- [it20 프레임 국면 불변식](it20-frame-load-phase-invariant.md) — Finalize가 Loading을 반환하면 전면 오버레이 영구 고착. quiet 갈래도 Loading→Ready로 닫는다

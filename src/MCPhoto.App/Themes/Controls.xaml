@@ -360,6 +360,48 @@
         </Grid>
     </DataTemplate>
 
+    <!-- ══════════════ Spinner.Ring (대기 스피너 공유 리소스, it20) ══════════════ -->
+    <!-- 사용: <Control Template="{StaticResource Spinner.Ring}" Width="56" Height="56"
+                       Focusable="False" IsTabStop="False" />
+         ⚠️ RotateTransform에 x:Name을 달고 Storyboard.TargetName으로 겨냥한다 —
+            속성 경로((UIElement.RenderTransform).(RotateTransform.Angle)) 방식은 템플릿 Seal로 동결된
+            Freezable에서 "Cannot animate on an immutable object instance"를 던진다(설계 §4.5).
+            그 예외는 UI 스레드 → DispatcherUnhandledException → 홈 복귀로 이어져,
+            손님이 촬영을 누르면 튕기는 최악의 실패 모드가 된다.
+            이 형태는 CaptureView.xaml:74-93에서 동작이 확인된 패턴과 동일하다.
+         ⚠️ 시작은 Loaded(발화 보장), 정지/재개는 IsVisible 트리거가 담당한다 — 오버레이가 Collapsed되면
+            Forever 애니메이션이 계속 도는 낭비를 막는다. IsVisible=True 진입 트리거로 시작하면
+            템플릿 적용 시점에 이미 Visible인 경우(오버레이 초기 상태) 전이가 관측되지 않아 발화하지 않는다. -->
+    <ControlTemplate x:Key="Spinner.Ring" TargetType="Control">
+        <Ellipse x:Name="SpinnerRing"
+                 Stroke="{StaticResource Brush.Accent}" StrokeThickness="5"
+                 StrokeDashArray="4 2" RenderTransformOrigin="0.5,0.5">
+            <Ellipse.RenderTransform>
+                <RotateTransform x:Name="SpinnerRotate" Angle="0" />
+            </Ellipse.RenderTransform>
+        </Ellipse>
+        <ControlTemplate.Triggers>
+            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                <BeginStoryboard x:Name="SpinnerSpin">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                         Storyboard.TargetProperty="Angle"
+                                         From="0" To="360" Duration="0:0:1"
+                                         RepeatBehavior="Forever" />
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+            <Trigger Property="IsVisible" Value="False">
+                <Trigger.EnterActions>
+                    <PauseStoryboard BeginStoryboardName="SpinnerSpin" />
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <ResumeStoryboard BeginStoryboardName="SpinnerSpin" />
+                </Trigger.ExitActions>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
     <!-- ══════════════ ScreenTitle (화면 제목) ══════════════ -->
     <Style x:Key="ScreenTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.H1}">
         <Setter Property="Margin" Value="0,0,0,24" />
