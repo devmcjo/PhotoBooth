@@ -17,17 +17,22 @@
 ```bash
 cd webclient && npm ci
 npx tsc --noEmit && npx vitest run     # 1926 통과(84파일)
+npx playwright test                     # 44 통과(chromium 29 + webkit 15) — 최초 1회 `npm run e2e:install`
 cd ../web/functions && npm test         # 316 통과
 cd ../.. && dotnet test tests/MCPhoto.Tests   # 938 통과
 ```
 
-세 개가 다 녹색이면 재개 지점이 건강한 것이다. 그다음 **[11 · WBS](./11-wbs.md)의 체크박스**에서 다음 Step을 고른다(각 Step에 산출물·검증·이탈 사항이 기록돼 있다).
+네 개가 다 녹색이면 재개 지점이 건강한 것이다.
 
-| 다음 | 선행 조건 |
-|------|-----------|
-| **Step 17 E2E·실기기** | Step 1~16 전부 + 실기기 3대(사람). Playwright 도입도 이 Step이다 |
+**구현 Step(0~17)은 전부 끝났다.** [11 · WBS](./11-wbs.md)에 남은 미완 Step은 없다.
+남은 것은 **사람이 하는 실기기 실측 84항목**이며, 수행 순서는
+[16 · 실기기 검증 통합 절차서](./16-field-verification-runbook.md)에 있다.
 
-구현 Step은 **전부 끝났다**. 남은 것은 E2E 자동화와 실기기 수락이다.
+| 남은 일 | 누가 | 어디 |
+|---------|------|------|
+| 실기기·실계정 실측 84항목(V1~V25) | **사람** | [16](./16-field-verification-runbook.md) — 세션 S1~S9 |
+| 성능 4측정 기기 3대 | **사람** | [16 §2 S9](./16-field-verification-runbook.md) → 결과는 [10 §7](./10-testing-and-acceptance.md) 표 |
+| 수락 체크리스트 닫기 | **사람** | [10 §8](./10-testing-and-acceptance.md) — 항목마다 확인 수단이 적혀 있다 |
 
 ---
 
@@ -83,6 +88,19 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 **규칙**: 규격을 바꿀 때는 **벡터/골든 파일을 먼저 고친다** → 양쪽이 동시에 실패 → 양쪽을 고친다.
 - 벡터 생성기(`webclient/scripts/genVectors.ts`)를 **다시 돌리지 않는다.** 웹 구현으로 기대값을 덮어써 교차 검증이 무력화된다.
 - 골든은 파일을 지우고 `dotnet test --filter GoldenImageTests`를 돌리면 재생성된다(의도적으로 규격을 바꿨을 때만).
+
+### 3.3b E2E 스위트 실행법 (Step 17 신설)
+
+```bash
+cd webclient
+npm run e2e:install    # 브라우저 바이너리 1회 다운로드(chromium + webkit · 네트워크 필요)
+npm run e2e            # 44건 — dev 서버(5173)는 Playwright가 자동 기동한다
+npm run e2e:chromium   # 카메라 시나리오까지 전부(webkit은 @camera·@opfs-write 제외)
+```
+
+- vitest와 **섞이지 않는다**: `vitest.config.ts`가 `tests/e2e/**`를 exclude한다.
+- 목 백엔드는 **같은 오리진**(`/__mock-api/`)이다 — 교차 오리진이면 CORS preflight를 가로챌 수 없다.
+- 자동화 판정(자동/부분/불가)과 dev 서버 특유의 관측 잡음은 [`10 §5`](./10-testing-and-acceptance.md#5-e2e-시나리오-playwright)에 있다.
 
 ### 3.4 정적 검사로 고정한 불변식
 
@@ -304,12 +322,16 @@ createCaptureSequence({ now: () => performance.now(), delay: (ms) => …, … })
 
 | 항목 | 값 |
 |------|-----|
-| 완료 | WBS Step 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + **15**(프레임 편집기·피커·삭제) + **16**(계정·사용자 관리·진단 모달·PWA/SW·내보내기/가져오기) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
-| 테스트 | 웹 **1926**(84파일, Step 16 실측) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13~16은 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
+| 완료 | WBS Step **0~17 전부** — 0~8 + **8.5** + **9** + **10** + **11**(★마일스톤 A) + **12**(인증) + **13**(PIN 게이트·설정 화면) + **14**(프레임 저장소·선택 화면) + **15**(프레임 편집기·피커·삭제) + **16**(계정·사용자 관리·진단 모달·PWA/SW·내보내기/가져오기) + **17**(E2E·수락 · ★마일스톤 B) + 서버 B1·B2·B4 + 사용자 액션 A1~A5 |
+| 테스트 | 웹 vitest **1926**(84파일) · **E2E 44**(Playwright — chromium 29 + webkit 15) · 서버 **316** · Windows **938**(후자 둘은 Step 12 시점 실측값. Step 13~17은 `docs/spec-vectors/`·서버·WPF 코드를 **무변경**이라 재실행 의무가 없다) |
 | 브랜치 | `feature/web-client-foundation` |
 | `main` | 머지 완료(2026-07-31, `e5efdfd`) |
-| 미완 | **Step 17(E2E·실기기·수락)뿐**. 실측 V1~V25 |
+| 미완 | **구현·E2E는 완료.** 남은 것은 **사람이 하는 실측 84항목**(V1~V25) → [16](./16-field-verification-runbook.md) |
 
 **13개 화면이 전부 실물이다** — `App.tsx`의 `ScreenRouter`에 `DummyScreen`으로 남은 상태가 **0개**이고,
-`ModalStack`의 미구현 스텁 분기도 사라졌다(셸 모달 4종 전부 실물). 남은 것은 **Step 17(E2E·실기기·수락)**뿐이다.
+`ModalStack`의 미구현 스텁 분기도 사라졌다(셸 모달 4종 전부 실물).
 `DummyScreen` 함수 자체는 라우터의 `default` 분기 안전망으로만 남는다 — **여기에 기능 진입점을 두지 마라.**
+
+**남은 것은 코드가 아니라 판정이다.** [`10 §8`](./10-testing-and-acceptance.md#8-수락-체크리스트-출시-전--analysis05-11-웹-확장)의
+수락 항목마다 `자동`/`정적`/`사람` 중 하나의 확인 수단이 적혀 있고, `사람` 항목은
+[`16`](./16-field-verification-runbook.md)의 세션 S1~S9를 순서대로 수행하면 전부 닫힌다.

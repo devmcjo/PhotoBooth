@@ -877,7 +877,53 @@ Step 12 → Step 16 (계정 + 사용자 관리 + 진단 + PWA)
   - [non-goal] **[12 차이 보고서에 등재되지 않은 동작 차이가 0건**이다. Windows 앱·서버·P1 페이지에 회귀가 없다(Windows 테스트 + 서버 테스트 통과 확인).
   - [trigger] 출시 판정은 이 Step 완료 시에만.
 - **롤백**: 해당 없음(검증 단계). 실패 항목은 원인 Step으로 되돌려 수정한다.
-- [ ] 완료
+
+### Step 17 완료 기록 (2026-08-01)
+
+설계: [`design/web-step17-e2e-and-acceptance.md`](../design/web-step17-e2e-and-acceptance.md)(X1~X10 순서대로 수행).
+
+**산출물**
+
+| 무엇 | 파일 |
+|------|------|
+| 설정 | `webclient/playwright.config.ts`(신규) · `package.json`(devDep 1 + 스크립트 3) · `tsconfig.json`(include 1줄) |
+| 픽스처 8 | `tests/e2e/fixtures/{app,backend,auth,capture,opfs,users,visibility,png}.ts` |
+| spec 7 | `guest-flow` · `upload-qr` · `auth-session` · `offline-storage` · `idle-and-recovery` · `roles-and-pin` · `strings-catalog` · `frame-authoring` |
+| 문서 | `10 §5·§6.2b·§7·§8` 재구성 · **`16` 신설**(실기기 절차서) · `14 §10` 링크 10줄 · `15 §1·§3.3b·§7` · `README` · 이 절 |
+
+**검증 수치(실측)**
+
+| 명령 | 결과 |
+|------|------|
+| `npx tsc --noEmit` | 오류 **0** |
+| `npx vitest run` | **1926 통과 / 84파일** — 착수 기준선과 **동일**(E2E가 vitest에 섞이지 않는다) |
+| `npx vite build` | 성공 |
+| `npx playwright test` | **44 통과 / 0 실패**(chromium 29 + webkit 15, 3.6분) |
+
+**설계에서 이탈한 것 3건**(전부 실측 근거가 있다)
+
+| # | 이탈 | 왜 |
+|---|------|-----|
+| 1 | chromium 프로젝트에 **`channel: "chromium"` 추가** | Playwright 1.49의 기본 headless는 구 `chromium_headless_shell`이고 **그 빌드에는 `getUserMedia`가 없다**(`NotSupportedError: Not supported`로 전 촬영 시나리오 실패). 정식 Chromium을 새 headless 모드로 띄우는 최소 변경이다 |
+| 2 | **E6(저장 실패 표시)을 자동화에서 내렸다** | 설계 §7.3이 유일 레버로 잡은 CDP `Storage.overrideQuotaForOrigin(origin, 0)`을 실제로 걸면 `estimate().quota`는 0이 되지만 **OPFS 2 MiB 쓰기가 그대로 성공**한다(가정 A5가 거짓). 설계 X5의 지시대로 **삭제하고** `10 §5` E6 행에 "V19-6" 판정을 적었다 |
+| 3 | **E20에서 `context.setOffline(true)`를 쓰지 않는다** | dev 서버에는 SW가 없어 오프라인으로 만들면 **앱 문서 자체를 받지 못한다**. E20의 실제 축인 **백엔드 미도달**만 재현하고, 앱 셸 오프라인은 V25-1(배포본)로 넘겼다 |
+
+**가정 검증 결과(설계 §0.2)**: A1 참(같은 오리진 목으로 preflight 회피) · A2 **참**(`page.clock`이 `performance.now()`까지 가짜로 만든다) ·
+A3 참(WebGL2/CPU 폴백으로 완주) · A4 참 · **A5 거짓**(위 이탈 2) · A6 **부분**(WebKit은 뜨지만 OPFS·`OffscreenCanvas`가 없다 → `@opfs-write` 제외) ·
+A7 참(Vite SPA 폴백이 `/oauth2callback`에 index.html을 준다) · A8 참(`route.abort()` 후에도 pending 생존) · A9 참(`@ui/*` 별칭 해석) · A10 참(1926).
+
+**E2E를 만들다 관측한 것(제품 결함 아님 — `10 §5.2`에 등재)**: dev의 `<StrictMode>` 이중 effect로 `uploads/prepare`만 2건 ·
+`logger.error`의 콘솔 미러링 · `/favicon.ico` 404(파일 부재) · Worker terminate 시 `VideoFrame` GC 권고.
+
+**`src/**` 무변경** — 제품 코드는 한 글자도 바뀌지 않았다(§17 비목표 준수).
+
+**남은 실측(사람 몫)**: V1~V25 **84항목** → [16 · 실기기 검증 통합 절차서](./16-field-verification-runbook.md)의 세션 S1~S9.
+성능 4측정도 그 안(S9)이며 결과는 [10 §7](./10-testing-and-acceptance.md) 표에 적는다.
+
+> ⚠️ **아래 `[x]`는 "E2E 전량 통과 + 문서 3종 완료"에 대한 것이다.** 실측(V) 완료는 사람 몫이라
+> 체크 조건이 아니다([10 §8](./10-testing-and-acceptance.md) 수락 체크리스트는 **의도적으로 열려 있다**).
+
+- [x] 완료 (구현·E2E·문서 — 실측 V는 [16](./16-field-verification-runbook.md)에서 별도 추적)
 
 ---
 
