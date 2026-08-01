@@ -32,7 +32,7 @@
 .frameImage {
   position: absolute;
   /* left/top/width/height는 `EditorTransform` 결과를 인라인으로 받는다(단일 변환). */
-  background: #fff;
+  background: var(--bg);
   pointer-events: none;
   user-select: none;
 }
@@ -43,7 +43,8 @@
   padding: 0;
   border: 2px dashed var(--accent);
   border-radius: 2px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  /* WPF 슬롯 채움은 #33FF4D79 = accent 20%다(점선/실선 차이는 12에 등재된 의도적 차이). */
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: transparent;
   cursor: grab;
   touch-action: none;
@@ -161,8 +162,8 @@
 .pickerThumb {
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  background: #fff;
+  aspect-ratio: 200 / 280;
+  background: var(--bg);
   border-radius: var(--radius-sm);
   object-fit: contain;
 }

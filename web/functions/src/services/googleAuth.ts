@@ -18,13 +18,39 @@ import type { TokenPayload } from "google-auth-library";
 const ALLOWED_ISS = ["https://accounts.google.com", "accounts.google.com"];
 
 /**
- * Google 검증 실패. reason은 서버 로그 전용(email·토큰 미포함). 라우트는 이를 일반화 401로 변환한다.
+ * Google 검증 실패의 종류.
+ *
+ * - `clientConfig`: **우리 서버의 OAuth 클라이언트 자격이 틀렸다**(client_id/secret이 Google에 등록된
+ *   값과 불일치). 계정 존재 여부와 무관하므로 401 일반화(열거 방지)의 대상이 아니다 → 라우트가 501.
+ * - `rejected`: 그 외 전부(만료·재사용 code, nonce 불일치, hd 불일치, email 미검증 …) → 라우트가 401.
+ */
+export type GoogleAuthErrorKind = "clientConfig" | "rejected";
+
+/**
+ * Google 검증 실패. reason은 서버 로그 전용(email·토큰 미포함).
+ * 라우트는 `kind`에 따라 501(구성 오류) 또는 일반화 401(열거 방지)로 변환한다.
+ *
+ * ⚠️ 기본값이 `"rejected"`인 이유: 기존 throw 지점을 하나도 고치지 않아도 종전 동작(401)이 유지된다.
  */
 export class GoogleAuthError extends Error {
-  constructor(message: string) {
+  readonly kind: GoogleAuthErrorKind;
+
+  constructor(message: string, kind: GoogleAuthErrorKind = "rejected") {
     super(message);
     this.name = "GoogleAuthError";
+    this.kind = kind;
   }
+}
+
+/**
+ * Google 토큰 엔드포인트 오류 메시지가 **클라이언트 자격 오류**를 가리키는가(순수 판정).
+ *
+ * ⚠️ `invalid_grant`를 여기 넣지 마라 — 만료·재사용된 code에서도 나오며 그것은 손님 흐름의 문제다
+ * (재시도로 해결된다). 구성 오류로 표시하면 운영자가 없는 문제를 찾는다.
+ */
+export function isClientCredentialError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("invalid_client") || lower.includes("unauthorized_client");
 }
 
 /** googleAuth가 필요로 하는 OAuth2Client의 최소 표면(테스트에서 mock 주입 가능). */
@@ -159,9 +185,13 @@ export async function verifyGoogleCodeAndGetEmail(
     });
     idToken = tokens.id_token;
   } catch (err) {
-    // Google 오류 상세는 message만(토큰·code 미노출). 라우트가 401 일반화.
+    // Google 오류 상세는 message만(토큰·code 미노출).
+    // invalid_client / unauthorized_client 는 **우리 서버 구성 오류**이므로 401로 감추지 않는다
+    // (계정 열거와 무관 — 라우트가 501로 매핑해 운영자가 원인을 볼 수 있게 한다).
+    const detail = err instanceof Error ? err.message : "unknown";
     throw new GoogleAuthError(
-      `code 교환 실패: ${err instanceof Error ? err.message : "unknown"}`
+      `code 교환 실패: ${detail}`,
+      isClientCredentialError(detail) ? "clientConfig" : "rejected"
     );
   }
   if (!idToken) {

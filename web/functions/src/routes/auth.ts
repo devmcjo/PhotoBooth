@@ -24,6 +24,24 @@ import {
   verifyGoogleCodeAndGetEmail,
 } from "../services/googleAuth";
 
+/**
+ * `GoogleAuthError` → HTTP 응답 매핑(순수 함수 — 라우트 밖에서 단위 검증한다).
+ *
+ * - `clientConfig`(Google이 `invalid_client`/`unauthorized_client`로 거부) → **501**.
+ *   우리 서버의 OAuth 자격이 틀렸다는 뜻뿐이고 **어느 계정이 존재하는지와 무관**하므로,
+ *   401 일반화(계정 열거 방지, 설계 §6.4)의 대상이 아니다. 401로 감추면 운영자가 구성 오류를
+ *   계정 문제로 오인한다(2026-08-01 실제 발생 — 배포 env에 플레이스홀더 client_id가 실렸다).
+ * - 그 외(`rejected`) → **기존 401 문구 그대로**. 한 글자도 바꾸지 않는다.
+ */
+export function mapGoogleAuthError(err: GoogleAuthError): HttpError {
+  if (err.kind === "clientConfig") {
+    return HttpError.notImplemented("Google 로그인이 구성되지 않았습니다.");
+  }
+  return HttpError.unauthorized(
+    "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
+  );
+}
+
 export function authRouter(): Router {
   const router = Router();
 
@@ -90,12 +108,11 @@ export function authRouter(): Router {
           }
         );
       } catch (err) {
-        // Google 검증 실패는 사유를 로그에만 남기고(토큰·email 미포함), 일반화 401(열거 방지, §6.4·§8.6).
+        // Google 검증 실패는 사유를 로그에만 남기고(토큰·email 미포함),
+        // 구성 오류(clientConfig)는 501, 그 외는 일반화 401(열거 방지, §6.4·§8.6).
         if (err instanceof GoogleAuthError) {
-          console.warn("Google 로그인 검증 실패:", err.message);
-          throw HttpError.unauthorized(
-            "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
-          );
+          console.warn(`Google 로그인 검증 실패[${err.kind}]:`, err.message);
+          throw mapGoogleAuthError(err);
         }
         throw err;
       }

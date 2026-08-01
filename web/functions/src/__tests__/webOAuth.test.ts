@@ -13,6 +13,7 @@ import {
   validateClientKind,
   validateRedirectUri,
 } from "../domain/validation";
+import { mapGoogleAuthError } from "../routes/auth";
 import {
   acceptableAudiences,
   assertPayloadAndExtractEmail,
@@ -315,5 +316,33 @@ describe("assertPayloadAndExtractEmail — audience 목록", () => {
         input
       )
     ).toThrow(GoogleAuthError);
+  });
+});
+
+// ───────── 라우트 매핑: 구성 오류(501) vs 계정 거부(401) — 2026-08-01 ─────────
+
+describe("mapGoogleAuthError — 라우트 응답 매핑", () => {
+  it("kind:'clientConfig' → 501 not_implemented(운영자 구성 오류)", () => {
+    const http = mapGoogleAuthError(
+      new GoogleAuthError("code 교환 실패: invalid_client", "clientConfig")
+    );
+    expect(http.status).toBe(501);
+    expect(http.code).toBe("not_implemented");
+    expect(http.message).toBe("Google 로그인이 구성되지 않았습니다.");
+  });
+
+  it("kind:'rejected' → 401 문구가 한 글자도 바뀌지 않는다(열거 방지 유지)", () => {
+    // 기본값(kind 미지정)도 rejected여야 한다 — 기존 throw 지점의 동작 보존.
+    for (const err of [
+      new GoogleAuthError("code 교환 실패: invalid_grant", "rejected"),
+      new GoogleAuthError("허용되지 않은 hosted domain."),
+    ]) {
+      const http = mapGoogleAuthError(err);
+      expect(http.status).toBe(401);
+      expect(http.code).toBe("unauthorized");
+      expect(http.message).toBe(
+        "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
+      );
+    }
   });
 });

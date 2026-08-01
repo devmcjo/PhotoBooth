@@ -1,7 +1,9 @@
 import { Component, useEffect, useMemo, type ErrorInfo, type ReactNode } from "react";
 import { APP_STATES, type AppState } from "@domain/navigation/appState";
 import { canTransition, isTopBarVisible } from "@domain/navigation/stateMachine";
+import { isFullscreenButtonVisible } from "@domain/navigation/fullscreenButtonPolicy";
 import { logger } from "@adapters/storage/logStore";
+import { isStandaloneDisplay } from "@adapters/platform/appInstall";
 import { getFullscreenController } from "@shell/fullscreenController";
 import { getIdleWatchdog } from "@shell/idleWatchdog";
 import { writeAccountModeIntent } from "@shell/accountModeIntent";
@@ -237,6 +239,7 @@ function handleAccountMenuSelect(id: AccountMenuItemId): void {
 export function App({ branding }: { readonly branding: Branding }) {
   const screen = useShellStore((s) => s.screen);
   const fullscreenLost = useShellStore((s) => s.fullscreenLost);
+  const isFullscreen = useShellStore((s) => s.isFullscreen);
   const user = useSessionStore((s) => s.currentUser);
 
   // 감시 대상 화면에 있을 때만 유휴 감시를 돌린다(02 §6).
@@ -250,6 +253,16 @@ export function App({ branding }: { readonly branding: Branding }) {
 
   // 팝오버 항목·권한 판정은 순수 함수가 소유하고 `TopBar`는 렌더만 한다(02 §5.1 · ACC-1 정신).
   const accountMenuItems = useMemo(() => buildAccountMenuItems(user), [user]);
+
+  // [전체화면] 버튼 노출 — 판정은 도메인 순수 함수가 소유한다(조건 4개, 02 §7).
+  // ⚠️ 배너와 **상호 배타**다: `fullscreenLost`가 참인 동안에는 배너의 [다시 전체화면으로]가
+  //    같은 일을 하므로 버튼을 숨긴다.
+  const showFullscreen = isFullscreenButtonVisible({
+    supported: getFullscreenController().isSupported(),
+    isFullscreen,
+    fullscreenLost,
+    standalone: isStandaloneDisplay(),
+  });
 
   return (
     <>
@@ -271,6 +284,8 @@ export function App({ branding }: { readonly branding: Branding }) {
           /* 게스트는 팝오버 없이 곧바로 로그인으로 간다(항목이 빈 배열이다). */
           onAccount={() => shellStore.getState().go("Login")}
           onSettings={() => shellStore.getState().go("Settings")}
+          showFullscreen={showFullscreen}
+          onFullscreen={() => void getFullscreenController().request()}
         />
       )}
 
@@ -285,7 +300,13 @@ export function App({ branding }: { readonly branding: Branding }) {
   );
 }
 
-/** 첫 사용자 제스처에서 전체화면·Wake Lock·오디오를 잠금 해제한다(01 §4.2 11단계). */
+/**
+ * 첫 사용자 제스처 1회 콜백(01 §4.2 11단계).
+ *
+ * 콜백 내용은 호출자(`main.tsx`)가 정한다 — 지금은 **Wake Lock만**이다.
+ * ⚠️ 여기에 전체화면 요청을 되살리지 마라(2026-08-01 폐지 — 원인 없는 상태 변화).
+ *    정적 검사 FS-1이 `request(` 호출부를 App.tsx 2곳으로 고정한다.
+ */
 export function installFirstGestureHandlers(
   onFirstGesture: () => void,
   target: Pick<EventTarget, "addEventListener" | "removeEventListener"> | undefined = typeof window !==

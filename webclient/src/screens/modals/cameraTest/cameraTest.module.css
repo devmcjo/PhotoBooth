@@ -7,7 +7,11 @@
   justify-content: center;
 }
 
-/* 플래시: DOM 오버레이. canvas에 그리면 합성 픽셀에 섞인다(04 §4.2). */
+/*
+ * 플래시: DOM 오버레이. canvas에 그리면 합성 픽셀에 섞인다(04 §4.2).
+ * ⚠️ **토큰화 금지 · 의도적 고정** — 물리적 플래시(터지는 흰빛)를 흉내 내는 것이라
+ *    다크 팔레트에서도 흰색이어야 한다. `--bg`로 바꾸면 다크에서 검은 화면이 번쩍인다.
+ */
 .flash {
   position: absolute;
   inset: 0;
@@ -24,19 +28,19 @@
 }
 
 .notice {
-  margin: var(--gap) 0 0;
-  padding: var(--gap-sm);
+  margin: var(--space-m) 0 0;
+  padding: var(--space-s);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--fg);
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
   text-align: center;
 }
 
 .deviceList {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-sm);
-  margin-top: var(--gap);
+  gap: var(--space-s);
+  margin-top: var(--space-m);
   justify-content: center;
 }

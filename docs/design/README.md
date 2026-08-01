@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| 최종 업데이트 | 2026-08-01 (웹 클라이언트 **Step 16** 계정·사용자 관리·진단·PWA 설계 등재 — 마지막 구현 Step) |
+| 최종 업데이트 | 2026-08-01 (웹 클라이언트 **실사용 이슈 4건 수정 설계 2건** 등재 — 로그인 `invalid_client` 원인 특정 · Windows 디자인 정합 1:1 대조표) |
 | 갱신 규칙 | 새 설계 문서를 추가하면 이 인덱스의 해당 절에 등재한다. 이터레이션이 완료돼 내용이 `docs/analysis`에 흡수되면 §4로 옮긴다 |
 
 ---
@@ -28,6 +28,8 @@
 | 웹 클라이언트(키오스크)의 프레임 목록·저장소·대기 UI를 바꾼다 | [Step 14 프레임 저장소·선택](./web-step14-frame-catalog-and-select.md) → [`web-client/03 §4·§4.1`](../web-client/03-screens-spec.md)·[`05 §4`](../web-client/05-storage-and-persistence.md)·[`06 §6`](../web-client/06-backend-integration-web.md) + [`analysis/13 §4.2·§5`](../analysis/13-client-behavior-spec.md) + [it20 대기 UI](./wpf-it20-frame-download-waiting-design.md)(Windows 원본) |
 | 웹 클라이언트(키오스크)의 프레임 편집기·불러오기·서버 등록을 바꾼다 | [Step 15 프레임 편집기·피커](./web-step15-frame-editor-and-picker.md) → [`web-client/03 §11·§15.4·§15.7`](../web-client/03-screens-spec.md) + [`analysis/13 §6`](../analysis/13-client-behavior-spec.md)(**2026-07-31 개정판**)·[`analysis/14 §4`](../analysis/14-media-pipeline-spec.md) + [프레임 신규 생성·서버 등록 팝업](./wpf-frame-create-from-existing-and-server-register-design.md)(Windows 원본) |
 | 웹 클라이언트(키오스크)의 계정·사용자 관리·진단·PWA를 바꾼다 | [Step 16 계정·사용자 관리·진단·PWA](./web-step16-account-usermgmt-diagnostics-pwa.md) → [`web-client/03 §13·§14·§15.2`](../web-client/03-screens-spec.md)·[`07 §5·§6`](../web-client/07-auth-and-permissions-web.md)·[`01 §6`](../web-client/01-tech-stack-and-structure.md) + [`analysis/60 §1·§2`](../analysis/60-auth-accounts-and-roles.md)(**역할 매트릭스 진실원**)·[`analysis/31 §4.3~§4.9`](../analysis/31-backend-api-reference.md) |
+| **웹 클라이언트에서 로그인이 안 된다 / 전체화면·카메라 권한 동작을 바꾼다** | [web-fix 2026-08-01 로그인·전체화면·카메라](./web-fix-20260801-login-fullscreen-camera.md) → [`web-client/07`](../web-client/07-auth-and-permissions-web.md)·[`02 §7`](../web-client/02-app-shell-and-navigation.md)·[`09 §3`](../web-client/09-kiosk-operations.md) + [`analysis/31 §4.2`](../analysis/31-backend-api-reference.md) |
+| **웹 클라이언트의 색·타이포·간격을 Windows 앱과 맞춘다** | [web-fix 2026-08-01 Windows 디자인 정합](./web-fix-20260801-windows-visual-parity.md) — **진실원은 `src/MCPhoto.App/Themes/*.xaml`** . WPF↔CSS 1:1 대조표가 검증 수단이다 |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
 
 ---
@@ -55,6 +57,8 @@
 
 | 문서 | 내용 |
 |------|------|
+| [web-fix-20260801-login-fullscreen-camera](./web-fix-20260801-login-fullscreen-camera.md) | **키오스크 웹 클라이언트 실사용 이슈 ①③④ 진단 + 수정 설계**(2026-08-01, 구현 Step 완료 후 첫 현장 피드백). ① **로그인 불가의 원인을 서버 로그로 특정**했다 — `GOOGLE_OAUTH_CLIENT_ID_WEB`이 인수인계 문서의 플레이스홀더 문자열(`<A1의 웹 client_id>`) 그대로 배포돼 Google 토큰 교환이 **`invalid_client`** 로 거부된다. 계정 데이터 문제가 **아니며**(`loginExistingGoogleAccount`의 `doc.email` 방어·`findByEmailField`는 **도달조차 하지 않는다** — 라우트 검사 순서로 증명), 웹 로그인 100%가 실패한다. 수정은 **구성 교정(사용자 액션) + 재발 방지 3종**: 서버가 `invalid_client`/`unauthorized_client`를 **401에서 501로 분리**(계정 열거와 무관한 사유이므로 방어 약화 없음 · `invalid_grant`는 제외) · **배포 전 플레이스홀더 차단 스크립트** · 클라 진단 모달의 **[마지막 로그인 실패]** 행. ⚠️ `doc.email` 방어는 **완화하지 않는다**(계정 탈취 방지). 서버 로그를 못 보는 경우의 **3분 진단 절차 A~D** 포함. ③ **첫 제스처 전체화면 자동 진입 폐지** → 상단바 [전체화면] 버튼(지원·비전체화면·비standalone·배너 미표시 4조건 순수 판정) — **Wake Lock·오디오 unlock은 그대로**. ④ 브라우저 권한 프롬프트가 **자동으로 뜰 수 없다는 사실**을 명확히 하고, `Guide` 화면의 [카메라 사용 허용] 사전 요청 + **실패 사유 5종 분류**(권한 거부/장치 없음/사용 중/비보안 컨텍스트/알 수 없음 — `03 §6.3` 규격 미달 해소) + `09 §3`에 **복사 가능한 Chrome 정책·키오스크 기동 절차**. 신설 정적 불변식 **FS-1**(전체화면 요청 2곳) · **CAM-1**(`getUserMedia` 2파일 + `.stop()` 필수) |
+| [web-fix-20260801-windows-visual-parity](./web-fix-20260801-windows-visual-parity.md) | **키오스크 웹 클라이언트 실사용 이슈 ② — Windows 앱과 거의 동일한 디자인으로**(2026-08-01). **진실원은 `src/MCPhoto.App/Themes/*.xaml` + `Views/*.xaml`** 이고, 스크린샷을 찍을 수 없으므로 **WPF↔CSS 1:1 대조표가 검증 수단**이다. 진단: ⓐ **웹이 다크 우선이고 Windows는 라이트 전용**(`#0e0e12` vs `#FFFFFF` — 컨셉 자체가 반대) ⓑ 토큰 어휘 불일치(웹 22개 vs WPF 34색+타이포 8+메트릭 17 — 웹에 hover/press/soft/disabled 단계가 **없다**) ⓒ 컴포넌트 형태 차이(Danger가 **정반대** — WPF 연분홍 배경+붉은 글자 vs 웹 붉은 배경+흰 글자) ⓓ **웹 라이트 모드가 실제로 깨져 있다**(`main.css:6-7`이 `tokens.css`의 라이트 값을 캐스케이드로 이겨 흰 카드 위 흰 글자). 설계: **라이트를 기본으로 뒤집고** 다크는 파생으로 유지(접근성 요구 준수) · 하드코딩 색 **16곳 토큰화**(QR 캔버스·플래시 4곳은 **의도적 유지**, 근거 주석 필수) · **Home 파스텔 장식 원 2개 이식**(사용자가 말한 "전체 배경"의 실체 — `HomeView.xaml:9-12`) · **그라데이션은 새로 만들지 않는다**(WPF에 0건) · 터치 타깃 48→**56**(`Touch.CTA`) 강화 · 전역 `:focus-visible` 폴백(⚠️ WPF의 `FocusVisualStyle={x:Null}`은 **따라하지 않는다**) · reduced-motion 전역 `!important`가 스피너를 멈추던 결함 수정. **13화면 P1~P4 우선순위표**와 **재현 불가·의도적 차이 12건(B-n1~B-n12)** 의 `12` 등재 목록 포함. ⚠️ **team-lead 판정 필요 1건**: WPF와 일치시키면 Primary 버튼 명암비가 6.53 → **3.19:1**(AA 미달)로 떨어진다 — 주요 CTA는 large-text 기준을 통과하므로 **일치**로 설계했고, 해소하려면 `Colors.xaml`을 **양 플랫폼에서 함께** 바꿔야 한다(H8 후속 제안) |
 | [web-it17-download-share-design](./web-it17-download-share-design.md) | **it17** 원클릭 자동 저장(fetch→Blob→`<a download>`)·전역 degrade 폴백·상단 공유 버튼(링크 복사+토스트)·파일명 규칙·`MCPhoto` 네이밍. **버킷 CORS(GET) 선행 조건 포함** |
 | [web-architecture](./web-architecture.md) | 다운로드 페이지 구조·상태머신·보안 규칙·Emulator 검증 |
 | [web-wbs](./web-wbs.md) | 웹 작업 분해 |

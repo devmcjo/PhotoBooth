@@ -11,6 +11,7 @@
     "build": "tsc && node scripts/gen-build-stamp.mjs",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "check:env": "node scripts/check-env-placeholders.mjs",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,storage",

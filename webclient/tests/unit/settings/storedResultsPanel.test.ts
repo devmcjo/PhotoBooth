@@ -225,6 +225,7 @@ describe("서버 상태 패널 — 03 §12.1 고급", () => {
     reachable: true,
     deployedAt: "2026-07-26T00:00:00.000Z",
     gateKeyValid: true,
+    oauth: null,
     detail: null,
   };
 

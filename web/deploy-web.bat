@@ -98,6 +98,17 @@ set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" goto :fail
 echo.
 
+REM ---- env guard: block <placeholder> values before they reach production ----
+REM  On 2026-08-01 the handoff doc's sample command was run without substituting
+REM  the value, so GOOGLE_OAUTH_CLIENT_ID_WEB shipped as "<...>". The deploy
+REM  succeeded and web sign-in failed 100% with invalid_client, silently.
+REM  Only the functions path runs this - hosting-only does not touch env.
+echo [2b/3] Checking functions env for unsubstituted placeholders...
+call npm --prefix functions run check:env
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" goto :fail
+echo.
+
 :deploy
 echo [3/3] firebase deploy (predeploy hook rebuilds tsc)...
 if /I "%TARGET%"=="all"     goto :deployAll

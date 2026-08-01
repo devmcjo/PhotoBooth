@@ -1,4 +1,7 @@
+import { describeLoginFailure, type LoginFailureReason } from "@domain/auth/loginFailure";
+import type { CameraFailureReason } from "@domain/capture/cameraFailure";
 import { formatBytes } from "@domain/results/byteFormat";
+import type { CameraPermission } from "@adapters/camera/cameraPermission";
 import type {
   CameraSettings,
   CameraState,
@@ -6,7 +9,7 @@ import type {
 } from "@adapters/camera/cameraTypes";
 import { displayLabel, type CameraDevice } from "@adapters/camera/deviceEnumerator";
 import type { EncoderProbe } from "@adapters/encode/encoderSupport";
-import type { ServerProbeResult } from "@adapters/http/healthService";
+import type { OAuthConfigStatus, ServerProbeResult } from "@adapters/http/healthService";
 import { describePersistState, type StorageStatus } from "@adapters/platform/persistStorage";
 import { describeServerStatus } from "@screens/settings/serverStatusPanel";
 import type { SwStatus } from "@shell/swUpdate";
@@ -51,8 +54,12 @@ export interface DiagnosticsSnapshot {
   readonly cancelled: boolean;
 }
 
-/** 카메라 권한 3상태 + 알 수 없음. `navigator.permissions`가 없거나 throw하면 `null`이다(A4). */
-export type CameraPermission = "granted" | "denied" | "prompt" | null;
+/**
+ * 카메라 권한 3상태 + 알 수 없음.
+ * ⚠️ 정의는 **`adapters/camera/cameraPermission.ts`가 소유한다** — 조회 함수와 같은 파일이어야
+ *    폴백 규칙(Safari 미지원·Firefox throw → `null`)이 두 벌로 갈라지지 않는다. 여기서는 재수출만 한다.
+ */
+export type { CameraPermission };
 
 export interface DiagnosticsDeps {
   readonly listCameras: () => Promise<readonly CameraDevice[]>;
@@ -61,6 +68,10 @@ export interface DiagnosticsDeps {
   readonly processedSize: () => ProcessedSize | null;
   readonly cameraFps: () => number;
   readonly cameraPermission: () => Promise<CameraPermission>;
+  /** 마지막 카메라 실패 사유. 실패한 적이 없으면 `null`. */
+  readonly cameraFailureReason: () => CameraFailureReason | null;
+  /** 마지막 로그인 실패 흔적(메모리 전용). 없으면 `null`. */
+  readonly lastLoginFailure: () => { reason: LoginFailureReason; at: number } | null;
   /** `null`이면 아직 촬영이 없어 판정 전이다. */
   readonly encoderProbe: () => EncoderProbe | null;
   readonly serverProbe: () => Promise<ServerProbeResult>;
@@ -103,6 +114,26 @@ function permissionText(permission: CameraPermission): DiagnosticsRow {
   return { label: STRINGS.diagnostics.cameraPermission, value: UNKNOWN, tone: "neutral" };
 }
 
+/** 실패 사유 → 진단 표시 문구. 화면이 사유 문자열을 비교하지 않게 여기서 접는다. */
+const CAMERA_FAILURE_LABEL: Readonly<Record<CameraFailureReason, string>> = {
+  permissionDenied: "권한 거부",
+  noDevice: "장치 없음",
+  inUse: "사용 중",
+  insecureContext: "보안 연결 아님",
+  unknown: "알 수 없음",
+};
+
+function failureReasonRow(reason: CameraFailureReason | null): DiagnosticsRow {
+  if (reason === null) {
+    return { label: STRINGS.diagnostics.cameraFailureReason, value: "없음", tone: "ok" };
+  }
+  return {
+    label: STRINGS.diagnostics.cameraFailureReason,
+    value: CAMERA_FAILURE_LABEL[reason],
+    tone: "bad",
+  };
+}
+
 function cameraStateTone(state: CameraState): DiagnosticsTone {
   if (state === "Ready") return "ok";
   if (state === "Failed") return "bad";
@@ -140,6 +171,7 @@ function buildCameraSection(
       ),
       neutral(STRINGS.diagnostics.cameraFps, deps.cameraFps().toFixed(1)),
       permissionText(permission),
+      failureReasonRow(safeSync(deps.cameraFailureReason, null)),
     ],
   };
 }
@@ -183,6 +215,50 @@ function buildEncoderSection(probe: EncoderProbe | null): DiagnosticsSection {
   };
 }
 
+/**
+ * 서버 OAuth 구성 2행(순수) — 2026-08-01 후속.
+ *
+ * 그 사고에서 배포된 `GOOGLE_OAUTH_CLIENT_ID_WEB`이 플레이스홀더였는데 **운영자가 화면에서
+ * 알아챌 방법이 없었다.** 게이트 키가 이미 "설정됨/미설정"을 보여 주므로 OAuth도 같은 수준으로 낸다.
+ *
+ * ⚠️ **값을 싣지 않는다.** 서버가 보내는 것도 열거값·개수뿐이다(`domain/oauthStatus.ts`).
+ * ⚠️ `null`(구버전 서버·도달 실패·키 무효)은 "미설정"이 아니라 **"알 수 없음"** 이다 —
+ *    섞으면 멀쩡한 배포를 오구성으로 읽는다.
+ */
+export function oauthRows(status: OAuthConfigStatus | null): readonly DiagnosticsRow[] {
+  if (status === null) {
+    return [
+      { label: STRINGS.diagnostics.oauthWeb, value: UNKNOWN, tone: "neutral" },
+      { label: STRINGS.diagnostics.oauthAllowlist, value: UNKNOWN, tone: "neutral" },
+    ];
+  }
+
+  const stateText =
+    status.web === "ok"
+      ? STRINGS.diagnostics.oauthConfigured
+      : status.web === "malformed"
+        ? STRINGS.diagnostics.oauthMalformed
+        : STRINGS.diagnostics.oauthUnset;
+  // desktop 값 복사는 형식이 멀쩡해도 로그인이 실패하는 오구성이라 상태 문자열에 함께 붙인다.
+  const shared = status.sharedClientId ? ` · ${STRINGS.diagnostics.oauthShared}` : "";
+
+  return [
+    {
+      label: STRINGS.diagnostics.oauthWeb,
+      value: `${stateText}${shared}`,
+      tone: status.web === "ok" && !status.sharedClientId ? "ok" : "bad",
+    },
+    {
+      label: STRINGS.diagnostics.oauthAllowlist,
+      value: formatCount(
+        STRINGS.diagnostics.oauthAllowlistValue,
+        status.redirectAllowlistCount,
+      ),
+      tone: status.redirectAllowlistCount > 0 ? "ok" : "bad",
+    },
+  ];
+}
+
 function buildServerSection(
   probe: ServerProbeResult,
   deps: DiagnosticsDeps,
@@ -200,8 +276,21 @@ function buildServerSection(
         : STRINGS.settings.serverNotConfigured,
     ),
   );
+  rows.push(...oauthRows(probe.oauth));
   rows.push(
     neutral(STRINGS.diagnostics.currentAccount, deps.accountId ?? STRINGS.diagnostics.guest),
+  );
+  // [마지막 로그인 실패] — 사유 열거값 + 시각뿐이다. email·token·code를 담지 않는다(AUTH-3).
+  // 이 행이 없어서 2026-08-01 서버 구성 오류를 현장에서 판별할 방법이 없었다.
+  const failure = safeSync(deps.lastLoginFailure, null);
+  rows.push(
+    failure === null
+      ? { label: STRINGS.diagnostics.lastLoginFailure, value: "없음", tone: "ok" }
+      : {
+          label: STRINGS.diagnostics.lastLoginFailure,
+          value: `${describeLoginFailure(failure.reason)} · ${deps.formatTimestamp(failure.at)}`,
+          tone: "bad",
+        },
   );
   return { id: "server", title: STRINGS.diagnostics.sections.server, rows };
 }
@@ -315,6 +404,7 @@ const EMPTY_PROBE: ServerProbeResult = {
   reachable: false,
   deployedAt: null,
   gateKeyValid: null,
+  oauth: null,
   detail: null,
 };
 

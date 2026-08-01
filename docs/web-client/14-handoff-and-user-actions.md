@@ -4,25 +4,31 @@
 |------|-----|
 | 문서 | **코드로는 끝낼 수 없는 작업**(콘솔·시크릿·배포)의 실행 절차와, 그 시점까지 완료된 구현 상태 |
 | 대상 독자 | 저장소 소유자(콘솔·시크릿 권한 보유자) |
-| 작성일 | 2026-07-31 작성 · **2026-08-01 갱신(Step 12 인증 완료)** |
+| 작성일 | 2026-07-31 작성 · **2026-08-01 갱신(Step 12 인증 완료 + A1~A5 전수 재감사)** |
 | 브랜치 | `feature/web-client-foundation` |
-| 상태 | **WBS Step 0~12 코드 완료(★마일스톤 A + 로그인) + 사용자 액션 A1~A5 전부 완료·검증(2026-07-31).** 남은 것은 Step 13~17 개발과 §10의 실측뿐이다 |
+| 상태 | **WBS Step 0~17 코드 완료 + 사용자 액션 A1~A5 재감사 완료(2026-08-01).** A2는 "완료" 기록이 **거짓이었다**(§3.5). 남은 것은 §10의 실측이다 |
 
 > **왜 이 문서가 따로 있는가**: 코드로 끝낼 수 없는 작업(콘솔 UI·시크릿·공개 배포)의 절차를 남긴다.
-> **A1~A5는 2026-07-31에 모두 완료됐다.** 아래 절차는 재구축·다른 프로젝트 이관·문제 발생 시 참조용으로 유지한다.
-> 지금 남은 사용자 작업은 **§10의 실측뿐**이다.
+> 아래 절차는 재구축·다른 프로젝트 이관·문제 발생 시 참조용으로 유지한다.
+>
+> 🛑 **2026-08-01 교훈 — "완료"라고 적는 것과 "검증했다"는 것은 다르다.**
+> A2는 이 문서에 **✅ 완료**로 기록돼 있었지만 실제로는 `.env`에 플레이스홀더 문자열이 들어 있었고,
+> 웹 로그인이 **100% 실패**하고 있었다. 아무도 몰랐던 이유는 **완료를 적을 때 "명령을 실행했다"만
+> 확인하고 "값이 올바른가"·"실제로 동작하는가"를 확인하지 않았기 때문이다.**
+> → **이제 각 절 끝의 "재감사" 표에 *무엇으로* 확인했는지를 함께 적는다.** 확인 수단이 없으면
+> "완료"가 아니라 **"코드로 검증 불가 — 사람이 ○○로 확인해야 함"** 이라고 적는다.
 
 ---
 
 ## 1. 30초 요약
 
-| # | 사용자 액션 | 없으면 막히는 것 | 상태 |
-|---|-------------|------------------|------|
-| ~~**A1**~~ | Google Cloud Console에 **Web application** OAuth 클라이언트 생성 | — | **✅ 완료** |
-| ~~**A2**~~ | 웹 OAuth **시크릿·env 등록** + functions 재배포 | — | **✅ 완료** |
-| ~~**A3**~~ | 웹 전용 **배포 게이트 키** 발급·등록 | — | **✅ 완료** |
-| ~~**A4**~~ | Storage 버킷 **CORS**(업로드 PUT) | — | **✅ 2026-07-31 완료·검증됨**(§5.3) |
-| ~~**A5**~~ | kiosk 사이트 **첫 배포** + P1 무변경 확인 | — | **✅ 2026-07-31 완료**(CSP·nosniff·캐시 헤더 실측) |
+| # | 사용자 액션 | 상태(2026-08-01 재감사) | 무엇으로 확인했나 |
+|---|-------------|--------------------------|-------------------|
+| **A1** | Google Cloud Console에 **Web application** OAuth 클라이언트 생성 | **간접 확인**(콘솔 화면은 코드로 볼 수 없다) | 발급물이 존재하고 형식·유일성이 맞다: `webclient/.env.production.local`의 `VITE_GOOGLE_CLIENT_ID`가 **72자 · `.apps.googleusercontent.com` · desktop 값과 다름**. 리디렉트 URI 3개 등록 여부는 **사람이 콘솔에서 확인**해야 한다(§2.3) |
+| **A2** | 웹 OAuth **시크릿·env 등록** + functions 재배포 | ⚠️ **"완료" 기록이 거짓이었다**(§3.5). 로컬 `.env`는 2026-08-01 교정됨 · **배포 반영 여부는 사람 확인 필요** | 로컬 값 = 웹 빌드 값과 **바이트 일치**(§3.5). 배포본은 §3.6 프로브로 정황만 확인 |
+| **A3** | 웹 전용 **배포 게이트 키** 발급·등록 | **✅ 실측 재확인** | 배포된 서버에 **웹 키 → 200 / 임의 문자열 → 401**(§4.5를 2026-08-01 재실행) |
+| **A4** | Storage 버킷 **CORS**(업로드 PUT) | **✅ 실측 재확인** | preflight 실측 재실행 — 허용 오리진에 `Allow-Methods: GET,PUT,HEAD` + `x-goog-meta-firebaseStorageDownloadTokens`(§5.3) |
+| **A5** | kiosk 사이트 **첫 배포** + P1 무변경 확인 | **✅ 실측 재확인**(사이트·헤더). ⚠️ **서빙 중인 번들이 최신 코드인지는 별 문제**다 | `curl -sI`로 200 + CSP + nosniff + `Cache-Control: no-cache, max-age=0`(§6.4) |
 
 - 재수행이 필요하면 A1~A3은 순서대로(A1의 산출물이 A2의 입력), A4·A5는 독립이다.
 - **Step 15(프레임 편집기·피커·삭제)까지 코드가 완성됐다**(2026-08-01). 게스트 완주 경로(마일스톤 A) + Google SSO 로그인 + 설정 화면 + 프레임 카탈로그·대기 4국면·삭제 + **프레임 저작(생성·편집·서버 등록)** 이 구현돼 있고, 남은 실측은 §10.1~§10.6·**§10.8**·**§10.9**·**§10.10**이다.
@@ -61,9 +67,25 @@
 | Hosting preview channel 도메인 | 채널 URL에 해시가 붙어 고정할 수 없다. **개발은 `localhost`, 실기기 검증은 운영 사이트**를 쓴다 |
 | `GOOGLE_ALLOWED_HD` | 도메인 제한을 쓰고 있다면 웹에도 **그대로 적용**된다(종류 무관 공통). 변경 불필요 |
 
+### 2.3 재감사 (2026-08-01)
+
+| 확인 항목 | 결과 | 근거 |
+|---|---|---|
+| 웹 client_id가 **존재**한다 | ✅ | `webclient/.env.production.local`의 `VITE_GOOGLE_CLIENT_ID`가 **72자** |
+| **형식**이 맞다 | ✅ | `.apps.googleusercontent.com`으로 끝난다 |
+| **Web application 유형**이다(= desktop 것을 재사용하지 않았다) | ✅ 간접 | 서버 env의 desktop `GOOGLE_OAUTH_CLIENT_ID`와 **값이 다르다**(SHA-256 앞 12자 대조로 확인). 유형 자체는 콘솔에서만 보인다 |
+| **Authorized redirect URIs 3개**가 등록돼 있다 | ⚠️ **코드로 검증 불가** | 서버 `OAUTH_REDIRECT_ALLOWLIST`가 3개인 것은 확인했지만(§3.5), 그것은 **우리 서버의 목록**이지 Google 콘솔의 목록이 아니다. 어긋나 있으면 Google이 리디렉트 단계에서 거부한다 → **사람이 콘솔 화면에서 3줄을 눈으로 대조**하거나 **§10.6 V21-1(실 로그인 1회)** 로 종단 확인해야 한다 |
+| **Authorized JavaScript origins 2개** | ⚠️ **코드로 검증 불가** | 동상. V21-1·V21-6로 확인한다 |
+
+> 즉 A1은 **"발급물은 확실히 있고 형식·유일성도 맞다. 콘솔 등록 내용은 사람만 볼 수 있다"** 가 정확한 상태다.
+> 종단 검증 1회(**§10.6 V21-1**)가 위 두 ⚠️를 한 번에 닫는다 — 그것이 A1의 진짜 완료 조건이다.
+
 ---
 
 ## 3. A2 · 웹 OAuth 시크릿·env 등록
+
+> 🛑 **이 절의 "완료" 기록은 거짓이었다.** 무슨 일이 있었고 어떻게 검증했어야 했는지는 **§3.5**에 있다.
+> 재수행할 때는 §3.3의 명령을 실행한 뒤 **반드시 §3.5의 검증 4단계**를 돌려라.
 
 ### 3.1 서버가 이미 준비된 것 (이 브랜치에서 완료)
 
@@ -108,6 +130,11 @@ deploy-web.bat functions
 
 **2)를 PowerShell로** — 편집기로 열어 두 줄을 붙여 넣어도 결과는 같다.
 
+> 🛑 **아래 명령의 `<…>` 를 반드시 실제 값으로 치환하라.** 치환하지 않으면 배포는 **성공하고**
+> 웹 로그인만 조용히 100% `invalid_client`로 실패한다 — **2026-08-01에 실제로 발생했다**
+> (`GOOGLE_OAUTH_CLIENT_ID_WEB=<A1의 웹 client_id>` 문자열이 그대로 배포됐다).
+> 이제 `deploy-web.bat`이 배포 직전에 `npm run check:env`로 이 실수를 막는다.
+
 ```powershell
 cd E:\Study\photobooth\web\functions
 Add-Content .env.mcphoto-955fb "GOOGLE_OAUTH_CLIENT_ID_WEB=<A1의 웹 client_id>"
@@ -119,7 +146,7 @@ Select-String -Path .env.mcphoto-955fb -Pattern '^[A-Z_]+' | ForEach-Object { ($
 
 | 값 | 무엇인가 |
 |-----|----------|
-| `GOOGLE_OAUTH_CLIENT_ID_WEB` | A1에서 만든 **Web application** 클라이언트의 client_id(`….apps.googleusercontent.com`). 비밀이 아니다 |
+| `GOOGLE_OAUTH_CLIENT_ID_WEB` | A1에서 만든 **Web application** 클라이언트의 client_id(`….apps.googleusercontent.com`). 비밀이 아니다. ⚠️ 값은 `webclient/.env.production.local`의 `VITE_GOOGLE_CLIENT_ID`와 **문자 단위로 같아야** 한다 |
 | `OAUTH_REDIRECT_ALLOWLIST` | 위 문자열 그대로. 서버가 이 목록과 **완전 일치**하는 `redirectUri`만 통과시킨다([analysis/31 §4.2](../analysis/31-backend-api-reference.md)) |
 
 ### 3.4 검증
@@ -129,9 +156,83 @@ Select-String -Path .env.mcphoto-955fb -Pattern '^[A-Z_]+' | ForEach-Object { ($
 | desktop 경로 무회귀 | Windows 앱으로 로그인 | 종전과 동일하게 성공 |
 | 웹 종류 활성 | `POST /auth/google`에 `clientKind:"web"` + 임의 code | **501이 아니라 401**(구성은 됐고 code가 가짜라서 거부) |
 | 허용목록 밖 거부 | `redirectUri`를 `https://evil.com/oauth2callback`로 | **400** |
-| 서버 회귀 | `cd web/functions && npm test` | 316개 통과 |
+| 서버 회귀 | `cd web/functions && npm test` | 전량 통과 |
 
 > `clientKind`를 **미지정**하면 desktop으로 해석된다 — 배포된 Windows 클라이언트는 **무변경으로 계속 동작**한다.
+>
+> ⚠️ **위 "웹 종류 활성" 검사만으로는 2026-08-01 사고를 잡지 못했다.** 그때 배포본은 F2(501 분리) 이전
+> 코드였고, 플레이스홀더 client_id로도 **똑같이 401**이 나왔기 때문이다. 지금은 F2가 들어가 있어
+> `invalid_client`/`unauthorized_client`가 **501**로 갈라지지만, **그 판정은 배포된 뒤에만 유효하다.**
+> 그래서 §3.5의 **로컬 값 검사**가 여전히 1차 방어선이다.
+
+### 3.5 🛑 사고 기록 — "완료"로 적혀 있었으나 실제로는 플레이스홀더였다 (2026-08-01)
+
+**무슨 일이 있었나**
+
+이 문서에는 A2가 **"✅ 완료"** 로 기록돼 있었다. 그러나 서버 env의 실제 값은 다음과 같았다.
+
+```
+GOOGLE_OAUTH_CLIENT_ID_WEB = [len=17]  ← "<A1의 웹 client_id>" 문자열 그대로
+```
+
+§3.3의 예시 명령을 **`<…>`를 치환하지 않고 그대로 실행**했고, 그 결과가 그대로 배포됐다.
+
+**왜 아무도 몰랐나 — 실패가 조용했다**
+
+| 단계 | 그때 관측된 것 | 왜 신호가 없었나 |
+|------|----------------|------------------|
+| `Add-Content` 실행 | 오류 없음 | 셸은 문자열을 그대로 넣을 뿐이다 |
+| `firebase deploy` | **성공** | 배포는 값의 의미를 검사하지 않는다 |
+| 문서의 확인 명령 | `GOOGLE_OAUTH_CLIENT_ID_WEB` 키가 보임 | **키 이름만 출력하는 명령**이었다(§3.3의 `Select-String … ($_ -split '=')[0]`) — 값이 무엇이든 통과한다 |
+| 손님 로그인 | "이 Google 계정으로는 로그인할 수 없습니다" | 서버가 Google의 `invalid_client`를 **401로 뭉갰다** → **구성 오류가 계정 문제로 보였다** |
+| 진단 모달 | OAuth 관련 행이 **없었다** | 게이트 키만 "설정됨/미설정"을 보여 줬다 |
+
+**어떻게 검증했어야 했나 (이제 이 4단계를 반드시 돌린다)**
+
+```powershell
+cd E:\Study\photobooth\web\functions
+
+# 1) 길이 + 접미사 — 플레이스홀더(17자·꺾쇠)는 여기서 즉시 걸린다. 값은 출력하지 않는다.
+node -e "const fs=require('fs');const p='.env.mcphoto-955fb';const kv=Object.fromEntries(fs.readFileSync(p,'utf8').split(/\r?\n/).filter(l=>l.includes('=')).map(l=>[l.slice(0,l.indexOf('=')).trim(),l.slice(l.indexOf('=')+1).trim()]));for(const k of ['GOOGLE_OAUTH_CLIENT_ID','GOOGLE_OAUTH_CLIENT_ID_WEB']){const v=kv[k]||'';console.log(k,'len='+v.length,'suffix_ok='+v.endsWith('.apps.googleusercontent.com'),'placeholder='+(v.includes('<')||v.includes('>')));}"
+
+# 2) desktop 값과 다른가 + 웹 빌드 값과 같은가 — 값 대신 해시 앞 12자만 비교한다.
+node -e "const fs=require('fs'),c=require('crypto');const rd=p=>Object.fromEntries(fs.readFileSync(p,'utf8').split(/\r?\n/).filter(l=>l.includes('=')).map(l=>[l.slice(0,l.indexOf('=')).trim(),l.slice(l.indexOf('=')+1).trim()]));const s=rd('.env.mcphoto-955fb'),w=rd('../../webclient/.env.production.local');const h=x=>c.createHash('sha256').update(x||'').digest('hex').slice(0,12);console.log('server web ',h(s.GOOGLE_OAUTH_CLIENT_ID_WEB));console.log('client web ',h(w.VITE_GOOGLE_CLIENT_ID));console.log('desktop    ',h(s.GOOGLE_OAUTH_CLIENT_ID));console.log('web==client?',s.GOOGLE_OAUTH_CLIENT_ID_WEB===w.VITE_GOOGLE_CLIENT_ID);console.log('web==desktop?',s.GOOGLE_OAUTH_CLIENT_ID_WEB===s.GOOGLE_OAUTH_CLIENT_ID);"
+
+# 3) 배포 직전 게이트(이제 deploy-web.bat이 자동으로 돌린다)
+npm run check:env
+
+# 4) ★ 종단 검증 — 실 Google 계정으로 **한 번 로그인해 본다**(§10.6 V21-1).
+#    1~3은 "형식이 맞다"까지만 보장한다. "Google이 이 client_id를 아는가"는 로그인 1회로만 확정된다.
+```
+
+기대값:
+
+| 검사 | 정상 |
+|---|---|
+| 1) | `len=72` · `suffix_ok=true` · `placeholder=false` (두 키 모두) |
+| 2) | `web==client? true` · `web==desktop? false` |
+| 3) | `OK — 플레이스홀더 없음` |
+| 4) | 상단 계정 라벨이 계정 id로 바뀌고 직전 화면으로 복귀 |
+
+**재발 방지로 들어간 것**
+
+| # | 무엇 | 어디 |
+|---|------|------|
+| 1 | 배포 직전 **플레이스홀더 게이트** — 값에 `<`·`>`가 있거나 필수 키가 비면 배포를 막는다 | `web/functions/scripts/check-env-placeholders.mjs` + `domain/envPlaceholder.ts`(순수 판정 · 테스트 있음). `deploy-web.bat`이 자동 실행 |
+| 2 | **`invalid_client`/`unauthorized_client` → 501 분리** — 구성 오류가 더 이상 "계정 거부(401)"로 보이지 않는다 | `services/googleAuth.ts`(`isClientCredentialError`) + `routes/auth.ts`(`mapGoogleAuthError`) |
+| 3 | **진단 모달의 [웹 OAuth 구성] 행** — 운영자가 화면에서 `설정됨 / 형식 오류(값 미치환 의심) / 미설정`을 본다(값은 노출하지 않는다) | `GET /health`의 `oauth` 필드(`domain/oauthStatus.ts`) → `diagnosticsPresenter.oauthRows` |
+| 4 | **[마지막 로그인 실패] 행** — 사유 열거값 + 시각 | `diagnosticsPresenter` |
+
+### 3.6 재감사 (2026-08-01)
+
+| 확인 항목 | 결과 | 근거 |
+|---|---|---|
+| **로컬** `.env.mcphoto-955fb`의 웹 client_id | ✅ 교정됨 | 72자 · `.apps.googleusercontent.com` · 꺾쇠 없음 |
+| 웹 빌드 값과 **바이트 일치** | ✅ | `GOOGLE_OAUTH_CLIENT_ID_WEB` ≡ `VITE_GOOGLE_CLIENT_ID`(해시 대조) |
+| desktop 값과 **다름** | ✅ | 해시가 다르다 |
+| `OAUTH_REDIRECT_ALLOWLIST` 3개 | ✅ | `…kiosk.web.app/oauth2callback` · `…kiosk.firebaseapp.com/oauth2callback` · `http://localhost:5173/oauth2callback` — §2.2 목록과 문자 단위 일치 |
+| **배포본에 반영됐는가** | ⚠️ **사람 확인 필요** | 정황은 "반영됨"에 가깝다: 배포된 함수의 `deployedAt`(`2026-08-01T08:33:00.538Z`)이 로컬 `web/functions/lib/build-stamp.json`과 **ms 단위까지 같고**, 그 로컬 빌드에는 F2가 들어 있다. 그 상태에서 허용 redirectUri + 가짜 code 프로브가 **501이 아니라 401**을 돌려준다 → 배포 env의 web client_id는 플레이스홀더가 아니다. **다만 서버 로그·콘솔을 볼 수 없으므로 단정하지 않는다** — §10.6 V21-1(실 로그인 1회)로 확정하라 |
+| `GOOGLE_OAUTH_CLIENT_SECRET_WEB`(Secret Manager) | ⚠️ **코드로 검증 불가** | 시크릿 값은 저장소에 없다. `npx firebase functions:secrets:access GOOGLE_OAUTH_CLIENT_SECRET_WEB --project mcphoto-955fb`로 **사람이** 확인하거나, V21-1로 종단 확인한다 |
 
 ---
 
@@ -236,6 +337,19 @@ $winKey = (Get-Content ..\backend-apikey.local -Raw).Trim()
 
 > `GET /health`로는 키 유효성을 판정할 수 없다 — **키가 없거나 틀려도 200이다**(06 §2.1). 위처럼 `/frames/default`의 401 여부로 확인한다.
 
+### 4.6 재감사 (2026-08-01)
+
+**A2와 달리 A3은 실측으로 닫혔다** — 게이트 키는 배포된 서버에 물어보면 즉시 참/거짓이 갈리기 때문이다.
+
+| 확인 항목 | 결과 | 근거(2026-08-01 재실행) |
+|---|---|---|
+| 웹 키가 **존재**하고 형식이 맞다 | ✅ | `VITE_BACKEND_API_KEY` **43자**(= 32바이트 base64url) · 꺾쇠 없음 |
+| Windows 키와 **다르다**(§6.2 경고) | ✅ | `backend-apikey.local`(48자)과 값·길이 모두 다르다 |
+| 배포된 서버가 웹 키를 **받아들인다** | ✅ **실측** | `GET /frames/default` + `X-MCPhoto-Client: <웹 키>` → **200** |
+| 게이트가 **실제로 동작**한다 | ✅ **실측** | 같은 요청에 `X-MCPhoto-Client: bogus` → **401** |
+| Windows 키 무회귀 | ⚠️ 미실행 | §4.5의 세 번째 명령(`backend-apikey.local`로 200)은 **Windows 키를 네트워크로 보내는 것**이라 이번 재감사에서는 돌리지 않았다. Windows 앱 로그인 1회로 대신 확인하는 편이 안전하다 |
+| `CLIENT_API_KEYS` **전체 목록**의 내용 | ⚠️ **코드로 검증 불가** | Secret Manager 값은 저장소에 없다. 필요하면 §4.2 명령으로 **사람이** 확인한다. 다만 위 200/401 실측이 "웹 키가 목록에 들어 있다"는 결론에는 충분하다 |
+
 ---
 
 ## 5. A4 · Storage 버킷 CORS (업로드 PUT)
@@ -313,6 +427,19 @@ Access-Control-Allow-Headers: Content-Type,x-goog-meta-firebaseStorageDownloadTo
 > M14가 요구하는 `x-goog-meta-firebaseStorageDownloadTokens`가 `Allow-Headers`에 있어야 서명 PUT이 통과한다.
 
 Step 11 구현 후에는 브라우저 Network 탭에서 실제 `OPTIONS 204 → PUT 200`을 최종 확인한다.
+
+### 5.4 재감사 (2026-08-01)
+
+§5.3의 두 명령을 그대로 재실행했다. **버킷 구성이 유지되고 있다.**
+
+| 확인 항목 | 결과 | 실측 |
+|---|---|---|
+| 허용 오리진 preflight | ✅ | `HTTP/1.1 200` + `Access-Control-Allow-Origin: https://mcphoto-955fb-kiosk.web.app` · `Allow-Methods: GET,PUT,HEAD` · `Allow-Headers: Content-Type,x-goog-meta-firebaseStorageDownloadTokens,x-goog-resumable` |
+| M14 요구 헤더가 허용 목록에 있다 | ✅ | `x-goog-meta-firebaseStorageDownloadTokens` 포함 — 없으면 서명 PUT이 아예 안 나간다 |
+| 허용목록 밖 차단 | ✅ | `Origin: https://evil.example.com` → `HTTP/1.1 200`이지만 **`Access-Control-*` 헤더가 하나도 없다**(= 브라우저가 차단) |
+| 실제 `OPTIONS 204 → PUT 200` | ⚠️ **코드로 검증 불가** | 서명 URL은 서버가 발급하고 브라우저가 사용자 제스처로 올린다 → **§10.5 V20-1**(사람) |
+
+> ⚠️ 두 번째 명령의 상태줄이 `200`인 것은 정상이다. **판정 기준은 상태 코드가 아니라 `Access-Control-*` 헤더의 유무**다 — GCS는 허용되지 않은 오리진에도 200을 주고 헤더만 뺀다.
 
 ---
 
@@ -398,6 +525,17 @@ curl.exe -sI https://mcphoto-955fb.web.app/ | Select-Object -First 1
 | P1 페이지 | 기존과 동일하게 동작(`?s=<유효토큰>`으로 확인) |
 
 > 첫 배포에서는 더미 13화면 전이 UI가 보인다(Step 7부터 실제 화면으로 교체된다). **의도된 상태**다.
+
+### 6.5 재감사 (2026-08-01)
+
+| 확인 항목 | 결과 | 실측 |
+|---|---|---|
+| kiosk 사이트가 살아 있다 | ✅ | `GET https://mcphoto-955fb-kiosk.web.app/` → **200** |
+| `/`의 캐시 헤더(§6.4의 함정) | ✅ | `Cache-Control: no-cache, max-age=0` — `max-age=3600`으로 되돌아가지 않았다 |
+| CSP | ✅ | `default-src 'self'` … `frame-ancestors 'none'` 전량 존재 |
+| nosniff | ✅ | `X-Content-Type-Options: nosniff` |
+| **서빙 중인 번들이 최신 코드인가** | ⚠️ **A5의 범위 밖 · 별도 확인 필요** | A5는 "사이트를 만들고 한 번 배포했다"까지다. 그 뒤 `webclient/`가 계속 바뀌었으므로 **지금 공개된 JS가 최신이라는 보장은 없다** — 확인·갱신은 `webclient\deploy.bat` 재실행이다. 이 문서의 ✅는 "사이트·헤더가 정상"이라는 뜻이지 "최신 빌드가 서빙 중"이라는 뜻이 아니다 |
+| P1(`mcphoto-955fb.web.app`) 무변경 | ⚠️ 미실행 | 이번 재감사에서는 kiosk만 확인했다. P1은 §6.4의 두 번째 명령으로 확인한다 |
 
 ---
 

@@ -46,7 +46,7 @@ export async function loadServerStatus(
     logger.warn("서버 상태 조회 실패", {
       reason: err instanceof Error ? err.message : String(err),
     });
-    probe = { reachable: false, deployedAt: null, gateKeyValid: null, detail: null };
+    probe = { reachable: false, deployedAt: null, gateKeyValid: null, oauth: null, detail: null };
   }
 
   if (aborted()) return { kind: "cancelled" };

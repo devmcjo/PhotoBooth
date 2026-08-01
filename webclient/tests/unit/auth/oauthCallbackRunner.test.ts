@@ -268,29 +268,38 @@ function applyHarness(): {
   readonly deps: ApplyDeps;
   readonly went: AppState[];
   readonly failed: LoginFailureReason[];
+  readonly cleared: number[];
 } {
   const went: AppState[] = [];
   const failed: LoginFailureReason[] = [];
+  const cleared: number[] = [];
   return {
     went,
     failed,
-    deps: { go: (to) => went.push(to), fail: (reason) => failed.push(reason) },
+    cleared,
+    deps: {
+      go: (to) => went.push(to),
+      fail: (reason) => failed.push(reason),
+      clearLastFailure: () => cleared.push(1),
+    },
   };
 }
 
 describe("applyOauthCallbackOutcome", () => {
-  it("성공은 복귀 화면으로 간다(오류를 세우지 않는다)", () => {
+  it("성공은 복귀 화면으로 간다(오류를 세우지 않는다) + 진단 흔적을 지운다", () => {
     const h = applyHarness();
     applyOauthCallbackOutcome({ kind: "success", returnTo: "FrameSelect" }, h.deps);
     expect(h.went).toEqual(["FrameSelect"]);
     expect(h.failed).toEqual([]);
+    expect(h.cleared).toHaveLength(1);
   });
 
-  it("실패는 오류를 먼저 싣고 Login으로 간다", () => {
+  it("실패는 오류를 먼저 싣고 Login으로 간다 — 진단 흔적은 지우지 않는다", () => {
     const h = applyHarness();
     applyOauthCallbackOutcome({ kind: "failed", reason: "rejected" }, h.deps);
     expect(h.failed).toEqual(["rejected"]);
     expect(h.went).toEqual(["Login"]);
+    expect(h.cleared).toEqual([]);
   });
 });
 

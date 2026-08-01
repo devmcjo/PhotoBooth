@@ -56,6 +56,28 @@ interface ScreenLogic {
 
 권한 판정은 전부 `domain/roles/userRole.ts`·`roles/roleChangePolicy.ts`·`accounts/accountAdminPolicy.ts`(순수 함수)로 하고 컴포넌트에서 직접 역할 문자열을 비교하지 않는다(정적 검사 ACC-1).
 
+### 1.4 디자인 토큰 (2026-08-01 개정)
+
+**진실원은 Windows 앱이다** — `src/MCPhoto.App/Themes/Colors|Typography|Metrics.xaml`.
+웹은 `webclient/src/ui/theme/tokens.css` **한 파일**이 토큰을 정의하고, 모듈 CSS는 `var(--…)`만 쓴다.
+
+| 축 | 규격 |
+|----|------|
+| 기본 테마 | **라이트**(`color-scheme: light dark`). Windows가 라이트 전용이기 때문이다. 다크는 `prefers-color-scheme: dark`의 **웹 전용 파생**이다([12 B-n4](./12-web-vs-windows-differences.md)) |
+| 배경·표면 | `--bg` #FFFFFF · `--bg-elevated` #FAF8FC · `--surface` #F4F1F7 · `--surface-alt` #ECE8F0 · `--surface-hover` #E4DEEC · `--surface-press` #DAD2E4 · `--border` #ECE8F0 · `--divider` #E4DEEC |
+| 텍스트 | `--fg` #241F2B · `--fg-secondary` #4A4453 · `--fg-tertiary` #6E6878 · `--fg-muted` #8A8494 |
+| 강조 | `--accent` #FF4D79 · `-hover` #FF6B8F · `-press` #E43C67 · `--accent-text` #D6376A · `--accent-soft` #FFE7EE · `--on-accent` #FFFFFF |
+| 보조 | `--accent2` #37C9B0 · `--accent2-soft` #DFF6F1 · `--accent2-text` #128A76 |
+| 시맨틱 | `--success` #128A76 · `--danger` #D92D4E(+ `-surface` #FDE8EC) · `--warning` #B26A00(+ `-surface` #FFF3DE) · `--disabled-bg/-fg` #ECE8F0 / #B4AEBE |
+| 오버레이 | `--scrim` `rgb(36 31 43 / 40%)`(**검정이 아니라 Ink 40%**) · `--capture-bg` #111114 |
+| 그림자 | `--shadow-sm/card/pop` — WPF `DropShadowEffect`를 `0 {Depth}px {Blur/2}px rgb(Ink / Op)`로 변환 |
+| 간격 | `--space-xs/s/m/l/xl/xxl` = 4/8/16/24/40/64 |
+| 라운드·터치 | `--radius-sm/​/lg/pill` = 8/14/24/999 · `--touch-min` 48 · `--touch-cta` 56 |
+| 타이포 | `--fs-display/h1/h2/title-sm/body/label/caption` = 64/32/24/20/16/14/13px **고정**. `clamp()`를 쓰지 않는다(같은 폭에서 Windows와 다르게 보이는 직접 원인이었다). `max-width:480px`에서 Display·H1 두 단계만 축소한다 |
+
+⚠️ **색 리터럴은 모듈 CSS에 4곳만 허용된다**(플래시 2 · QR 캔버스 1 · 카운트다운 text-shadow 1).
+정적 검사 **THEME-1**이 이를 고정한다.
+
 ---
 
 ## 2. `Home` — 대기 화면
@@ -83,7 +105,7 @@ interface ScreenLogic {
 | 타이틀·소제목 | 브랜딩 값(`analysis/41 §6`). 폴백 `MCPhoto` / `self custom photobooth`(2026-07-30 원격 이름 통일 반영 — `analysis/41 §6`) |
 | 유휴 감시 | 없음 |
 | **웹 추가** | 화면 아무 곳이나 첫 포인터 이벤트에서 **전체화면 + AudioContext unlock + Wake Lock** 시도(1회, 실패 무시) |
-| **웹 추가** | 카메라 권한이 아직 `prompt` 상태면 하단에 중립 안내: *"촬영을 시작하면 카메라 사용 권한을 묻습니다."*(권한 요청은 여기서 하지 않는다 — `Capture` 진입 시) |
+| **웹 추가** | 카메라 권한 안내는 **상태별**이다. `prompt`·조회 불가 → *"촬영을 시작하면 카메라 사용 권한을 묻습니다."* / `denied` → *"카메라 권한이 거부되어 있습니다. 촬영 안내 화면에서 복구 방법을 확인해 주세요."* / `granted` → **렌더하지 않는다**. ⚠️ 권한 **요청**은 여기서 하지 않는다 — Home은 CTA 1개 화면이다. 사전 요청 버튼은 `Guide`에 있다(§5) |
 
 **완료 기준**: [촬영하기] 탭 → `FrameSelect` 진입. 로그인 상태였다면 상단 계정 라벨이 유지된다.
 
@@ -202,6 +224,7 @@ interface ScreenLogic {
 | 유휴 감시 | **○** |
 | **웹 추가** | [촬영 시작] 제스처에서 **AudioContext unlock 재확인 + Wake Lock 재요청**(셔터음·화면 꺼짐 대비) |
 | **웹 추가** | 타임랩스 인코더 판정 결과가 "미지원"이면 하단에 중립 안내: *"이 브라우저에서는 타임랩스가 제공되지 않습니다."*(촬영은 정상 진행) |
+| **웹 추가 · 카메라 권한 사전 요청**(2026-08-01) | 권한 상태 3분기. `granted` → **아무것도 렌더하지 않는다** / `prompt`·`null`(조회 불가 — Safari·Firefox) → 안내 1줄 + **[카메라 사용 허용]** 버튼(누르면 `getUserMedia` 프라이밍 후 **즉시 트랙 정지**) / `denied` → 거부 안내 + 브라우저별 복구 절차(접기). ⚠️ **[촬영 시작]은 어떤 상태에서도 비활성화하지 않는다** — 손님이 갇히면 안 되고, 거부 상태면 `Capture`가 사유를 다시 보여준다(§6.3) |
 
 **완료 기준**: 설정 변경이 즉시 반영된다(컷 수 8로 저장 후 진입 시 8 표시). [촬영 시작] 후 카메라 권한 프롬프트 → 프리뷰.
 
@@ -262,7 +285,21 @@ interface ScreenLogic {
 
 | 항목 | 내용 |
 |------|------|
-| 권한 프롬프트 | `getUserMedia` 호출 시 브라우저 권한 대화상자가 뜬다. **거부 시** → `Failed` + 전용 안내: *"카메라 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요."* + [다시 시도] |
+| 권한 프롬프트 | `getUserMedia` 호출 시 브라우저 권한 대화상자가 뜬다. 실패는 **사유 5종으로 갈라진다**(아래 표) — 권한 거부와 장치 부재는 손님이 할 조치가 완전히 다르다 |
+
+**실패 사유 5종**(판정: `domain/capture/cameraFailure.ts` 순수 함수 · 예외 `name`에서만 유도)
+
+| 사유 | 유발 예외 | 문구 | [다시 시도] |
+|------|-----------|------|:-----------:|
+| `insecureContext` | `isSecureContext === false`(**가장 먼저 판정**) | "보안 연결(https)에서만 카메라를 사용할 수 있습니다." | ✕ |
+| `permissionDenied` | `NotAllowedError`·`SecurityError` | "카메라 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요." | ✕ |
+| `noDevice` | `NotFoundError`·`OverconstrainedError`(**제약 없는 재시도 후에도** 실패) | "사용할 수 있는 카메라를 찾지 못했습니다. 연결을 확인해 주세요." | ○ |
+| `inUse` | `NotReadableError`·`TrackStartError` | "카메라를 다른 앱이 사용 중입니다. 그 앱을 닫고 다시 시도해 주세요." | ○ |
+| `unknown` | 그 외 전부 | "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요." | ○ |
+
+⚠️ **`permissionDenied`·`insecureContext`에는 [다시 시도]를 붙이지 않는다**(`isCameraRetryable`) — 같은 조건에서 다시 눌러도 반드시 실패해 손님을 헛돌게 한다. 복구는 브라우저 사이트 설정([09 §3](./09-kiosk-operations.md))에서만 가능하다.
+⚠️ **`insecureContext`를 가장 먼저 판정한다** — `http://`로 열면 `navigator.mediaDevices` 자체가 `undefined`라 예외 `name`이 `TypeError`가 되어 `unknown`으로 뭉개진다.
+
 | 권한 사전 승인 | 키오스크는 브라우저 정책으로 사전 허용하는 것을 권장([09 §3](./09-kiosk-operations.md)) |
 | 세션 녹화 | **하지 않는다.** 타임랩스용 프레임을 샘플링해 바로 인코딩한다(WD2, [04 §7](./04-media-pipeline-web.md)) |
 | 탭 hidden | **시퀀스 취소 + 홈 복귀**(WM4) |
@@ -715,7 +752,7 @@ power가 **신규 생성 세션**(빈 편집기 / 기존 프레임 불러오기 
 |------|--------------|
 | 카메라 | 장치 수 · 목록(label) · **현재 해상도·fps** · 권한 상태(granted/prompt/denied) |
 | 비디오 인코더 | **타임랩스 경로 판정**: `MediaRecorder(mp4)` / `WebCodecs+muxer` / **미지원** + 코덱 문자열 |
-| 서버 연결 | 백엔드 구성 여부 · 주소 · 버킷 · **게이트 키 "설정됨/미설정"만**(값 절대 미표시) · 현재 로그인 계정 · `GET /health` 결과와 `deployedAt` |
+| 서버 연결 | 백엔드 구성 여부 · 주소 · 버킷 · **게이트 키 "설정됨/미설정"만**(값 절대 미표시) · **[웹 OAuth 구성] "설정됨/형식 오류(값 미치환 의심)/미설정/알 수 없음"** + **[redirect 허용목록] 개수**(둘 다 값 절대 미표시 — `GET /health`의 `oauth`) · 현재 로그인 계정 · **[마지막 로그인 실패]** 사유+시각 · `GET /health` 결과와 `deployedAt` |
 | 로그·저장소 | 로그 항목 수·기간 + **[로그 내보내기]** · 저장소 영속 승인 여부 · 사용량/할당량(`navigator.storage.estimate()`) · OPFS 세션 잔재 수 |
 | **개발자 문의**(it17 Windows 대응) | Developer `devmcjo@gmail.com`(+**[복사]** 버튼) · Version · Build Date(빌드 시각은 여기서만 노출 — 하단 캡션 금지) · **Web Deploy Date**(`GET /health`의 `deployedAt` — 유효 게이트 키일 때만 수신) |
 | 앱 | 버전 · Service Worker 상태(업데이트 대기 시 [지금 적용]) · PWA 설치 여부 |

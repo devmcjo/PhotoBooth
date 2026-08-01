@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isSessionActive } from "@domain/navigation/stateMachine";
 import { getCameraService } from "@adapters/camera/cameraService";
+import { readCameraPermission } from "@adapters/camera/cameraPermission";
 import { listCameras } from "@adapters/camera/deviceEnumerator";
 import { getTimelapseService } from "@adapters/encode/timelapseService";
 import { createHealthService } from "@adapters/http/healthService";
@@ -13,6 +14,7 @@ import { getLogStore } from "@adapters/storage/logStore";
 import { getOpfsClient } from "@adapters/storage/opfsClient";
 import { OPFS_DIRS } from "@adapters/storage/opfsProtocol";
 import { getResultsStore } from "@adapters/storage/resultsStore";
+import { loginStore } from "@shell/loginStore";
 import { sessionStore } from "@shell/sessionStore";
 import { shellStore, useShellStore } from "@shell/shellStore";
 import {
@@ -25,7 +27,6 @@ import { STRINGS } from "@ui/strings";
 import { env } from "../../../env";
 import {
   collectDiagnostics,
-  type CameraPermission,
   type DiagnosticsDeps,
   type DiagnosticsSnapshot,
 } from "./diagnosticsPresenter";
@@ -40,26 +41,12 @@ import styles from "./diagnostics.module.css";
  * ⚠️ 언마운트에서 `AbortController.abort()` — 결과는 폐기한다.
  */
 
-/**
- * 카메라 권한 조회. **타입을 믿지 않고 런타임 감지**하고 throw를 삼킨다 —
- * Firefox는 `{name:"camera"}`를 모르는 이름으로 보고 예외를 던진다(A4).
+/*
+ * ⚠️ 카메라 권한 조회는 **`adapters/camera/cameraPermission.ts`로 옮겼다**(2026-08-01).
+ *    Guide 화면도 같은 조회를 쓰는데, 복사본이 생기면 폴백 규칙(Safari 미지원·Firefox throw →
+ *    `null`)이 두 벌로 갈라진다. 진단은 **조회만** 한다 — 여는 것만으로 LED가 켜지면 안 되므로
+ *    `requestCameraPermission`을 부르지 않는다.
  */
-async function readCameraPermission(): Promise<CameraPermission> {
-  try {
-    if (typeof navigator === "undefined") return null;
-    const permissions = navigator.permissions as
-      | { query?: (descriptor: { name: string }) => Promise<{ state: string }> }
-      | undefined;
-    if (typeof permissions?.query !== "function") return null;
-    const status = await permissions.query({ name: "camera" });
-    if (status.state === "granted" || status.state === "denied" || status.state === "prompt") {
-      return status.state;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 function formatTimestamp(ms: number): string {
   const date = new Date(ms);
@@ -95,6 +82,8 @@ export function DiagnosticsModal() {
       processedSize: () => getCameraService().processedSize(),
       cameraFps: () => getCameraService().fps(),
       cameraPermission: readCameraPermission,
+      cameraFailureReason: () => getCameraService().failureReason(),
+      lastLoginFailure: () => loginStore.getState().lastFailure,
       encoderProbe: () => getTimelapseService().encoderProbe(),
       serverProbe: () => createHealthService().probe(),
       storageBucket: env.storageBucket,

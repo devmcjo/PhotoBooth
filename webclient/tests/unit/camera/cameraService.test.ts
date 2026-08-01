@@ -353,7 +353,7 @@ describe("cameraService — Ready 게이트(04 §3)", () => {
 });
 
 describe("cameraService — 열기 실패는 false다(예외 전파 금지)", () => {
-  it("getUserMedia 거부는 false + Failed다", async () => {
+  it("getUserMedia 거부는 false + Failed다 — 사유는 permissionDenied다", async () => {
     const h = harness({
       openStream: async () => {
         throw new DOMException("denied", "NotAllowedError");
@@ -361,6 +361,36 @@ describe("cameraService — 열기 실패는 false다(예외 전파 금지)", ()
     });
     expect(await h.camera.start({ targetAspect: 0.75, mirror: false })).toBe(false);
     expect(h.camera.state()).toBe("Failed");
+    // 권한 거부와 장치 부재는 손님이 할 조치가 다르다 → 화면이 사유별 문구를 고른다(03 §6.3).
+    expect(h.camera.failureReason()).toBe("permissionDenied");
+  });
+
+  it("점유(NotReadableError)는 inUse다", async () => {
+    const h = harness({
+      openStream: async () => {
+        throw new DOMException("busy", "NotReadableError");
+      },
+    });
+    expect(await h.camera.start({ targetAspect: 0.75, mirror: false })).toBe(false);
+    expect(h.camera.failureReason()).toBe("inUse");
+  });
+
+  it("성공하면 직전 실패 사유가 지워진다", async () => {
+    let fail = true;
+    const stream = fakeStream();
+    const h = harness({
+      openStream: async () => {
+        if (fail) throw new DOMException("denied", "NotAllowedError");
+        return stream as unknown as MediaStream;
+      },
+    });
+    expect(await h.camera.start({ targetAspect: 0.75, mirror: false })).toBe(false);
+    expect(h.camera.failureReason()).toBe("permissionDenied");
+
+    fail = false;
+    h.camera.stop();
+    expect(await h.camera.start({ targetAspect: 0.75, mirror: false })).toBe(true);
+    expect(h.camera.failureReason()).toBeNull();
   });
 
   it("OverconstrainedError는 제약 없이 1회 재시도한다(저장된 deviceId가 사라진 경우)", async () => {
@@ -391,6 +421,8 @@ describe("cameraService — 열기 실패는 false다(예외 전파 금지)", ()
     });
     expect(await h.camera.start({ deviceId: "gone", targetAspect: 0.75, mirror: false })).toBe(false);
     expect(h.camera.state()).toBe("Failed");
+    // 재시도까지 실패했을 때만 noDevice로 확정한다.
+    expect(h.camera.failureReason()).toBe("noDevice");
   });
 
   it("video.play() 실패도 Failed + 자원 정리다", async () => {

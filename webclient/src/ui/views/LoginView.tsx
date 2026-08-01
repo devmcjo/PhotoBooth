@@ -19,29 +19,35 @@ export function LoginView() {
 
   return (
     <main className={styles.screen}>
-      <h1 className={styles.title}>{STRINGS.login.title}</h1>
+      {/* Windows `LoginGuestView.xaml`은 내용을 Card(Width 440) 안에 담는다. */}
+      <section className={styles.loginCard}>
+        <h1 className={styles.loginTitle}>{STRINGS.login.title}</h1>
 
-      {available ? (
-        <Button variant="primary" disabled={redirecting} onClick={signIn}>
-          {redirecting ? STRINGS.login.redirecting : STRINGS.login.google}
-        </Button>
-      ) : (
-        <p className={styles.subtitle}>{STRINGS.login.errors.clientNotConfigured}</p>
-      )}
+        {available ? (
+          <Button
+            variant="primary"
+            className={styles.loginPrimary}
+            disabled={redirecting}
+            onClick={signIn}
+          >
+            {redirecting ? STRINGS.login.redirecting : STRINGS.login.google}
+          </Button>
+        ) : (
+          <p className={styles.loginCaption}>{STRINGS.login.errors.clientNotConfigured}</p>
+        )}
 
-      {/*
-        영역을 **항상** 렌더한다 — `aria-live`는 요소가 이미 있어야 변경을 읽어 준다.
-        오류가 없을 때는 빈 문자열이다.
-      */}
-      <p className={styles.note} aria-live="polite">
-        {notice === null ? "" : STRINGS.login.errors[notice]}
-      </p>
+        {/*
+          영역을 **항상** 렌더한다 — `aria-live`는 요소가 이미 있어야 변경을 읽어 준다.
+          오류가 없을 때는 빈 문자열이다.
+        */}
+        <p className={styles.note} aria-live="polite">
+          {notice === null ? "" : STRINGS.login.errors[notice]}
+        </p>
 
-      <div className={styles.actions}>
-        <Button variant="ghost" onClick={close}>
+        <Button variant="ghost" className={styles.loginClose} onClick={close}>
           {STRINGS.common.close}
         </Button>
-      </div>
+      </section>
     </main>
   );
 }

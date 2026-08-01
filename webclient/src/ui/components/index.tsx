@@ -36,7 +36,12 @@ export function Button({ variant = "secondary", className, ...rest }: ButtonProp
 export function Spinner({ label = STRINGS.common.loading }: { readonly label?: string }) {
   return (
     <div role="status" aria-live="polite" aria-label={label}>
-      <div className={styles.spinner} />
+      {/*
+        `data-keep-motion`은 `main.css`의 reduced-motion 전역 `!important`(0.01ms) 제외 표식이다.
+        ⚠️ 이 속성을 지우면 스피너가 사실상 정지해 "앱이 멈춘 것"으로 보인다 — reduced-motion의
+           의도는 정지가 아니라 완화(2s)다.
+      */}
+      <div className={styles.spinner} data-keep-motion />
     </div>
   );
 }
@@ -146,6 +151,12 @@ export interface TopBarProps<T extends string> {
   readonly onAccountMenuSelect: (id: T) => void;
   readonly onAccount: () => void;
   readonly onSettings: () => void;
+  /**
+   * 참이면 [전체화면] 버튼을 렌더한다.
+   * ⚠️ 판정은 호출자(App)가 도메인 함수 `isFullscreenButtonVisible`로 한다 — 여기서 하지 않는다.
+   */
+  readonly showFullscreen: boolean;
+  readonly onFullscreen: () => void;
 }
 
 /**
@@ -163,6 +174,8 @@ export function TopBar<T extends string>({
   onAccountMenuSelect,
   onAccount,
   onSettings,
+  showFullscreen,
+  onFullscreen,
 }: TopBarProps<T>) {
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -203,6 +216,12 @@ export function TopBar<T extends string>({
     <header className={styles.topBar}>
       <p className={styles.topBarTitle}>{title}</p>
       <div className={styles.topBarActions}>
+        {/* 계정 버튼 **왼쪽**. 설정·계정이라는 기존 순서를 흔들지 않는다(02 §7). */}
+        {showFullscreen && (
+          <Button variant="ghost" onClick={onFullscreen} aria-label={STRINGS.fullscreen.enter}>
+            {STRINGS.fullscreen.enter}
+          </Button>
+        )}
         <div className={styles.popoverAnchor}>
           <Button
             variant="ghost"

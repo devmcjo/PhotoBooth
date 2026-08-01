@@ -21,6 +21,7 @@ const PROBE: ServerProbeResult = {
   reachable: true,
   deployedAt: "2026-08-01T00:00:00.000Z",
   gateKeyValid: true,
+  oauth: { web: "ok", desktop: "ok", sharedClientId: false, redirectAllowlistCount: 3 },
   detail: null,
 };
 
@@ -45,6 +46,8 @@ function deps(overrides: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
     processedSize: () => ({ width: 1080, height: 1080 }),
     cameraFps: () => 29.5,
     cameraPermission: async () => "granted",
+    cameraFailureReason: () => null,
+    lastLoginFailure: () => null,
     encoderProbe: () => ENCODER,
     serverProbe: async () => PROBE,
     storageBucket: "mcphoto-955fb.firebasestorage.app",
@@ -199,6 +202,60 @@ describe("게이트 키 값 노출 금지", () => {
     // 키가 실제로 주입됐는지 확인한다(테스트가 공회전하지 않게).
     const envModule = await import("../../../src/env");
     expect(envModule.env.backendApiKey).toBe(SECRET);
+  });
+
+  /**
+   * 2026-08-01 후속: 플레이스홀더 배포를 **운영자가 화면에서 알아챌 수 있어야** 한다.
+   * ⚠️ 게이트 키와 같은 규칙 — 값은 절대 싣지 않는다.
+   */
+  it("웹 OAuth 구성 행이 상태를 보여 준다(형식 오류가 보인다)", async () => {
+    const snapshot = await collectDiagnostics(
+      deps({
+        serverProbe: async () => ({
+          ...PROBE,
+          oauth: {
+            web: "malformed",
+            desktop: "ok",
+            sharedClientId: false,
+            redirectAllowlistCount: 3,
+          },
+        }),
+      }),
+    );
+
+    expect(findRow(snapshot, STRINGS.diagnostics.oauthWeb)).toBe(
+      STRINGS.diagnostics.oauthMalformed,
+    );
+    expect(findRow(snapshot, STRINGS.diagnostics.oauthAllowlist)).toBe("3개");
+  });
+
+  it("desktop client_id를 그대로 쓴 오구성이 드러난다", async () => {
+    const snapshot = await collectDiagnostics(
+      deps({
+        serverProbe: async () => ({
+          ...PROBE,
+          oauth: {
+            web: "ok",
+            desktop: "ok",
+            sharedClientId: true,
+            redirectAllowlistCount: 3,
+          },
+        }),
+      }),
+    );
+
+    expect(findRow(snapshot, STRINGS.diagnostics.oauthWeb)).toContain(
+      STRINGS.diagnostics.oauthShared,
+    );
+  });
+
+  it("서버가 신호를 주지 않으면 '미설정'이 아니라 '알 수 없음'이다", async () => {
+    const snapshot = await collectDiagnostics(
+      deps({ serverProbe: async () => ({ ...PROBE, oauth: null }) }),
+    );
+
+    expect(findRow(snapshot, STRINGS.diagnostics.oauthWeb)).toBe(STRINGS.account.unknown);
+    expect(findRow(snapshot, STRINGS.diagnostics.oauthAllowlist)).toBe(STRINGS.account.unknown);
   });
 
   it("게이트 키 행은 '설정됨/거부됨/미설정' 중 하나다", async () => {

@@ -12,7 +12,8 @@
   /* 가공 결과의 종횡비를 캔버스가 결정하므로 컨테이너는 높이를 양보한다. */
   min-height: 0;
   overflow: hidden;
-  background: #000;
+  /* WPF `Brush.CaptureBg` #111114 — 촬영 화면만 예외적으로 다크다. */
+  background: var(--capture-bg);
   border-radius: var(--radius);
 }
 
@@ -32,7 +33,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--gap-sm);
-  background: rgb(0 0 0 / 55%);
+  background: var(--scrim);
   text-align: center;
   padding: var(--gap);
 }

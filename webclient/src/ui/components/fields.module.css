@@ -1,20 +1,23 @@
-/* 설정 폼 컨트롤 — 03 §12 (터치 48px · 가로 스크롤 금지) */
+/*
+ * 설정 폼 컨트롤 — 03 §12 (터치 48px · 가로 스크롤 금지)
+ * 진실원: Windows `Themes/Controls.xaml`(TextBox · ComboBox · ToggleSwitch · Button.Segment).
+ */
 
 .row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--gap-sm);
-  padding: var(--gap-sm) 0;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-s);
+  padding: var(--space-s) 0;
+  border-bottom: 1px solid var(--divider);
 }
 
 .rowLabel {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
   min-width: 40%;
   flex: 1 1 220px;
 }
@@ -24,7 +27,7 @@
 }
 
 .lockBadge {
-  padding: 0.1rem 0.5rem;
+  padding: 2px var(--space-s);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--fg-muted);
@@ -34,7 +37,8 @@
 
 .description {
   flex-basis: 100%;
-  margin: 0;
+  /* WPF 규약: 라벨 하단 4. */
+  margin: var(--space-xs) 0 0;
   color: var(--fg-muted);
   font-size: var(--fs-caption);
 }
@@ -43,67 +47,186 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
   justify-content: flex-end;
 }
 
+/*
+ * ── 토글 스위치 ──
+ *
+ * WPF: 히트 56×48 · track 52×30 r15 bg #ECE8F0 border 1 · thumb 원 24 흰색 + Shadow.Sm ·
+ *      checked → track #FF4D79.
+ * ⚠️ **`transition`을 넣지 마라** — WPF는 즉시 스냅이다.
+ */
 .toggle {
-  min-width: 88px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: var(--touch-min);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
+.toggle:disabled {
+  cursor: not-allowed;
+}
+
+.toggleTrack {
+  display: block;
+  position: relative;
+  width: 52px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-alt);
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  /* thumb는 WPF에서 항상 흰색이다(체크 여부와 무관) — `--bg`가 라이트에서 그 값이다. */
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 켜짐: track이 accent가 되고 thumb이 오른쪽으로 **즉시** 이동한다(위치 = 색 아닌 단서). */
+.toggle[aria-checked="true"] .toggleTrack {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle[aria-checked="true"] .toggleThumb {
+  left: auto;
+  right: 2px;
+}
+
+.toggle:disabled .toggleTrack {
+  background: var(--disabled-bg);
+  border-color: var(--disabled-bg);
+}
+
+/*
+ * ── 세그먼트(Choice) ──
+ *
+ * WPF `Button.Segment`: h48 · minW64 · r8 · transparent · fg #6E6878 · 15/SemiBold ·
+ * checked → bg #FF4D79 fg #FFFFFF **+ Bold**(폭이 변한다 — 원본 동작이므로 그대로 재현한다) ·
+ * hover는 **미선택일 때만**.
+ */
 .choiceGroup {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
 }
 
-.choice {
+/*
+ * ⚠️ 클래스를 **두 번** 쓴다(specificity 0,2,0). `Button` 컴포넌트가 붙이는 `.button` 기본
+ *    스타일(min-height 56 · min-width 120 · surface-alt 배경)을 확실히 이기기 위함이다 —
+ *    한 겹이면 두 CSS 모듈의 번들 순서에 따라 결과가 달라진다.
+ */
+.choice.choice {
   min-width: 64px;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-m);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-tertiary);
+  font-size: 0.9375rem;
+  font-weight: var(--fw-semibold);
 }
 
-/* 네이티브 드롭다운(사용자 관리 역할 변경 전용). 터치 타깃 48px을 지킨다(01 §8). */
+@media (hover: hover) {
+  .choice.choice:hover:not(:disabled):not([aria-pressed="true"]) {
+    background: var(--surface-hover);
+  }
+}
+
+/*
+ * ⚠️ **글자색만 WPF와 다르다**(흰색 → 잉크). 15px Bold는 large text(18.66px) 미만이라 흰 글자로는
+ *    3.19:1이고, 여기서 폰트를 키우면 미선택(15px)과 폭이 어긋나 세그먼트가 눌릴 때마다 흔들린다
+ *    (WPF의 SemiBold→Bold 폭 변동 위에 4px가 더 얹힌다). 그래서 색으로 맞춘다 — 5.05:1(12 H8).
+ */
+.choice.choice[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent-ink);
+  font-weight: var(--fw-bold);
+}
+
+/*
+ * ── 네이티브 드롭다운 ──
+ *
+ * WPF ComboBox의 chevron(12×8 #6E6878)·커스텀 팝업(Shadow.Pop maxH240)은 **재현하지 않는다**
+ * (12 B-n2 — 네이티브 드롭다운의 화살표·팝업은 OS가 그린다). 색·라운드·높이만 맞춘다.
+ */
 .select {
   min-height: var(--touch-min);
   min-width: 0;
   width: min(220px, 100%);
-  padding: 0 var(--gap-sm);
+  padding: 0 var(--space-s);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  background: var(--bg);
   color: var(--fg);
   font-family: inherit;
   font-size: var(--fs-body);
 }
 
 .select:disabled {
-  opacity: 0.55;
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
 }
 
+/*
+ * WPF TextBox: bg #FFFFFF · caret #FF4D79 · border 1 #ECE8F0 · r8 · padding 10,8 · minH48 · fs16.
+ * focus → border 1→2px.
+ * ⚠️ WPF는 그때 레이아웃이 시프트하지만 웹은 padding으로 흡수한다(12 B-n11 — 시프트는 결함이지
+ *    규격이 아니다).
+ */
 .textField {
   min-height: var(--touch-min);
   min-width: 0;
   width: min(360px, 100%);
-  padding: 0 var(--gap-sm);
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  background: var(--bg);
   color: var(--fg);
+  caret-color: var(--accent);
   font-family: inherit;
   font-size: var(--fs-body);
 }
 
+.textField:focus-visible {
+  border-width: 2px;
+  border-color: var(--accent);
+  /* 1→2px 증가분을 padding에서 빼 레이아웃 시프트를 흡수한다. */
+  padding: 7px 9px;
+}
+
 .textField:disabled {
-  opacity: 0.55;
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
 }
 
 .stepper {
   display: flex;
   align-items: center;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
 }
 
-.stepperButton {
+/* 같은 이유로 두 겹이다 — 스테퍼 +/- 는 120px가 아니라 정사각 48px여야 한다. */
+.stepperButton.stepperButton {
   min-width: var(--touch-min);
+  padding: 0;
 }
 
 .stepperValue {

@@ -143,10 +143,25 @@ export interface GoogleExchangeRequest {
 
 /** 오류 → 사유 매핑의 **유일한 지점**. 상태코드를 화면에 흩뿌리지 않는다. */
 function classifyExchangeError(err: unknown): LoginFailureReason {
-  if (err instanceof SsoNotConfiguredError) return "notConfigured";
+  // ⚠️ 아래 로그 컨텍스트의 키를 `code`로 쓰지 마라 — `[masked]`가 된다(15 §4 함정 #1).
+  //    email·token·code·state·nonce는 **절대 싣지 않는다**(AUTH-3).
+  if (err instanceof SsoNotConfiguredError) {
+    // 2026-08-01부터 501은 "SSO 미구성"뿐 아니라 **OAuth 클라이언트 자격 오류**
+    // (서버가 Google에서 invalid_client/unauthorized_client로 거부당함)도 포함한다.
+    // 운영자가 고쳐야 하는 구성 문제이므로 error 레벨로 남긴다.
+    logger.error("서버 OAuth 구성 오류 — 운영자 확인 필요", {
+      status: err.status,
+      errorCode: err.code,
+    });
+    return "notConfigured";
+  }
   if (err instanceof NetworkError) return "network";
   if (err instanceof BackendError) {
-    if (err.status === 401) return "rejected";
+    if (err.status === 401) {
+      // 진짜 계정·도메인 거부. 손님이 재시도해도 같은 결과이므로 warn(장애가 아니다).
+      logger.warn("로그인 거부(계정·도메인)", { status: 401, errorCode: err.code });
+      return "rejected";
+    }
     if (err.status === 400) {
       // 정상 흐름에서는 발생하지 않는다 — 발생하면 서버 허용 목록 미등록·오타다.
       // ⚠️ 키를 `code`로 쓰면 `[masked]`가 된다(15 §4 함정 #1) → `errorCode`.

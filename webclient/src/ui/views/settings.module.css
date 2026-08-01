@@ -12,39 +12,48 @@
   overflow-y: auto;
   /* 가로 스크롤 금지(01 §8) — 넓은 내용은 각자 줄바꿈한다. */
   overflow-x: hidden;
-  padding: var(--gap);
+  /* WPF Settings 스크롤 Padding="40,88,40,16" · MaxWidth 1200. 상단은 TopBar가 대신한다. */
+  padding: var(--space-l) var(--space-xl) var(--space-m);
   display: flex;
   flex-direction: column;
-  gap: var(--gap-lg);
+  /* WPF 카드 간 간격 16. */
+  gap: var(--space-m);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .title {
   margin: 0;
-  font-size: var(--fs-title);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
 }
 
+/* WPF 편집기 배너와 같은 톤: Warning.Surface · r14 · padding 16,10. */
 .banner {
   margin: 0;
-  padding: var(--gap-sm) var(--gap);
+  padding: 10px var(--space-m);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
-  color: var(--fg-muted);
+  background: var(--warning-surface);
+  color: var(--warning);
   font-size: var(--fs-body);
 }
 
+/* WPF Card: bg Surface · border 1 · r14 · **padding 24** · Shadow.Card. */
 .section {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
-  padding: var(--gap);
+  background: var(--surface);
+  padding: var(--space-l);
+  box-shadow: var(--shadow-card);
 }
 
+/* WPF 섹션 제목: H2 + 하단 16. */
 .sectionTitle {
-  margin: 0 0 var(--gap-sm);
-  font-size: var(--fs-body);
-  font-weight: 700;
+  margin: 0 0 var(--space-m);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
 }
 
 .note {
@@ -62,8 +71,9 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-sm);
-  margin-top: var(--gap-sm);
+  /* WPF 가로 버튼 간격 16. */
+  gap: var(--space-m);
+  margin-top: var(--space-m);
 }
 
 /* ── 서버 상태 · 저장소 표 ── */
@@ -141,15 +151,17 @@
 
 /* ── 하단 sticky 저장 바(03 §12.4) ── */
 
+/* WPF sticky 바: Padding="40,12" + 상단 1px Divider + Shadow.Sm. */
 .saveBar {
   position: sticky;
   bottom: 0;
   display: flex;
-  gap: var(--gap-sm);
+  gap: var(--space-m);
   justify-content: flex-end;
-  padding: var(--gap-sm) var(--gap);
-  border-top: 1px solid var(--border);
+  padding: 12px var(--space-xl);
+  border-top: 1px solid var(--divider);
   background: var(--bg);
+  box-shadow: var(--shadow-sm);
   /* 스크롤 영역 위에 항상 떠 있어야 한다. */
   z-index: 1;
 }

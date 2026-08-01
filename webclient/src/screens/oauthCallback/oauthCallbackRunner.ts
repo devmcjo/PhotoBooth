@@ -144,6 +144,8 @@ export async function runOauthCallback(
 export interface ApplyDeps {
   readonly go: (to: AppState) => void;
   readonly fail: (reason: LoginFailureReason) => void;
+  /** 로그인 성공 시 진단 흔적을 지운다(진단 [마지막 로그인 실패] 행 — 07 §2.5). */
+  readonly clearLastFailure: () => void;
 }
 
 export function defaultApplyDeps(): ApplyDeps {
@@ -152,6 +154,7 @@ export function defaultApplyDeps(): ApplyDeps {
       shellStore.getState().go(to);
     },
     fail: (reason) => loginStore.getState().fail(reason),
+    clearLastFailure: () => loginStore.getState().clearLastFailure(),
   };
 }
 
@@ -164,6 +167,8 @@ export function applyOauthCallbackOutcome(
   deps: ApplyDeps = defaultApplyDeps(),
 ): void {
   if (outcome.kind === "success") {
+    // 진단 흔적은 **성공에서만** 지운다 — `Login` 화면을 여는 것만으로 사라지면 쓸모가 없다.
+    deps.clearLastFailure();
     deps.go(outcome.returnTo);
     return;
   }

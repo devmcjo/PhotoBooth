@@ -8,11 +8,28 @@ import { getBackendClient, type BackendClient } from "./backendClient";
  *    키 유효성은 `GET /frames/default`(apiKey 게이트)의 **401 여부**로 확정한다.
  */
 
+/**
+ * 서버가 보고하는 OAuth 클라이언트 구성 상태(열거값뿐 — client_id 값은 담기지 않는다).
+ * 서버 정의는 `web/functions/src/domain/oauthStatus.ts`.
+ */
+export type OAuthClientConfigState = "ok" | "malformed" | "unset";
+
+export interface OAuthConfigStatus {
+  readonly web: OAuthClientConfigState;
+  readonly desktop: OAuthClientConfigState;
+  /** web·desktop이 같은 client_id다(유형이 다르면 공유할 수 없으므로 오구성). */
+  readonly sharedClientId: boolean;
+  /** `OAUTH_REDIRECT_ALLOWLIST` 항목 수. 주소 자체는 오지 않는다. */
+  readonly redirectAllowlistCount: number;
+}
+
 export interface HealthResponse {
   readonly status: string;
   readonly time?: string;
   /** 유효 게이트 키일 때만 온다. 진단 화면의 "Web Deploy Date". */
   readonly deployedAt?: string;
+  /** 유효 게이트 키일 때만 온다. **구버전 서버에는 없다** → 파싱 실패는 `null`로 접는다. */
+  readonly oauth?: unknown;
 }
 
 export interface ServerProbeResult {
@@ -24,7 +41,42 @@ export interface ServerProbeResult {
    * 서버에 도달하지 못했으면 `null`(알 수 없음 — "구성됨"과 "도달 성공"을 구분한다).
    */
   readonly gateKeyValid: boolean | null;
+  /**
+   * 서버 OAuth 구성 상태. **구버전 서버·미인증·도달 실패면 `null`**(= 알 수 없음).
+   * "알 수 없음"과 "미설정"을 섞으면 운영자가 멀쩡한 배포를 오구성으로 읽는다.
+   */
+  readonly oauth: OAuthConfigStatus | null;
   readonly detail: string | null;
+}
+
+const CONFIG_STATES: readonly OAuthClientConfigState[] = ["ok", "malformed", "unset"];
+
+function parseConfigState(value: unknown): OAuthClientConfigState | null {
+  return typeof value === "string" && (CONFIG_STATES as readonly string[]).includes(value)
+    ? (value as OAuthClientConfigState)
+    : null;
+}
+
+/**
+ * 서버 응답의 `oauth`를 **경계에서 검증**한다 — 타입 단언으로 통과시키면 구버전 서버가
+ * 보낸 `undefined`가 화면까지 흘러 "미설정"으로 오독된다.
+ * 하나라도 형식이 맞지 않으면 통째로 `null`(= 알 수 없음)이다.
+ */
+export function parseOAuthConfigStatus(raw: unknown): OAuthConfigStatus | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const record = raw as Record<string, unknown>;
+  const web = parseConfigState(record.web);
+  const desktop = parseConfigState(record.desktop);
+  const count = record.redirectAllowlistCount;
+  if (web === null || desktop === null) return null;
+  if (typeof record.sharedClientId !== "boolean") return null;
+  if (typeof count !== "number" || !Number.isFinite(count) || count < 0) return null;
+  return {
+    web,
+    desktop,
+    sharedClientId: record.sharedClientId,
+    redirectAllowlistCount: Math.floor(count),
+  };
 }
 
 export interface HealthService {
@@ -44,15 +96,17 @@ export function createHealthService(client: BackendClient = getBackendClient()):
     async probe() {
       let reachable = false;
       let deployedAt: string | null = null;
+      let oauth: OAuthConfigStatus | null = null;
       let detail: string | null = null;
 
       try {
         const health = await check();
         reachable = health.status === "ok" || health.status.length > 0;
         deployedAt = health.deployedAt ?? null;
+        oauth = parseOAuthConfigStatus(health.oauth);
       } catch (err) {
         detail = err instanceof Error ? err.message : String(err);
-        return { reachable: false, deployedAt: null, gateKeyValid: null, detail };
+        return { reachable: false, deployedAt: null, gateKeyValid: null, oauth: null, detail };
       }
 
       let gateKeyValid: boolean | null = null;
@@ -66,7 +120,7 @@ export function createHealthService(client: BackendClient = getBackendClient()):
         detail = err instanceof Error ? err.message : String(err);
       }
 
-      return { reachable, deployedAt, gateKeyValid, detail };
+      return { reachable, deployedAt, gateKeyValid, oauth, detail };
     },
   };
 }

@@ -1,60 +1,196 @@
-/* 공통 UI 컴포넌트 — 03 §1 (터치 48px · 다크/라이트 · reduced-motion) */
+/*
+ * 공통 UI 컴포넌트 — 03 §1 (터치 48px · CTA 56px · 다크/라이트 · reduced-motion)
+ *
+ * **진실원은 Windows `Themes/Controls.xaml`이다.** 버튼 5종·카드·모달·토스트의 수치와 상태
+ * 3단계(hover/press/disabled)를 그대로 옮겼다.
+ *
+ * ⚠️ WPF 버튼 스타일 8종의 `Padding` setter는 템플릿에 바인딩되지 않아 **무효**다. 그대로 옮기면
+ *    웹 버튼이 원본보다 넓어진다 → 폭은 `min-width` + 콘텐츠로 결정한다.
+ * ⚠️ hover는 `@media (hover: hover)`로 감싼다 — 터치 기기에서 hover가 눌린 상태로 고착된다.
+ */
 
+/* ── 버튼 5종 ── */
+
+/* Secondary(= 웹 기본). WPF `Button.Secondary`: bg #ECE8F0 · fg Ink · border 1 #ECE8F0 · h56 · minW120 · 16/SemiBold */
 .button {
-  min-height: var(--touch-min);
-  min-width: var(--touch-min);
-  padding: 0.75rem 1.5rem;
-  border: 1px solid var(--border);
+  min-height: var(--touch-cta);
+  min-width: 120px;
+  padding: 0 var(--space-l);
+  border: 1px solid var(--surface-alt);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: var(--surface-alt);
   color: var(--fg);
   font: inherit;
   font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
   cursor: pointer;
-  transition: transform var(--transition), opacity var(--transition);
+  transition: transform var(--transition), background-color var(--transition);
   /* 터치 지연·더블탭 확대 방지 */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
+@media (hover: hover) {
+  .button:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+}
+
 .button:active:not(:disabled) {
+  background: var(--surface-press);
   transform: scale(0.98);
 }
 
+/* WPF disabled: bg #ECE8F0 · fg #B4AEBE — 불투명도가 아니라 색 교체다. */
 .button:disabled {
-  opacity: 0.45;
+  background: var(--disabled-bg);
+  border-color: var(--disabled-bg);
+  color: var(--disabled-fg);
   cursor: not-allowed;
 }
 
-.button:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
+/*
+ * 포커스 링은 `main.css`의 전역 폴백(`3px solid var(--fg)`)을 그대로 쓴다.
+ * ⚠️ `--accent`로 두면 로즈 버튼 위에서 링이 보이지 않는다 — 색을 여기서 다시 정하지 않는다.
+ */
 
+/*
+ * Primary. WPF 원본: bg #FF4D79 · fg #FFFFFF · r14 · h56 · minW120 · 16px Bold · 테두리 없음.
+ *
+ * ⚠️ **폰트만 WPF보다 크다(16 → 19px).** 흰 글자 on `#FF4D79`는 3.19:1이라 WCAG AA 일반
+ *    텍스트(4.5:1)에 못 미치고, 이 배경 위에서 4.5:1을 만족하는 밝은 색은 존재하지 않는다
+ *    (tokens.css 실측 주석). large text(**≥18.66px = 14pt Bold**) 기준 3:1로 넘기는 것이
+ *    색을 바꾸지 않고 통과하는 유일한 길이라 19px로 올렸다 — 색 일치(팀 리드 판정)를 지키면서
+ *    접근성을 확보하는 절충이다. **19px 미만으로 내리면 AA가 깨진다**(12 H8 · themeInvariants).
+ *    WPF도 Home 24 / Guide 20으로 화면별로 키워 두었으므로 성질이 같은 조정이다.
+ */
 .primary {
   background: var(--accent);
-  color: var(--accent-fg);
-  border-color: transparent;
-  font-weight: 700;
+  color: var(--on-accent);
+  border: 0;
+  font-size: 1.1875rem; /* 19px — large text 하한 18.66px 초과 */
+  font-weight: var(--fw-bold);
 }
 
+@media (hover: hover) {
+  .primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+}
+
+.primary:active:not(:disabled) {
+  background: var(--accent-press);
+}
+
+/*
+ * Danger. ⚠️ WPF는 **연분홍 배경 + 붉은 글자**이고 hover에서 반전된다 — 웹의 종전 구현
+ * (붉은 배경 + 흰 글자)과 정반대였다. 라운드도 r8로 다른 CTA와 다르다(WPF 그대로).
+ */
 .danger {
-  background: var(--danger);
-  color: #fff;
-  border-color: transparent;
+  background: var(--danger-surface);
+  color: var(--danger);
+  border: 0;
+  border-radius: var(--radius-sm);
+  min-width: 100px;
+  font-weight: var(--fw-semibold);
 }
 
+@media (hover: hover) {
+  .danger:hover:not(:disabled) {
+    background: var(--danger);
+    color: var(--on-accent);
+  }
+}
+
+/*
+ * 라이트에서 흰 글자 on `#D92D4E` = **4.73:1**로 AA를 통과한다(16px/600 그대로 문제없다).
+ * 그러나 **다크 파생 `--danger`(#FF6B85)는 밝아서 2.73:1**로 떨어진다 — 다크에서만 잉크로
+ * 뒤집는다(#241F2B on #FF6B85 = 5.89:1). 라이트는 WPF의 hover 반전 그대로 남는다.
+ */
+@media (hover: hover) and (prefers-color-scheme: dark) {
+  .danger:hover:not(:disabled) {
+    color: var(--on-accent-ink);
+  }
+}
+
+/* WPF Danger에는 press 상태가 없다 — 배경을 되돌리지 않는다. */
+
+/* Ghost. WPF: transparent · fg #4A4453 · border 1 #ECE8F0 · minW100 · 16/Medium */
 .ghost {
   background: transparent;
+  border-color: var(--border);
+  color: var(--fg-secondary);
+  min-width: 100px;
+  font-weight: var(--fw-medium);
 }
 
+@media (hover: hover) {
+  /* WPF는 hover에서 bg·border·fg **3속성을 동시에** 바꾼다. */
+  .ghost:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--fg-tertiary);
+    color: var(--fg);
+  }
+}
+
+.ghost:active:not(:disabled) {
+  background: var(--surface-press);
+}
+
+/* WPF Ghost disabled는 **배경이 바뀌지 않는다**(글자색만 흐려진다). */
+.ghost:disabled {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--disabled-fg);
+}
+
+/* Icon. WPF `Button.Icon.Pill`: 56×56 완전 원형 · transparent · fg Ink · fs15 */
+.iconButton {
+  width: var(--touch-icon);
+  height: var(--touch-icon);
+  min-width: var(--touch-icon);
+  min-height: var(--touch-icon);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--fg);
+  font-size: 0.9375rem;
+}
+
+@media (hover: hover) {
+  .iconButton:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+}
+
+.iconButton:active:not(:disabled) {
+  background: var(--surface-press);
+}
+
+/* WPF Icon disabled는 변화가 없다. */
+.iconButton:disabled {
+  background: transparent;
+  color: var(--fg);
+}
+
+/* ── 스피너 ── */
+
+/*
+ * WPF `Ellipse 56×56 · stroke #FF4D79 5px · dash "4 2"(두께 배수 = 20/10) · 1초 선형 무한`.
+ * 점선 링은 conic 그라데이션 + 링 마스크로 재현한다(SVG 의존을 새로 들이지 않는다).
+ * 세그먼트 비율 2:1 = 48deg on / 24deg off → 링을 5등분한다.
+ * 마스크의 색은 **알파만 쓰인다**(불투명이면 무엇이든 같다) → 색 리터럴을 두지 않으려고
+ * `var(--fg)`를 쓴다(THEME-1: 색 리터럴은 4곳뿐이다).
+ */
 .spinner {
-  width: 2rem;
-  height: 2rem;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  animation: spin 800ms linear infinite;
+  background: repeating-conic-gradient(var(--accent) 0 48deg, transparent 0 72deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), var(--fg) calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), var(--fg) calc(100% - 5px));
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
@@ -63,6 +199,11 @@
   }
 }
 
+/*
+ * reduced-motion의 의도는 "정지"가 아니라 "완화"다 — 로딩 표시가 멈추면 "앱이 멈춘 것"으로 보인다.
+ * `main.css`의 전역 `!important`(0.01ms)가 이 값을 이기지 않도록 스피너 요소에
+ * `data-keep-motion` 속성이 붙어 있다(`ui/components/index.tsx`).
+ */
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation-duration: 2s;
@@ -77,8 +218,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--gap);
-  background: var(--bg-scrim);
+  padding: var(--space-m);
+  /* WPF `Color.Scrim` = Ink 40%. **검정이 아니다.** */
+  background: var(--scrim);
   /* 배경 클릭으로 닫지 않는다(오조작 방지 — 02 §10) */
 }
 
@@ -86,24 +228,26 @@
   width: min(560px, 100%);
   max-height: 90vh;
   overflow-y: auto;
-  padding: var(--gap-lg);
+  padding: var(--space-l);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: var(--bg);
   color: var(--fg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-pop);
 }
 
 .dialogTitle {
-  margin: 0 0 var(--gap);
-  font-size: 1.35rem;
+  margin: 0 0 var(--space-m);
+  font-size: var(--fs-title-sm);
+  font-weight: var(--fw-semibold);
 }
 
 .dialogActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-sm);
+  /* WPF 모달 내 버튼 간격은 12다(화면 가로 버튼 간격 16과 다르다). */
+  gap: 12px;
   justify-content: flex-end;
-  margin-top: var(--gap-lg);
+  margin-top: var(--space-l);
 }
 
 /*
@@ -120,35 +264,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--gap);
-  background: var(--bg-scrim);
+  padding: var(--space-m);
+  background: var(--scrim);
   /* 배경 클릭으로 닫지 않는다(오조작 방지). */
 }
 
 .overlayDialog {
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
+  gap: var(--space-m);
+  /* WPF 오버레이는 MinWidth 380이다. */
   width: min(560px, 100%);
+  min-width: min(380px, 100%);
   max-height: 90vh;
   overflow-y: auto;
-  padding: var(--gap-lg);
+  padding: var(--space-l);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: var(--bg);
   color: var(--fg);
   text-align: left;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-pop);
 }
 
 .overlayTitle {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: var(--fs-title-sm);
+  font-weight: var(--fw-semibold);
 }
 
 .overlayActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-sm);
+  gap: 12px;
   justify-content: flex-end;
 }
 
@@ -163,14 +310,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gap);
+  gap: var(--space-m);
 }
 
 .pinIndicator {
   display: flex;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
   justify-content: center;
-  padding: var(--gap-sm) 0;
+  padding: var(--space-s) 0;
 }
 
 .pinDot {
@@ -189,16 +336,21 @@
 .pinKeypad {
   display: grid;
   grid-template-columns: repeat(3, minmax(var(--touch-min), 84px));
-  gap: var(--gap-sm);
+  gap: var(--space-s);
   justify-content: center;
 }
 
-.pinKey {
-  /* 터치 타깃 48px 이상(01 §8). */
+/*
+ * ⚠️ 클래스를 **두 번** 쓴다(specificity 0,2,0) — `.button`의 min-width 120을 이겨야 한다.
+ *    키패드 열은 최대 84px이라 120px가 먹으면 그리드가 넘친다.
+ */
+.pinKey.pinKey {
+  /* 웹 전용 컴포넌트지만 56은 이미 `--touch-cta`와 같다 → 토큰화만 한다. */
   min-width: var(--touch-min);
-  min-height: 56px;
-  font-size: 1.35rem;
-  font-weight: 600;
+  padding: 0;
+  min-height: var(--touch-cta);
+  font-size: var(--fs-title-sm);
+  font-weight: var(--fw-semibold);
 }
 
 .pinKeyWide {
@@ -228,21 +380,22 @@
 
 .popover {
   position: absolute;
-  top: calc(100% + 0.25rem);
+  top: calc(100% + var(--space-xs));
   right: 0;
   z-index: 51;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: 2px;
   min-width: 12rem;
-  padding: var(--gap-sm);
+  padding: var(--space-s);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+  background: var(--bg);
+  box-shadow: var(--shadow-pop);
 }
 
-.popoverItem {
+.popoverItem.popoverItem {
+  min-width: 0;
   justify-content: flex-start;
   text-align: left;
   width: 100%;
@@ -252,24 +405,29 @@
 
 .toastHost {
   position: fixed;
-  inset: auto 0 1.5rem 0;
+  inset: auto 0 var(--space-l) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gap-sm);
-  padding: 0 var(--gap);
+  gap: var(--space-s);
+  padding: 0 var(--space-m);
   pointer-events: none;
   z-index: 100;
 }
 
+/*
+ * ⚠️ **위치를 옮기지 않는다**(12 B-n9). WPF 토스트는 상단 중앙 pill이지만, 웹은 하단이
+ * 손가락에 가깝고 상단바와 겹치지 않는다. 색·라운드·그림자만 WPF에 맞춘다.
+ */
 .toast {
   max-width: min(520px, 100%);
-  padding: 0.85rem 1.25rem;
+  padding: 12px var(--space-l);
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  background: var(--surface);
+  /* 좌측 컬러 바는 **유지**한다 — 색만으로 구분하지 않기 위한 웹 접근성 장치다(M4). */
   border-left: 6px solid var(--info);
   color: var(--fg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-pop);
   pointer-events: auto;
 }
 
@@ -284,37 +442,46 @@
 
 /* ── 상단바 ── */
 
+/*
+ * **웹 전용**(WPF에는 대응 컨트롤이 없고 각 View가 상단 오프셋 88로 자리를 비운다 — 12 B-n10).
+ * 높이를 56(`--touch-cta`)으로 올려 그 감각에 근접시킨다.
+ */
 .topBar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--gap-sm);
-  padding: var(--gap-sm) var(--gap);
-  border-bottom: 1px solid var(--border);
-  min-height: var(--touch-min);
+  gap: var(--space-s);
+  padding: 0 var(--space-m);
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+  min-height: var(--touch-cta);
 }
 
 .topBarTitle {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
 }
 
 .topBarActions {
   display: flex;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
 }
 
 /* ── 전체화면 이탈 배너 ── */
 
+/*
+ * **웹 전용**(12 B-n8). ⚠️ 로즈 풀블리드는 CTA 색과 충돌해 "누르는 곳"으로 오독된다 →
+ * 경고 톤으로 바꾼다.
+ */
 .banner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-sm);
-  padding: var(--gap-sm) var(--gap);
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 0.95rem;
+  gap: var(--space-s);
+  padding: var(--space-s) var(--space-m);
+  background: var(--warning-surface);
+  color: var(--warning);
+  font-size: var(--fs-body);
 }

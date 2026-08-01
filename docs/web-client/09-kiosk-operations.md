@@ -24,6 +24,10 @@
 
 ## 2. 브라우저 키오스크 모드 (WR4 — 필수)
 
+> ⚠️ **`--kiosk`로 띄우면 상단바 [전체화면] 버튼을 쓸 필요가 없다.** 브라우저가 이미 전체화면이라
+> `document.fullscreenElement`는 null이지만 화면은 꽉 차 있다 — 버튼은 보이되 눌러도 시각적 변화가 없다
+> (2026-08-01 첫 터치 자동 진입 폐지 · [02 §7](./02-app-shell-and-navigation.md)).
+
 ### 2.1 Windows — Chrome / Edge
 
 ```bat
@@ -85,16 +89,88 @@ Chrome `--kiosk`(§2.1과 동일 플래그) 또는 Safari 전체화면 + `시스
 
 ## 3. 카메라 권한 사전 승인 (필수 — 매번 묻지 않게)
 
-| 플랫폼 | 방법 |
-|--------|------|
-| **Chrome/Edge(데스크톱)** | 앱을 한 번 열어 **[허용]** 을 누르면 그 오리진에 기억된다(전용 프로필이면 유지). 또는 정책 `VideoCaptureAllowedUrls`로 사전 허용 |
-| **Chrome 정책(기업)** | `VideoCaptureAllowedUrls = ["https://mcphoto-955fb-kiosk.web.app"]` → 프롬프트 없이 허용 |
-| **Android Chrome** | 최초 [허용] 후 기억됨. 사이트 설정에서 확인 |
-| **iOS/iPadOS Safari** | 설정 → Safari → 카메라 → **허용** 또는 "웹사이트별 설정"에서 도메인 허용. **[한 번만 허용]을 누르면 매번 묻는다** |
+> **왜 자동으로 뜨게 할 수 없나**: 브라우저 권한 프롬프트는 `getUserMedia()` 호출로만 뜨고, 그 호출은
+> **사용자 제스처**를 요구한다. 페이지가 뜨자마자 자동으로 띄우는 것은 어떤 브라우저에서도 불가능하다
+> ([12 C5](./12-web-vs-windows-differences.md)). 앱이 할 수 있는 최선은 **촬영 안내 화면의
+> [카메라 사용 허용] 버튼**이고, "매번 묻지 않게" 만드는 것은 아래 운영 절차의 몫이다.
 
-| 확인 | 앱의 **진단 모달 → 카메라 섹션**에 권한 상태(granted/prompt/denied)와 장치 목록·실제 해상도가 표시된다 |
+### (1) Chrome/Edge 기업 정책 — 가장 확실 · 프롬프트 자체가 사라진다
 
-> 카메라 권한이 `denied`가 되면 앱에서 되돌릴 수 없다. **브라우저 사이트 설정에서 재허용**해야 한다. 이 문구를 촬영 화면 오류 안내에 포함해 두었다([03 §6.3](./03-screens-spec.md)).
+레지스트리 경로
+
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google\Chrome\VideoCaptureAllowedUrls
+HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\VideoCaptureAllowedUrls
+```
+
+PowerShell(관리자):
+
+```powershell
+$p = "HKLM:\SOFTWARE\Policies\Google\Chrome\VideoCaptureAllowedUrls"
+New-Item -ItemType Directory -Force $p | Out-Null
+New-ItemProperty -Path $p -Name "1" -Value "https://mcphoto-955fb-kiosk.web.app" -PropertyType String -Force
+New-ItemProperty -Path $p -Name "2" -Value "https://mcphoto-955fb-kiosk.firebaseapp.com" -PropertyType String -Force
+gpupdate /force
+```
+
+확인: 주소창에 `chrome://policy` → `VideoCaptureAllowedUrls`가 목록에 보이고 상태가 OK.
+
+- ⚠️ **오리진 단위**다. 경로(`/oauth2callback` 등)를 붙이면 매칭되지 않는다.
+- ⚠️ 정책은 **관리형 브라우저에서만** 먹는다. `chrome://policy`에 안 뜨면 (2)로 간다.
+
+### (2) 키오스크 기동 옵션 — 정책을 못 쓰는 현장
+
+```bat
+:: 전용 프로필 + 키오스크 + 카메라 사전 허용
+"C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+  --kiosk "https://mcphoto-955fb-kiosk.web.app" ^
+  --user-data-dir="C:\mcphoto-kiosk-profile" ^
+  --autoplay-policy=no-user-gesture-required
+```
+
+- **전용 프로필(`--user-data-dir`)이 핵심**이다. 여기서 [허용]을 **한 번만** 누르면 그 프로필에 영구 기억된다. 기본 프로필을 쓰면 사용자가 브라우저 데이터를 지울 때 함께 날아간다.
+- ⚠️ **`--use-fake-ui-for-media-stream`은 운영에 쓰지 마라.** 프롬프트를 없애는 대신 **가짜(테스트용) 장치를 물릴 수 있고**, 실제 카메라 대신 초록 패턴이 찍히는 사고가 난다. 이 플래그는 CI 전용이다.
+- ⚠️ `--kiosk`로 띄우면 브라우저가 이미 전체화면이라 **상단바 [전체화면] 버튼이 필요 없다**(§2 참고).
+
+### (3) 최초 1회 수동 승인 절차(정책·플래그 없이)
+
+1. 부스 브라우저로 kiosk URL을 연다 → **설정 → 진단·상태 → [카메라] 섹션**의 [권한] 행이 `확인 전`인지 본다.
+2. 홈 → [촬영하기] → 프레임 선택 → **촬영 안내 화면의 [카메라 사용 허용]** 을 누른다.
+3. 브라우저 팝업에서 **[허용]** — ⚠️ **[이번만 허용]을 누르지 마라.** 매번 다시 묻는다.
+4. 진단 [권한] 행이 `허용됨`으로 바뀌면 끝. 부스를 재부팅해도 유지되는지 1회 확인한다.
+
+### (4) 거부 상태 복구 (화면에도 같은 내용을 띄운다 — [03 §5](./03-screens-spec.md))
+
+| 브라우저 | 절차 |
+|----------|------|
+| Chrome/Edge(데스크톱) | 주소창 왼쪽 **자물쇠(또는 ⓘ)** → [사이트 설정] → **카메라 → 허용** → 페이지 새로고침 |
+| Android Chrome | 주소창 왼쪽 자물쇠 → [권한] → 카메라 → 허용 |
+| iOS/iPadOS Safari | **설정 앱 → Safari → 카메라 → 허용**, 또는 주소창 `ᴀA` → [웹사이트 설정] → 카메라 → 허용 |
+| macOS Safari | Safari → 설정 → 웹사이트 → 카메라 → 해당 도메인 → 허용. **추가로** macOS 시스템 설정 → 개인정보 보호 → 카메라에서 Safari 체크 |
+| 공통 | 위를 해도 안 되면 **OS 레벨 카메라 권한**(Windows: 설정 → 개인정보 → 카메라 → "앱이 카메라에 액세스하도록 허용")을 확인한다 |
+
+> 카메라 권한이 `denied`가 되면 **앱에서 되돌릴 수 없다.** 촬영 화면은 사유별 안내를 띄우고
+> [다시 시도]를 **일부러 숨긴다**(같은 조건에서 다시 눌러도 반드시 실패한다 — [03 §6.3](./03-screens-spec.md)).
+
+**확인 수단**: 앱의 **진단 모달 → 카메라 섹션**에 권한 상태(허용됨/거부됨/확인 전/알 수 없음), 마지막 **[실패 사유]**, 장치 목록·실제 해상도가 표시된다.
+
+---
+
+## 3b. 표시 설정 (라이트 모드 고정 — 권장)
+
+웹 클라이언트는 **OS의 라이트/다크 설정을 따라간다.** 기본 팔레트는 Windows 앱과 같은 라이트
+("코튼 캔디")이고, 다크는 웹 전용 파생이라 **다크 모드에서는 Windows 앱과 색이 달라진다**
+([12 B-n4](./12-web-vs-windows-differences.md)). 손님이 보는 화면을 Windows와 동일하게 유지하려면
+부스 기기를 **라이트 모드로 고정**한다.
+
+| OS | 절차 |
+|----|------|
+| Windows 11 | 설정 → 개인 설정 → 색 → **모드 선택: 라이트** |
+| Android | 설정 → 디스플레이 → **어두운 테마 끄기**(+ 절전 모드의 자동 다크 전환도 끈다) |
+| iPadOS/iOS | 설정 → 디스플레이 및 밝기 → **라이트**(자동 전환 끄기) |
+| macOS | 시스템 설정 → 화면 모드 → **밝게**(자동 아님) |
+
+⚠️ "자동"으로 두면 **저녁에 화면이 바뀐다.** 반드시 고정값으로 둔다.
 
 ---
 

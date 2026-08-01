@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   abortReasonToLoginFailure,
+  describeLoginFailure,
   loginFailureMessageKey,
   type LoginFailureReason,
 } from "@domain/auth/loginFailure";
@@ -62,5 +63,26 @@ describe("abortReasonToLoginFailure", () => {
     expect(STRINGS.login.errors[loginFailureMessageKey(abortReasonToLoginFailure("timeout"))]).toBe(
       "Google 로그인이 취소되었습니다.",
     );
+  });
+});
+
+describe("describeLoginFailure — 진단 표시 문구(07 §2.5)", () => {
+  it("사유 6종 전부가 비어 있지 않은 한국어 문구를 갖는다", () => {
+    for (const reason of ALL_REASONS) {
+      const label = describeLoginFailure(reason);
+      expect(typeof label, reason).toBe("string");
+      expect(label.length, reason).toBeGreaterThan(0);
+    }
+  });
+
+  it("손님 문구와 달리 redirectRejected와 network가 갈라진다 — 운영자가 원인을 찾아야 한다", () => {
+    expect(describeLoginFailure("redirectRejected")).not.toBe(describeLoginFailure("network"));
+    // 손님 문구는 여전히 같은 것으로 접힌다(축이 둘이라는 사실 자체를 고정한다).
+    expect(loginFailureMessageKey("redirectRejected")).toBe(loginFailureMessageKey("network"));
+  });
+
+  it("서버 구성 오류(notConfigured)가 계정 거부(rejected)와 다르게 표시된다", () => {
+    // 2026-08-01: 서버 구성 오류가 401 계정 문구로 표시돼 운영자가 원인을 찾지 못했다.
+    expect(describeLoginFailure("notConfigured")).not.toBe(describeLoginFailure("rejected"));
   });
 });

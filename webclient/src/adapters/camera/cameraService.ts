@@ -1,4 +1,8 @@
 import {
+  classifyCameraFailure,
+  type CameraFailureReason,
+} from "@domain/capture/cameraFailure";
+import {
   createPreviewReadiness,
   onFrame as advanceReadiness,
   type PreviewReadinessState,
@@ -54,6 +58,13 @@ export interface CameraService {
   /** 프리뷰 캔버스 제어권 이관(zero-copy). 실패해도 무해하다. */
   bindPreview(canvas: HTMLCanvasElement): boolean;
   state(): CameraState;
+  /**
+   * 마지막 실패 사유. 실패한 적이 없으면 `null`.
+   *
+   * 화면은 이 값으로 **사유별 문구·[다시 시도] 노출**을 정한다(03 §6.3) —
+   * 권한 거부와 장치 부재는 손님이 할 조치가 완전히 다르다.
+   */
+  failureReason(): CameraFailureReason | null;
   /** 실제 획득값. 열려 있지 않으면 null. */
   settings(): CameraSettings | null;
   /** 가공 결과 크기(크롭 후). */
@@ -111,6 +122,8 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
   let currentSettings: CameraSettings | null = null;
   let lastProcessedSize: ProcessedSize | null = null;
   let currentOptions: CameraStartOptions | null = null;
+  /** 마지막 실패 사유. `teardown()`이 지우지 않는다 — 실패 직후 teardown이 돌기 때문이다. */
+  let lastFailureReason: CameraFailureReason | null = null;
 
   const stateListeners = new Set<CameraStateListener>();
   const processedListeners = new Set<(size: ProcessedSize) => void>();
@@ -182,25 +195,47 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
     currentOptions = null;
   }
 
+  /** `isSecureContext` 미지원 환경(구형 WebView·node 테스트)에서는 `true`로 본다. */
+  function secureContext(): boolean {
+    return typeof isSecureContext === "boolean" ? isSecureContext : true;
+  }
+
+  /** 실패 사유를 분류해 보관한다. 화면은 `failureReason()`으로 읽는다. */
+  function recordFailure(err: unknown): CameraFailureReason {
+    const reason = classifyCameraFailure(err instanceof Error ? err.name : "", secureContext());
+    lastFailureReason = reason;
+    return reason;
+  }
+
   async function open(options: CameraStartOptions): Promise<MediaStream | null> {
     try {
-      return await openStream(buildConstraints(options));
+      const opened = await openStream(buildConstraints(options));
+      lastFailureReason = null; // 성공하면 직전 실패 흔적을 지운다.
+      return opened;
     } catch (err) {
       const name = err instanceof Error ? err.name : "";
-      // 저장된 deviceId가 사라진 경우다(장치 교체·권한 재부여). 제약 없이 첫 장치로 재시도한다.
+      // ⚠️ 이 재시도를 없애지 마라 — 저장된 deviceId가 사라진 경우(장치 교체·권한 재부여)의
+      //    **정상 복구 경로**다. 제약 없이 첫 장치로 한 번 더 연다.
       if (name === "OverconstrainedError" || name === "NotFoundError") {
         logger.warn("지정한 카메라를 열 수 없어 기본 장치로 재시도", { deviceId: options.deviceId });
         try {
-          return await openStream({ audio: false, video: true });
+          const retried = await openStream({ audio: false, video: true });
+          lastFailureReason = null;
+          return retried;
         } catch (retryErr) {
+          // 재시도까지 실패했을 때만 사유를 확정한다.
+          const reason = recordFailure(retryErr);
           logger.error("카메라 열기 실패(재시도 포함)", {
+            failureReason: reason,
             reason: retryErr instanceof Error ? retryErr.message : String(retryErr),
           });
           return null;
         }
       }
+      const reason = recordFailure(err);
       logger.error("카메라 열기 실패", {
         name,
+        failureReason: reason,
         reason: err instanceof Error ? err.message : String(err),
       });
       return null;
@@ -209,6 +244,7 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
 
   return {
     state: () => state,
+    failureReason: () => lastFailureReason,
     settings: () => currentSettings,
     processedSize: () => lastProcessedSize,
     fps: () => meter.fps(now()),
@@ -249,7 +285,8 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
 
       const opened = await open(options);
       if (opened === null) {
-        setState("Failed", "카메라를 열 수 없습니다.");
+        // detail은 **사유 열거값**이다(한국어 문장이 아니다) — 문구 결정은 화면이 한다(03 §6.3).
+        setState("Failed", lastFailureReason ?? "unknown");
         teardown();
         return false;
       }
@@ -286,7 +323,9 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
 
       const attached = await source.attach(stream);
       if (!attached) {
-        setState("Failed", "카메라 재생을 시작할 수 없습니다.");
+        // 스트림은 열렸는데 재생이 시작되지 않았다 — 권한·장치 문제가 아니므로 `unknown`이다.
+        lastFailureReason = "unknown";
+        setState("Failed", "unknown");
         teardown();
         return false;
       }
@@ -299,7 +338,8 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
             elapsedMs: Math.round(now() - startedAt),
             processedFrames: meter.total,
           });
-          setState("Failed", "카메라 준비가 완료되지 않았습니다.");
+          lastFailureReason = "unknown";
+          setState("Failed", "unknown");
           teardown();
         }
       }, readyTimeoutMs);

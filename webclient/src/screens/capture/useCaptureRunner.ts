@@ -11,6 +11,7 @@ import { sessionStore, type CapturedCut } from "@shell/sessionStore";
 import { useSettingsStore } from "@shell/settingsStore";
 import { configureShell, shellStore } from "@shell/shellStore";
 import { STRINGS } from "@ui/strings";
+import { createCaptureRetryGate } from "./captureRetryGate";
 import {
   CaptureCancelledError,
   createCaptureSequence,
@@ -35,6 +36,11 @@ export interface CaptureRunner {
   readonly capturedCount: number;
   readonly canShootNow: boolean;
   shootNow(): void;
+  /**
+   * [다시 시도] — 진입 절차를 **처음부터**(카메라 시작부터) 다시 태운다.
+   * 진행 중이거나 화면을 벗어난 뒤라면 아무 일도 하지 않는다.
+   */
+  retryCamera(): void;
 }
 
 function delay(ms: number): Promise<void> {
@@ -63,9 +69,18 @@ export function useCaptureRunner(): CaptureRunner {
   const sequenceRef = useRef<CaptureSequence | null>(null);
   /** StrictMode 이중 마운트에서 두 번 촬영하지 않게 한다. */
   const startedRef = useRef(false);
+  /**
+   * 살아 있는 effect의 재시도 진입점. cleanup에서 `null`로 끊는다 —
+   * 언마운트 뒤에 눌린 [다시 시도]가 죽은 클로저의 카메라를 되살리지 않게 한다.
+   */
+  const retryRef = useRef<(() => void) | null>(null);
 
   const shootNow = useCallback(() => {
     sequenceRef.current?.skipCountdown();
+  }, []);
+
+  const retryCamera = useCallback(() => {
+    retryRef.current?.();
   }, []);
 
   useEffect(() => {
@@ -185,10 +200,19 @@ export function useCaptureRunner(): CaptureRunner {
       }
     }
 
-    void run();
+    // 최초 진입과 [다시 시도]가 **같은 `run()`** 을 탄다. 진입 절차 자체는 위에서 한 줄도 바뀌지
+    // 않았다 — 게이트는 "겹쳐 돌지 않게 하고, 폐기 뒤에는 부르지 않는다"만 책임진다(03 §6.3).
+    const gate = createCaptureRetryGate({
+      run,
+      disposed: () => disposed,
+      onError: (err) => logger.error("촬영 진입 절차가 예외로 끝났다", { error: String(err) }),
+    });
+    retryRef.current = () => gate.retry();
+    gate.start();
 
     return () => {
       disposed = true;
+      retryRef.current = null;
       sequenceRef.current?.cancel();
       sequenceRef.current = null;
       startedRef.current = false;
@@ -208,6 +232,7 @@ export function useCaptureRunner(): CaptureRunner {
     capturedCount,
     canShootNow: ready,
     shootNow,
+    retryCamera,
   };
 }
 

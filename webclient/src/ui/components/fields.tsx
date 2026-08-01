@@ -52,20 +52,28 @@ export interface ToggleProps {
   readonly onChange: (next: boolean) => void;
 }
 
-/** on/off 토글. `role="switch"` + 문자 표시(색만으로 구분하지 않는다). */
+/**
+ * on/off 스위치 — WPF `ToggleSwitch`(track 52×30 r15 · thumb 원 24 · 히트 56×48).
+ *
+ * ⚠️ **색만으로 구분하지 않는다**: 켜짐/꺼짐은 **thumb의 좌우 위치**로도 드러난다(M4).
+ *    종전 구현은 "켜짐"/"꺼짐" 문자 버튼이었으나 WPF와 형태가 달라 스위치로 교체했다.
+ * ⚠️ **`transition`을 넣지 마라** — WPF는 즉시 스냅이다. 넣으면 "다르게 보인다".
+ */
 export function Toggle({ label, checked, disabled = false, onChange }: ToggleProps) {
   return (
-    <Button
+    <button
+      type="button"
       className={styles.toggle}
       role="switch"
       aria-checked={checked}
       aria-label={label}
-      variant={checked ? "primary" : "secondary"}
       disabled={disabled}
       onClick={() => onChange(!checked)}
     >
-      {checked ? "켜짐" : "꺼짐"}
-    </Button>
+      <span className={styles.toggleTrack} aria-hidden="true">
+        <span className={styles.toggleThumb} />
+      </span>
+    </button>
   );
 }
 
@@ -101,7 +109,11 @@ export function ChoiceGroup<T extends string | number>({
         <Button
           key={String(option.value)}
           className={styles.choice}
-          variant={option.value === value ? "primary" : "secondary"}
+          /*
+           * ⚠️ `variant`를 주지 않는다 — 세그먼트 표현(WPF `Button.Segment`)은 `.choice`가
+           *    통째로 소유하고, 선택 상태는 `aria-pressed`로만 갈린다. `variant="primary"`를
+           *    함께 주면 두 규칙이 같은 specificity로 충돌해 번들 순서에 결과가 좌우된다.
+           */
           aria-pressed={option.value === value}
           disabled={disabled}
           onClick={() => onChange(option.value)}

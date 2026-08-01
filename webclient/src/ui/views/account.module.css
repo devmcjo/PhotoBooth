@@ -11,15 +11,21 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--gap-lg);
+  /* WPF Account 스크롤 Padding="40,88,40,40" · **MaxWidth 560 중앙**. 상단은 TopBar가 대신한다. */
+  padding: var(--space-l) var(--space-xl) var(--space-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
+  /* WPF 카드 간 간격 16. */
+  gap: var(--space-m);
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
 }
 
 .title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
 }
 
 .tabs {
@@ -35,8 +41,9 @@
 }
 
 .sectionTitle {
-  margin: var(--gap-sm) 0 0;
-  font-size: 1.1rem;
+  margin: var(--space-s) 0 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
 }
 
 .note {
@@ -55,7 +62,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-sm);
+  /* WPF 가로 버튼 간격 16. */
+  gap: var(--space-m);
 }
 
 /* 내 정보 — 라벨/값 2열. 좁은 화면에서는 1열로 접힌다(가로 스크롤 금지 — 03 §1.2). */
@@ -91,10 +99,11 @@
 .bottomBar {
   display: flex;
   justify-content: flex-end;
-  gap: var(--gap-sm);
-  padding: var(--gap);
-  border-top: 1px solid var(--border);
-  background: var(--bg-elevated);
+  gap: var(--space-m);
+  padding: 12px var(--space-xl);
+  border-top: 1px solid var(--divider);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .pinMessage {

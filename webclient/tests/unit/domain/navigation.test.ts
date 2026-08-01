@@ -12,6 +12,10 @@ import {
   reset,
   tick,
 } from "@domain/navigation/idleCountdown";
+import {
+  isFullscreenButtonVisible,
+  type FullscreenButtonInput,
+} from "@domain/navigation/fullscreenButtonPolicy";
 
 describe("appState", () => {
   it("13개 상태를 갖는다", () => {
@@ -153,5 +157,48 @@ describe("idleCountdown", () => {
     const state = createIdleCountdown(5);
     tick(state);
     expect(state.remaining).toBe(5);
+  });
+});
+
+describe("fullscreenButtonPolicy — 상단바 [전체화면] 버튼 노출(02 §7)", () => {
+  const VISIBLE: FullscreenButtonInput = {
+    supported: true,
+    isFullscreen: false,
+    fullscreenLost: false,
+    standalone: false,
+  };
+
+  it("네 조건이 전부 맞을 때만 보인다 — 16조합 중 1개", () => {
+    const flags: (keyof FullscreenButtonInput)[] = [
+      "supported",
+      "isFullscreen",
+      "fullscreenLost",
+      "standalone",
+    ];
+    let visibleCount = 0;
+    for (let mask = 0; mask < 16; mask += 1) {
+      const input = Object.fromEntries(
+        flags.map((key, index) => [key, (mask & (1 << index)) !== 0]),
+      ) as unknown as FullscreenButtonInput;
+      if (isFullscreenButtonVisible(input)) visibleCount += 1;
+    }
+    expect(visibleCount).toBe(1);
+    expect(isFullscreenButtonVisible(VISIBLE)).toBe(true);
+  });
+
+  it("미지원이면 숨긴다 — 죽은 버튼 금지(iOS Safari)", () => {
+    expect(isFullscreenButtonVisible({ ...VISIBLE, supported: false })).toBe(false);
+  });
+
+  it("이미 전체화면이면 숨긴다", () => {
+    expect(isFullscreenButtonVisible({ ...VISIBLE, isFullscreen: true })).toBe(false);
+  });
+
+  it("이탈 배너가 떠 있으면 숨긴다 — 배너의 [다시 전체화면으로]와 중복되지 않게", () => {
+    expect(isFullscreenButtonVisible({ ...VISIBLE, fullscreenLost: true })).toBe(false);
+  });
+
+  it("PWA standalone이면 숨긴다 — 이미 몰입 상태다", () => {
+    expect(isFullscreenButtonVisible({ ...VISIBLE, standalone: true })).toBe(false);
   });
 });

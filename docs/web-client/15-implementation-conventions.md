@@ -162,6 +162,10 @@ npm run e2e:chromium   # 카메라 시나리오까지 전부(webkit은 @camera·
 | **WD5** `src/` 전체에 `window.close` 0건 | 동상 — 스크립트가 열지 않은 탭은 닫을 수 없다. 부르면 조용히 실패해 "버튼이 안 먹는다"가 된다 |
 | **DIAG-1** 진단·뷰·`serverStatusPanel`에서 `backendApiKey`가 등장하는 줄에 `.length`·`.trim()`이 반드시 있다 | 동상 — 게이트 키 **값**이 화면·로그로 새는 것을 막는다 |
 | **PIN-1**(확장) `PIN_FILES`에 `pinChangeRunner.ts`·`pinResetRunner.ts`·`PinKeypad.tsx` 추가 | `settingsInvariants.test.ts` — Step 16의 새 PIN 경로 3종이 자동으로 검사에 들어온다 |
+| **FS-1** `getFullscreenController().request(` 호출부가 **App.tsx 2곳뿐**(상단바 [전체화면] 버튼 · 이탈 배너) | `fullscreenInvariants.test.ts` — 2026-08-01 이슈 ③의 원인이 "부르는 곳이 하나 늘어난 것"(`main.tsx` 첫 제스처)이었다. 문서로만 두면 다음 사람이 다시 넣는다 |
+| **CAM-1** `getUserMedia(` 보유 파일이 **정확히 2개**(`cameraService.ts` 실촬영 · `cameraPermission.ts` 권한 프라이밍) + 후자에 `.stop()` 존재 | `cameraInvariants.test.ts` — 하드웨어 단일 소유(01 §2.1)를 프라이밍이 우회하지 못하게. `.stop()` 검사는 **LED 잔존 회귀**를 막는다 |
+| **THEME-1** `src/ui`·`src/screens` CSS의 색 리터럴이 **정확히 4곳**(플래시 2 · QR 캔버스 1 · 카운트다운 text-shadow 1) + 각각 위에 근거 주석 | `themeInvariants.test.ts` — 토큰화되지 않은 색은 팔레트를 바꿔도 따라오지 않는다. 함께 `#0e0e12` 0건 · `main.css`의 `:root` 색 재정의 0건 · `outline: none` 0건 · 토글 `transition` 0건도 고정한다 |
+| **THEME-2** `.primary`의 `font-size` ≥ **18.66px**(= 14pt, WCAG large text 하한) · `--on-accent: #ffffff` · `--on-accent-ink: #241f2b` · 작은 요소 3곳(세그먼트 선택·`.autoBadge`·`.cutOrder`)이 `--on-accent-ink`를 쓴다 | `themeInvariants.test.ts` — 흰 글자 on `#FF4D79`는 **3.19:1**이라 large text가 아니면 AA가 깨진다. `#FF4D79` 위에서 4.5:1을 만족하는 밝은 색은 **존재하지 않으므로**(필요 상대휘도 1.43 > 1) 폰트를 줄이거나 잉크를 흰색으로 되돌리면 **되돌릴 방법이 없다**. 실측표는 [`design/web-fix-20260801-windows-visual-parity.md §4.4.1`](../design/web-fix-20260801-windows-visual-parity.md) |
 | `exportImport.ts`에 `fetch(` 0건 · `zipStore.ts`·`swPolicy.ts`는 **import 0** | `accountInvariants.test.ts` — 프레임 바이트는 OPFS에서 직접 읽고(A1 회피), 순수 코덱·분류기는 의존성을 갖지 않는다 |
 
 새 불변식을 만들면 **같은 방식으로 고정**하는 것이 이 저장소의 관례다.
@@ -188,6 +192,9 @@ npm run e2e:chromium   # 카메라 시나리오까지 전부(webkit은 @camera·
 | 14 | `sw.js` 바이트가 같으면 브라우저가 **업데이트를 감지하지 않는다** | 자산 목록을 `sw.js`에 인라인해 내용이 바뀌면 파일도 바뀌게 만든다(빌드 타임스탬프는 no-op 재빌드를 churn시킨다) |
 | 15 | PIN 승인이 **화면 단위**라 `Account ↔ UserMgmt` 왕복마다 PIN을 다시 물었다 | 승인 단위는 화면이 아니라 **그룹**이다(`pinGateGroup`). 하위 페이지를 새로 만들면 그룹에 넣는다 |
 | 16 | `authMethodLabel`이 호출자 0인 채로 규격과 다른 문구("Google 계정")를 들고 있었다 | **렌더된 적 없는 헬퍼는 "현행 동작"이 아니다** — 우선순위 규칙(소스 > analysis)을 적용할 대상이 아니다 |
+| 17 | 인수인계 문서(`14 §3`)의 예시 명령을 **치환 없이** 실행해 `GOOGLE_OAUTH_CLIENT_ID_WEB=<A1의 웹 client_id>`가 배포 env에 실렸다 | **배포는 성공하고 로그인만 조용히 실패**했다(웹 100% `invalid_client` → 401 "계정" 문구로 오귀인). ① 배포 전 플레이스홀더 검사를 스크립트로 고정한다(`functions/scripts/check-env-placeholders.mjs` — `deploy-web.bat`이 호출) ② **운영자 구성 오류를 계정 오류로 표시하지 않는다**(서버가 `invalid_client`/`unauthorized_client`만 501로 분리) |
+| 18 | 두 CSS 모듈이 **같은 specificity**로 충돌하면(예: `.button` vs `.choice`) 번들 순서에 결과가 좌우된다 | 컴포넌트가 붙이는 기본 클래스를 이겨야 하는 화면 오버라이드는 **클래스를 두 번 쓴다**(`.choice.choice`) — `!important`보다 되돌리기 쉽고 순서에 의존하지 않는다 |
+| 19 | CSS 주석에 마크다운 강조를 쓰다 `…minW120 · **16**/Bold …` 를 적었더니 **`**` 뒤의 `/`가 주석을 조기에 닫아** 빌드가 깨졌다(`postcss: Unexpected '/'`) | CSS 주석 안에서 `*` 바로 뒤에 `/`가 오면 **그 자리가 주석 끝**이다. `tsc`·`vitest`는 CSS를 파싱하지 않아 **`vite build`에서만 드러난다** → 주석에 `16/Bold`·`4/3` 같은 슬래시를 쓸 때 앞 글자가 `*`인지 본다(`grep -rn '\*\*/' src --include=*.css`) |
 
 ---
 

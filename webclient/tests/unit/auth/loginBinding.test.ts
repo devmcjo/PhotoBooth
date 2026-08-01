@@ -116,7 +116,7 @@ describe("runSignIn — 실패 경로", () => {
 
 describe("loginStore — 콜백이 실어 보낸 오류 전달", () => {
   beforeEach(() => {
-    loginStore.setState({ notice: null });
+    loginStore.setState({ notice: null, lastFailure: null });
   });
 
   it("fail → notice · clear → null", () => {
@@ -125,6 +125,29 @@ describe("loginStore — 콜백이 실어 보낸 오류 전달", () => {
     expect(loginStore.getState().notice).toBe("rejected");
     loginStore.getState().clear();
     expect(loginStore.getState().notice).toBeNull();
+  });
+
+  it("lastFailure는 clear()로 지워지지 않는다 — 진단 흔적이 화면을 여는 것만으로 사라지면 안 된다", () => {
+    loginStore.getState().fail("notConfigured", 1_700_000_000_000);
+    expect(loginStore.getState().lastFailure).toEqual({
+      reason: "notConfigured",
+      at: 1_700_000_000_000,
+    });
+    // `notice`는 Login 화면이 마운트하면서 소비·소거한다.
+    loginStore.getState().clear();
+    expect(loginStore.getState().notice).toBeNull();
+    expect(loginStore.getState().lastFailure?.reason).toBe("notConfigured");
+  });
+
+  it("lastFailure는 로그인 성공(clearLastFailure)에서만 null이 된다", () => {
+    loginStore.getState().fail("rejected", 1);
+    loginStore.getState().clearLastFailure();
+    expect(loginStore.getState().lastFailure).toBeNull();
+  });
+
+  it("시각은 주입할 수 있다(결정적 테스트)", () => {
+    loginStore.getState().fail("network", 42);
+    expect(loginStore.getState().lastFailure?.at).toBe(42);
   });
 
   it("진단 사유를 그대로 보관한다(문구 접기는 화면이 한다)", () => {
@@ -157,5 +180,19 @@ describe("문구 카탈로그 — 규격(analysis/13 §14)과 문자 단위 일�
 
   it("세션 만료 문구가 '세션'으로 시작한다(07 §4.3 · 12 C10)", () => {
     expect(STRINGS.error.sessionExpired).toBe("세션이 만료되었습니다. 다시 로그인해 주세요.");
+  });
+
+  /**
+   * 2026-08-01 사고의 핵심은 **서버 구성 오류가 "계정 문제"로 보였다**는 것이다.
+   * 서버가 501을 분리해 보내도 클라 문구가 잘못 접히면 같은 오귀인이 반복된다 → 여기서 고정한다.
+   */
+  it("501(notConfigured) 경로에 '계정' 문구가 새지 않는다", () => {
+    const shown = STRINGS.login.errors[loginFailureMessageKey("notConfigured")];
+
+    expect(shown).toBe("Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요.");
+    expect(shown).not.toBe(STRINGS.login.errors.rejected);
+    expect(shown).not.toContain("계정");
+    // 반대 방향도 고정한다 — 401은 계속 계정 문구여야 한다(구성 오류로 오독되면 안 된다).
+    expect(STRINGS.login.errors[loginFailureMessageKey("rejected")]).toContain("계정");
   });
 });

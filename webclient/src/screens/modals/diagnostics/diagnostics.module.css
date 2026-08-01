@@ -17,7 +17,8 @@
 
 .sectionTitle {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--fs-title-sm);
+  font-weight: var(--fw-semibold);
 }
 
 .rows {
@@ -29,7 +30,7 @@
 
 .key {
   margin: 0;
-  color: var(--fg-muted);
+  color: var(--fg-tertiary);
   font-size: var(--fs-caption);
 }
 
@@ -39,13 +40,14 @@
   word-break: break-all;
 }
 
+/* ok는 보조색(민트)이다 — 강조색(로즈)은 CTA 전용이라 상태 표시와 섞으면 안 된다. */
 .ok {
-  color: var(--accent);
+  color: var(--accent2-text);
 }
 
 .warn {
-  color: var(--fg);
-  font-weight: 600;
+  color: var(--warning);
+  font-weight: var(--fw-semibold);
 }
 
 .bad {
@@ -60,7 +62,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-sm);
+  /* 모달 내 버튼 간격 12(WPF 규약). */
+  gap: 12px;
 }
 
 .caption {

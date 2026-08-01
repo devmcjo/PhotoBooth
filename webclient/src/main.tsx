@@ -26,7 +26,7 @@ import "./main.css";
 /**
  * 앱 진입점 — 부트스트랩 순서는 01 §4.2가 규격이다.
  *   1~6 `shell/bootstrap.ts` · **7 Service Worker** · **8 전역 예외** · 9 OAuth 콜백
- *   · **10 React 마운트** · **11 첫 제스처(전체화면·오디오·WakeLock)**
+ *   · **10 React 마운트** · **11 첫 제스처(WakeLock)**
  *
  * ⚠️ 이 파일에 `location.assign`·`location.replace`·`location.href =` 를 두지 않는다 —
  *    리로드하면 메모리 전용 JWT(M2)가 즉시 사라진다. URL 정리는 `history.replaceState`다.
@@ -66,12 +66,13 @@ function installShellHandlers(): void {
 }
 
 function installFirstGesture(): void {
-  // 11. 전체화면·Wake Lock·오디오는 모두 **사용자 제스처**를 요구한다.
-  //     Home의 [촬영 시작]과 별개로 화면 아무 곳이나 첫 터치에서 시도한다.
+  // 11. Wake Lock은 사용자 제스처를 요구한다. 전체화면은 **여기서 하지 않는다** —
+  //     손님이 화면 아무 곳이나 만졌을 때 전체화면으로 들어가는 것은 원인 없는 상태 변화다
+  //     (2026-08-01 폐지). 진입은 상단바 [전체화면] 버튼 1곳뿐이다(02 §7 · 12 C4).
+  //     ⚠️ 오디오 unlock은 여기가 아니라 Guide의 [촬영 시작]에 있다 — 건드리지 마라.
   installFirstGestureHandlers(() => {
-    void getFullscreenController().request();
     void requestWakeLock();
-    logger.info("첫 제스처 처리(전체화면·WakeLock 요청)");
+    logger.info("첫 제스처 처리(WakeLock 요청)");
   });
 }
 

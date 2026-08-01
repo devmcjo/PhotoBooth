@@ -17,12 +17,14 @@ export function DoneView({ appName }: { readonly appName: string }) {
 
   return (
     <main className={styles.screen}>
-      <h1 className={styles.title}>{appName}</h1>
-      <p className={styles.subtitle} aria-live="polite">
+      {/* WPF `DoneView.xaml`: Display **48**(Home의 64와 다르다) · 부제 margin 0,12,0,40. */}
+      <h1 className={styles.doneTitle}>{appName}</h1>
+      <p className={styles.doneSubtitle} aria-live="polite">
         {STRINGS.done.thanks}
       </p>
       <Button
         variant="primary"
+        className={styles.doneCta}
         onClick={() => void shellStore.getState().returnHome("완료 화면에서 홈 선택")}
       >
         {STRINGS.done.goHome}

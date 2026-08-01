@@ -18,7 +18,7 @@ import {
   TempUserLimitError,
   toBackendError,
 } from "@adapters/http/errors";
-import { createHealthService } from "@adapters/http/healthService";
+import { createHealthService, parseOAuthConfigStatus } from "@adapters/http/healthService";
 import { createQrUsageService, isTempUserBlocked } from "@adapters/http/qrUsageService";
 import { createUploadGateway } from "@adapters/http/uploadGateway";
 import { createFrameRepository, parseFrame } from "@adapters/http/frameRepository";
@@ -323,6 +323,72 @@ describe("healthService — 두 프로브(06 §2.1)", () => {
       recorded.url.includes("health") ? json({ status: "ok" }) : json({ error: { code: "internal" } }, 500),
     );
     expect((await createHealthService(c).probe()).gateKeyValid).toBeNull();
+  });
+
+  it("health의 oauth 구성 신호를 그대로 싣는다", async () => {
+    const { client: c } = client((recorded) =>
+      recorded.url.includes("health")
+        ? json({
+            status: "ok",
+            oauth: {
+              web: "malformed",
+              desktop: "ok",
+              sharedClientId: false,
+              redirectAllowlistCount: 3,
+            },
+          })
+        : json([]),
+    );
+    expect((await createHealthService(c).probe()).oauth).toEqual({
+      web: "malformed",
+      desktop: "ok",
+      sharedClientId: false,
+      redirectAllowlistCount: 3,
+    });
+  });
+
+  it("oauth가 없는 구버전 서버 응답이면 null이다(= 알 수 없음)", async () => {
+    const { client: c } = client((recorded) =>
+      recorded.url.includes("health") ? json({ status: "ok" }) : json([]),
+    );
+    expect((await createHealthService(c).probe()).oauth).toBeNull();
+  });
+});
+
+/**
+ * 경계 검증 — 서버 응답은 **신뢰하지 않는다**. 형식이 하나라도 어긋나면 통째로 `null`이어야
+ * 화면이 "미설정"으로 오독하지 않는다.
+ */
+describe("parseOAuthConfigStatus — 경계 검증", () => {
+  const OK = {
+    web: "ok",
+    desktop: "unset",
+    sharedClientId: true,
+    redirectAllowlistCount: 0,
+  };
+
+  it("정상 형태를 통과시킨다", () => {
+    expect(parseOAuthConfigStatus(OK)).toEqual(OK);
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["null", null],
+    ["문자열", "ok"],
+    ["배열", []],
+    ["알 수 없는 열거값", { ...OK, web: "weird" }],
+    ["web 누락", { desktop: "ok", sharedClientId: false, redirectAllowlistCount: 1 }],
+    ["desktop 누락", { web: "ok", sharedClientId: false, redirectAllowlistCount: 1 }],
+    ["sharedClientId가 boolean이 아님", { ...OK, sharedClientId: "true" }],
+    ["개수가 숫자가 아님", { ...OK, redirectAllowlistCount: "3" }],
+    ["개수가 음수", { ...OK, redirectAllowlistCount: -1 }],
+    ["개수가 NaN", { ...OK, redirectAllowlistCount: Number.NaN }],
+  ])("%s → null", (_label, raw) => {
+    expect(parseOAuthConfigStatus(raw)).toBeNull();
+  });
+
+  it("소수 개수는 내림한다(형식만 맞으면 버리지 않는다)", () => {
+    expect(parseOAuthConfigStatus({ ...OK, redirectAllowlistCount: 2.7 })?.redirectAllowlistCount).toBe(2);
   });
 });
 

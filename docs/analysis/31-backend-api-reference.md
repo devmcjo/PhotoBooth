@@ -82,7 +82,7 @@
 | `not_found` | 404 | 대상 없음(계정·프레임) 또는 미정의 엔드포인트 | "대상을 찾을 수 없습니다" |
 | `conflict` | 409 | 중복(동일 `sessionId` 재commit, 프레임 10개 초과) 또는 **PIN 미설정** | 문맥별 분기 필수(§4.5 참고) |
 | `invalid_argument` | 400 | 입력 검증 실패, JSON 파싱 실패, 자기 자신 대상 PIN 재설정 | 입력 오류 안내 |
-| `not_implemented` | 501 | 서버 기능 미구성 (현재는 **Google SSO 미구성**만) | "로그인이 구성되지 않았습니다. 관리자에게 문의" — 자격 실패·네트워크와 **구분해서** 안내 |
+| `not_implemented` | 501 | 서버 기능 미구성 — **Google SSO 미구성 또는 OAuth 클라이언트 자격 오류**(client_id/secret이 Google에 등록된 값과 불일치) | "로그인이 구성되지 않았습니다. 관리자에게 문의" — 자격 실패·네트워크와 **구분해서** 안내 |
 | `internal` | 500 | 서버 오류 | 재시도 가능 안내 |
 | `TEMP_USER_TIME_EXCEEDED` | **403** | 무료 사용 시간 경과 | 고정 문구: *"무료 사용 시간이 지났습니다. 관리자에게 문의해주세요."* |
 | `TEMP_USER_COUNT_EXCEEDED` | **403** | 무료 사용 횟수 소진 | 고정 문구: *"무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요."* |
@@ -132,7 +132,12 @@
 
 **응답 200**
 ```json
-{ "status": "ok", "time": "2026-07-30T02:11:03.512Z", "deployedAt": "2026-07-29T11:04:22.000Z" }
+{
+  "status": "ok",
+  "time": "2026-07-30T02:11:03.512Z",
+  "deployedAt": "2026-07-29T11:04:22.000Z",
+  "oauth": { "web": "ok", "desktop": "ok", "sharedClientId": false, "redirectAllowlistCount": 3 }
+}
 ```
 
 | 필드 | 타입 | 비고 |
@@ -140,6 +145,18 @@
 | `status` | string | 항상 `"ok"` |
 | `time` | string(ISO8601 UTC) | 서버 현재 시각 |
 | `deployedAt` | string(ISO8601 UTC) **또는 필드 부재** | **유효한 `X-MCPhoto-Client`를 제시했을 때만** 포함. 스탬프가 없으면 키가 유효해도 생략 |
+| `oauth` | object **또는 필드 부재** | 동상(유효 키일 때만). 구성 로드가 실패하면 생략된다. **2026-08-01 신설** — 진단 모달의 [웹 OAuth 구성] 신호 |
+
+`oauth` 하위(전부 필수):
+
+| 필드 | 타입 | 값 |
+|------|------|-----|
+| `web` · `desktop` | string | `"ok"`(형식 정상) · `"malformed"`(값은 있으나 `….apps.googleusercontent.com`이 아니다 — **플레이스홀더 미치환**) · `"unset"`(미구성 = 그 종류는 501) |
+| `sharedClientId` | boolean | web·desktop이 **같은 client_id**다(유형이 다르면 공유할 수 없으므로 오구성) |
+| `redirectAllowlistCount` | number | `OAUTH_REDIRECT_ALLOWLIST` 항목 수 |
+
+> ⚠️ **`oauth`에는 client_id 값·길이·앞자리가 어떤 형태로도 담기지 않는다**(열거값과 개수뿐 — `domain/oauthStatus.ts`, 테스트가 고정). 게이트 키를 "설정됨/미설정"만 보여 주는 것과 같은 수준이다.
+> ⚠️ 클라는 이 필드를 **경계에서 검증**해야 한다 — 구버전 서버에는 없으므로, 없거나 형식이 어긋나면 **"미설정"이 아니라 "알 수 없음"** 으로 접는다(`healthService.parseOAuthConfigStatus`).
 
 - 키가 없거나 틀려도 **200**이다(무인증 헬스 체크를 500/401로 바꾸지 않는 설계). 따라서 **헬스 응답으로 게이트 키 유효성을 판정할 수 없다** — `deployedAt` 유무가 힌트일 뿐이며, 확정하려면 `GET /frames/default` 같은 apiKey 게이트 엔드포인트로 401을 확인해야 한다.
 
@@ -194,9 +211,9 @@
 
 | 상태·코드 | 원인 | 클라이언트 처리 |
 |-----------|------|-----------------|
-| 501 `not_implemented` | 구성된 OAuth 클라이언트가 하나도 없음, **또는 요청한 `clientKind`가 미구성**(예: 웹 client_id 없이 `clientKind:"web"`) | *"Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요."* |
+| 501 `not_implemented` | 구성된 OAuth 클라이언트가 하나도 없음, **또는 요청한 `clientKind`가 미구성**(예: 웹 client_id 없이 `clientKind:"web"`), **또는 Google이 `invalid_client`/`unauthorized_client`로 code 교환을 거부**(운영자 구성 오류 — 계정 존재 여부와 무관한 사유이므로 401 일반화(열거 방지)의 대상이 아니다) | *"Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요."* |
 | 400 `invalid_argument` | 위 필드 형식 위반 | 개발 오류(정상 흐름에선 발생하지 않아야 한다) |
-| 401 `unauthorized` | code 교환 실패 / id_token 검증 실패(aud·iss·exp 불일치, `email_verified=false`, nonce 불일치, 허용 도메인(`GOOGLE_ALLOWED_HD`) 밖) / 계정 매핑 실패 | *"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."* — 서버가 사유를 **일반화**한다(계정 열거 방지). 상세 사유는 서버 로그에만 남는다 |
+| 401 `unauthorized` | code 교환 실패(`invalid_grant` 등 — **`invalid_client`·`unauthorized_client`는 제외**, 위 501) / id_token 검증 실패(aud·iss·exp 불일치, `email_verified=false`, nonce 불일치, 허용 도메인(`GOOGLE_ALLOWED_HD`) 밖) / 계정 매핑 실패 | *"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."* — 서버가 사유를 **일반화**한다(계정 열거 방지). 상세 사유는 서버 로그에만 남는다 |
 
 **서버가 하는 계정 처리**
 

@@ -16,15 +16,17 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--gap-lg);
+  /* WPF Margin="40,80,40,40"(상단 80은 WPF 자체의 불일치 — 웹은 TopBar가 대신한다). */
+  padding: var(--space-l) var(--space-xl) var(--space-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
+  gap: var(--space-m);
 }
 
 .title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
 }
 
 .summary {
@@ -44,10 +46,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-sm);
-  padding: var(--gap);
+  gap: var(--space-s);
+  padding: var(--space-m);
   border: 1px solid var(--danger);
   border-radius: var(--radius);
+  background: var(--danger-surface);
 }
 
 .failedText {
@@ -73,19 +76,21 @@
   table-layout: auto;
 }
 
+/* WPF 헤더 h42 · 행 h58. 셀 컨트롤은 h38(터치 예외)이지만 웹은 48을 지킨다. */
 .table th,
 .table td {
-  padding: var(--gap-sm);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-s);
+  border-bottom: 1px solid var(--divider);
   text-align: left;
   vertical-align: top;
   word-break: break-all;
 }
 
 .table th {
-  color: var(--fg-muted);
-  font-size: var(--fs-caption);
-  font-weight: 600;
+  height: 42px;
+  color: var(--fg-tertiary);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
 }
 
 .cards {
@@ -100,10 +105,13 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-sm);
-  padding: var(--gap);
+  gap: var(--space-s);
+  /* WPF Card: padding 24 · Surface · Shadow.Card. */
+  padding: var(--space-l);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 
 .cardHead {
@@ -155,10 +163,11 @@
 .bottomBar {
   display: flex;
   justify-content: space-between;
-  gap: var(--gap-sm);
-  padding: var(--gap);
-  border-top: 1px solid var(--border);
-  background: var(--bg-elevated);
+  gap: var(--space-m);
+  padding: 12px var(--space-xl);
+  border-top: 1px solid var(--divider);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .pinMessage {

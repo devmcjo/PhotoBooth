@@ -1,4 +1,9 @@
-/* 촬영 흐름 화면 공용 레이아웃 — 03 §1 (세로·가로 양쪽에서 동작해야 한다) */
+/*
+ * 촬영 흐름 화면 공용 레이아웃 — 03 §1 (세로·가로 양쪽에서 동작해야 한다)
+ *
+ * Windows 공통 레이아웃 규약(`Views/*.xaml` 전수): 화면 좌우 여백 **40** · 가로 버튼 간격 **16** ·
+ * 카드 간격 **16** · 카드 목록 거터 **20**.
+ */
 
 .screen {
   flex: 1;
@@ -6,22 +11,23 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--gap);
-  padding: var(--gap);
+  gap: var(--space-m);
+  /* WPF 화면 좌우 여백 40(Space.XL). 상단은 TopBar(56) 아래 24가 붙는다(12 B-n10). */
+  padding: var(--space-l) var(--space-xl) var(--space-xl);
   text-align: center;
   min-height: 0;
 }
 
 .title {
   margin: 0;
-  font-size: var(--fs-title);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
   letter-spacing: -0.02em;
 }
 
 .subtitle {
   margin: 0;
-  color: var(--fg-muted);
+  color: var(--fg-tertiary);
   font-size: var(--fs-body);
 }
 
@@ -34,91 +40,265 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-sm);
+  /* WPF: 각 버튼 Margin="8,0" → 간격 16. */
+  gap: var(--space-m);
   justify-content: center;
+}
+
+/* ── Home (WPF `Views/HomeView.xaml`) ── */
+
+/*
+ * 파스텔 장식 원 2개 — WPF `HomeView.xaml:9-12`.
+ *   좌상단 Ellipse 360×360 Fill=Accent.Soft Opacity=.6 Margin=-120,-120,0,0
+ *   우하단 Ellipse 300×300 Fill=Accent2.Soft Opacity=.6 Margin=0,0,-100,-100
+ *
+ * ⚠️ `position: fixed` + `pointer-events: none` + `z-index: 0`이다. 음수 오프셋이 가로 스크롤을
+ *    만들지 않는 것은 **`main.css`의 `overflow-x: hidden`** 덕분이다 — 그 규칙을 지우지 마라.
+ * ⚠️ 화면 컴포넌트 안에 두어야 한다. 셸에 두면 전 화면에 남는다.
+ */
+.homeDecorTopLeft,
+.homeDecorBottomRight {
+  position: fixed;
+  z-index: 0;
+  border-radius: 50%;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.homeDecorTopLeft {
+  left: -120px;
+  top: -120px;
+  width: 360px;
+  height: 360px;
+  background: var(--accent-soft);
+}
+
+.homeDecorBottomRight {
+  right: -100px;
+  bottom: -100px;
+  width: 300px;
+  height: 300px;
+  background: var(--accent2-soft);
+}
+
+/* 콘텐츠는 장식보다 위다. */
+.homeTitle,
+.homeSubtitle,
+.homeCta {
+  position: relative;
+  z-index: 1;
+}
+
+.homeTitle {
+  margin: 0;
+  /* WPF Text.Display 64/Bold. */
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.02em;
+}
+
+.homeSubtitle {
+  /* WPF: H2 24 · #6E6878 · Margin="0,8,0,48". */
+  margin: var(--space-s) 0 48px;
+  color: var(--fg-tertiary);
+  font-size: var(--fs-h2);
+}
+
+/*
+ * WPF Home CTA: h72 · fs24 · padding 72,0.
+ * ⚠️ 클래스를 두 번 쓴다 — `.button`/`.primary`(min-height 56 · min-width 120)를 확실히 이긴다.
+ */
+.homeCta.homeCta {
+  min-height: 72px;
+  padding: 0 4.5rem;
+  font-size: var(--fs-h2);
 }
 
 /* ── 프레임 선택 ── */
 
 .frameGrid {
   display: grid;
-  /* 열 수를 하드코딩하지 않는다 — 프레임 개수가 늘어도 레이아웃이 견딘다. */
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: var(--gap);
+  /*
+   * WPF는 카드가 200×280 **고정**이지만 웹은 태블릿 폭이 다양해 고정 px를 쓰지 않는다
+   * (12 B-n5 — 고정 px는 가로 스크롤을 만든다). 비율만 맞춘다.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* WPF 컨테이너 Margin=10 → 항목 간 20(리터럴이 원본 값이다). */
+  gap: 20px;
   width: 100%;
   max-width: 720px;
 }
 
+/*
+ * WPF FrameCard: bg Surface · border **2 transparent** · r14 · Shadow.Sm ·
+ * hover → Shadow.Card(테두리·배경 불변) · selected → border Accent + Shadow.Card.
+ */
 .frameCard {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-sm);
-  padding: var(--gap-sm);
-  border: 2px solid var(--border);
+  gap: var(--space-s);
+  padding: var(--space-s);
+  border: 2px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: var(--surface);
   color: var(--fg);
   cursor: pointer;
   min-height: var(--touch-min);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (hover: hover) {
+  .frameCard:hover {
+    box-shadow: var(--shadow-card);
+  }
 }
 
 .frameCardSelected {
   border-color: var(--accent);
+  box-shadow: var(--shadow-card);
 }
 
 .frameThumb {
   width: 100%;
-  aspect-ratio: 3 / 4;
-  background: #fff;
+  /* WPF 200×280 = 5/7. */
+  aspect-ratio: 200 / 280;
+  background: var(--bg);
   border-radius: var(--radius-sm);
   object-fit: contain;
 }
 
-/* ── 가이드 ── */
+/* ── 가이드 (WPF `Views/GuideView.xaml`) ── */
+
+/* WPF는 정보를 Card(MinWidth 440) 안에 담는다. */
+.guideCard {
+  display: flex;
+  flex-direction: column;
+  width: min(440px, 100%);
+  padding: var(--space-l);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+
+.guideTitle {
+  margin: 0 0 28px;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  text-align: center;
+}
 
 .guideList {
   display: grid;
   grid-template-columns: auto auto;
-  gap: var(--gap-sm) var(--gap);
+  /* WPF 정보 행은 각 Margin="0,0,0,12". */
+  gap: 12px var(--space-m);
   margin: 0;
   text-align: left;
 }
 
 .guideList dt {
-  color: var(--fg-muted);
+  color: var(--fg-tertiary);
 }
 
+/* WPF: 값은 Accent + Bold + 우측 정렬. */
 .guideList dd {
   margin: 0;
-  font-weight: 600;
+  text-align: right;
+  color: var(--accent-text);
+  font-weight: var(--fw-bold);
 }
 
+/* WPF [촬영 시작]: h64 · fs20 · HorizontalAlignment=Stretch. */
+.guidePrimary.guidePrimary {
+  min-height: 64px;
+  margin-top: var(--space-l);
+  width: 100%;
+  font-size: var(--fs-title-sm);
+}
+
+/* [취소]는 Ghost 중앙 + 12px 간격. */
+.guideCancel.guideCancel {
+  margin: 12px auto 0;
+}
+
+/* 카메라 권한 사전 요청 블록(F7 · 03 §5). `.guideCard` 안에서 구조를 잡는다. */
+.permissionBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-s);
+  margin-top: var(--space-m);
+  padding-top: var(--space-m);
+  border-top: 1px solid var(--divider);
+}
+
+.permissionHint {
+  margin: 0;
+  color: var(--fg-secondary);
+  font-size: var(--fs-label);
+}
+
+.permissionRecovery {
+  color: var(--fg-tertiary);
+  font-size: var(--fs-caption);
+}
+
+.permissionRecovery summary {
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--accent-text);
+}
+
+.permissionRecovery ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  text-align: left;
+}
+
+/*
+ * ⚠️ 글자색이 잉크다(흰색 아님). 13px Bold는 large text 미만이라 흰 글자로는 3.19:1이고,
+ *    인라인 배지라 폰트를 19px로 키울 수 없다 → 색으로 맞춘다(5.05:1 · 12 H8).
+ */
 .autoBadge {
-  margin-left: 0.4rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
+  margin-left: var(--space-xs);
+  padding: 2px var(--space-s);
+  border-radius: var(--radius-pill);
   background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 0.7rem;
-  font-weight: 700;
+  color: var(--on-accent-ink);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
   vertical-align: middle;
 }
 
-/* ── 촬영 ── */
+/* ── 촬영 (WPF `Views/CaptureView.xaml` — 유일하게 다크 배경이다) ── */
 
 .captureStage {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gap-sm);
+  gap: var(--space-s);
   width: 100%;
   max-width: 720px;
   min-height: 0;
 }
 
+/* WPF 상단 칩: Scrim 배경 · r6 · padding 14,8 · margin 20 · fs20 Bold. */
 .progress {
-  font-size: 1.1rem;
+  margin: 20px 0;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--scrim);
+  color: var(--on-accent);
+  font-size: var(--fs-title-sm);
+  font-weight: var(--fw-bold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -129,14 +309,24 @@
   align-items: center;
   justify-content: center;
   font-size: clamp(4rem, 18vw, 9rem);
-  font-weight: 800;
-  color: #fff;
+  font-weight: var(--fw-bold);
+  /* 촬영 화면은 항상 다크 배경(`--capture-bg`) 위다 → 흰 글자가 토큰과 무관하게 맞다. */
+  color: var(--on-accent);
+  /*
+   * ⚠️ **토큰화 금지** — 이 그림자는 팔레트 색이 아니라 "어두운 프리뷰 위 가독성 확보"용
+   *    검정 글로우다. `--shadow-*`(Ink 기반)로 바꾸면 라이트 팔레트에서 보라빛이 돌아
+   *    카운트다운 숫자가 프리뷰에 묻힌다.
+   */
   text-shadow: 0 4px 24px rgb(0 0 0 / 60%);
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
 
-/* 플래시는 DOM 오버레이다 — canvas에 그리면 합성 픽셀에 섞인다(04 §4.2). */
+/*
+ * 플래시는 DOM 오버레이다 — canvas에 그리면 합성 픽셀에 섞인다(04 §4.2).
+ * ⚠️ **토큰화 금지 · 의도적 고정** — 물리적 플래시(터지는 흰빛)를 흉내 내는 것이라
+ *    다크 팔레트에서도 흰색이어야 한다. `--bg`로 바꾸면 다크에서 검은 화면이 번쩍인다.
+ */
 .flash {
   position: absolute;
   inset: 0;
@@ -149,25 +339,29 @@
 .cutGrid {
   display: grid;
   /* it17: 자동 컷 수가 7·9를 만들 수 있다 — 열 수를 하드코딩하지 않는다. */
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: var(--gap-sm);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* WPF 항목 Margin=8 → 간격 16. */
+  gap: var(--space-m);
   width: 100%;
   max-width: 860px;
 }
 
+/* WPF: r12 · border3 · Shadow.Sm · 배경은 촬영 화면과 같은 CaptureBg. */
 .cutCard {
   position: relative;
   padding: 0;
   border: 3px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: #000;
+  border-radius: 12px;
+  background: var(--capture-bg);
   cursor: pointer;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
   /* 대표 슬롯 종횡비를 인라인 스타일로 받는다(프레임마다 다르다). */
 }
 
 .cutCardSelected {
   border-color: var(--accent);
+  box-shadow: var(--shadow-card);
 }
 
 .cutThumb {
@@ -177,51 +371,64 @@
   object-fit: cover;
 }
 
+/*
+ * WPF 배지: 28×28 r14 우상단 Margin=6.
+ * ⚠️ 글자색이 잉크다(흰색 아님). 14px Bold는 large text 미만이고 28px 원 안에서 19px로
+ *    키울 수 없다 → 색으로 맞춘다(5.05:1 · 12 H8).
+ */
 .cutOrder {
   position: absolute;
-  top: 0.35rem;
-  left: 0.35rem;
-  min-width: 1.75rem;
-  height: 1.75rem;
+  top: 6px;
+  left: 6px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 14px;
   background: var(--accent);
-  color: var(--accent-fg);
-  font-weight: 800;
-  font-size: 0.95rem;
+  color: var(--on-accent-ink);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-label);
 }
 
 /* ── 업로드 · QR ── */
 
+/* WPF QR 모달: Card Width 440 · Padding 48. */
 .qrStage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gap);
-  width: 100%;
-  max-width: 560px;
+  gap: var(--space-m);
+  width: min(440px, 100%);
+  padding: 48px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow-pop);
   min-height: 0;
 }
 
 /*
- * ⚠️ 배경 흰색 고정 — 다크모드에서도 반전하지 않는다(스캐너 호환 — 03 §9).
+ * ⚠️ **토큰화 금지 · 의도적 고정** — QR 캔버스 배경은 스캐너 호환을 위해 다크모드에서도
+ *    흰색을 유지한다(03 §9). 팔레트를 따라 어두워지면 대비가 반전돼 인식률이 급락한다.
  * `pixelated`: 정수 배율로 그린 모듈을 CSS가 부드럽게 뭉개면 인식률이 떨어진다.
  */
 .qrCanvas {
   display: block;
-  width: min(100%, 60vh);
+  width: min(100%, 240px);
   height: auto;
   image-rendering: pixelated;
   background: #fff;
   border-radius: var(--radius-sm);
-  padding: 0;
+  /* WPF QR Border: 흰 배경 · padding 16 · r8 · Shadow.Sm. */
+  padding: var(--space-m);
+  box-shadow: var(--shadow-sm);
 }
 
 .uploadProgress {
   width: min(100%, 320px);
-  height: 0.5rem;
+  /* WPF 진행바 h8. */
+  height: 8px;
 }
 
 /* ── 결과 ── */
@@ -232,5 +439,138 @@
   max-height: 60vh;
   object-fit: contain;
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--bg);
+}
+
+/* ── Login (WPF `Views/LoginGuestView.xaml`: Card Width 440) ── */
+
+.loginCard {
+  display: flex;
+  flex-direction: column;
+  width: min(440px, 100%);
+  padding: var(--space-l);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+/* WPF: 제목 H1 Margin="0,0,0,12" · 캡션 Margin="0,0,0,24". */
+.loginTitle {
+  margin: 0 0 12px;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+}
+
+.loginCaption {
+  margin: 0 0 var(--space-l);
+  color: var(--fg-tertiary);
+  font-size: var(--fs-body);
+}
+
+/* [Google로 로그인]은 전폭, [닫기]는 Ghost 중앙 + 12px 간격. */
+.loginPrimary.loginPrimary {
+  width: 100%;
+}
+
+.loginClose.loginClose {
+  margin: 12px auto 0;
+}
+
+/* ── Done (WPF `Views/DoneView.xaml`) ── */
+
+/* Display 48 — Home의 64와 다르다. */
+.doneTitle {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.02em;
+}
+
+.doneSubtitle {
+  /* WPF Margin="0,12,0,40". */
+  margin: 12px 0 var(--space-xl);
+  color: var(--fg-tertiary);
+  font-size: var(--fs-h2);
+}
+
+/* WPF 버튼 padding 48,0. */
+.doneCta.doneCta {
+  padding: 0 var(--space-xl);
+}
+
+/* ── Result (WPF `Views/ResultView.xaml`: 2열 * | 340) ── */
+
+.resultLayout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-l);
+  width: 100%;
+  max-width: 1100px;
+  min-height: 0;
+}
+
+@media (min-width: 900px) {
+  .resultLayout {
+    /* WPF: 좌 미리보기 가변 · 우 패널 340 고정. */
+    grid-template-columns: 1fr 340px;
+    align-items: start;
+  }
+}
+
+/* 좌: 미리보기 Card(WPF Padding 16). */
+.resultMain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  min-height: 0;
+}
+
+/* 우: 필터 세로 목록(항목 간 8) + [다음] 전폭 + [취소] Ghost 중앙. */
+.resultSide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+}
+
+.filterList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+}
+
+/*
+ * WPF `Button.Filter`: h48 · selected → bg Accent.Soft · border Accent · fg Accent.Text.
+ * ⚠️ 클래스를 두 번 쓴다 — `.button`(min-height 56 · surface-alt)을 이겨야 한다.
+ */
+.filterPill.filterPill {
+  min-height: var(--touch-min);
+  width: 100%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-secondary);
+  font-weight: var(--fw-medium);
+}
+
+.filterPill.filterPill[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: var(--fw-semibold);
+}
+
+.resultNext.resultNext {
+  width: 100%;
+  margin-top: var(--space-s);
+}
+
+.resultCancel.resultCancel {
+  margin: 12px auto 0;
 }

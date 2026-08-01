@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  cameraFailureMessageKey,
+  isCameraRetryable,
+  type CameraFailureReason,
+} from "@domain/capture/cameraFailure";
 import { getCameraService } from "@adapters/camera/cameraService";
 import type { CameraState, ProcessedSize } from "@adapters/camera/cameraTypes";
-import { Spinner } from "@ui/components";
+import { Button, Spinner } from "@ui/components";
 import { STRINGS } from "@ui/strings";
 import styles from "./cameraPreview.module.css";
 
@@ -17,21 +22,35 @@ import styles from "./cameraPreview.module.css";
 export interface CameraPreviewProps {
   /** 프리뷰 위에 겹칠 오버레이(카운트다운·플래시 등). */
   readonly overlay?: React.ReactNode;
-  /** 실패 시 표시할 문구. 기본은 규격 문구. */
+  /** 실패 시 표시할 문구. 기본은 **사유별 규격 문구**(03 §6.3). */
   readonly failedMessage?: string;
+  /**
+   * 재시도 진입점. 주면 **재시도 가능한 사유에서만** [다시 시도]가 렌더된다.
+   * ⚠️ `permissionDenied`·`insecureContext`에는 나타나지 않는다 — 같은 조건에서 다시 눌러도
+   *    반드시 실패해 손님을 헛돌게 한다(`isCameraRetryable`).
+   */
+  readonly onRetry?: () => void;
 }
 
-export function CameraPreview({ overlay, failedMessage }: CameraPreviewProps) {
+export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** 제어권 이관은 캔버스당 **1회만** 가능하다 — 재이관 시도를 막는다. */
   const boundRef = useRef(false);
   const [state, setState] = useState<CameraState>(() => getCameraService().state());
+  const [reason, setReason] = useState<CameraFailureReason | null>(() =>
+    getCameraService().failureReason(),
+  );
   const [size, setSize] = useState<ProcessedSize | null>(null);
 
   useEffect(() => {
     const camera = getCameraService();
     setState(camera.state());
-    const offState = camera.onState(setState);
+    setReason(camera.failureReason());
+    const offState = camera.onState((next) => {
+      setState(next);
+      // 사유는 상태와 **같은 통지**에서 읽는다 — 따로 폴링하면 두 값이 어긋난다.
+      setReason(camera.failureReason());
+    });
     const offFrame = camera.onProcessedFrame(setSize);
     return () => {
       offState();
@@ -69,7 +88,14 @@ export function CameraPreview({ overlay, failedMessage }: CameraPreviewProps) {
 
       {state === "Failed" && (
         <div className={styles.overlay} role="alert">
-          <p className={styles.overlayText}>{failedMessage ?? STRINGS.camera.failed}</p>
+          <p className={styles.overlayText}>
+            {failedMessage ?? STRINGS.camera.errors[cameraFailureMessageKey(reason ?? "unknown")]}
+          </p>
+          {onRetry !== undefined && isCameraRetryable(reason ?? "unknown") && (
+            <Button variant="primary" onClick={onRetry}>
+              {STRINGS.camera.retry}
+            </Button>
+          )}
         </div>
       )}
 

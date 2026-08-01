@@ -184,6 +184,8 @@ export const STRINGS = {
   fullscreen: {
     lost: "전체화면이 해제되었습니다.",
     reenter: "다시 전체화면으로",
+    /** 상단바 버튼(02 §7) — 첫 터치 자동 진입을 폐지하고 만든 **유일한** 명시적 진입점이다. */
+    enter: "전체화면",
   },
 
   save: {
@@ -204,8 +206,40 @@ export const STRINGS = {
 
   camera: {
     notReady: "카메라를 준비하고 있습니다…",
+    /** 사유를 알 수 없을 때의 기본 문구. 사유별 문구는 `errors`가 소유한다(03 §6.3). */
     failed: "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요.",
     testNotSaved: "저장되지 않았습니다.",
+    /**
+     * 실패 사유별 문구 — 키는 `CameraFailureReason`과 1:1이다(03 §6.3 · 12 C5).
+     * ⚠️ `permissionDenied`·`insecureContext`에는 [다시 시도]를 붙이지 않는다
+     *    (`isCameraRetryable`) — 같은 조건에서 다시 눌러도 반드시 실패한다.
+     */
+    errors: {
+      permissionDenied: "카메라 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요.",
+      noDevice: "사용할 수 있는 카메라를 찾지 못했습니다. 연결을 확인해 주세요.",
+      inUse: "카메라를 다른 앱이 사용 중입니다. 그 앱을 닫고 다시 시도해 주세요.",
+      insecureContext: "보안 연결(https)에서만 카메라를 사용할 수 있습니다.",
+      unknown: "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요.",
+    },
+    retry: "다시 시도",
+    /** Guide 화면 권한 사전 요청 블록(03 §5 · 07 §3). */
+    allowButton: "카메라 사용 허용",
+    allowHint: "촬영 전에 카메라 사용을 허용해 주세요.",
+    deniedHint: "카메라 권한이 거부되었습니다. 아래 안내를 확인해 주세요.",
+    /** Home 안내(03 §2 86행) — `prompt` 상태에서만 노출한다. */
+    homePromptNote: "촬영을 시작하면 카메라 사용 권한을 묻습니다.",
+    homeDeniedNote: "카메라 권한이 거부되어 있습니다. 촬영 안내 화면에서 복구 방법을 확인해 주세요.",
+    /** 거부 상태 복구 절차(09 §3-(4)와 같은 내용). ⚠️ `innerHTML` 금지 — JSX 텍스트 노드다. */
+    recovery: {
+      title: "권한 복구 방법 보기",
+      chrome:
+        "Chrome·Edge: 주소창 왼쪽 자물쇠(또는 ⓘ) → [사이트 설정] → 카메라 → 허용 → 페이지 새로고침",
+      android: "Android Chrome: 주소창 왼쪽 자물쇠 → [권한] → 카메라 → 허용",
+      ios: "iPhone·iPad Safari: 설정 앱 → Safari → 카메라 → 허용 (또는 주소창 ᴀA → 웹사이트 설정 → 카메라)",
+      macos:
+        "macOS Safari: Safari → 설정 → 웹사이트 → 카메라 → 이 사이트를 허용. 추가로 시스템 설정 → 개인정보 보호 → 카메라에서 Safari를 켠다",
+      os: "위를 해도 안 되면 OS의 카메라 권한을 확인해 주세요(Windows: 설정 → 개인정보 → 카메라).",
+    },
   },
 
   result: {
@@ -443,6 +477,7 @@ export const STRINGS = {
     cameraResolution: "획득 해상도",
     processedSize: "가공 해상도",
     cameraFps: "fps",
+    cameraFailureReason: "실패 사유",
 
     encoderPath: "경로",
     encoderCodec: "코덱",
@@ -454,6 +489,22 @@ export const STRINGS = {
     bucket: "Storage 버킷",
     currentAccount: "현재 계정",
     guest: "게스트",
+    /**
+     * 서버 OAuth 구성 신호(2026-08-01 후속). 게이트 키의 "설정됨/미설정"과 **같은 수준**이다 —
+     * ⚠️ client_id 값·길이·앞자리를 문구에 담지 않는다. 열거값과 개수뿐이다.
+     */
+    oauthWeb: "웹 OAuth 구성",
+    oauthConfigured: "설정됨",
+    /** 값은 있으나 `….apps.googleusercontent.com` 형식이 아니다 — 플레이스홀더 미치환이 여기 걸린다. */
+    oauthMalformed: "형식 오류(값 미치환 의심)",
+    oauthUnset: "미설정",
+    /** desktop client_id를 그대로 넣은 오구성. 유형이 다르면 OAuth 클라이언트를 공유할 수 없다. */
+    oauthShared: "desktop과 같은 값",
+    oauthAllowlist: "redirect 허용목록",
+    /** `{n}`을 항목 수로 치환한다. 주소 자체는 표시하지 않는다. */
+    oauthAllowlistValue: "{n}개",
+    /** 서버 구성 오류를 현장에서 판별하는 유일한 화면 흔적(07 §2.5). 메모리 전용이다. */
+    lastLoginFailure: "마지막 로그인 실패",
 
     logCount: "로그 건수",
     /** `{n}`을 건수로 치환한다. */

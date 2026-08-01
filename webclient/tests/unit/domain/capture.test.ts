@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  cameraFailureMessageKey,
+  classifyCameraFailure,
+  isCameraRetryable,
+  type CameraFailureReason,
+} from "@domain/capture/cameraFailure";
+import { STRINGS } from "@ui/strings";
+import {
   addCut,
   beginFullRetake,
   beginSession,
@@ -237,5 +244,68 @@ describe("timelapseSpeed — 예상 결과 길이", () => {
   it("배속이 0 이하면 원 길이를 돌려준다(0 나눗셈 방어)", () => {
     expect(expectedOutputSeconds(10, 0)).toBe(10);
     expect(expectedOutputSeconds(10, -2)).toBe(10);
+  });
+});
+
+// ─────────── 카메라 실패 사유 분류 (03 §6.3 · 12 C5 — 2026-08-01 신설) ───────────
+
+describe("classifyCameraFailure", () => {
+  it("권한 거부 계열", () => {
+    expect(classifyCameraFailure("NotAllowedError", true)).toBe("permissionDenied");
+    expect(classifyCameraFailure("SecurityError", true)).toBe("permissionDenied");
+    expect(classifyCameraFailure("PermissionDeniedError", true)).toBe("permissionDenied");
+  });
+
+  it("장치 부재 계열", () => {
+    expect(classifyCameraFailure("NotFoundError", true)).toBe("noDevice");
+    expect(classifyCameraFailure("OverconstrainedError", true)).toBe("noDevice");
+    expect(classifyCameraFailure("DevicesNotFoundError", true)).toBe("noDevice");
+  });
+
+  it("점유 계열", () => {
+    expect(classifyCameraFailure("NotReadableError", true)).toBe("inUse");
+    expect(classifyCameraFailure("TrackStartError", true)).toBe("inUse");
+  });
+
+  it("알 수 없는 이름은 unknown이다", () => {
+    expect(classifyCameraFailure("", true)).toBe("unknown");
+    expect(classifyCameraFailure("AbortError", true)).toBe("unknown");
+  });
+
+  it("보안 컨텍스트가 아니면 **이름과 무관하게** insecureContext가 먼저다", () => {
+    // http로 열면 navigator.mediaDevices 자체가 undefined라 name이 TypeError가 되고,
+    // 먼저 판정하지 않으면 unknown으로 뭉개진다(현장에서 실제로 발생하는 오구성).
+    for (const name of ["TypeError", "NotAllowedError", "NotFoundError", ""]) {
+      expect(classifyCameraFailure(name, false), name).toBe("insecureContext");
+    }
+  });
+});
+
+describe("cameraFailureMessageKey · isCameraRetryable", () => {
+  const ALL: readonly CameraFailureReason[] = [
+    "permissionDenied",
+    "noDevice",
+    "inUse",
+    "insecureContext",
+    "unknown",
+  ];
+
+  it("사유 5종 전부가 실제 문구 카탈로그에 매핑된다(빈 문구 없음)", () => {
+    for (const reason of ALL) {
+      const message = STRINGS.camera.errors[cameraFailureMessageKey(reason)];
+      expect(typeof message, reason).toBe("string");
+      expect(message.length, reason).toBeGreaterThan(0);
+    }
+  });
+
+  it("권한 거부·비보안 연결에는 [다시 시도]를 붙이지 않는다 — 반드시 다시 실패한다", () => {
+    expect(isCameraRetryable("permissionDenied")).toBe(false);
+    expect(isCameraRetryable("insecureContext")).toBe(false);
+  });
+
+  it("장치 부재·점유·미상은 재시도 가능하다", () => {
+    expect(isCameraRetryable("noDevice")).toBe(true);
+    expect(isCameraRetryable("inUse")).toBe(true);
+    expect(isCameraRetryable("unknown")).toBe(true);
   });
 });

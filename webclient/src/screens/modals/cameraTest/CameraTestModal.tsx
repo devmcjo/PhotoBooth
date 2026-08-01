@@ -96,6 +96,14 @@ export function CameraTestModal() {
             // 플래시는 DOM 오버레이다 — canvas에 그리면 합성 픽셀에 섞인다(04 §4.2).
             flashing ? <div className={styles.flash} aria-hidden="true" /> : undefined
           }
+          // 장치 부재·점유 실패는 조건이 바뀌면 성공할 수 있다 → 같은 인자로 다시 연다.
+          onRetry={() =>
+            void presenter.open({
+              deviceId: values.CameraDevice.length > 0 ? values.CameraDevice : null,
+              mirror: values.MirrorMode,
+              flash: values.FlashMode,
+            })
+          }
         />
       </div>
 

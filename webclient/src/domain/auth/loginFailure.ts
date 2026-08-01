@@ -60,3 +60,23 @@ const FAILURE_BY_ABORT_REASON: Readonly<Record<OauthAbortReason, LoginFailureRea
 export function abortReasonToLoginFailure(reason: OauthAbortReason): LoginFailureReason {
   return FAILURE_BY_ABORT_REASON[reason];
 }
+
+/**
+ * 사유 → **진단 모달 표시 문구**(순수). 손님용 문구(`STRINGS.login.errors`)와 별 축이다 —
+ * 손님에게는 400·네트워크가 한 문구로 접히지만, 운영자에게는 갈라져야 원인을 찾는다.
+ *
+ * `Record`로 두는 이유: 사유를 하나 늘리면 **컴파일이 깨져** 진단 문구 결정을 강제한다.
+ * ⚠️ 화면이 사유 문자열을 비교하지 않게 여기서 소유한다(ACC-1 정신).
+ */
+const DIAGNOSTIC_LABEL_BY_REASON: Readonly<Record<LoginFailureReason, string>> = {
+  cancelled: "취소·상태 불일치",
+  rejected: "계정·도메인 거부",
+  notConfigured: "서버 구성 오류",
+  redirectRejected: "redirectUri 거부",
+  network: "네트워크 오류",
+  clientNotConfigured: "클라이언트 미구성",
+};
+
+export function describeLoginFailure(reason: LoginFailureReason): string {
+  return DIAGNOSTIC_LABEL_BY_REASON[reason];
+}

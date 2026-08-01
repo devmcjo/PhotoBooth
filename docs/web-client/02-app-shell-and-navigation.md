@@ -37,7 +37,7 @@ Windows `AppShellViewModel`에 대응한다. **화면 하나가 아니라 앱 �
 
 | 화면 상태 | 상단바 | 유휴 감시 | 웹 추가 규칙 |
 |-----------|:------:|:---------:|--------------|
-| `Home` | 표시(홈 버튼만 숨김) | ✕ | 첫 제스처에서 전체화면·오디오·WakeLock 시도 |
+| `Home` | 표시(홈 버튼만 숨김) | ✕ | 첫 제스처에서 **WakeLock만** 시도(전체화면 자동 진입은 2026-08-01 폐지 — §7). 오디오 unlock은 `Guide`의 [촬영 시작]에 있다 |
 | `Login` | 표시 | ✕ | 리디렉트로 페이지를 떠난다 → 복귀 지점을 `sessionStorage`에 저장([07 §2](./07-auth-and-permissions-web.md)) |
 | `FrameSelect` | 표시 | **○** | |
 | `Guide` | 표시 | **○** | [촬영 시작]에서 오디오 unlock 재확인 |
@@ -265,7 +265,8 @@ Windows의 표시 모드(`DisplayMode`/`WindowBounds`)를 대체한다. **설정
 
 | 상황 | 동작 |
 |------|------|
-| 첫 사용자 제스처 | `documentElement.requestFullscreen({ navigationUI: "hide" })` 시도. 실패는 로그만(강제 불가) |
+| **상단바 [전체화면] 버튼** | 진입점은 **이곳 하나**다. `documentElement.requestFullscreen({ navigationUI: "hide" })` 시도, 실패는 로그만(강제 불가). 버튼은 **네 조건이 전부 아닐 때만** 렌더한다: ① Fullscreen API 미지원(런타임 감지 — iOS Safari) ② 이미 전체화면 ③ 이탈 배너 표시 중 ④ PWA standalone. 판정은 도메인 순수 함수 `isFullscreenButtonVisible`이 소유한다 |
+| ~~첫 사용자 제스처~~ | **폐지(2026-08-01)**. 손님이 화면 아무 곳이나 만졌을 때 전체화면으로 들어가는 것은 **원인 없는 상태 변화**다. 첫 제스처는 이제 Wake Lock만 요청한다. 정적 검사 **FS-1**이 `request(` 호출부를 App.tsx 2곳(상단바 버튼 · 이탈 배너)으로 고정한다 |
 | 전체화면 진입 성공 시 | Chromium이면 `navigator.keyboard.lock(["Escape","F11"])` **best-effort** 시도(미지원·거부는 무시) |
 | 전체화면 이탈 감지(`fullscreenchange`) | **상단 배너**: "전체화면이 해제되었습니다. [다시 전체화면으로]" — 탭하면 재요청. 촬영 흐름은 중단하지 않는다 |
 | `Capture` 중 이탈 | 배너만 표시하고 시퀀스는 계속(탭이 hidden이 아닌 한). hidden이면 §8 |

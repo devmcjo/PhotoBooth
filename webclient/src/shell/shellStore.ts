@@ -72,8 +72,13 @@ export interface ShellState {
   readonly overlayReturnTo: AppState | null;
   readonly modals: readonly ModalEntry[];
   readonly toasts: readonly Toast[];
-  /** 전체화면이 해제된 상태인가(재진입 배너 표시 조건 — WD7). */
+  /** 전체화면이 **해제된** 상태인가 = "한 번 들어갔다가 나왔다"(재진입 배너의 유일한 조건 — WD7). */
   readonly fullscreenLost: boolean;
+  /**
+   * 지금 전체화면인가. `fullscreenLost`와 **별 축**이다 — 한 번도 전체화면이 아니었던 세션은
+   * 둘 다 `false`다. 상단바 [전체화면] 버튼의 표시 여부 판정에 쓴다(02 §7).
+   */
+  readonly isFullscreen: boolean;
 
   /** 정방향·오버레이 전이. 불법 전이는 **거부 + 경고 로그**만 남긴다. */
   go(to: AppState): boolean;
@@ -87,6 +92,7 @@ export interface ShellState {
   toast(kind: ToastKind, message: string): void;
   dismissToast(id: number): void;
   setFullscreenLost(lost: boolean): void;
+  setIsFullscreen(value: boolean): void;
 }
 
 let nextToastId = 1;
@@ -97,6 +103,7 @@ export const shellStore = createStore<ShellState>()((set, get) => ({
   modals: [],
   toasts: [],
   fullscreenLost: false,
+  isFullscreen: false,
 
   go(to) {
     const from = get().screen;
@@ -176,6 +183,10 @@ export const shellStore = createStore<ShellState>()((set, get) => ({
 
   setFullscreenLost(lost) {
     set({ fullscreenLost: lost });
+  },
+
+  setIsFullscreen(value) {
+    set({ isFullscreen: value });
   },
 }));
 
