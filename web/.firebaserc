@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "mcphoto-955fb"
-  }
+  },
+  "targets": {
+    "mcphoto-955fb": {
+      "hosting": {
+        "default": [
+          "mcphoto-955fb"
+        ],
+        "kiosk": [
+          "mcphoto-955fb-kiosk"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

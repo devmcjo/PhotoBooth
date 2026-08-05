@@ -1,0 +1,192 @@
+/*
+ * 프레임 편집기 — 03 §11 · §15.4 · §15.7
+ *
+ * 스테이지는 canvas가 아니라 `<img>` + DOM 슬롯이다(설계 이탈 ②): 좌표계가 하나뿐이라
+ * dpr 환산이라는 **두 번째 변환**이 생기지 않고, 슬롯이 실제 `<button>`이라 포커스·키보드가 공짜다.
+ */
+
+.layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--gap);
+  width: 100%;
+  max-width: 1080px;
+}
+
+.stage {
+  position: relative;
+  flex: 1 1 380px;
+  /* 높이를 확보하지 않으면 `getBoundingClientRect()`가 0을 돌려줘 변환이 무효가 된다. */
+  aspect-ratio: 3 / 4;
+  max-height: 62vh;
+  min-width: 260px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  /* 드래그 중 스크롤 방지(A15-5 — 실측 V24-5). */
+  touch-action: none;
+}
+
+.frameImage {
+  position: absolute;
+  /* left/top/width/height는 `EditorTransform` 결과를 인라인으로 받는다(단일 변환). */
+  background: var(--bg);
+  pointer-events: none;
+  user-select: none;
+}
+
+.slot {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 2px dashed var(--accent);
+  border-radius: 2px;
+  /* WPF 슬롯 채움은 #33FF4D79 = accent 20%다(점선/실선 차이는 12에 등재된 의도적 차이). */
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: transparent;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.slot:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-style: solid;
+}
+
+.slot:active {
+  cursor: grabbing;
+}
+
+.stageEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  color: var(--fg-muted);
+  font-size: var(--fs-body);
+  text-align: center;
+}
+
+/* ── 우측 조작 패널(좁은 화면에서는 아래로 흐른다) ── */
+
+.panel {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 260px;
+  text-align: left;
+}
+
+.panelRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.panelLabel {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.range {
+  width: 100%;
+  min-height: var(--touch-min);
+}
+
+.muted {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  overflow-wrap: anywhere;
+}
+
+.scopeNotice {
+  margin: 0;
+  font-size: var(--fs-caption);
+  overflow-wrap: anywhere;
+}
+
+.warning {
+  color: var(--danger);
+}
+
+.banner {
+  margin: 0;
+  padding: var(--gap-sm) var(--gap);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  text-align: left;
+}
+
+/* ── 피커 오버레이 ── */
+
+.pickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--gap-sm);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.pickerCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  min-height: var(--touch-min);
+  text-align: center;
+}
+
+.pickerCardSelected {
+  border-color: var(--accent);
+}
+
+.pickerThumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 200 / 280;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+.pickerName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pickerStatus {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: var(--gap);
+  text-align: center;
+}
+
+/* ── 서버 등록 확인 오버레이 ── */
+
+.registerOption {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  min-height: var(--touch-min);
+}

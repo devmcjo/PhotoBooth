@@ -1,0 +1,192 @@
+{
+  "name": "copy-name",
+  "spec": "docs/analysis/13 §6.4 (FrameNaming)",
+  "note": "99까지 모두 충돌하는 케이스는 난수 접미라서 **결정적이지 않으므로 벡터에 넣지 않는다**(웹 단위 테스트에서만 확인).",
+  "cases": [
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "베이직 4컷",
+        "existingNames": []
+      },
+      "expected": "베이직 4컷 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "베이직 4컷",
+        "existingNames": [
+          "베이직 4컷 사본"
+        ]
+      },
+      "expected": "베이직 4컷 사본 2"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "베이직 4컷",
+        "existingNames": [
+          "베이직 4컷 사본",
+          "베이직 4컷 사본 2"
+        ]
+      },
+      "expected": "베이직 4컷 사본 3"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "베이직 4컷 사본",
+        "existingNames": []
+      },
+      "expected": "베이직 4컷 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "베이직 4컷 사본 3",
+        "existingNames": []
+      },
+      "expected": "베이직 4컷 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "베이직 4컷 사본",
+        "existingNames": [
+          "베이직 4컷 사본"
+        ]
+      },
+      "expected": "베이직 4컷 사본 2"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "",
+        "existingNames": []
+      },
+      "expected": "새 프레임 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "   ",
+        "existingNames": []
+      },
+      "expected": "새 프레임 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": null,
+        "existingNames": []
+      },
+      "expected": "새 프레임 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "사본",
+        "existingNames": []
+      },
+      "expected": "사본 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "사본 2",
+        "existingNames": []
+      },
+      "expected": "사본 2 사본"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "A",
+        "existingNames": [
+          "A 사본",
+          "A 사본 2",
+          "A 사본 3"
+        ]
+      },
+      "expected": "A 사본 4"
+    },
+    {
+      "kind": "nextCopyName",
+      "input": {
+        "baseName": "  공백 트림  ",
+        "existingNames": []
+      },
+      "expected": "  공백 트림   사본"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "베이직 4컷"
+      },
+      "expected": "베이직 4컷"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "베이직 4컷 사본"
+      },
+      "expected": "베이직 4컷"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "베이직 4컷 사본 2"
+      },
+      "expected": "베이직 4컷"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "베이직 4컷 사본 99"
+      },
+      "expected": "베이직 4컷"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "베이직 4컷 사본 100"
+      },
+      "expected": "베이직 4컷 사본 100"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "사본"
+      },
+      "expected": "사본"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "사본 2"
+      },
+      "expected": "사본 2"
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": ""
+      },
+      "expected": ""
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "  "
+      },
+      "expected": "  "
+    },
+    {
+      "kind": "stripCopySuffix",
+      "input": {
+        "name": "사본이야기"
+      },
+      "expected": "사본이야기"
+    }
+  ]
+}

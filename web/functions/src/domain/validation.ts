@@ -123,6 +123,74 @@ export function validateLoopbackRedirectUri(value: unknown): ValidationResult<st
 }
 
 /**
+ * OAuth 클라이언트 종류(B2 — 웹 클라이언트 도입).
+ * 요청의 `clientKind`로 **명시 받는다**(리디렉트 형태로 추론하지 않는다 — analysis/61 §4.2).
+ * 미지정은 `desktop`으로 해석해 **배포된 Windows 클라이언트가 무변경으로 동작**한다.
+ */
+export type OAuthClientKind = "desktop" | "web";
+
+export const OAUTH_CLIENT_KINDS: readonly OAuthClientKind[] = ["desktop", "web"];
+
+/**
+ * clientKind 검증. 미지정(undefined·null)은 하위 호환으로 `desktop`.
+ * 화이트리스트 밖 문자열은 400 — 임의 값으로 서버 구성을 고르지 못하게 한다.
+ */
+export function validateClientKind(value: unknown): ValidationResult<OAuthClientKind> {
+  if (value === undefined || value === null) return ok("desktop");
+  if (typeof value !== "string") return fail("clientKind는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (!OAUTH_CLIENT_KINDS.includes(v as OAuthClientKind))
+    return fail("clientKind가 올바르지 않습니다(desktop | web).");
+  return ok(v as OAuthClientKind);
+}
+
+/**
+ * redirect_uri 검증(B1) — 허용 목록(웹) **또는** loopback(데스크톱).
+ *
+ * ⚠️ **완전 일치만 허용한다.** prefix·정규식 매칭은 open redirect / SSRF 통로가 된다 —
+ *    이 값은 서버가 Google에 보내는 code 교환 요청에 그대로 실린다(08 §4.1).
+ *    예: 허용 목록에 `https://a.web.app/oauth2callback`이 있어도
+ *        `https://a.web.app.evil.com/oauth2callback`은 거부된다(완전 일치이므로 자동).
+ * ⚠️ 기존 loopback 경로는 **무변경**이다(배포된 Windows 클라이언트가 계속 동작해야 한다).
+ *
+ * **검사 순서가 중요하다 — 허용 목록이 먼저다.** 웹 개발용 리디렉트
+ * `http://localhost:5173/oauth2callback`은 http+localhost라 loopback처럼 보이지만
+ * loopback 규칙은 경로 `/`만 허용하므로 순서를 뒤집으면 **허용 목록에 등록해도 영구히 거부**된다.
+ * 허용 목록은 운영자가 넣은 완전 일치 값이므로 먼저 통과시키는 것이 더 안전하기도 하다.
+ */
+export function validateRedirectUri(
+  value: unknown,
+  allowlist: readonly string[]
+): ValidationResult<string> {
+  if (typeof value !== "string") return fail("redirectUri는 문자열이어야 합니다.");
+  const v = value.trim();
+  if (v.length === 0) return fail("redirectUri가 비어 있습니다.");
+  if (v.length > 256) return fail("redirectUri가 너무 깁니다(최대 256자).");
+
+  // ① 운영자가 등록한 완전 일치 값(웹). 개발용 localhost 경로 포함.
+  if (allowlist.includes(v)) return ok(v);
+
+  // ② 데스크톱 loopback — 포트가 매번 달라 허용 목록에 등록할 수 없다. 종전 규칙 그대로.
+  //    loopback 형태일 때만 위임해 오류 메시지가 원인을 정확히 가리키게 한다
+  //    (웹 URI에 "http만 허용됩니다"가 뜨면 운영자가 허용 목록 누락을 찾지 못한다).
+  if (looksLikeLoopback(v)) return validateLoopbackRedirectUri(v);
+
+  return fail("redirectUri가 허용되지 않았습니다(허용 목록 미등록).");
+}
+
+/** loopback 형태(http + 127.0.0.1/localhost)인지 — 세부 검증은 validateLoopbackRedirectUri가 한다. */
+function looksLikeLoopback(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * nonce: id_token replay 방어용 난수(§8.4). 있으면 검증, 없으면 생략(옵션).
  * base64url/hex 등 형식 무관하게 안전 문자·길이만 방어(≤256, [A-Za-z0-9-._~]).
  */

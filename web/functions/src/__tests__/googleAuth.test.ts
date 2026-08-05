@@ -4,6 +4,7 @@ import {
   GoogleAuthConfig,
   GoogleAuthError,
   GoogleVerifyInput,
+  isClientCredentialError,
   OAuth2ClientFactory,
   OAuth2ClientLike,
   verifyGoogleCodeAndGetEmail,
@@ -188,6 +189,10 @@ describe("googleAuth — verifyGoogleCodeAndGetEmail(mock 팩토리 주입)", ()
     await expect(verifyGoogleCodeAndGetEmail(CFG, INPUT, factory)).rejects.toThrow(
       GoogleAuthError
     );
+    // 의미는 종전과 같다(401 대상). kind 단언만 추가한다.
+    await expect(verifyGoogleCodeAndGetEmail(CFG, INPUT, factory)).rejects.toMatchObject({
+      kind: "rejected",
+    });
   });
 
   test("code 교환 응답에 id_token 없음 → GoogleAuthError", async () => {
@@ -216,5 +221,50 @@ describe("googleAuth — verifyGoogleCodeAndGetEmail(mock 팩토리 주입)", ()
     await expect(
       verifyGoogleCodeAndGetEmail(CFG, { ...INPUT, nonce: "client" }, factory)
     ).rejects.toThrow(GoogleAuthError);
+  });
+});
+
+// ───────── 실패 사유 분류(2026-08-01) — 구성 오류를 401에서 분리한다 ─────────
+//
+// 배포 env에 플레이스홀더 client_id가 실려 웹 로그인 100%가 `invalid_client`로 실패했는데,
+// 서버가 그것을 "이 Google 계정으로는 로그인할 수 없습니다"(401)로 표시해 운영자가 원인을
+// 계정 문제로 오인했다. `invalid_client`·`unauthorized_client`는 계정 존재 여부와 무관하므로
+// 401 일반화(열거 방지)의 대상이 아니다 → `kind:"clientConfig"` → 라우트가 501.
+describe("googleAuth — GoogleAuthError.kind (구성 오류 vs 계정 거부)", () => {
+  test("isClientCredentialError — invalid_client·unauthorized_client만 참", () => {
+    expect(isClientCredentialError("code 교환 실패: invalid_client")).toBe(true);
+    expect(isClientCredentialError("unauthorized_client")).toBe(true);
+    // ⚠️ invalid_grant는 만료·재사용 code에서도 나온다 — 구성 오류가 아니다.
+    expect(isClientCredentialError("invalid_grant")).toBe(false);
+    expect(isClientCredentialError("invalid_request")).toBe(false);
+  });
+
+  test("getToken이 invalid_client로 실패 → kind:'clientConfig'", async () => {
+    const factory = mockFactory({ getTokenThrows: new Error("invalid_client") });
+    await expect(verifyGoogleCodeAndGetEmail(CFG, INPUT, factory)).rejects.toMatchObject({
+      name: "GoogleAuthError",
+      kind: "clientConfig",
+    });
+  });
+
+  test("getToken이 unauthorized_client로 실패 → kind:'clientConfig'", async () => {
+    const factory = mockFactory({
+      getTokenThrows: new Error("unauthorized_client: not allowed"),
+    });
+    await expect(verifyGoogleCodeAndGetEmail(CFG, INPUT, factory)).rejects.toMatchObject({
+      kind: "clientConfig",
+    });
+  });
+
+  test("code 교환 이후 단계의 실패는 전부 kind:'rejected'(기본값)", async () => {
+    // id_token 검증 실패 · payload 재확인 실패 모두 계정·요청 사유이므로 401 유지다.
+    const verifyFails = mockFactory({ verifyThrows: new Error("Invalid token signature") });
+    await expect(verifyGoogleCodeAndGetEmail(CFG, INPUT, verifyFails)).rejects.toMatchObject({
+      kind: "rejected",
+    });
+    const badHd = mockFactory({ payload: makePayload({ hd: "other.com" }) });
+    await expect(
+      verifyGoogleCodeAndGetEmail({ ...CFG, allowedHd: "rsupport.com" }, INPUT, badHd)
+    ).rejects.toMatchObject({ kind: "rejected" });
   });
 });

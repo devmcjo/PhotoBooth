@@ -1,0 +1,73 @@
+/* 진단·상태 모달 — 03 §15.2. 값은 **색만으로 구분하지 않는다**(문자로도 판독 가능하다 — 01 §8). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  max-height: 60vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--fs-title-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: 0.125rem var(--gap);
+  margin: 0;
+}
+
+.key {
+  margin: 0;
+  color: var(--fg-tertiary);
+  font-size: var(--fs-caption);
+}
+
+.value {
+  margin: 0;
+  font-size: var(--fs-caption);
+  word-break: break-all;
+}
+
+/* ok는 보조색(민트)이다 — 강조색(로즈)은 CTA 전용이라 상태 표시와 섞으면 안 된다. */
+.ok {
+  color: var(--accent2-text);
+}
+
+.warn {
+  color: var(--warning);
+  font-weight: var(--fw-semibold);
+}
+
+.bad {
+  color: var(--danger);
+}
+
+.neutral {
+  color: var(--fg);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* 모달 내 버튼 간격 12(WPF 규약). */
+  gap: 12px;
+}
+
+.caption {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}

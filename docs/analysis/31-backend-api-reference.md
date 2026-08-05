@@ -82,7 +82,7 @@
 | `not_found` | 404 | 대상 없음(계정·프레임) 또는 미정의 엔드포인트 | "대상을 찾을 수 없습니다" |
 | `conflict` | 409 | 중복(동일 `sessionId` 재commit, 프레임 10개 초과) 또는 **PIN 미설정** | 문맥별 분기 필수(§4.5 참고) |
 | `invalid_argument` | 400 | 입력 검증 실패, JSON 파싱 실패, 자기 자신 대상 PIN 재설정 | 입력 오류 안내 |
-| `not_implemented` | 501 | 서버 기능 미구성 (현재는 **Google SSO 미구성**만) | "로그인이 구성되지 않았습니다. 관리자에게 문의" — 자격 실패·네트워크와 **구분해서** 안내 |
+| `not_implemented` | 501 | 서버 기능 미구성 — **Google SSO 미구성 또는 OAuth 클라이언트 자격 오류**(client_id/secret이 Google에 등록된 값과 불일치) | "로그인이 구성되지 않았습니다. 관리자에게 문의" — 자격 실패·네트워크와 **구분해서** 안내 |
 | `internal` | 500 | 서버 오류 | 재시도 가능 안내 |
 | `TEMP_USER_TIME_EXCEEDED` | **403** | 무료 사용 시간 경과 | 고정 문구: *"무료 사용 시간이 지났습니다. 관리자에게 문의해주세요."* |
 | `TEMP_USER_COUNT_EXCEEDED` | **403** | 무료 사용 횟수 소진 | 고정 문구: *"무료 사용 횟수가 소진되었습니다. 관리자에게 문의해주세요."* |
@@ -132,7 +132,12 @@
 
 **응답 200**
 ```json
-{ "status": "ok", "time": "2026-07-30T02:11:03.512Z", "deployedAt": "2026-07-29T11:04:22.000Z" }
+{
+  "status": "ok",
+  "time": "2026-07-30T02:11:03.512Z",
+  "deployedAt": "2026-07-29T11:04:22.000Z",
+  "oauth": { "web": "ok", "desktop": "ok", "sharedClientId": false, "redirectAllowlistCount": 3 }
+}
 ```
 
 | 필드 | 타입 | 비고 |
@@ -140,6 +145,18 @@
 | `status` | string | 항상 `"ok"` |
 | `time` | string(ISO8601 UTC) | 서버 현재 시각 |
 | `deployedAt` | string(ISO8601 UTC) **또는 필드 부재** | **유효한 `X-MCPhoto-Client`를 제시했을 때만** 포함. 스탬프가 없으면 키가 유효해도 생략 |
+| `oauth` | object **또는 필드 부재** | 동상(유효 키일 때만). 구성 로드가 실패하면 생략된다. **2026-08-01 신설** — 진단 모달의 [웹 OAuth 구성] 신호 |
+
+`oauth` 하위(전부 필수):
+
+| 필드 | 타입 | 값 |
+|------|------|-----|
+| `web` · `desktop` | string | `"ok"`(형식 정상) · `"malformed"`(값은 있으나 `….apps.googleusercontent.com`이 아니다 — **플레이스홀더 미치환**) · `"unset"`(미구성 = 그 종류는 501) |
+| `sharedClientId` | boolean | web·desktop이 **같은 client_id**다(유형이 다르면 공유할 수 없으므로 오구성) |
+| `redirectAllowlistCount` | number | `OAUTH_REDIRECT_ALLOWLIST` 항목 수 |
+
+> ⚠️ **`oauth`에는 client_id 값·길이·앞자리가 어떤 형태로도 담기지 않는다**(열거값과 개수뿐 — `domain/oauthStatus.ts`, 테스트가 고정). 게이트 키를 "설정됨/미설정"만 보여 주는 것과 같은 수준이다.
+> ⚠️ 클라는 이 필드를 **경계에서 검증**해야 한다 — 구버전 서버에는 없으므로, 없거나 형식이 어긋나면 **"미설정"이 아니라 "알 수 없음"** 으로 접는다(`healthService.parseOAuthConfigStatus`).
 
 - 키가 없거나 틀려도 **200**이다(무인증 헬스 체크를 500/401로 바꾸지 않는 설계). 따라서 **헬스 응답으로 게이트 키 유효성을 판정할 수 없다** — `deployedAt` 유무가 힌트일 뿐이며, 확정하려면 `GET /frames/default` 같은 apiKey 게이트 엔드포인트로 401을 확인해야 한다.
 
@@ -155,7 +172,8 @@
   "code": "4/0AeanS0...",
   "codeVerifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   "redirectUri": "http://127.0.0.1:53412/",
-  "nonce": "n-0S6_WzA2Mj"
+  "nonce": "n-0S6_WzA2Mj",
+  "clientKind": "desktop"
 }
 ```
 
@@ -163,8 +181,15 @@
 |------|:----:|------|
 | `code` | ✅ | 문자열, 트림 후 1~2048자 |
 | `codeVerifier` | ✅ | RFC 7636 — `^[A-Za-z0-9\-._~]{43,128}$` |
-| `redirectUri` | ✅ | **loopback만**: scheme `http`, host `127.0.0.1` 또는 `localhost`, 경로 `/` 또는 없음, 쿼리·프래그먼트·인증정보 금지, 포트 1~65535 선택, 총 길이 ≤256 |
+| `redirectUri` | ✅ | **허용 목록(완전 일치) 또는 loopback**. ① `OAUTH_REDIRECT_ALLOWLIST`(CSV env)에 **정확히 일치**하면 통과 ② 아니면 loopback 규칙: scheme `http`, host `127.0.0.1`/`localhost`, 경로 `/` 또는 없음, 쿼리·프래그먼트·인증정보 금지, 포트 1~65535 선택. 총 길이 ≤256 |
 | `nonce` | — | 있으면 `^[A-Za-z0-9\-._~]{1,256}$`. id_token의 `nonce`와 대조된다 |
+| `clientKind` | — | `desktop` \| `web`. **미지정 = `desktop`**(하위 호환). 그 외 문자열은 400. 선택된 종류의 client_id/secret 쌍으로 code를 교환한다 |
+
+> **검사 순서가 계약이다(허용 목록 먼저).** 웹 개발용 `http://localhost:5173/oauth2callback`은 loopback처럼 보이지만 loopback 규칙은 경로 `/`만 허용한다 — 순서를 뒤집으면 허용 목록에 등록해도 영구히 400이 된다.
+>
+> **prefix 매칭은 쓰지 않는다.** 허용 목록에 `https://a.web.app/oauth2callback`이 있어도 `https://a.web.app.evil.com/oauth2callback`은 거부된다(open redirect·SSRF 방어). 이 값은 서버가 Google에 보내는 code 교환 요청에 그대로 실린다.
+>
+> **audience는 목록이다.** 구성된 모든 client_id(`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_ID_WEB`)를 `verifyIdToken`에 넘기고 `payload.aud`가 그 목록에 **포함**되는지 확인한다. code 교환이 이미 한 클라이언트로 고정되므로 목록은 **우리 소유 클라이언트끼리만** 넓힌다.
 
 **응답 200**
 ```json
@@ -186,9 +211,9 @@
 
 | 상태·코드 | 원인 | 클라이언트 처리 |
 |-----------|------|-----------------|
-| 501 `not_implemented` | 서버에 `GOOGLE_OAUTH_CLIENT_ID` 미설정 | *"Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요."* |
+| 501 `not_implemented` | 구성된 OAuth 클라이언트가 하나도 없음, **또는 요청한 `clientKind`가 미구성**(예: 웹 client_id 없이 `clientKind:"web"`), **또는 Google이 `invalid_client`/`unauthorized_client`로 code 교환을 거부**(운영자 구성 오류 — 계정 존재 여부와 무관한 사유이므로 401 일반화(열거 방지)의 대상이 아니다) | *"Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요."* |
 | 400 `invalid_argument` | 위 필드 형식 위반 | 개발 오류(정상 흐름에선 발생하지 않아야 한다) |
-| 401 `unauthorized` | code 교환 실패 / id_token 검증 실패(aud·iss·exp 불일치, `email_verified=false`, nonce 불일치, 허용 도메인(`GOOGLE_ALLOWED_HD`) 밖) / 계정 매핑 실패 | *"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."* — 서버가 사유를 **일반화**한다(계정 열거 방지). 상세 사유는 서버 로그에만 남는다 |
+| 401 `unauthorized` | code 교환 실패(`invalid_grant` 등 — **`invalid_client`·`unauthorized_client`는 제외**, 위 501) / id_token 검증 실패(aud·iss·exp 불일치, `email_verified=false`, nonce 불일치, 허용 도메인(`GOOGLE_ALLOWED_HD`) 밖) / 계정 매핑 실패 | *"이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."* — 서버가 사유를 **일반화**한다(계정 열거 방지). 상세 사유는 서버 로그에만 남는다 |
 
 **서버가 하는 계정 처리**
 
@@ -717,10 +742,15 @@ P1은 백엔드 API를 쓰지 않는다. **Firestore `resultSessions/{token}` �
 | `STORAGE_BUCKET` | env | ✅ | 서명 URL·토큰 URL 조립 |
 | `HOSTING_BASE_URL` | env | — | 다운로드 페이지 base URL |
 | `JWT_EXPIRES_IN_SECONDS` | env | — | 기본 `28800`(8시간) |
-| `GOOGLE_OAUTH_CLIENT_ID` | env | SSO 사용 시 | **SSO 활성화 신호** — 없으면 `/auth/google`는 501 |
-| `GOOGLE_ALLOWED_HD` | env | — | 허용 Workspace 도메인(빈 값 = 제한 없음) |
+| `GOOGLE_OAUTH_CLIENT_ID` | env | desktop SSO 사용 시 | **desktop 종류 활성화 신호**(Windows 앱) |
+| `GOOGLE_OAUTH_CLIENT_ID_WEB` | env | web SSO 사용 시 | **web 종류 활성화 신호**(웹 클라이언트). Desktop 클라이언트와 유형이 달라 **공유할 수 없다** |
+| `GOOGLE_OAUTH_CLIENT_SECRET_WEB` | secret | web SSO 사용 시 | 웹 클라이언트 secret. **선언된 시크릿이라 배포 시 반드시 존재해야 한다**(미사용이어도 placeholder 등록) |
+| `OAUTH_REDIRECT_ALLOWLIST` | env | web SSO 사용 시 | 허용 `redirectUri` CSV(**완전 일치**). 예: `https://mcphoto-955fb-kiosk.web.app/oauth2callback,http://localhost:5173/oauth2callback` |
+| `GOOGLE_ALLOWED_HD` | env | — | 허용 Workspace 도메인(빈 값 = 제한 없음). **종류 무관 공통 적용** |
 
-- `GOOGLE_OAUTH_CLIENT_SECRET`은 배포 시 항상 존재해야 하므로 SSO 미사용이어도 placeholder를 등록한다. 따라서 "시크릿만 있고 client id 없음"은 **정상 비활성** 상태다.
+- `/auth/google`는 **구성된 종류가 하나 이상**이면 활성이다. 요청한 `clientKind`가 미구성이면 그 요청만 501이다.
+- 종류별로 "id를 켰는데 secret이 없으면 **조기 실패**" 규칙이 동일하게 적용된다(오구성 배포 방지).
+- `GOOGLE_OAUTH_CLIENT_SECRET`(및 `_WEB`)은 배포 시 항상 존재해야 하므로 SSO 미사용이어도 placeholder를 등록한다. 따라서 "시크릿만 있고 client id 없음"은 **정상 비활성** 상태다.
 - 게이트 키는 **여러 개 등록 가능**하다(CSV). 플랫폼별로 다른 키를 발급하면 유출 시 해당 키만 폐기할 수 있다 — 새 클라이언트마다 별도 키를 받는 것을 권장한다.
 
 ---

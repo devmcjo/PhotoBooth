@@ -10,9 +10,10 @@ import { loadConfig } from "../config";
 import { issueToken } from "../domain/jwt";
 import {
   validateAuthCode,
+  validateClientKind,
   validateCodeVerifier,
-  validateLoopbackRedirectUri,
   validateNonce,
+  validateRedirectUri,
 } from "../domain/validation";
 import { asyncHandler } from "../http/async";
 import { requireApiKey } from "../http/auth";
@@ -22,6 +23,24 @@ import {
   GoogleAuthError,
   verifyGoogleCodeAndGetEmail,
 } from "../services/googleAuth";
+
+/**
+ * `GoogleAuthError` → HTTP 응답 매핑(순수 함수 — 라우트 밖에서 단위 검증한다).
+ *
+ * - `clientConfig`(Google이 `invalid_client`/`unauthorized_client`로 거부) → **501**.
+ *   우리 서버의 OAuth 자격이 틀렸다는 뜻뿐이고 **어느 계정이 존재하는지와 무관**하므로,
+ *   401 일반화(계정 열거 방지, 설계 §6.4)의 대상이 아니다. 401로 감추면 운영자가 구성 오류를
+ *   계정 문제로 오인한다(2026-08-01 실제 발생 — 배포 env에 플레이스홀더 client_id가 실렸다).
+ * - 그 외(`rejected`) → **기존 401 문구 그대로**. 한 글자도 바꾸지 않는다.
+ */
+export function mapGoogleAuthError(err: GoogleAuthError): HttpError {
+  if (err.kind === "clientConfig") {
+    return HttpError.notImplemented("Google 로그인이 구성되지 않았습니다.");
+  }
+  return HttpError.unauthorized(
+    "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
+  );
+}
 
 export function authRouter(): Router {
   const router = Router();
@@ -45,8 +64,23 @@ export function authRouter(): Router {
       if (!codeRes.ok) throw HttpError.invalid(codeRes.error);
       const verifierRes = validateCodeVerifier(req.body?.codeVerifier);
       if (!verifierRes.ok) throw HttpError.invalid(verifierRes.error);
-      const redirectRes = validateLoopbackRedirectUri(req.body?.redirectUri);
+      // B2: 어느 OAuth 클라이언트로 교환할지 요청이 명시한다. 미지정 = desktop(하위 호환).
+      const kindRes = validateClientKind(req.body?.clientKind);
+      if (!kindRes.ok) throw HttpError.invalid(kindRes.error);
+      // B1: loopback(데스크톱) 또는 허용 목록(웹)만 통과. 완전 일치.
+      const redirectRes = validateRedirectUri(
+        req.body?.redirectUri,
+        cfg.oauthRedirectAllowlist
+      );
       if (!redirectRes.ok) throw HttpError.invalid(redirectRes.error);
+
+      // 요청한 종류가 구성되지 않았으면 구성 오류다(401로 감추지 않는다 — 운영자가 원인을 알아야 한다).
+      const client = cfg.googleOAuthClients[kindRes.value];
+      if (!client) {
+        throw HttpError.notImplemented(
+          `Google 로그인이 이 클라이언트 종류로 구성되지 않았습니다: ${kindRes.value}`
+        );
+      }
 
       // nonce는 선택: 있으면 형식 검증 후 id_token nonce 대조에 사용(§8.4).
       let nonce: string | undefined;
@@ -61,9 +95,10 @@ export function authRouter(): Router {
       try {
         email = await verifyGoogleCodeAndGetEmail(
           {
-            clientId: cfg.googleOAuthClientId,
-            clientSecret: cfg.googleOAuthClientSecret,
+            clientId: client.clientId,
+            clientSecret: client.clientSecret,
             allowedHd: cfg.googleAllowedHd,
+            audiences: cfg.googleOAuthAudiences,
           },
           {
             code: codeRes.value,
@@ -73,12 +108,11 @@ export function authRouter(): Router {
           }
         );
       } catch (err) {
-        // Google 검증 실패는 사유를 로그에만 남기고(토큰·email 미포함), 일반화 401(열거 방지, §6.4·§8.6).
+        // Google 검증 실패는 사유를 로그에만 남기고(토큰·email 미포함),
+        // 구성 오류(clientConfig)는 501, 그 외는 일반화 401(열거 방지, §6.4·§8.6).
         if (err instanceof GoogleAuthError) {
-          console.warn("Google 로그인 검증 실패:", err.message);
-          throw HttpError.unauthorized(
-            "이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요."
-          );
+          console.warn(`Google 로그인 검증 실패[${err.kind}]:`, err.message);
+          throw mapGoogleAuthError(err);
         }
         throw err;
       }

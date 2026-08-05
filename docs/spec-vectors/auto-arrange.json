@@ -1,0 +1,628 @@
+{
+  "name": "auto-arrange",
+  "spec": "docs/analysis/14 §4.1 (autoArrange · fitInCell)",
+  "note": "margin=max(20, floor(frameW/20)), gap=max(12, floor(frameW/40)), cell=floor(...), 비율맞춤=roundHalfToEven.",
+  "cases": [
+    {
+      "input": {
+        "slotCount": 1,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 1080,
+          "height": 1440
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 2,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 525,
+          "height": 1440
+        },
+        {
+          "index": 1,
+          "x": 615,
+          "y": 80,
+          "width": 525,
+          "height": 1440
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 3,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 340,
+          "height": 1440
+        },
+        {
+          "index": 1,
+          "x": 430,
+          "y": 80,
+          "width": 340,
+          "height": 1440
+        },
+        {
+          "index": 2,
+          "x": 800,
+          "y": 80,
+          "width": 340,
+          "height": 1440
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 1,
+          "x": 615,
+          "y": 80,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 2,
+          "x": 60,
+          "y": 820,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 3,
+          "x": 615,
+          "y": 820,
+          "width": 525,
+          "height": 700
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 5,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 1,
+          "x": 430,
+          "y": 80,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 2,
+          "x": 800,
+          "y": 80,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 3,
+          "x": 60,
+          "y": 820,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 4,
+          "x": 430,
+          "y": 820,
+          "width": 340,
+          "height": 700
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 6,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 1,
+          "x": 430,
+          "y": 80,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 2,
+          "x": 800,
+          "y": 80,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 3,
+          "x": 60,
+          "y": 820,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 4,
+          "x": 430,
+          "y": 820,
+          "width": 340,
+          "height": 700
+        },
+        {
+          "index": 5,
+          "x": 800,
+          "y": 820,
+          "width": 340,
+          "height": 700
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": 0.75
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 1,
+          "x": 615,
+          "y": 80,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 2,
+          "x": 60,
+          "y": 820,
+          "width": 525,
+          "height": 700
+        },
+        {
+          "index": 3,
+          "x": 615,
+          "y": 820,
+          "width": 525,
+          "height": 700
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": 1.3333333333333333
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 233,
+          "width": 525,
+          "height": 394
+        },
+        {
+          "index": 1,
+          "x": 615,
+          "y": 233,
+          "width": 525,
+          "height": 394
+        },
+        {
+          "index": 2,
+          "x": 60,
+          "y": 973,
+          "width": 525,
+          "height": 394
+        },
+        {
+          "index": 3,
+          "x": 615,
+          "y": 973,
+          "width": 525,
+          "height": 394
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": 1
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 167,
+          "width": 525,
+          "height": 525
+        },
+        {
+          "index": 1,
+          "x": 615,
+          "y": 167,
+          "width": 525,
+          "height": 525
+        },
+        {
+          "index": 2,
+          "x": 60,
+          "y": 907,
+          "width": 525,
+          "height": 525
+        },
+        {
+          "index": 3,
+          "x": 615,
+          "y": 907,
+          "width": 525,
+          "height": 525
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 6,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": 0.75
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 203,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 1,
+          "x": 430,
+          "y": 203,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 2,
+          "x": 800,
+          "y": 203,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 3,
+          "x": 60,
+          "y": 943,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 4,
+          "x": 430,
+          "y": 943,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 5,
+          "x": 800,
+          "y": 943,
+          "width": 340,
+          "height": 453
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 2,
+        "frameW": 1600,
+        "frameH": 1200,
+        "targetAspect": 1.3333333333333333
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 80,
+          "y": 337,
+          "width": 700,
+          "height": 525
+        },
+        {
+          "index": 1,
+          "x": 820,
+          "y": 337,
+          "width": 700,
+          "height": 525
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 400,
+        "frameH": 1600,
+        "targetAspect": null
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 20,
+          "y": 80,
+          "width": 360,
+          "height": 330
+        },
+        {
+          "index": 1,
+          "x": 20,
+          "y": 450,
+          "width": 360,
+          "height": 330
+        },
+        {
+          "index": 2,
+          "x": 20,
+          "y": 820,
+          "width": 360,
+          "height": 330
+        },
+        {
+          "index": 3,
+          "x": 20,
+          "y": 1190,
+          "width": 360,
+          "height": 330
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 400,
+        "frameH": 1600,
+        "targetAspect": 0.75
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 76,
+          "y": 80,
+          "width": 248,
+          "height": 330
+        },
+        {
+          "index": 1,
+          "x": 76,
+          "y": 450,
+          "width": 248,
+          "height": 330
+        },
+        {
+          "index": 2,
+          "x": 76,
+          "y": 820,
+          "width": 248,
+          "height": 330
+        },
+        {
+          "index": 3,
+          "x": 76,
+          "y": 1190,
+          "width": 248,
+          "height": 330
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 2,
+        "frameW": 480,
+        "frameH": 1600,
+        "targetAspect": 1
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 24,
+          "y": 214,
+          "width": 432,
+          "height": 432
+        },
+        {
+          "index": 1,
+          "x": 24,
+          "y": 954,
+          "width": 432,
+          "height": 432
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 0,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": 0.75
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 80,
+          "width": 1080,
+          "height": 1440
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 7,
+        "frameW": 1200,
+        "frameH": 1600,
+        "targetAspect": 0.75
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 60,
+          "y": 203,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 1,
+          "x": 430,
+          "y": 203,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 2,
+          "x": 800,
+          "y": 203,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 3,
+          "x": 60,
+          "y": 943,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 4,
+          "x": 430,
+          "y": 943,
+          "width": 340,
+          "height": 453
+        },
+        {
+          "index": 5,
+          "x": 800,
+          "y": 943,
+          "width": 340,
+          "height": 453
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 4,
+        "frameW": 200,
+        "frameH": 300,
+        "targetAspect": 0.75
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 20,
+          "y": 32,
+          "width": 74,
+          "height": 99
+        },
+        {
+          "index": 1,
+          "x": 106,
+          "y": 32,
+          "width": 74,
+          "height": 99
+        },
+        {
+          "index": 2,
+          "x": 20,
+          "y": 168,
+          "width": 74,
+          "height": 99
+        },
+        {
+          "index": 3,
+          "x": 106,
+          "y": 168,
+          "width": 74,
+          "height": 99
+        }
+      ]
+    },
+    {
+      "input": {
+        "slotCount": 1,
+        "frameW": 100,
+        "frameH": 100,
+        "targetAspect": 1
+      },
+      "expected": [
+        {
+          "index": 0,
+          "x": 20,
+          "y": 20,
+          "width": 60,
+          "height": 60
+        }
+      ]
+    }
+  ]
+}

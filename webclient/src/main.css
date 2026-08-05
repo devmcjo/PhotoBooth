@@ -1,0 +1,97 @@
+/*
+ * 전역 리셋·부트 화면·버전 캡션.
+ *
+ * ⚠️ **팔레트를 여기서 정의하지 않는다.** 색·타이포 토큰의 유일 정의처는 `ui/theme/tokens.css`다.
+ *    2026-08-01 이전에는 이 파일의 `:root`가 `--bg`·`--fg`를 다시 정의했고, `main.tsx`가
+ *    tokens.css를 **먼저** import하는 탓에 이 파일이 라이트 값을 캐스케이드로 이겼다 —
+ *    라이트 모드에서 흰 카드 위에 흰 글자가 올라갔다. 그 줄들을 지운 것이 이 파일의 핵심 변경이다.
+ */
+:root {
+  font-family: var(--font);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  /*
+   * 키오스크: 가로 스크롤 금지(01 §8 접근성).
+   * ⚠️ Home 장식 원(`screens.module.css`)이 음수 오프셋을 쓰므로 **이 규칙을 지우면
+   *    가로 스크롤이 생긴다.** 장식 이식은 이 전제 위에 설계돼 있다.
+   */
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * 전역 포커스 링 폴백(01 §8 · 12 B-n3).
+ * ⚠️ WPF는 거의 모든 버튼에서 `FocusVisualStyle={x:Null}`로 포커스 비주얼을 지운다.
+ *    **그것을 따라하지 마라** — 웹에서 포커스 제거는 접근성 위반이다. 의도된 차이다.
+ * 색을 `--fg`로 두는 이유: `--accent`로 두면 로즈 버튼 위에서 링이 보이지 않는다.
+ */
+:focus-visible {
+  outline: 3px solid var(--fg);
+  outline-offset: 2px;
+}
+
+.boot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-s);
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.boot__title {
+  margin: 0;
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.02em;
+}
+
+.boot__subtitle {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-body);
+}
+
+/* 버전 캡션: 화면 하단 흐린 캡션 · 로그인 무관 상시 · 클릭 비간섭(05 §8.2) */
+.version-caption {
+  position: fixed;
+  inset: auto 0 0 0;
+  padding: var(--space-s);
+  text-align: center;
+  font-size: var(--fs-caption);
+  color: var(--fg-muted);
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+
+/*
+ * reduced-motion: 애니메이션을 **없애는** 것이 아니라 **완화**하는 것이 의도다.
+ * ⚠️ `[data-keep-motion]`을 제외하지 않으면 이 전역 `!important`가 스피너의 2s 회전까지
+ *    0.01ms로 눌러 사실상 정지시킨다 — 로딩 표시가 멈추면 "앱이 멈춘 것"으로 보인다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-keep-motion]) {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

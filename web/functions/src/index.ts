@@ -21,6 +21,11 @@ const CLIENT_API_KEYS = defineSecret("CLIENT_API_KEYS");
 // 배포 시 반드시 존재해야 하므로, SSO 미사용이어도 최초 배포 전 임시값이라도 등록해 둔다.
 // it15: SENDGRID_API_KEY 선언은 제거했다(이메일 인증·재설정 폐지 → 배포 전제조건 1개 감소).
 const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
+// B2(웹 클라이언트): 웹 전용 OAuth 클라이언트의 secret. Desktop 클라이언트와 **유형이 달라 공유할 수 없다**.
+// ⚠️ 선언된 시크릿은 **배포 시 반드시 존재해야 한다** — 등록 전에 functions를 배포하면 실패한다.
+//    `GOOGLE_OAUTH_CLIENT_ID_WEB`(env)가 비어 있으면 웹 종류는 그냥 비활성이며(요청 시 501),
+//    Windows(desktop) 경로는 영향받지 않는다. 등록: firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET_WEB
+const GOOGLE_OAUTH_CLIENT_SECRET_WEB = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET_WEB");
 
 // 리전은 배포 시 결정(설계 §1.2 USER-DECISION). 기본 서울.
 setGlobalOptions({ region: "asia-northeast3", maxInstances: 10 });
@@ -33,7 +38,12 @@ const app = createApp();
 
 export const api = onRequest(
   {
-    secrets: [JWT_SECRET, CLIENT_API_KEYS, GOOGLE_OAUTH_CLIENT_SECRET],
+    secrets: [
+      JWT_SECRET,
+      CLIENT_API_KEYS,
+      GOOGLE_OAUTH_CLIENT_SECRET,
+      GOOGLE_OAUTH_CLIENT_SECRET_WEB,
+    ],
     // 서명 URL PUT은 클라가 직접 하므로 함수 메모리/타임아웃은 소규모로 충분.
     memory: "256MiB",
     timeoutSeconds: 60,

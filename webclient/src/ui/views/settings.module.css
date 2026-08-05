@@ -1,0 +1,167 @@
+/* 설정 화면 — 03 §12 (스크롤 영역 + 하단 sticky 저장 바) */
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  /* 가로 스크롤 금지(01 §8) — 넓은 내용은 각자 줄바꿈한다. */
+  overflow-x: hidden;
+  /* WPF Settings 스크롤 Padding="40,88,40,16" · MaxWidth 1200. 상단은 TopBar가 대신한다. */
+  padding: var(--space-l) var(--space-xl) var(--space-m);
+  display: flex;
+  flex-direction: column;
+  /* WPF 카드 간 간격 16. */
+  gap: var(--space-m);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+}
+
+/* WPF 편집기 배너와 같은 톤: Warning.Surface · r14 · padding 16,10. */
+.banner {
+  margin: 0;
+  padding: 10px var(--space-m);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--warning-surface);
+  color: var(--warning);
+  font-size: var(--fs-body);
+}
+
+/* WPF Card: bg Surface · border 1 · r14 · **padding 24** · Shadow.Card. */
+.section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-l);
+  box-shadow: var(--shadow-card);
+}
+
+/* WPF 섹션 제목: H2 + 하단 16. */
+.sectionTitle {
+  margin: 0 0 var(--space-m);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+}
+
+.note {
+  margin: var(--gap-sm) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.warning {
+  margin: var(--gap-sm) 0 0;
+  color: var(--danger);
+  font-size: var(--fs-caption);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  /* WPF 가로 버튼 간격 16. */
+  gap: var(--space-m);
+  margin-top: var(--space-m);
+}
+
+/* ── 서버 상태 · 저장소 표 ── */
+
+.statusList {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 0.25rem var(--gap);
+  margin: 0;
+  font-size: var(--fs-caption);
+}
+
+.statusKey {
+  color: var(--fg-muted);
+}
+
+.statusValue {
+  margin: 0;
+  /* 긴 URL이 화면을 밀지 않게 한다. */
+  overflow-wrap: anywhere;
+}
+
+/* ── 보관된 결과물 ── */
+
+.resultList {
+  list-style: none;
+  margin: var(--gap-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  /* 세션이 200개까지 쌓일 수 있다 — 이 영역만 스크롤한다. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.resultItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.resultName {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.resultBytes {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+/* ── 가져오기 미리보기 ── */
+
+.previewList {
+  list-style: none;
+  margin: var(--gap-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: var(--fs-caption);
+}
+
+.previewItem {
+  overflow-wrap: anywhere;
+}
+
+/* ── 하단 sticky 저장 바(03 §12.4) ── */
+
+/* WPF sticky 바: Padding="40,12" + 상단 1px Divider + Shadow.Sm. */
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: var(--space-m);
+  justify-content: flex-end;
+  padding: 12px var(--space-xl);
+  border-top: 1px solid var(--divider);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  /* 스크롤 영역 위에 항상 떠 있어야 한다. */
+  z-index: 1;
+}

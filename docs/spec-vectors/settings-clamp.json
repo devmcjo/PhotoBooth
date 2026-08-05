@@ -1,0 +1,267 @@
+{
+  "name": "settings-clamp",
+  "spec": "docs/analysis/41 §2.1 · §2.7 (AppSettings.Clamp)",
+  "note": "input은 기본값 위에 얹는 부분 패치. expected에 있는 키만 비교한다(플랫폼 고유 키를 벡터에 넣지 않기 위함). DisplayMode·WindowBounds는 웹에 UI가 없어 제외.",
+  "cases": [
+    {
+      "input": {
+        "CutCount": 0
+      },
+      "expected": {
+        "CutCount": 0
+      }
+    },
+    {
+      "input": {
+        "CutCount": 6
+      },
+      "expected": {
+        "CutCount": 6
+      }
+    },
+    {
+      "input": {
+        "CutCount": 3
+      },
+      "expected": {
+        "CutCount": 6
+      }
+    },
+    {
+      "input": {
+        "CutCount": 7
+      },
+      "expected": {
+        "CutCount": 6
+      }
+    },
+    {
+      "input": {
+        "CutCount": 9
+      },
+      "expected": {
+        "CutCount": 8
+      }
+    },
+    {
+      "input": {
+        "CutCount": 11
+      },
+      "expected": {
+        "CutCount": 10
+      }
+    },
+    {
+      "input": {
+        "CutCount": -1
+      },
+      "expected": {
+        "CutCount": 6
+      }
+    },
+    {
+      "input": {
+        "CutCount": 100
+      },
+      "expected": {
+        "CutCount": 10
+      }
+    },
+    {
+      "input": {
+        "CountdownSec": 4
+      },
+      "expected": {
+        "CountdownSec": 3
+      }
+    },
+    {
+      "input": {
+        "CountdownSec": 5
+      },
+      "expected": {
+        "CountdownSec": 6
+      }
+    },
+    {
+      "input": {
+        "CountdownSec": 7
+      },
+      "expected": {
+        "CountdownSec": 6
+      }
+    },
+    {
+      "input": {
+        "CountdownSec": 9
+      },
+      "expected": {
+        "CountdownSec": 8
+      }
+    },
+    {
+      "input": {
+        "CountdownSec": 0
+      },
+      "expected": {
+        "CountdownSec": 3
+      }
+    },
+    {
+      "input": {
+        "RetakeLimit": 0
+      },
+      "expected": {
+        "RetakeLimit": 1
+      }
+    },
+    {
+      "input": {
+        "RetakeLimit": 4
+      },
+      "expected": {
+        "RetakeLimit": 3
+      }
+    },
+    {
+      "input": {
+        "RetentionHours": 0
+      },
+      "expected": {
+        "RetentionHours": 1
+      }
+    },
+    {
+      "input": {
+        "RetentionHours": 1
+      },
+      "expected": {
+        "RetentionHours": 1
+      }
+    },
+    {
+      "input": {
+        "RetentionHours": 72
+      },
+      "expected": {
+        "RetentionHours": 72
+      }
+    },
+    {
+      "input": {
+        "RetentionHours": 100
+      },
+      "expected": {
+        "RetentionHours": 72
+      }
+    },
+    {
+      "input": {
+        "RetentionHours": -5
+      },
+      "expected": {
+        "RetentionHours": 1
+      }
+    },
+    {
+      "input": {
+        "HostingBaseUrl": "https://a.web.app/"
+      },
+      "expected": {
+        "HostingBaseUrl": "https://a.web.app"
+      }
+    },
+    {
+      "input": {
+        "HostingBaseUrl": "https://a.web.app///"
+      },
+      "expected": {
+        "HostingBaseUrl": "https://a.web.app"
+      }
+    },
+    {
+      "input": {
+        "HostingBaseUrl": "https://a.web.app"
+      },
+      "expected": {
+        "HostingBaseUrl": "https://a.web.app"
+      }
+    },
+    {
+      "input": {
+        "BackendBaseUrl": "https://api.example.com/api"
+      },
+      "expected": {
+        "BackendBaseUrl": "https://api.example.com/api/"
+      }
+    },
+    {
+      "input": {
+        "BackendBaseUrl": "https://api.example.com/api/"
+      },
+      "expected": {
+        "BackendBaseUrl": "https://api.example.com/api/"
+      }
+    },
+    {
+      "input": {
+        "BackendBaseUrl": "  https://api.example.com/api  "
+      },
+      "expected": {
+        "BackendBaseUrl": "https://api.example.com/api/"
+      }
+    },
+    {
+      "input": {
+        "BackendBaseUrl": ""
+      },
+      "expected": {
+        "BackendBaseUrl": ""
+      }
+    },
+    {
+      "input": {
+        "GoogleClientId": "  abc.apps.googleusercontent.com  "
+      },
+      "expected": {
+        "GoogleClientId": "abc.apps.googleusercontent.com"
+      }
+    },
+    {
+      "input": {
+        "EnableQrDelivery": true,
+        "SendPhoto": false,
+        "SendTimelapse": false
+      },
+      "expected": {
+        "EnableQrDelivery": false,
+        "SendPhoto": false,
+        "SendTimelapse": false
+      }
+    },
+    {
+      "input": {
+        "EnableQrDelivery": true,
+        "SendPhoto": false,
+        "SendTimelapse": true
+      },
+      "expected": {
+        "EnableQrDelivery": true,
+        "SendPhoto": false,
+        "SendTimelapse": true
+      }
+    },
+    {
+      "input": {
+        "EnableQrDelivery": false,
+        "SendPhoto": false,
+        "SendTimelapse": false
+      },
+      "expected": {
+        "EnableQrDelivery": false,
+        "SendPhoto": false,
+        "SendTimelapse": false
+      }
+    }
+  ]
+}

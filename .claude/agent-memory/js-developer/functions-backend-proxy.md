@@ -1,6 +1,6 @@
 ---
 name: functions-backend-proxy
-description: web/functions(Cloud Functions 2nd gen, TypeScript) 백엔드 프록시의 빌드·검증·Emulator 스모크 방법과 서명 URL Emulator 제약
+description: web/functions(Cloud Functions 2nd gen, TypeScript) 백엔드 프록시의 빌드·검증·Emulator 스모크 방법, 서명 URL Emulator 제약, 배포 스탬프 함정과 실제 배포 흔적 판별법
 metadata:
   type: project
 ---
@@ -18,6 +18,11 @@ WPF Admin 키 제거용 서버 경유 계층(설계 `docs/design/wpf-backend-pro
 **시크릿 규약**: JWT_SECRET·CLIENT_API_KEYS는 `defineSecret`(Secret Manager), 로컬은 `web/functions/.env`(gitignore). 키 파일 절대 없음(ADC 초기화). `.env`는 `web/functions/.gitignore:6`이 커버.
 
 **Node engine 경고 무해**: package.json engines=20, 로컬 Node v25 → EBADENGINE 경고 뜨나 빌드/테스트 정상.
+
+**⚠️ `npm run build`는 배포 스탬프를 다시 찍는다 — 배포 여부 판단에 쓰지 마라.** `build` = `tsc && node scripts/gen-build-stamp.mjs`이고 후자가 `lib/build-stamp.json`의 `deployedAt`을 **실행 시각(now)** 으로 덮는다. 게다가 `web/firebase.json`의 functions predeploy 훅이 `npm --prefix functions run build`라서 **모든 배포가 업로드 직전에 스탬프를 새로 찍는다.**
+→ 따라서 "배포본 `deployedAt` == 로컬 `build-stamp.json`(밀리초까지)"는 **설계된 정상 결과**이지 사고 징후가 아니다. 2026-08-01에 이 일치를 근거로 "누가 몰래 배포했다"는 오탐이 실제로 발생했다.
+**이 리포에서 배포가 실제로 일어났는지 보는 곳은 `web/.firebase/hosting.*.cache`의 mtime이다**(`firebase-debug.log`는 남지 않는다). 파일명은 타깃의 base64다: `hosting.cHVibGlj.cache`=`public`(→ `deploy-web.bat`), `hosting.a2lvc2s.cache`=`kiosk`(→ `webclient/deploy.bat`). 빌드만 한 것과 배포한 것은 이 캐시 mtime으로만 갈린다.
+⚠️ `web/functions/src/**`와 `webclient/src/**`가 **미커밋 상태여도 배포는 워킹트리를 그대로 컴파일해 올린다.** 리뷰 전 코드가 프로덕션에 실릴 수 있는 실제 경로다.
 
 **테스트 관례**: 라우트는 supertest 미사용 — 서비스 함수를 직접 호출하고 `db()`는 `jest.mock("../firebase")`로 `FakeFirestore`(helpers/fakeFirestore.ts) 주입. 미들웨어는 Request/Response/next를 최소 모킹해 단위 테스트. 설계 문서의 엔드포인트·DTO·에러코드를 계약으로 그대로 따른다(클라 C#이 이에 맞춤).
 

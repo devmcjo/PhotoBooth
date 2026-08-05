@@ -1,0 +1,40 @@
+{
+  "name": "mcphoto-webclient",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MC포토 웹 클라이언트(키오스크) — docs/web-client 설계 기반",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vite build --config vite.sw.config.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "e2e": "playwright test",
+    "e2e:chromium": "playwright test --project=chromium",
+    "e2e:install": "playwright install chromium webkit"
+  },
+  "dependencies": {
+    "mp4-muxer": "5.2.2",
+    "qrcode-generator": "2.0.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "5.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "22.10.2",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
+    "@vitest/coverage-v8": "2.1.8",
+    "typescript": "5.7.2",
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,31 @@
+/* PIN 입력 모달 — 03 §15.3 · 07 §6.4 (키오스크에 물리 키보드가 없다) */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+}
+
+/*
+ * ⚠️ 인디케이터·키패드 스타일은 Step 16에서 `components.module.css`(`.pinPad` 계열)로 옮겼다.
+ *    세 화면(게이트 모달 · 계정 PIN 변경 · 타 계정 재설정)이 같은 표현을 공유해야 하기 때문이다.
+ *    여기에 다시 만들지 마라.
+ */
+
+/* ── 안내 ── */
+
+.message {
+  margin: 0;
+  min-height: 1.5em;
+  text-align: center;
+  color: var(--danger);
+  font-size: var(--fs-body);
+}
+
+.hint {
+  margin: 0;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}

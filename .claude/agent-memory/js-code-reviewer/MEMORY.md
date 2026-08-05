@@ -1,3 +1,4 @@
 - [Backend proxy functions](backend-proxy-functions.md) — web/functions(Cloud Functions TS) 검증법(tsc/eslint/jest + Emulator 스모크 36케이스)·인가 우회 검증 포인트·시크릿 위생
 - [Functions auth 보안 불변식](functions-auth-security-invariants.md) — id/email 네임스페이스 분리·tx pessimistic lock·SSO email_verified 게이트·sentinel pw·reset 라우팅 안전
 - [Functions 검증 명령](functions-verify-commands.md) — build/tsc/lint/test/smoke 실행법 + Windows 출력삼킴/emulators:exec tee 함정
+- [webclient E2E Playwright](webclient-e2e-playwright.md) — 목 백엔드 동일 오리진 트릭·OAuth 하네스=백도어 아님·실측 3건(headless getUserMedia 없음/CDP 쿼터가 OPFS 안 막음/WebKit에 OPFS·OffscreenCanvas 없음)

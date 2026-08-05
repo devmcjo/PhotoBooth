@@ -1,16 +1,30 @@
-# MCPhoto — 버킷 CORS 판정 (다운로드 GET: **설정 불필요**)
+# MCPhoto — 버킷 CORS (다운로드 GET: 불필요 / 업로드 PUT: **구성 완료**)
 
 | 항목 | 값 |
 |------|-----|
-| 결론 | **버킷 CORS 설정은 불필요하다**(2026-07-30 실측). 웹 다운로드 페이지의 자동 저장은 버킷 CORS 없이 동작한다 |
-| 근거 | 다운로드 URL 호스트인 `firebasestorage.googleapis.com`은 **서비스 프론트엔드가 `Access-Control-Allow-Origin: *`를 항상 반환**하며, 이는 버킷 CORS 구성과 무관하다(§1 실측) |
+| **현재 상태(2026-07-31)** | **업로드 PUT용 CORS가 구성돼 있다.** 웹 클라이언트(키오스크) 도입에 따라 적용했다 — 절차·검증은 [docs/web-client/14 §5](../docs/web-client/14-handoff-and-user-actions.md) |
+| 다운로드 GET | **여전히 CORS 설정과 무관하다**(2026-07-30 실측). 아래 §1의 판정은 유효하다 |
+| 근거(GET) | 다운로드 URL 호스트인 `firebasestorage.googleapis.com`은 **서비스 프론트엔드가 `Access-Control-Allow-Origin: *`를 항상 반환**하며, 이는 버킷 CORS 구성과 무관하다(§1 실측) |
+| 근거(PUT) | 서명 URL 호스트는 `storage.googleapis.com`이고 **버킷 CORS 구성을 그대로 따른다.** 브라우저 PUT은 preflight를 보낸다 |
 | 이 프로젝트 | project=`mcphoto-955fb`, bucket=`mcphoto-955fb.firebasestorage.app` |
-| 구성 파일 | **없다.** `web/cors.json`을 두지 않는다 — 적용할 필요가 없는 설정의 구성 파일은 오해를 만든다 |
-| 향후 필요 시점 | **업로드 PUT**(로드맵 [B5](../docs/analysis/90-roadmap-and-future-work.md))에서만 필요하다. §3 참조 |
+| 허용 오리진 | `https://mcphoto-955fb-kiosk.web.app` · `https://mcphoto-955fb-kiosk.firebaseapp.com` · `http://localhost:5173` |
+| 허용 헤더 | `Content-Type` · **`x-goog-meta-firebaseStorageDownloadTokens`** · `x-goog-resumable` |
+| 구성 파일 | 저장소에 두지 않는다. Cloud Shell에서 적용했다(이 PC에 `gcloud` 미설치 — §1) |
 | 웹 코드 영향 | **없음.** 자동 저장의 폴백 경로는 CORS와 무관하게 **그대로 유지한다**(§4) |
 
-> 이 문서는 "왜 버킷 CORS를 설정하지 않았는가"의 근거와, 만약 필요해질 경우의 절차를 남긴다.
-> **지금 실행할 작업은 없다.**
+> ⚠️ `x-goog-meta-firebaseStorageDownloadTokens`가 허용 헤더에 없으면 **preflight가 막혀 PUT이 아예 나가지 못한다**(M14 파손).
+> 서명 PUT의 `requiredHeaders`에 이 헤더가 들어 있기 때문이다.
+>
+> **`gcloud` 없이 확인하는 법**(어느 PC에서든):
+> ```powershell
+> curl.exe -s -o NUL -D - -X OPTIONS `
+>   -H "Origin: https://mcphoto-955fb-kiosk.web.app" -H "Access-Control-Request-Method: PUT" `
+>   "https://storage.googleapis.com/mcphoto-955fb.firebasestorage.app/probe" |
+>   Select-String "access-control"
+> ```
+> 허용 오리진이면 `Access-Control-Allow-*`가 돌아오고, 목록 밖 오리진이면 그 헤더가 **없다**(= 차단).
+>
+> 아래 §1~§4는 **다운로드 GET 판정의 근거**로 그대로 유효하다.
 
 ---
 

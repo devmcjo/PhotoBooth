@@ -1,0 +1,12 @@
+node_modules/
+coverage/
+dist/
+.vite/
+
+# 빌드 주입 비밀값(게이트 키) — 커밋 금지(01 §5.2)
+.env.local
+.env.*.local
+
+# Playwright
+test-results/
+playwright-report/

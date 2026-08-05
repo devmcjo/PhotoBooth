@@ -36,6 +36,15 @@ metadata:
 **How to apply:** 경고를 없애려고 파일을 CRLF로 되돌리지 말 것 — 오히려 불필요한 작업이다.
 단 **BOM은 절대 금지**(`.ts`/`.mjs`/`.md` 모두 UTF-8 without BOM). 검사: `head -c 3 <file> | od -An -tx1`에 `ef bb bf`가 없어야 한다.
 
+⚠️ 2026-08-01 정정(Step 12 구현 시 실측): **`Edit`는 원본 줄바꿈을 보존한다**(CRLF 파일은 CRLF로 남고 LF 파일은 LF로 남는다).
+줄바꿈이 바뀌는 것은 **`Write`로 기존 파일을 통째로 덮어쓸 때**뿐이다(2026-07-31 메모의 "Edit도 LF로 바꾼다"는 관측은 틀렸다).
+굳이 통일하고 싶으면 `node -e "...replace(/\r\n/g,'\n').replace(/\n/g,'\r\n')"` 일괄 변환이 안전하지만, **검증 가치는 없다**.
+
+**작업 트리는 이미 파일별로 섞여 있다** — 확인 방법: `docs/web-client/`에서 `02`·`03`·`07`·`12`는 LF, `06`·`11`·`14`·`15`·`README`는 CRLF.
+`webclient/src/`도 같다(`App.tsx` CRLF ↔ Step 11이 만든 `QrView.tsx` LF). 그러니 **어느 한쪽이 "정답"이 아니다** —
+파일마다 있는 그대로 유지하면 되고, 섞여 있다는 사실 자체를 이상 징후로 보지 말 것.
+`webclient/package.json`·`package-lock.json`은 애초에 **LF**다(npm이 관리) — 이 둘은 건드리지 말 것.
+
 ## `lib/`는 tsc가 청소하지 않는다
 
 소스 파일을 **삭제**하면 `lib/`에 컴파일 산출물(`.js`/`.d.ts`/`.js.map`)이 그대로 남고, `firebase deploy`가

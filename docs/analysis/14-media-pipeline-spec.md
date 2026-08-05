@@ -176,7 +176,7 @@ fitInCell(cellW, cellH, targetAspect) -> (w, h, offX, offY):
 
 > ⚠️ **정수 나눗셈 주의**: 위 `/`는 모두 **정수 나눗셈(내림)** 이다. 부동소수 나눗셈으로 구현하면 Windows 클라이언트와 픽셀 단위로 결과가 달라진다.
 
-### 4.2 일괄 스케일 (70~130%)
+### 4.2 일괄 스케일 (10~300%)
 
 ```
 scaleSlots(baseSlots, factor, frameW, frameH) -> Slot[]:

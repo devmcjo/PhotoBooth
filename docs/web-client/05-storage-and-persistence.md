@@ -183,8 +183,14 @@ OPFS/
 
 ### 4.2 IndexedDB 스키마
 
+> ⚠️ **정정(2026-08-01, Step 14 구현)**: DB는 `mcphoto`가 **아니라 별 DB `mcphoto-frames` v1**이다.
+> 로그 스토어가 `mcphoto` 연결을 앱 수명 내내 붙들고 있고 그 연결에 `onversionchange`가 없어
+> 같은 DB의 버전 업그레이드가 **영구 blocked** 된다(`adapters/storage/logStore.ts`). Step 10의
+> 폴더 핸들 DB(`mcphoto-handles` v1)가 같은 이유로 분리된 선례다. 연결은 **트랜잭션 1회마다 열고 닫고**,
+> `onsuccess`에서 `db.onversionchange = () => db.close()`를 건다.
+
 ```jsonc
-// DB "mcphoto" (version 1) / store "frames" (keyPath: "key")
+// DB "mcphoto-frames" (version 1) / store "frames" (keyPath: "key")
 {
   "key": "user:devmcjo:내프레임",       // 스코프 + 소유자 + 이름 (유일 키)
   "scope": "user",                      // "public" | "user"
@@ -265,7 +271,7 @@ Windows는 파일명 접두(`{계정}_{이름}`)로 구분한다. 웹은 **명�
 
 ```
 deleteLocal(frame):
-  1. OPFS 이미지 파일 존재 확인. 없으면 실패(false)
+  1. OPFS 이미지 파일 존재 확인. 없으면 메타 레코드를 지우고 **성공(true)** ← 2026-08-01 정정
   2. IndexedDB 레코드 삭제
   3. OPFS 이미지 파일 삭제
   4. 성공 판정 = "이미지 파일이 실제로 사라졌는가" (getFileHandle이 NotFoundError)
@@ -274,6 +280,7 @@ deleteLocal(frame):
 | 규칙 | 내용 |
 |------|------|
 | 성공 판정 | **실제 부재로 확인**한다. 예외를 삼키고 성공으로 보고하지 않는다(M4) |
+| 이미지가 **이미 없을 때** | 4단계의 목표("이미지 파일이 사라졌는가")가 이미 달성돼 있다 → **성공**으로 본다(2026-08-01 정정). 실패로 보고하면 카드가 영원히 지워지지 않는다. 고아 메타 레코드는 함께 지우고 경고 로그를 남긴다 |
 | 파일 잠금 | 웹에는 파일 잠금 문제가 없다(Windows의 알려진 결함이 웹에서는 성립하지 않는다). 단 **썸네일 `ImageBitmap`은 `close()`** 해 둔다 |
 | 서버 삭제 | power + "서버에서도 제거" 체크 시 `DELETE /frames/{id}` → 실패 시 **이름 매칭 재시도** → 결과를 명확히 안내 |
 | `{deleted:false}` | **성공이 아니다** |

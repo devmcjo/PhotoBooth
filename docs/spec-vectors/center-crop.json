@@ -1,0 +1,306 @@
+{
+  "name": "center-crop",
+  "spec": "docs/analysis/14 §3 (centerCrop) · 04 §9 정수 연산 대응표",
+  "note": "cropW = roundHalfToEven(srcH * targetAspect), x = floor((srcW - cropW) / 2). .5 케이스 필수.",
+  "cases": [
+    {
+      "input": {
+        "srcWidth": 1920,
+        "srcHeight": 1080,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 555,
+        "y": 0,
+        "width": 810,
+        "height": 1080
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1920,
+        "srcHeight": 1080,
+        "targetAspect": 1.3333333333333333
+      },
+      "expected": {
+        "x": 240,
+        "y": 0,
+        "width": 1440,
+        "height": 1080
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1920,
+        "srcHeight": 1080,
+        "targetAspect": 1
+      },
+      "expected": {
+        "x": 420,
+        "y": 0,
+        "width": 1080,
+        "height": 1080
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1280,
+        "srcHeight": 720,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 370,
+        "y": 0,
+        "width": 540,
+        "height": 720
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1080,
+        "srcHeight": 1920,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 0,
+        "y": 240,
+        "width": 1080,
+        "height": 1440
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 640,
+        "srcHeight": 480,
+        "targetAspect": 1
+      },
+      "expected": {
+        "x": 80,
+        "y": 0,
+        "width": 480,
+        "height": 480
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 4032,
+        "srcHeight": 3024,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 882,
+        "y": 0,
+        "width": 2268,
+        "height": 3024
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1600,
+        "srcHeight": 1200,
+        "targetAspect": 1.3333333333333333
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1200
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1000,
+        "srcHeight": 1000,
+        "targetAspect": 1
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 1000,
+        "height": 1000
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1000,
+        "srcHeight": 133,
+        "targetAspect": 0.5
+      },
+      "expected": {
+        "x": 467,
+        "y": 0,
+        "width": 66,
+        "height": 133
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1000,
+        "srcHeight": 135,
+        "targetAspect": 0.5
+      },
+      "expected": {
+        "x": 466,
+        "y": 0,
+        "width": 68,
+        "height": 135
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 100,
+        "srcHeight": 200,
+        "targetAspect": 1.6
+      },
+      "expected": {
+        "x": 0,
+        "y": 69,
+        "width": 100,
+        "height": 62
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 100,
+        "srcHeight": 200,
+        "targetAspect": 0.8
+      },
+      "expected": {
+        "x": 0,
+        "y": 37,
+        "width": 100,
+        "height": 125
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 333,
+        "srcHeight": 1000,
+        "targetAspect": 0.666
+      },
+      "expected": {
+        "x": 0,
+        "y": 250,
+        "width": 333,
+        "height": 500
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1000,
+        "srcHeight": 1333,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 1000,
+        "height": 1333
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 999,
+        "srcHeight": 1000,
+        "targetAspect": 0.666
+      },
+      "expected": {
+        "x": 166,
+        "y": 0,
+        "width": 666,
+        "height": 1000
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 0,
+        "srcHeight": 0,
+        "targetAspect": 1
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "input": {
+        "srcWidth": -10,
+        "srcHeight": 100,
+        "targetAspect": 1
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 100
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1920,
+        "srcHeight": 1080,
+        "targetAspect": 0
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1920,
+        "srcHeight": 1080,
+        "targetAspect": -1
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1,
+        "srcHeight": 1,
+        "targetAspect": 1
+      },
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1920,
+        "srcHeight": 1,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 959,
+        "y": 0,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "input": {
+        "srcWidth": 1,
+        "srcHeight": 1080,
+        "targetAspect": 0.75
+      },
+      "expected": {
+        "x": 0,
+        "y": 539,
+        "width": 1,
+        "height": 1
+      }
+    }
+  ]
+}

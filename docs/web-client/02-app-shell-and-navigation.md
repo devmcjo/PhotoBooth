@@ -37,7 +37,7 @@ Windows `AppShellViewModel`에 대응한다. **화면 하나가 아니라 앱 �
 
 | 화면 상태 | 상단바 | 유휴 감시 | 웹 추가 규칙 |
 |-----------|:------:|:---------:|--------------|
-| `Home` | 표시(홈 버튼만 숨김) | ✕ | 첫 제스처에서 전체화면·오디오·WakeLock 시도 |
+| `Home` | 표시(홈 버튼만 숨김) | ✕ | 첫 제스처에서 **WakeLock만** 시도(전체화면 자동 진입은 2026-08-01 폐지 — §7). 오디오 unlock은 `Guide`의 [촬영 시작]에 있다 |
 | `Login` | 표시 | ✕ | 리디렉트로 페이지를 떠난다 → 복귀 지점을 `sessionStorage`에 저장([07 §2](./07-auth-and-permissions-web.md)) |
 | `FrameSelect` | 표시 | **○** | |
 | `Guide` | 표시 | **○** | [촬영 시작]에서 오디오 unlock 재확인 |
@@ -171,7 +171,10 @@ export function canTransition(from: Screen, to: Screen): boolean {
 ### 5.1 M1 배선 (가장 중요한 배선)
 
 ```ts
-// shell/sessionStore.ts — currentUser 변경 진입점은 login / logout / resetUserForTest 3개뿐
+// shell/sessionStore.ts — currentUser 변경 진입점은 login / logout / expireSession / markPinSet 4개뿐
+//   · expireSession(Step 12): 401 만료 전용. 촬영 데이터는 **유지**한다(§5.2 매트릭스).
+//   · markPinSet(Step 13):    최초 PIN 설정 반영. **멱등이고 null을 만들지 않는다** → M1 구독 무영향.
+//   규칙의 요지는 "진입점 개수"가 아니라 **currentUser 필드를 통해서만 바꾼다**는 것이다.
 // ⚠️ 셀렉터 구독은 subscribeWithSelector 미들웨어가 있어야만 동작한다.
 //    미들웨어 없이 subscribe(selector, listener)를 쓰면 Zustand가 두 번째 인자를 "조용히 무시"해
 //    토큰 폐기가 한 번도 실행되지 않는다 — M1이 소리 없이 깨진다.
@@ -243,6 +246,17 @@ function tick(now: number) {
 | 탭 hidden 중 | 타이머는 계속 두되, **복귀 시 실경과로 즉시 재판정**한다(이미 만료됐으면 바로 홈 복귀) |
 | 모달 위 표시 | 유휴 경고는 **모달 스택 최상단**에 올린다(다른 모달을 가려도 됨) |
 
+### 6.2 유휴 경고와 화면 로컬 오버레이의 관계 (it20)
+
+유휴 경고는 **셸이 소유**하고 화면 로컬 오버레이(프레임 준비 대기·삭제 확인·서버 등록 확인·카메라 초기화 대기)는 **화면이 소유**한다. 전역 busy 오버레이는 두지 않는다 — 대기는 각 화면의 고유 관심사다.
+
+| 불변식 | 값 | 왜 |
+|--------|-----|-----|
+| **프레임 준비 총 대기 상한 < 유휴 무동작 판정** | 60초 **<** `IDLE_TIMEOUT_MS` 120초 | 손님이 대기 오버레이를 보는 중에 "자리를 비우셨나요?" 팝업이 겹치면 안 된다. 대기는 반드시 유휴 경고보다 **먼저** 끝난다 |
+
+- 이 부등식은 **정적 테스트로 고정한다**(문서에만 두면 어느 한쪽 상수를 고칠 때 조용히 깨진다 — `15 §3.4` 관례).
+- `Degraded`·`Failed` 국면을 손님이 방치하면 그때는 유휴 경고가 위에 겹쳐 홈으로 복귀시킨다 — **의도된 최종 탈출 경로**다.
+
 ---
 
 ## 7. 전체화면 제어 (WD7)
@@ -251,7 +265,8 @@ Windows의 표시 모드(`DisplayMode`/`WindowBounds`)를 대체한다. **설정
 
 | 상황 | 동작 |
 |------|------|
-| 첫 사용자 제스처 | `documentElement.requestFullscreen({ navigationUI: "hide" })` 시도. 실패는 로그만(강제 불가) |
+| **상단바 [전체화면] 버튼** | 진입점은 **이곳 하나**다. `documentElement.requestFullscreen({ navigationUI: "hide" })` 시도, 실패는 로그만(강제 불가). 버튼은 **네 조건이 전부 아닐 때만** 렌더한다: ① Fullscreen API 미지원(런타임 감지 — iOS Safari) ② 이미 전체화면 ③ 이탈 배너 표시 중 ④ PWA standalone. 판정은 도메인 순수 함수 `isFullscreenButtonVisible`이 소유한다 |
+| ~~첫 사용자 제스처~~ | **폐지(2026-08-01)**. 손님이 화면 아무 곳이나 만졌을 때 전체화면으로 들어가는 것은 **원인 없는 상태 변화**다. 첫 제스처는 이제 Wake Lock만 요청한다. 정적 검사 **FS-1**이 `request(` 호출부를 App.tsx 2곳(상단바 버튼 · 이탈 배너)으로 고정한다 |
 | 전체화면 진입 성공 시 | Chromium이면 `navigator.keyboard.lock(["Escape","F11"])` **best-effort** 시도(미지원·거부는 무시) |
 | 전체화면 이탈 감지(`fullscreenchange`) | **상단 배너**: "전체화면이 해제되었습니다. [다시 전체화면으로]" — 탭하면 재요청. 촬영 흐름은 중단하지 않는다 |
 | `Capture` 중 이탈 | 배너만 표시하고 시퀀스는 계속(탭이 hidden이 아닌 한). hidden이면 §8 |
@@ -295,3 +310,10 @@ Windows의 표시 모드(`DisplayMode`/`WindowBounds`)를 대체한다. **설정
 | 모달 스택 | 배열로 관리. 최상단만 포커스 트랩. `Esc`로 닫히는 모달과 닫히지 않는 모달을 구분(PIN 입력은 `Esc` 취소 허용, 유휴 경고는 버튼만) |
 | 모달 접근성 | `role="dialog"` `aria-modal="true"` + 진입 시 첫 포커스 지정 + 닫을 때 이전 포커스 복원 |
 | 스크림 | 모달 배경 클릭으로 닫지 않는다(오조작 방지). 명시적 버튼만 |
+| **셸 모달 4종**(`ModalId`) | `cameraTest` · `diagnostics` · `pinPrompt` · `idleWarning`. **이게 전부다** |
+| **화면 로컬 오버레이 5종** | `FrameSelect` = 프레임 준비 대기 · 프레임 준비 실패 · 삭제 확인 / `FrameEditor` = 기존 프레임 불러오기 · 서버 등록 확인. 셸 스택을 쓰지 않으므로 **유휴 경고가 언제나 위**에 그려진다. 같은 화면의 오버레이는 **상호배타 단일 필드**로 관리한다(03 §790) |
+
+> ⚠️ **2026-08-01 정정(Step 15 구현)**: `ModalId`에서 `"framePicker"`·`"confirmDelete"`를 **제거했다**.
+> 두 UI 모두 화면 로컬 오버레이로 확정됐고(03 §790), 식별자가 남아 있으면 "나중에 누군가 셸 모달로
+> 배선하는" 경로가 되어 같은 UI가 둘이 된다. 정적 검사 **FR-8**이 `src/` 전체에서 그 리터럴 0건을 고정한다.
+> 화면 로컬 오버레이의 공통 껍데기는 `ui/components/OverlayDialog.tsx`이며 **`pushModal`을 부르지 않는다**.

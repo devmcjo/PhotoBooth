@@ -1,0 +1,179 @@
+/*
+ * `UserMgmt` 화면 — 03 §14.
+ *
+ * ⚠️ **가로 스크롤을 만들지 않는다**(03 §1.2). 좁은 화면은 표 대신 카드 목록을 쓴다.
+ *    두 마크업은 같은 데이터를 렌더하고, 조작부는 하나의 컴포넌트를 공유한다.
+ */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* WPF Margin="40,80,40,40"(상단 80은 WPF 자체의 불일치 — 웹은 TopBar가 대신한다). */
+  padding: var(--space-l) var(--space-xl) var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-m);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+}
+
+.summary {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+/* 실패 카드 — 빈 목록과 **시각적으로 달라야 한다**. */
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-surface);
+}
+
+.failedText {
+  margin: 0;
+  color: var(--danger);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.confirmText {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* WPF 헤더 h42 · 행 h58. 셀 컨트롤은 h38(터치 예외)이지만 웹은 48을 지킨다. */
+.table th,
+.table td {
+  padding: var(--space-s);
+  border-bottom: 1px solid var(--divider);
+  text-align: left;
+  vertical-align: top;
+  word-break: break-all;
+}
+
+.table th {
+  height: 42px;
+  color: var(--fg-tertiary);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  /* WPF Card: padding 24 · Surface · Shadow.Card. */
+  padding: var(--space-l);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+}
+
+.cardId {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.roleBadge {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-caption);
+}
+
+.cardMeta {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  word-break: break-all;
+}
+
+/* 표는 넓은 화면에서만, 카드는 좁은 화면에서만 그린다. */
+.cards {
+  display: flex;
+}
+
+.table {
+  display: none;
+}
+
+@media (min-width: 720px) {
+  .table {
+    display: table;
+  }
+
+  .cards {
+    display: none;
+  }
+}
+
+.bottomBar {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-m);
+  padding: 12px var(--space-xl);
+  border-top: 1px solid var(--divider);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.pinMessage {
+  margin: 0;
+  min-height: 1.5em;
+  text-align: center;
+  color: var(--danger);
+  font-size: var(--fs-body);
+}

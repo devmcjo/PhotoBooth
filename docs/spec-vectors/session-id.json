@@ -1,0 +1,151 @@
+{
+  "name": "session-id",
+  "spec": "docs/analysis/31 §7 (UploadContract) · M13",
+  "note": "stampPrefix는 로컬 시각 성분으로 조립한다(타임존 무관하게 재현되도록 성분을 직접 전달). expiresAt은 epoch ms로 비교.",
+  "cases": [
+    {
+      "kind": "stamp",
+      "input": {
+        "year": 2026,
+        "month": 7,
+        "day": 30,
+        "hour": 21,
+        "minute": 5,
+        "second": 9,
+        "uuid": "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      },
+      "expected": {
+        "stampPrefix": "20260730_210509",
+        "sessionId": "20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      }
+    },
+    {
+      "kind": "stamp",
+      "input": {
+        "year": 2026,
+        "month": 1,
+        "day": 1,
+        "hour": 0,
+        "minute": 0,
+        "second": 0,
+        "uuid": "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      },
+      "expected": {
+        "stampPrefix": "20260101_000000",
+        "sessionId": "20260101_000000_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      }
+    },
+    {
+      "kind": "stamp",
+      "input": {
+        "year": 2026,
+        "month": 12,
+        "day": 31,
+        "hour": 23,
+        "minute": 59,
+        "second": 59,
+        "uuid": "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      },
+      "expected": {
+        "stampPrefix": "20261231_235959",
+        "sessionId": "20261231_235959_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      }
+    },
+    {
+      "kind": "stamp",
+      "input": {
+        "year": 2026,
+        "month": 2,
+        "day": 28,
+        "hour": 9,
+        "minute": 30,
+        "second": 0,
+        "uuid": "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      },
+      "expected": {
+        "stampPrefix": "20260228_093000",
+        "sessionId": "20260228_093000_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      }
+    },
+    {
+      "kind": "paths",
+      "input": {
+        "sessionId": "20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b",
+        "format": "Jpg"
+      },
+      "expected": {
+        "finalImagePath": "results/20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/final.jpg",
+        "timelapsePath": "results/20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/timelapse.mp4"
+      }
+    },
+    {
+      "kind": "paths",
+      "input": {
+        "sessionId": "20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b",
+        "format": "Png"
+      },
+      "expected": {
+        "finalImagePath": "results/20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/final.png",
+        "timelapsePath": "results/20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/timelapse.mp4"
+      }
+    },
+    {
+      "kind": "urls",
+      "input": {
+        "bucket": "mcphoto-955fb.firebasestorage.app",
+        "storagePath": "results/20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/final.jpg",
+        "downloadToken": "tok-123",
+        "hostingBaseUrl": "https://mcphoto-955fb.web.app/",
+        "token": "20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      },
+      "expected": {
+        "tokenDownloadUrl": "https://firebasestorage.googleapis.com/v0/b/mcphoto-955fb.firebasestorage.app/o/results%2F20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b%2Ffinal.jpg?alt=media&token=tok-123",
+        "downloadPageUrl": "https://mcphoto-955fb.web.app/?s=20260730_210509_3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+      }
+    },
+    {
+      "kind": "urls",
+      "input": {
+        "bucket": "b",
+        "storagePath": "results/x/timelapse.mp4",
+        "downloadToken": "t",
+        "hostingBaseUrl": "https://host///",
+        "token": "abc"
+      },
+      "expected": {
+        "tokenDownloadUrl": "https://firebasestorage.googleapis.com/v0/b/b/o/results%2Fx%2Ftimelapse.mp4?alt=media&token=t",
+        "downloadPageUrl": "https://host/?s=abc"
+      }
+    },
+    {
+      "kind": "expiresAt",
+      "input": {
+        "createdAtEpochMs": 1785412800000,
+        "retentionHours": 24
+      },
+      "expected": {
+        "expiresAtEpochMs": 1785499200000
+      }
+    },
+    {
+      "kind": "expiresAt",
+      "input": {
+        "createdAtEpochMs": 1785412800000,
+        "retentionHours": 1
+      },
+      "expected": {
+        "expiresAtEpochMs": 1785416400000
+      }
+    },
+    {
+      "kind": "expiresAt",
+      "input": {
+        "createdAtEpochMs": 1785412800000,
+        "retentionHours": 72
+      },
+      "expected": {
+        "expiresAtEpochMs": 1785672000000
+      }
+    }
+  ]
+}

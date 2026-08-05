@@ -58,18 +58,23 @@
                                         로그인된다(자격증명 입력 없이 QR 한도·프레임 권한 획득)
  4. Google 인증 → /oauth2callback?code=…&state=…  로 복귀
  5. 콜백 처리:
-      a. sessionStorage에서 값 복원 (없으면 → 오류 화면 + 홈)
+      a. sessionStorage에서 값 복원 **+ 즉시 삭제**(원자적 소비 — 재진입 시 반드시 없음)
       b. state 대조 (불일치 → "Google 로그인이 취소되었습니다." + 홈)
       c. error 파라미터 있으면 → 취소로 처리
       d. startedAt이 3분 초과면 → 취소로 처리 (Windows 타임아웃과 동일)
-      e. POST /auth/google { code, codeVerifier, redirectUri, nonce, clientKind: "web" }
+      e. history.replaceState로 URL의 code·state 제거          ← 흔적·재사용 방지
+           ↑ **판정 직후·교환 전이다**(성공 후가 아니다 — Step 12 구현에서 앞당겼다):
+             ① 401·네트워크 실패에도 주소창에 인가 코드가 남지 않는다
+             ② 교환은 최대 100초다 — 그 사이 새로고침해도 같은 code로 재진입할 수 없다
+             ③ 라우터가 더미 history 엔트리를 쌓기 전이라 /oauth2callback이 히스토리에 남지 않는다
+      f. POST /auth/google { code, codeVerifier, redirectUri, nonce, clientKind: "web" }
            ↑ clientKind는 서버 확장 B2가 도입하는 필드다. **웹은 반드시 "web"을 보낸다** —
              미지정은 "desktop"(하위 호환)이라 서버가 데스크톱 client_id/secret으로 code를
              교환해 실패한다([08 §4.2](./08-server-and-infra-prerequisites.md)).
-      f. 성공 → 토큰을 메모리에 보관 + 세션 사용자 설정
-      g. sessionStorage 값 즉시 삭제
-      h. history.replaceState로 URL의 code·state 제거          ← 흔적·재사용 방지
-      i. returnTo 화면으로 복귀 (없으면 Home)
+      g. 성공 → 토큰을 메모리에 보관 + 세션 사용자 설정
+      h. returnTo 화면으로 복귀 (없으면 Home)
+           ↑ 리디렉트로 앱이 통째로 재시작됐으므로 촬영 세션에 의존하는 화면으로는 복귀할 수 없다 →
+             Home·FrameSelect·Settings·Account 4종으로 clamp한다(그 외는 Home).
 ```
 
 ### 2.3 PKCE 생성 (Web Crypto)
@@ -122,7 +127,7 @@ export async function createPkce() {
 |------|------|
 | 사용자 취소 / `state` 불일치 / code 없음 / 3분 타임아웃 | Google 로그인이 취소되었습니다. |
 | 서버 **401** | 이 Google 계정으로는 로그인할 수 없습니다. 허용된 계정·도메인인지 확인해 주세요. |
-| 서버 **501** | Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요. |
+| 서버 **501** | Google 로그인이 구성되지 않았습니다. 관리자에게 문의하세요. — 2026-08-01부터 **SSO 미구성뿐 아니라 OAuth 클라이언트 자격 오류**(Google이 `invalid_client`/`unauthorized_client`로 code 교환을 거부)도 여기로 온다. 클라는 `logger.error("서버 OAuth 구성 오류 — 운영자 확인 필요", { status, errorCode })`를 남긴다 |
 | 서버 **400**(`redirectUri` 거부 등) | Google 로그인 중 오류가 발생했습니다. 네트워크를 확인해 주세요. + **로그에 "서버가 redirectUri를 거부했다(B1 미적용 가능)"** 를 남긴다 |
 | 네트워크 | Google 로그인 중 오류가 발생했습니다. 네트워크를 확인해 주세요. |
 | `GoogleClientId` 빈 값 | 로그인이 구성되지 않았습니다. 관리자에게 문의하세요.(버튼 자체 미노출) |
@@ -136,6 +141,17 @@ export async function createPkce() {
 1. SSO 구성 여부(미구성 → 501) → 2. 입력 형식(400) → 3. code 교환 → 4. id_token 서명·만료·issuer 검증 → 5. 재확인(`aud`·`iss`·`exp`·`nonce`·`hd`·**`email_verified === true`**) → 6. email 정규화 → 계정 조회/자동 생성 → 7. JWT 발급.
 
 실패 사유는 **서버 로그에만** 남고 응답은 401로 일반화된다(계정 열거 방지) → 클라이언트는 단일 문구를 쓴다.
+
+⚠️ **예외 1건**: Google 토큰 엔드포인트의 `invalid_client`·`unauthorized_client`는 **계정 존재 여부와 무관한 서버 구성 오류**이므로 401 일반화 대상이 아니다 → **501**로 분리한다([analysis/31 §4.2](../analysis/31-backend-api-reference.md)). `invalid_grant`는 만료·재사용 code에서도 나오므로 **포함하지 않는다**(401 유지).
+
+### 2.8 진단 흔적 — [마지막 로그인 실패]
+
+로그인 실패는 화면 문구로만 남고 사라졌다. 운영자가 현장에서 원인을 보려면 흔적이 필요하다.
+
+- **설정 → 진단·상태 → [서버] 섹션**의 마지막 행에 `{사유} · {시각}`이 남는다(없으면 "없음").
+- 값은 **열거형 사유 + 시각뿐**이다 — email·token·code를 담지 않는다(AUTH-3).
+- **메모리 전용**(M2 정신)이라 새로고침하면 사라지고, **로그인 성공 시에만** 지워진다.
+  ⚠️ `Login` 화면을 여는 것만으로 사라지면 안 된다(화면 문구 `notice`와는 다른 축이다).
 
 ---
 

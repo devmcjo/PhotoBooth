@@ -1,5 +1,7 @@
 {
-  "hosting": {
+  "hosting": [
+  {
+    "target": "default",
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
@@ -25,6 +27,64 @@
       }
     ]
   },
+  {
+    "//": "웹 클라이언트(키오스크 앱). 산출물은 webclient의 `npm run build`가 web/kiosk/에 만든다. 기존 default 사이트(P1 다운로드 페이지)와 CSP·캐시 정책이 독립이다 — docs/web-client/01 §5.1·§5.3",
+    "target": "kiosk",
+    "public": "kiosk",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "//": "⚠️ `connect-src`의 `blob:`은 프레임 [선택 편집]이 object URL을 `fetch`하기 때문에 필요하다(web-client Step 15). 브라우저별로 `'self'`가 blob:을 덮는지 갈리고, 막히면 운영에서만 실패한다. 같은 출처 blob 허용은 새 공격면을 만들지 않는다.",
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://firebasestorage.googleapis.com; media-src 'self' blob: https://firebasestorage.googleapis.com; connect-src 'self' blob: https://asia-northeast3-mcphoto-955fb.cloudfunctions.net https://storage.googleapis.com https://firebasestorage.googleapis.com; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
+          },
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(self), microphone=(), geolocation=()"
+          }
+        ]
+      },
+      {
+        "//": "⚠️ Hosting은 헤더를 **rewrite 이전의 요청 경로**로 매칭한다. 손님이 실제로 여는 것은 `/`이고 그 요청은 `/index.html` 규칙에 걸리지 않아 기본 max-age=3600이 붙었다(2026-07-31 실측). 그러면 재배포해도 최대 1시간 동안 옛 HTML이 서빙된다 — P1 사이트에서 겪은 사고와 같은 계열이다. SPA rewrite로 HTML을 서빙하는 경로를 **전부 열거**한다(라우터 경로는 2개뿐 — web-client/02 §3). 경로가 늘면 여기에 추가한다.",
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "/oauth2callback",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "/index.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "/sw.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "//": "옛 매니페스트가 캐시되면 새 SW가 **없는 자산**을 precache하려다 실패한다(web-client 01 §6).",
+        "source": "/precache-manifest.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "/branding.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      }
+    ]
+  }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
