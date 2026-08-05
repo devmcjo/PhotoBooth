@@ -140,9 +140,12 @@
              넓게 걸면 커맨드 바인딩이 조용히 실패한다(버튼만 비활성). 목록(ListBox)만 Picker로 좁힌다. -->
         <Grid Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{StaticResource Brush.Scrim}"
               Visibility="{Binding IsFramePickerVisible, Converter={StaticResource BoolToVis}}">
+            <!-- it21 §8.4: 창모드 하한이 800×600으로 낮아졌다. MinWidth 720은 800폭에서 좌우 여백을 거의
+                 남기지 않고 MaxHeight 620은 창 높이 600을 넘겼다 → 하한을 낮추고 스크롤로 감싼다. -->
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
             <Border Style="{StaticResource Card}" Padding="24" Effect="{StaticResource Shadow.Pop}"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                    MinWidth="720" MaxWidth="1100" MaxHeight="620"
+                    MinWidth="560" MaxWidth="1100" MaxHeight="620"
                     Background="{StaticResource Brush.Bg}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -187,6 +190,7 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            </ScrollViewer>
         </Grid>
 
         <!-- R2: 서버 등록 확인 오버레이(파워 + 신규 생성 저장 시에만 — 삭제 확인 팝업과 동일 패턴).

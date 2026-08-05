@@ -3,22 +3,159 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
-    <Grid Background="{StaticResource Brush.Bg}">
-        <!-- 배경 파스텔 포인트(로즈/민트 soft 원, 비텍스트 장식) -->
-        <Ellipse Width="360" Height="360" Fill="{StaticResource Brush.Accent.Soft}" Opacity="0.6"
-                 HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-120,-120,0,0" />
-        <Ellipse Width="300" Height="300" Fill="{StaticResource Brush.Accent2.Soft}" Opacity="0.6"
-                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-100,-100" />
+             mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280"
+             SizeChanged="OnSizeChanged" Loaded="OnLoaded">
+    <!--
+        어트랙트(attract) 화면. 손님이 처음 보는 화면이자 유휴 복귀·세션 완료가 되돌아오는 화면이다.
+        (wpf-it21-main-visual-redesign-design.md §7)
 
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-            <TextBlock Text="{DynamicResource Branding.AppName}" Style="{StaticResource Text.Display}" HorizontalAlignment="Center" />
+        종전에는 타이틀·부제·CTA 3요소뿐이라 "여백이 넓은 세련됨"이 아니라 미완성으로 읽혔다(설계 §3.1).
+        해법은 요소를 늘리는 게 아니라 **층을 늘리는 것**이다 — 무인 키오스크에서 요소를 늘리면
+        오조작·산만으로 직결된다. 주 액션은 여전히 [촬영하기] 하나뿐이고, 늘어난 것은
+        "이 부스가 무엇을 해주는지" 말하는 비상호작용 층이다. (설계 §0.4)
+
+        층0 배경 워시 · 층1 브랜드 · 층2 행동(CTA) · 층3 흐름 안내 · 층4 게스트 로그인 힌트
+    -->
+    <Grid Background="{StaticResource Brush.Bg}">
+        <!--
+            층0 · 배경 워시. 종전 두 원은 모서리에 음수 마진으로 걸쳐 있어 구성과 공간 관계가 없었다
+            (지워도 아무것도 안 바뀌었다 — 설계 §3.3). 중앙 블록 뒤를 감싸도록 재배치한다.
+        -->
+        <!-- 단색 원은 경계선이 보여 "잘린 도형"으로 읽힌다(첫 렌더에서 확인). 방사형으로 페이드시켜
+             경계를 없앤다 — 종단 색은 같은 색의 알파 0이다(회색빛이 돌지 않게). -->
+        <Ellipse Width="880" Height="620" HorizontalAlignment="Center" VerticalAlignment="Top"
+                 Margin="0,-230,0,0" IsHitTestVisible="False">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="{StaticResource Color.Accent.Soft}" Offset="0" />
+                    <GradientStop Color="#00FFE7EE" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+        <Ellipse Width="620" Height="520" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                 Margin="-220,0,0,-180" IsHitTestVisible="False">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="{StaticResource Color.Accent2.Soft}" Offset="0" />
+                    <GradientStop Color="#00DFF6F1" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+        <Ellipse Width="460" Height="420" HorizontalAlignment="Right" VerticalAlignment="Top"
+                 Margin="0,-40,-120,0" IsHitTestVisible="False">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="{StaticResource Color.Accent.Soft}" Offset="0" />
+                    <GradientStop Color="#00FFE7EE" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+
+        <!-- 상단 바(72)를 피해 아래로 내린다 — Home에서도 우측 계정·설정 버튼은 떠 있다. -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,56,0,0">
+            <!-- 층1 · 브랜드. 워드마크만 있으면 "제목이 큰 문서"로 읽힌다 — 도형 마크가 세련도의 실체다(설계 §3.2).
+                 타일을 로즈로 채우고 글리프를 흰색으로 뺀다: 배경 워시(Accent.Soft)와 같은 톤이면
+                 타일 경계가 사라져 마크가 배경에 묻힌다(첫 렌더에서 실제로 그랬다). -->
+            <Border x:Name="MarkTile" Width="96" Height="96"
+                    CornerRadius="{StaticResource Radius.L}"
+                    Background="{StaticResource Brush.Accent}"
+                    Effect="{StaticResource Shadow.Card}"
+                    HorizontalAlignment="Center">
+                <Path x:Name="MarkGlyph" Data="{StaticResource Icon.Camera}"
+                      Width="44" Height="44" Stretch="Uniform"
+                      Fill="{StaticResource Brush.OnAccent}"
+                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+
+            <!-- 워드마크·부제는 App.xaml.cs가 런타임 교체하므로 DynamicResource 필수(설계 §11 P2). -->
+            <TextBlock x:Name="Wordmark" Text="{DynamicResource Branding.AppName}"
+                       Style="{StaticResource Text.Display}"
+                       HorizontalAlignment="Center" Margin="0,20,0,0" />
             <TextBlock Text="{DynamicResource Branding.Subtitle}" Style="{StaticResource Text.H2}"
                        Foreground="{StaticResource Brush.Text.Tertiary}"
-                       HorizontalAlignment="Center" Margin="0,8,0,48" />
-            <Button Content="촬영하기" Command="{Binding StartCommand}"
+                       HorizontalAlignment="Center" Margin="0,6,0,40" />
+
+            <!-- 층2 · 행동. 유일한 주 액션이다. -->
+            <!-- ⚠️ Button.Primary 템플릿의 ContentPresenter에는 Margin="{TemplateBinding Padding}"이 없다
+                 → Padding이 렌더에 반영되지 않는다(기존부터의 결함). 폭은 MinWidth로 지정한다. -->
+            <Button x:Name="Cta" Content="촬영하기" Command="{Binding StartCommand}"
                     Style="{StaticResource Button.Primary}"
-                    Height="72" FontSize="24" Padding="72,0" HorizontalAlignment="Center" />
+                    Height="80" FontSize="26" MinWidth="320"
+                    Effect="{StaticResource Shadow.Pop}"
+                    HorizontalAlignment="Center" />
+
+            <!--
+                층3 · 흐름 안내. 카드(Border)로 감싸지 않는다 — 이 앱에서 카드는 "조작 가능한 컨테이너"로
+                일관되게 쓰이므로 비상호작용 안내를 카드로 만들면 어포던스가 거짓이 된다(설계 §7.2).
+                IsHitTestVisible=False로 "눌리는 것처럼 보이는데 안 눌리는" 오조작을 차단한다.
+            -->
+            <Grid x:Name="FlowStrip" Margin="0,44,0,0" IsHitTestVisible="False" HorizontalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="200" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <Grid Width="32" Height="32" HorizontalAlignment="Center">
+                        <Ellipse Fill="{StaticResource Brush.Accent.Soft}" />
+                        <TextBlock Text="1" FontFamily="{StaticResource Font.Primary}"
+                                   FontSize="15" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.Accent.Text}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Text="프레임 선택" Style="{StaticResource Text.Title}"
+                               HorizontalAlignment="Center" Margin="0,10,0,0" />
+                    <TextBlock Text="원하는 틀을 고르세요" Style="{StaticResource Text.Caption}"
+                               HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <Rectangle Grid.Column="1" Width="1" Margin="24,6" VerticalAlignment="Stretch"
+                           Fill="{StaticResource Brush.Divider}" />
+
+                <StackPanel Grid.Column="2">
+                    <Grid Width="32" Height="32" HorizontalAlignment="Center">
+                        <Ellipse Fill="{StaticResource Brush.Accent.Soft}" />
+                        <TextBlock Text="2" FontFamily="{StaticResource Font.Primary}"
+                                   FontSize="15" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.Accent.Text}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Text="촬영" Style="{StaticResource Text.Title}"
+                               HorizontalAlignment="Center" Margin="0,10,0,0" />
+                    <TextBlock Text="카운트다운 후 자동 촬영" Style="{StaticResource Text.Caption}"
+                               HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <Rectangle Grid.Column="3" Width="1" Margin="24,6" VerticalAlignment="Stretch"
+                           Fill="{StaticResource Brush.Divider}" />
+
+                <StackPanel Grid.Column="4">
+                    <Grid Width="32" Height="32" HorizontalAlignment="Center">
+                        <Ellipse Fill="{StaticResource Brush.Accent.Soft}" />
+                        <TextBlock Text="3" FontFamily="{StaticResource Font.Primary}"
+                                   FontSize="15" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.Accent.Text}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Text="QR로 받기" Style="{StaticResource Text.Title}"
+                               HorizontalAlignment="Center" Margin="0,10,0,0" />
+                    <TextBlock Text="사진·타임랩스를 폰으로" Style="{StaticResource Text.Caption}"
+                               HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+
+            <!--
+                층4 · 게스트 로그인 진입점. 상단 바 계정 버튼이 아이콘 전용이 되면서 잃은 발견성을
+                여기서 회복한다 — 터치 화면에는 hover 툴팁이 없다(NN/g, 설계 §4.3).
+            -->
+            <Button Content="로그인하고 내 프레임 쓰기"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding LoginCommand}"
+                    Visibility="{Binding IsGuest, Converter={StaticResource BoolToVis}}"
+                    HorizontalAlignment="Center" Margin="0,40,0,0" />
         </StackPanel>
     </Grid>
 </UserControl>

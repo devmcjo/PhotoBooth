@@ -77,6 +77,10 @@ public class XamlResourceTests
                 "Button.Primary", "Button.Secondary", "Button.Ghost", "Button.Danger",
                 "Button.Icon", "Button.Icon.Pill", "Button.Filter", "Button.FrameCard", "Button.Shutter",
                 "Card", "ScreenTitle", "Toggle", "Segment",
+                // it21: 벡터 아이콘 시스템(유니코드 글리프 폐기)과 상단 바 버튼.
+                // 키가 사라지면 셸이 XamlParseException으로 뜨지 않는다.
+                "Icon.Gear", "Icon.Account", "Icon.Home", "Icon.Camera",
+                "Icon.Glyph", "Button.TopBar", "Button.TopBar.Brand",
             };
 
             var missing = new List<string>();
@@ -131,6 +135,7 @@ public class XamlResourceTests
     [InlineData("Typography.xaml")]
     [InlineData("Metrics.xaml")]
     [InlineData("Controls.xaml")]
+    [InlineData("Icons.xaml")]      // it21: 참조 0건이어야 한다(스타일이 Geometry를 참조하면 여기서 잡힌다)
     public void Each_Theme_File_Resolves_Its_Own_StaticResource_References(string file)
     {
         var themesDir = FindThemesDir();
@@ -250,6 +255,8 @@ public class XamlResourceTests
     [InlineData("FrameSelectView.xaml")]   // it15 F2-D3: 카드 시각을 공유 리소스로 교체
     [InlineData("SettingsView.xaml")]      // it17: 컷수 콤보 전환(it19: 자동 규칙 캡션은 제거됨)
     [InlineData("GuideView.xaml")]         // it17: 컷수 옆 "(자동)" 배지
+    [InlineData("HomeView.xaml")]          // it21: 4층 구조로 전면 재작성(앱 마크·흐름 안내·게스트 힌트)
+    [InlineData("QrPopupView.xaml")]       // it21 §8.4: 좁은 창 대비 스크롤 래핑
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
@@ -537,5 +544,206 @@ public class XamlResourceTests
             Assert.True(missing.Count == 0,
                 "SettingsView.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
         });
+    }
+
+    // ── it21: 벡터 아이콘 시스템 · 상단 바 재배치 · 창모드 최소 크기 ──
+    // 설계: docs/design/wpf-it21-main-visual-redesign-design.md
+
+    /// <summary>…/src/MCPhoto.App 디렉터리.</summary>
+    private static string FindAppDir() => Directory.GetParent(FindAppViewsDir())!.FullName;
+
+    /// <summary>
+    /// 셸 XAML이 참조하는 테마 키가 전부 해석된다. 상단 바를 벡터 아이콘으로 재작성했으므로
+    /// 키 하나만 어긋나도 **창 자체가 뜨지 않는다**(XamlParseException). PinPromptWindow 테스트와 동형.
+    /// </summary>
+    [Fact]
+    public void MainWindow_StaticResource_Keys_Resolve_In_Theme()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppDir(), "MainWindow.xaml"));
+        var referenced = ThemeKeysReferencedBy(text);
+
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var missing = referenced.Where(k => !theme.Contains(k)).ToList();
+            Assert.True(missing.Count == 0,
+                "MainWindow.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
+        });
+    }
+
+    /// <summary>
+    /// 아이콘 4종이 Geometry로 해석되고, 동결돼 있으며, 24×24 좌표계 안에 있다.
+    /// Path 데이터 오타는 빈 Bounds나 좌표계 이탈로 나타난다(빌드는 통과한다).
+    /// </summary>
+    [Theory]
+    [InlineData("Icon.Gear")]
+    [InlineData("Icon.Account")]
+    [InlineData("Icon.Home")]
+    [InlineData("Icon.Camera")]
+    public void Icon_Geometries_Resolve_As_Frozen_Geometry(string key)
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var geo = theme[key] as System.Windows.Media.Geometry;
+            Assert.NotNull(geo);
+            Assert.True(geo!.IsFrozen, $"{key} 는 po:Freeze=\"True\" 로 동결되어야 한다(공유 렌더 자원)");
+
+            var b = geo.Bounds;
+            Assert.False(b.IsEmpty, $"{key} 의 Bounds 가 비어 있다 — Path 데이터 오류");
+            Assert.InRange(b.Left, -1.0, 25.0);
+            Assert.InRange(b.Top, -1.0, 25.0);
+            Assert.InRange(b.Right, -1.0, 25.0);
+            Assert.InRange(b.Bottom, -1.0, 25.0);
+        });
+    }
+
+    /// <summary>
+    /// Icon.Glyph 의 Fill 은 조상 버튼의 Foreground 를 따라간다(색 정책을 버튼 하나가 소유).
+    /// 이 바인딩이 끊기면 Path.Fill 이 null 이 되어 **아이콘이 투명하게 렌더된다** —
+    /// 예외도 경고도 없이 상단 바가 빈 버튼 3개가 되므로, 실제 시각 트리를 만들어 값으로 고정한다.
+    /// </summary>
+    [Fact]
+    public void Icon_Glyph_Fill_Follows_Ancestor_Button_Foreground()
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var path = new System.Windows.Shapes.Path
+            {
+                Style = (System.Windows.Style)theme["Icon.Glyph"],
+                Data = (System.Windows.Media.Geometry)theme["Icon.Gear"],
+            };
+            var button = new System.Windows.Controls.Button
+            {
+                Style = (System.Windows.Style)theme["Button.TopBar"],
+                Foreground = System.Windows.Media.Brushes.Red,
+                Content = path,
+            };
+
+            // RelativeSource AncestorType 은 **시각 트리**를 탐색한다 → 템플릿 적용 + 레이아웃이 필요하다.
+            var host = new System.Windows.Controls.Border { Child = button, Width = 80, Height = 80 };
+            host.Measure(new System.Windows.Size(80, 80));
+            host.Arrange(new System.Windows.Rect(0, 0, 80, 80));
+            button.ApplyTemplate();
+            host.UpdateLayout();
+
+            var fill = path.Fill as System.Windows.Media.SolidColorBrush;
+            Assert.NotNull(fill);
+            Assert.Equal(System.Windows.Media.Colors.Red, fill!.Color);
+        });
+    }
+
+    /// <summary>
+    /// 요구 2("톱니바퀴가 너무 둥글둥글해 설정임을 모르겠다") 재발 방지.
+    /// 톱니가 사라져 단순 원형 실루엣으로 퇴화하면 Bounds 가 뿌리 원 지름(15.2)까지 줄어든다.
+    /// 팁 반지름 11.3 → 지름 22.6 을 고정해 "톱니가 있는 형태"를 구조적으로 강제한다.
+    /// </summary>
+    [Fact]
+    public void Gear_Icon_Has_Discernible_Teeth()
+    {
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var gear = (System.Windows.Media.Geometry)theme["Icon.Gear"];
+            var b = gear.Bounds;
+
+            Assert.InRange(b.Width, 22.1, 23.1);    // 팁 지름 22.6 ± 0.5
+            Assert.InRange(b.Height, 22.1, 23.1);
+            // 축 구멍(지름 7.2) 대비 3배 초과 — 구멍만 남은 도넛으로 퇴화하지 않았음을 고정.
+            Assert.True(b.Width > 7.2 * 3,
+                $"톱니가 소실된 것으로 보인다(Bounds.Width={b.Width:F2}). 설정 아이콘이 원형으로 읽힌다");
+        });
+    }
+
+    /// <summary>
+    /// 상단 바 3버튼이 아이콘 전용이 되면서 표면 라벨이 사라졌다. 접근 이름과 툴팁이 둘 다 있어야 한다
+    /// (NN/g: 아이콘 단독은 거의 항상 모호하다). 하나라도 빠지면 스크린 리더·학습성이 함께 무너진다.
+    /// </summary>
+    [Fact]
+    public void TopBar_Icon_Buttons_Have_Accessibility_Labels()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppDir(), "MainWindow.xaml"));
+
+        foreach (var name in new[] { "홈으로", "로그인 또는 계정", "설정" })
+            Assert.Contains($"AutomationProperties.Name=\"{name}\"", text);
+
+        Assert.Contains("ToolTip=\"홈으로\"", text);
+        Assert.Contains("ToolTip=\"{Binding AccountLabel}\"", text);   // 계정 ID는 툴팁으로 이전됐다
+        Assert.Contains("ToolTip=\"설정\"", text);
+    }
+
+    /// <summary>
+    /// 브랜드-홈 칩은 홈 화면에서 숨어야 한다 — 눌러도 아무 일이 없는 버튼은 어포던스 거짓말이다.
+    /// 홈 복귀 커맨드 바인딩도 함께 고정한다(칩 재작성 시 커맨드가 조용히 빠지는 것을 막는다).
+    /// </summary>
+    [Fact]
+    public void TopBar_Home_Button_Is_Gated_By_IsHome()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppDir(), "MainWindow.xaml"));
+
+        var brand = Regex.Match(text, @"<Button\b[^>]*?Button\.TopBar\.Brand.*?</Button>", RegexOptions.Singleline);
+        Assert.True(brand.Success, "MainWindow.xaml 에서 브랜드-홈 칩(Button.TopBar.Brand)을 찾지 못함");
+
+        Assert.Contains("IsHome", brand.Value);
+        Assert.Contains("InverseBoolToVis", brand.Value);
+        Assert.Contains("GoHomeCommand", brand.Value);
+        // 워드마크는 App.xaml.cs 가 런타임 교체한다 — StaticResource 로 바꾸면 브랜딩 교체가 무효화된다.
+        Assert.Contains("{DynamicResource Branding.AppName}", brand.Value);
+    }
+
+    /// <summary>
+    /// 창모드 최소 크기(요구 5) 회귀 방지. 하한은 XAML 하드코딩이 아니라 표시 모드 분기가 소유한다.
+    /// 전체화면에서는 하한을 해제하는데, 그 해제가 Maximized **앞**에 와야 한다 —
+    /// 뒤에 두면 작은 패널에서 한 프레임 동안 창이 화면을 넘긴다(설계 §8.3 P3).
+    /// </summary>
+    [Fact]
+    public void MainWindow_Minimum_Size_Is_Mode_Scoped()
+    {
+        var appDir = FindAppDir();
+        var xaml = File.ReadAllText(Path.Combine(appDir, "MainWindow.xaml"));
+        var cs = File.ReadAllText(Path.Combine(appDir, "MainWindow.xaml.cs"));
+
+        var windowTag = Regex.Match(xaml, @"<Window\b.*?>", RegexOptions.Singleline);
+        Assert.True(windowTag.Success, "MainWindow.xaml 에서 Window 여는 태그를 찾지 못함");
+        Assert.DoesNotContain("MinWidth", windowTag.Value);
+        Assert.DoesNotContain("MinHeight", windowTag.Value);
+
+        Assert.Matches(@"WindowedMinWidth\s*=\s*800", cs);
+        Assert.Matches(@"WindowedMinHeight\s*=\s*600", cs);
+
+        int release = cs.IndexOf("MinWidth = 0", StringComparison.Ordinal);
+        int maximized = cs.IndexOf("WindowState.Maximized", StringComparison.Ordinal);
+        Assert.True(release > 0, "전체화면 분기에서 MinWidth = 0 하한 해제를 찾지 못함");
+        Assert.True(release < maximized,
+            "하한 해제(MinWidth = 0)가 Maximized 적용보다 앞에 있어야 한다 — 작은 패널에서 창이 화면을 넘긴다");
+    }
+
+    /// <summary>
+    /// Home 4층 구조의 바인딩 고정. 특히 게스트 로그인 힌트(층4)는 **게스트에게만** 보여야 한다 —
+    /// 게이트가 빠지면 이미 로그인한 사용자에게 "로그인하고 …" 버튼이 노출된다.
+    /// </summary>
+    [Fact]
+    public void HomeView_Bindings_Exist_And_Guest_Hint_Is_Gated()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "HomeView.xaml"));
+        var vmType = typeof(MCPhoto.App.ViewModels.HomeViewModel);
+
+        foreach (var member in new[] { "StartCommand", "LoginCommand", "IsGuest" })
+        {
+            var binding = new Regex(@"\{Binding\s+" + Regex.Escape(member) + @"\s*[,}]");
+            Assert.True(binding.IsMatch(text), $"HomeView.xaml 에 '{{Binding {member}}}' 바인딩이 없다");
+            Assert.NotNull(vmType.GetProperty(member));
+        }
+
+        var hint = Regex.Match(text, @"<Button\b[^>]*?LoginCommand.*?/>", RegexOptions.Singleline);
+        Assert.True(hint.Success, "HomeView.xaml 에서 게스트 로그인 힌트 버튼을 찾지 못함");
+        Assert.Contains("IsGuest", hint.Value);
+        Assert.Contains("BoolToVis", hint.Value);
+
+        // 흐름 안내(층3)는 비상호작용이어야 한다 — 눌리는 것처럼 보이면 키오스크 오조작이 된다.
+        var strip = Regex.Match(text, @"<Grid\b[^>]*?x:Name=""FlowStrip""[^>]*?>", RegexOptions.Singleline);
+        Assert.True(strip.Success, "HomeView.xaml 에서 흐름 안내 스트립(FlowStrip)을 찾지 못함");
+        Assert.Contains("IsHitTestVisible=\"False\"", strip.Value);
     }
 }

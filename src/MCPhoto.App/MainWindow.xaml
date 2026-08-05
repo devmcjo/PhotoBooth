@@ -6,7 +6,6 @@
         xmlns:local="clr-namespace:MCPhoto.App"
         mc:Ignorable="d"
         Title="{DynamicResource Branding.AppName}" Height="720" Width="1280"
-        MinHeight="720" MinWidth="1280"
         Background="{StaticResource Brush.Bg}"
         PreviewMouseDown="OnAnyUserActivity"
         PreviewKeyDown="OnAnyUserActivity">
@@ -16,7 +15,12 @@
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Stretch" />
 
-        <!-- 상단 바 오버레이(it2 §3): 좌=로그인/계정, 우=설정. 촬영·QR에서 숨김. -->
+        <!--
+            상단 바 오버레이(it2 §3 → it21 §6에서 재배치): 좌=브랜드-홈 칩, 우=계정·설정.
+            좌=내비게이션 / 우=액션이 상용 관례다(설계 §6.1). 촬영·QR에서 숨김.
+            아이콘은 전부 벡터 Geometry(Icons.xaml) — 종전 유니코드 글리프는 폰트 폴백에 모양이
+            좌우돼 "설정인지 모르겠다"의 원인이었다(설계 §3.4).
+        -->
         <Grid x:Name="TopBar" Height="72" VerticalAlignment="Top"
               Background="Transparent"
               Visibility="{Binding IsTopBarVisible, Converter={StaticResource BoolToVis}}">
@@ -26,37 +30,79 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- 좌: 홈 + 로그인/계정 버튼. 홈 버튼은 홈 화면에선 숨김. (it9 후속) -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                <Button Margin="16,8,0,8"
-                        Style="{StaticResource Button.Icon.Pill}"
-                        Command="{Binding GoHomeCommand}"
-                        Content="⌂ 홈"
-                        Visibility="{Binding IsHome, Converter={StaticResource InverseBoolToVis}}"
-                        AutomationProperties.Name="홈으로" />
-                <Button Margin="8,8,16,8"
-                        Style="{StaticResource Button.Icon.Pill}"
+            <!--
+                좌: 브랜드-홈 칩. 로고=홈은 확립된 관례이나 보편 신호는 아니므로(NN/g)
+                홈 글리프를 함께 실어 키오스크가 요구하는 "눈에 띄는 홈"을 만족시킨다. (설계 §4.2)
+                홈 화면에선 숨김 — 눌러도 아무 일 없는 버튼은 어포던스 거짓말이다. (게이트는 it9 그대로)
+                워드마크는 App.xaml.cs가 런타임 교체하므로 DynamicResource 필수. (설계 §11 P2)
+            -->
+            <Button Grid.Column="0" Margin="16,8"
+                    Style="{StaticResource Button.TopBar.Brand}"
+                    Command="{Binding GoHomeCommand}"
+                    Visibility="{Binding IsHome, Converter={StaticResource InverseBoolToVis}}"
+                    ToolTip="홈으로"
+                    AutomationProperties.Name="홈으로">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource Icon.Glyph}" Data="{StaticResource Icon.Home}"
+                          Width="20" Height="20" />
+                    <TextBlock Text="{DynamicResource Branding.AppName}"
+                               FontFamily="{StaticResource Font.Primary}"
+                               FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                               Margin="10,0,0,0" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Button>
+
+            <!-- 우: 계정 · 설정. 설정은 설정 화면에서 숨김(자기 화면 재진입 방지). -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,8,16,8">
+                <!--
+                    계정: 게스트=사람 아이콘, 로그인=이니셜 아바타(설계 §6.2).
+                    아이콘 전용이라 라벨이 사라지므로 ToolTip + Automation 이름이 필수다(NN/g·설계 §4.3).
+                    게스트의 발견성은 Home 화면의 텍스트 진입점이 보완한다(터치엔 hover 툴팁이 없다).
+                -->
+                <Button x:Name="AccountButton"
+                        Style="{StaticResource Button.TopBar}"
                         Command="{Binding OpenAccountCommand}"
-                        Content="{Binding AccountLabel}"
-                        AutomationProperties.Name="로그인 또는 계정" />
+                        ToolTip="{Binding AccountLabel}"
+                        AutomationProperties.Name="로그인 또는 계정">
+                    <Grid>
+                        <Path Style="{StaticResource Icon.Glyph}" Data="{StaticResource Icon.Account}"
+                              Visibility="{Binding IsLoggedIn, Converter={StaticResource InverseBoolToVis}}" />
+                        <Border Width="34" Height="34" CornerRadius="17"
+                                Background="{StaticResource Brush.Accent}"
+                                Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding AccountInitial}"
+                                       FontFamily="{StaticResource Font.Primary}"
+                                       FontSize="17" FontWeight="Bold"
+                                       Foreground="{StaticResource Brush.OnAccent}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                </Button>
+
+                <Button Margin="8,0,0,0"
+                        Style="{StaticResource Button.TopBar}"
+                        Command="{Binding OpenSettingsCommand}"
+                        Visibility="{Binding IsSettings, Converter={StaticResource InverseBoolToVis}}"
+                        ToolTip="설정"
+                        AutomationProperties.Name="설정">
+                    <!-- 22px: Icon.Gear는 경계가 0.7~23.3이라 Uniform 스케일 시 계정 아이콘보다 커 보인다. -->
+                    <Path Style="{StaticResource Icon.Glyph}" Data="{StaticResource Icon.Gear}"
+                          Width="22" Height="22" />
+                </Button>
             </StackPanel>
 
-            <!-- 우: 설정 버튼(gear 글리프). 설정 화면에선 숨김(자기 화면 재진입 방지). -->
-            <Button Grid.Column="2" Margin="16,8"
-                    Style="{StaticResource Button.Icon}"
-                    Command="{Binding OpenSettingsCommand}"
-                    Content="⚙"
-                    FontSize="22"
-                    Visibility="{Binding IsSettings, Converter={StaticResource InverseBoolToVis}}"
-                    AutomationProperties.Name="설정" />
-
-            <!-- 계정 팝오버 -->
-            <Popup IsOpen="{Binding IsAccountPopupOpen}" PlacementTarget="{Binding ElementName=TopBar}"
-                   Placement="Bottom" HorizontalOffset="16" VerticalOffset="-8"
+            <!-- 계정 팝오버. 계정 버튼이 우측으로 옮겨졌으므로 버튼 자신을 기준으로 우측 정렬한다.
+                 (TopBar 기준으로 두면 버튼은 우측, 팝오버는 좌측으로 분리된다 — 설계 §6.4)
+                 HorizontalOffset = 버튼 폭 56 − 카드 폭 240 = -184.
+                 ⚠️ 카드 폭을 **고정**해야 이 오프셋이 성립한다. MinWidth만 두면 계정 ID가 길 때
+                 카드가 넓어져 우측 정렬이 어긋난다(긴 ID는 카드 안에서 말줄임 처리한다). -->
+            <Popup IsOpen="{Binding IsAccountPopupOpen}" PlacementTarget="{Binding ElementName=AccountButton}"
+                   Placement="Bottom" HorizontalOffset="-184" VerticalOffset="8"
                    StaysOpen="False" AllowsTransparency="True">
-                <Border Style="{StaticResource Card}" Effect="{StaticResource Shadow.Pop}" MinWidth="220">
+                <Border Style="{StaticResource Card}" Effect="{StaticResource Shadow.Pop}" Width="240">
                     <StackPanel>
-                        <TextBlock Text="{Binding AccountLabel}" Style="{StaticResource Text.Title}" />
+                        <TextBlock Text="{Binding AccountLabel}" Style="{StaticResource Text.Title}"
+                                   TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="계정" Style="{StaticResource Text.Caption}" Margin="0,0,0,12" />
                         <!-- 계정 항목별 전용 페이지로 이동(it5 §5 C2, it15 §6.3) -->
                         <Button Content="계정 관리" Style="{StaticResource Button.Ghost}"

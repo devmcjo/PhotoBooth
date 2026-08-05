@@ -18,6 +18,14 @@ public partial class MainWindow : Window
     /// </summary>
     private DisplayMode? _appliedMode;
 
+    /// <summary>
+    /// 창모드 최소 크기. (it21 §8.2) 종전에는 XAML에 1280×720이 하드코딩돼 표시 모드와 무관하게 걸렸고,
+    /// 그 값이 기본 창 크기와 같아 <b>창을 1픽셀도 줄일 수 없었다</b>. 창모드는 운영자 점검 용도이므로
+    /// 손님 접점(전체화면)의 터치 규격을 강제할 필요가 없다.
+    /// </summary>
+    private const double WindowedMinWidth = 800;
+    private const double WindowedMinHeight = 600;
+
     public MainWindow(ISettingsService settings, AppShellViewModel shell)
     {
         _settings = settings;
@@ -53,12 +61,18 @@ public partial class MainWindow : Window
                 return;                                  // 창 기하·상태 불변(위치 점프 방지)
 
             case DisplayApplyAction.Fullscreen:
+                // ⚠️ 하한 해제를 Maximized **앞에** 둔다(it21 §8.3 P3). 뒤에 두면 하한이 살아 있는 채로
+                //    최대화가 적용돼, 1024×768 같은 작은 패널에서 한 프레임 동안 창이 화면을 넘긴다.
+                MinWidth = 0;
+                MinHeight = 0;
                 WindowStyle = WindowStyle.None;
                 ResizeMode = ResizeMode.NoResize;
                 WindowState = WindowState.Maximized;
                 break;
 
             case DisplayApplyAction.WindowedRestoreGeometry:
+                MinWidth = WindowedMinWidth;
+                MinHeight = WindowedMinHeight;
                 WindowStyle = WindowStyle.SingleBorderWindow;
                 ResizeMode = ResizeMode.CanResize;
                 WindowState = WindowState.Normal;

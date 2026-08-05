@@ -1,15 +1,17 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        디자인 시스템 진입점. 병합 순서 중요: Colors → Brushes → Typography → Metrics → Controls.
+        디자인 시스템 진입점. 병합 순서 중요: Colors → Brushes → Typography → Metrics → Icons → Controls.
         (Brushes는 Colors 참조, Metrics는 Color.Shadow 참조, Controls는 위 전부 참조)
         Controls.xaml은 Step 2에서 추가된다.
+        Icons.xaml(it21 §5.5)은 의존이 0이라 위치가 자유롭지만, 사용처인 Controls 앞에 둔다.
     -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Colors.xaml" />
         <ResourceDictionary Source="Brushes.xaml" />
         <ResourceDictionary Source="Typography.xaml" />
         <ResourceDictionary Source="Metrics.xaml" />
+        <ResourceDictionary Source="Icons.xaml" />
         <ResourceDictionary Source="Controls.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

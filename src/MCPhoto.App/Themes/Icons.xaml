@@ -1,0 +1,58 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:po="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
+                    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                    mc:Ignorable="po">
+    <!--
+        벡터 아이콘 Geometry. (wpf-it21-main-visual-redesign-design.md §5)
+
+        종전 상단 바는 유니코드 글리프(⚙ ⌂)를 썼는데, Font.Primary(Segoe UI, Malgun Gothic)에
+        해당 코드포인트가 없어 폰트 폴백(Segoe UI Symbol / Segoe UI Emoji)이 일어났다.
+        Windows 11에서 컬러 이모지 톱니로 렌더되는 것이 "너무 둥글둥글해 설정인지 모르겠다"의 원인이다.
+        모양을 코드가 통제하려면 벡터가 유일한 해법이다. (§3.4)
+
+        ⚠️ 이 파일은 다른 딕셔너리의 키를 **하나도 참조하지 않는다**(순수 도형 값).
+           따라서 MergedDictionaries가 없고, 형제 딕셔너리 StaticResource 교차 참조 사고의
+           재발 표면이 아예 없다. 색은 사용처의 Path.Fill이, 크기는 Icon.Glyph가 정한다. (§5.5)
+
+        ⚠️ 스타일(Controls.xaml)이 이 키들을 StaticResource로 참조하면 Controls→Icons 교차 참조가
+           생겨 창이 뜨지 않는다. Geometry는 **사용처에서 Path.Data로 주입**한다. (§11 P1)
+
+        좌표계는 전부 24×24. 실제 표시 크기는 Icon.Glyph의 Width/Height가 정한다(Stretch=Uniform).
+        FillRule=EvenOdd로 톱니바퀴 축 구멍과 카메라 렌즈 구멍이 뚫린다.
+        po:Freeze=True — 다수 Path가 공유하므로 동결이 렌더·메모리에 유리하고 런타임 변경 경로를 막는다.
+    -->
+
+    <!-- 설정: 8치 기어. 뿌리 r=7.6 · 팁 r=11.3 · 축 구멍 r=3.6, 45° 간격.
+         치 깊이가 팁 반지름의 33%라 24px에서도 톱니가 개별 식별된다. (§5.3) -->
+    <PathGeometry x:Key="Icon.Gear" po:Freeze="True" FillRule="EvenOdd"
+                  Figures="M 19.45,10.48 L 23.2,10.53 A 11.3,11.3 0 0 1 23.2,13.47 L 19.45,13.52
+                           A 7.6,7.6 0 0 1 18.34,16.19 L 20.96,18.88 A 11.3,11.3 0 0 1 18.88,20.96
+                           L 16.19,18.34 A 7.6,7.6 0 0 1 13.52,19.45 L 13.47,23.2
+                           A 11.3,11.3 0 0 1 10.53,23.2 L 10.48,19.45 A 7.6,7.6 0 0 1 7.81,18.34
+                           L 5.12,20.96 A 11.3,11.3 0 0 1 3.04,18.88 L 5.66,16.19
+                           A 7.6,7.6 0 0 1 4.55,13.52 L 0.8,13.47 A 11.3,11.3 0 0 1 0.8,10.53
+                           L 4.55,10.48 A 7.6,7.6 0 0 1 5.66,7.81 L 3.04,5.12
+                           A 11.3,11.3 0 0 1 5.12,3.04 L 7.81,5.66 A 7.6,7.6 0 0 1 10.48,4.55
+                           L 10.53,0.8 A 11.3,11.3 0 0 1 13.47,0.8 L 13.52,4.55
+                           A 7.6,7.6 0 0 1 16.19,5.66 L 18.88,3.04 A 11.3,11.3 0 0 1 20.96,5.12
+                           L 18.34,7.81 A 7.6,7.6 0 0 1 19.45,10.48 Z
+                           M 15.6,12 A 3.6,3.6 0 1 1 8.4,12 A 3.6,3.6 0 1 1 15.6,12 Z" />
+
+    <!-- 계정: 머리 원(중심 12,7.8 r=4) + 어깨 돔. -->
+    <PathGeometry x:Key="Icon.Account" po:Freeze="True" FillRule="EvenOdd"
+                  Figures="M 16,7.8 A 4,4 0 1 1 8,7.8 A 4,4 0 1 1 16,7.8 Z
+                           M 12,14 C 7.6,14 4,17.2 4,21.2 L 20,21.2 C 20,17.2 16.4,14 12,14 Z" />
+
+    <!-- 홈: 지붕 삼각 + 몸통 + 문 노치. -->
+    <PathGeometry x:Key="Icon.Home" po:Freeze="True" FillRule="EvenOdd"
+                  Figures="M 12,3 L 2,12 L 5,12 L 5,21 L 10,21 L 10,15 L 14,15 L 14,21
+                           L 19,21 L 19,12 L 22,12 Z" />
+
+    <!-- 앱 마크(카메라): 바디 + 뷰파인더 융기 + 렌즈 구멍. -->
+    <PathGeometry x:Key="Icon.Camera" po:Freeze="True" FillRule="EvenOdd"
+                  Figures="M 9.2,4 L 7.8,6 L 4.4,6 A 2.4,2.4 0 0 0 2,8.4 L 2,17.6
+                           A 2.4,2.4 0 0 0 4.4,20 L 19.6,20 A 2.4,2.4 0 0 0 22,17.6 L 22,8.4
+                           A 2.4,2.4 0 0 0 19.6,6 L 16.2,6 L 14.8,4 Z
+                           M 12,17 A 4.2,4.2 0 1 1 12,8.6 A 4.2,4.2 0 1 1 12,17 Z" />
+</ResourceDictionary>

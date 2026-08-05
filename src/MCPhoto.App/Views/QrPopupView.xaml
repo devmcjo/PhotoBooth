@@ -6,6 +6,8 @@
              mc:Ignorable="d" d:DesignHeight="720" d:DesignWidth="1280">
     <!-- 스크림 위 카드 다이얼로그(모달). 업로드중/성공(QR)/실패 3상태를 Visibility로 분기(it5 §2 B6). -->
     <Grid Background="{StaticResource Brush.Scrim}">
+        <!-- it21 §8.4: 창모드 하한이 600 높이까지 낮아졌으므로 카드가 잘리지 않도록 스크롤로 감싼다. -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
         <Border Style="{StaticResource Card}" Padding="48" Effect="{StaticResource Shadow.Pop}"
                 HorizontalAlignment="Center" VerticalAlignment="Center" Width="440" Background="{StaticResource Brush.Bg}">
             <StackPanel>
@@ -53,5 +55,6 @@
                         Visibility="{Binding IsUploading, Converter={StaticResource InverseBoolToVis}}" />
             </StackPanel>
         </Border>
+        </ScrollViewer>
     </Grid>
 </UserControl>

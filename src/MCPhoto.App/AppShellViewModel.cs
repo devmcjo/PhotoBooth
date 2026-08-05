@@ -85,8 +85,16 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     public QrGateReason TempUserQrReason =>
         CurrentUser?.Role == UserRole.TempUser ? (_tempUserQrStatus?.Reason ?? QrGateReason.Ok) : QrGateReason.Ok;
 
-    /// <summary>상단 바 좌측 라벨: 비로그인="로그인", 로그인=계정 ID.</summary>
+    /// <summary>상단 바 계정 버튼의 접근 이름·툴팁: 비로그인="로그인", 로그인=계정 ID.
+    /// it21 §6.2: 버튼 표면에서 텍스트가 사라지고 아이콘/아바타가 되므로, 이 문자열은 툴팁으로 옮겨간다.</summary>
     public string AccountLabel => CurrentUser?.Id ?? "로그인";
+
+    /// <summary>
+    /// 계정 버튼 아바타에 표시할 이니셜 1글자(대문자). 게스트는 빈 문자열. (it21 §6.2)
+    /// 아이콘 전용화로 사라진 "누가 로그인했는지"를 텍스트 pill 없이 전달한다.
+    /// </summary>
+    public string AccountInitial =>
+        CurrentUser?.Id is { Length: > 0 } id ? id[..1].ToUpperInvariant() : string.Empty;
 
     /// <summary>상단 바 표시 여부(촬영·QR 팝업에서 숨김).</summary>
     public bool IsTopBarVisible => SessionStateMachine.IsTopBarVisible(CurrentState);
@@ -149,6 +157,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGuest));
         OnPropertyChanged(nameof(IsPower));
         OnPropertyChanged(nameof(AccountLabel));
+        OnPropertyChanged(nameof(AccountInitial));   // it21 §6.2: 계정 버튼 아바타
 
         // it13: 계정 변경마다 TempUser 사용량 상태를 재평가(§7.5). 로그아웃·비TempUser는 즉시 클리어,
         //        TempUser 로그인은 서버 상태를 1회 조회(fire-and-forget, 완료 시 파생 프로퍼티 통지).

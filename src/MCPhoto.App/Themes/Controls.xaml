@@ -218,6 +218,40 @@
         <Setter Property="Padding" Value="18,0" />
     </Style>
 
+    <!-- ══════════════ Icon.Glyph / Button.TopBar (it21 §5.6·§6.2) ══════════════ -->
+    <!--
+        ⚠️ 이 절의 어떤 스타일도 Icon.Gear 등 **Geometry 키를 참조하지 않는다.**
+           참조하는 순간 Controls → Icons 형제 딕셔너리 교차 참조가 되어 창이 뜨지 않는다.
+           Geometry는 사용처(MainWindow.xaml / HomeView.xaml)가 Path.Data로 주입한다. (설계 §11 P1)
+    -->
+
+    <!-- 아이콘 Path 공통. Fill을 조상 버튼의 Foreground에 묶어 hover/disabled 색 정책을 버튼이 소유한다. -->
+    <Style x:Key="Icon.Glyph" TargetType="Path">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Fill"
+                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ButtonBase}}}" />
+    </Style>
+
+    <!--
+        상단 바 버튼. Button.Icon(56px pill·hover/press 트리거)을 상속하고 배경만 덮는다.
+        종전 Transparent 배경은 흰 배경 위에서 버튼인지 라벨인지 구분되지 않았다(설계 §3.4) —
+        Surface 배경을 주어 좌/우 버튼들이 하나의 컨트롤 군으로 읽히게 한다.
+    -->
+    <Style x:Key="Button.TopBar" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+        <Setter Property="Background" Value="{StaticResource Brush.Surface}" />
+    </Style>
+
+    <!-- 브랜드-홈 칩(홈 글리프 + 워드마크). 너비 가변 — 워드마크는 런타임 교체될 수 있다. -->
+    <Style x:Key="Button.TopBar.Brand" TargetType="Button" BasedOn="{StaticResource Button.TopBar}">
+        <Setter Property="Width" Value="Auto" />
+        <Setter Property="MinWidth" Value="{StaticResource Touch.IconBtn}" />
+        <Setter Property="Padding" Value="18,0" />
+    </Style>
+
     <!-- ══════════════ Button.Filter (필터 칩) ══════════════ -->
     <Style x:Key="Button.Filter" TargetType="Button">
         <Setter Property="Height" Value="{StaticResource Touch.Min}" />

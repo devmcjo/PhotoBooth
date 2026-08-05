@@ -252,8 +252,26 @@ fallback PNG 쓰기는 전용 lock + 임시 파일 원자 교체로 경합을 �
 ### 4.3 가로/세로 레이아웃 자동 (§1, §9 #20)
 
 - 화면 방향(가로/세로) 감지 → 방향별 레이아웃 자동. 프레임은 자기 비율대로 화면 중앙 정렬.
-- 구현: `DataTemplate`/`VisualStateManager` 또는 방향별 UserControl 스왑. 반응형(창모드 최소 1280×720).
+- 구현: `DataTemplate`/`VisualStateManager` 또는 방향별 UserControl 스왑.
 - 표시 모드: 기본 fullscreen, 창모드 옵션(테스트). 창모드 마지막 크기·위치 복원(`windowBounds`).
+- **창 최소 크기(it21)**: 모드별로 코드가 소유한다 — 창모드 800×600, 전체화면 해제(0). Window 요소에 하드코딩하지 않는다. 상세·함정은 `docs/analysis/13-client-behavior-spec.md` §8.4.1.
+
+### 4.4 디자인 시스템 (`Themes/`)
+
+`Theme.xaml`이 진입점이며 병합 순서는 **Colors → Brushes → Typography → Metrics → Icons → Controls**다.
+
+| 파일 | 내용 | 자체 병합 |
+|------|------|-----------|
+| `Colors.xaml` | Color 원자값(라이트 팔레트) | 없음 |
+| `Brushes.xaml` | 역할 기반 SolidColorBrush | Colors |
+| `Typography.xaml` | 타이포 스케일·Font.Primary | Brushes |
+| `Metrics.xaml` | 간격·모서리·터치·엘리베이션 | Colors |
+| `Icons.xaml` | **벡터 아이콘 `PathGeometry`**(Gear/Account/Home/Camera, 24×24, `po:Freeze`) | **없음**(참조 0) |
+| `Controls.xaml` | 컨트롤 스타일·템플릿 | Brushes·Metrics·Typography |
+
+- ⚠️ **형제 딕셔너리 간 `StaticResource` 교차 참조는 불가**하다(각 RD가 독립 파싱 → 런타임 `XamlParseException`으로 창이 아예 안 뜬다). 각 파일은 자기가 참조하는 딕셔너리를 **자체 병합**해야 한다.
+- ⚠️ `Controls.xaml`의 스타일은 **`Icons.xaml`의 Geometry를 참조하지 않는다.** Geometry는 사용처가 `Path.Data`로 주입한다. 스타일이 참조하는 순간 교차 참조가 되어 위 사고가 재발한다(`XamlResourceTests`가 검출).
+- 아이콘에 유니코드 글리프를 쓰지 않는다 — 폰트 폴백에 따라 모양이 통제되지 않는다(it21에서 `⚙`·`⌂` 폐기).
 
 ---
 
