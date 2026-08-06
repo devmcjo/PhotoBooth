@@ -24,7 +24,16 @@ interface VideoFrameCallbackApi {
   cancelVideoFrameCallback?: (handle: number) => void;
 }
 
-/** 숨겨진 `<video>`를 만든다. 규격 속성이 빠지면 모바일에서 깨지므로 한 곳에서 만든다. */
+/**
+ * 숨겨진 `<video>`를 만든다. 규격 속성이 빠지면 모바일에서 깨지므로 한 곳에서 만든다.
+ *
+ * ⚠️ **`display: none`을 쓰지 마라**(2026-08-06 교정 · 정적 검사 CAM-3).
+ *    WebKit은 렌더링 트리에서 빠진 `<video>`에 대해 `requestVideoFrameCallback`을 발화하지
+ *    않는 경우가 있다. 그러면 프레임이 **한 장도 오지 않아** 8초 뒤 Ready 타임아웃이 나고,
+ *    화면에는 권한 문제와 구분되지 않는 실패 문구만 뜬다.
+ *    대신 **1×1 투명 고정 배치**로 "레이아웃에는 있으나 보이지 않게" 만든다 — 렌더링 트리에
+ *    남아 있어야 프레임 콜백이 돈다.
+ */
 export function createHiddenVideoElement(doc: Document = document): HTMLVideoElement {
   const video = doc.createElement("video");
   video.autoplay = true;
@@ -32,7 +41,16 @@ export function createHiddenVideoElement(doc: Document = document): HTMLVideoEle
   video.playsInline = true;
   video.setAttribute("playsinline", ""); // 구형 iOS는 속성 형태만 인식한다
   video.setAttribute("disablepictureinpicture", "");
-  video.style.display = "none";
+  // 손님·스크린리더에게는 존재하지 않는 요소다(프리뷰는 가공된 canvas가 보여준다 — WM1).
+  video.setAttribute("aria-hidden", "true");
+  video.style.position = "fixed";
+  video.style.top = "0";
+  video.style.left = "0";
+  video.style.width = "1px";
+  video.style.height = "1px";
+  video.style.opacity = "0";
+  video.style.pointerEvents = "none";
+  video.style.zIndex = "-1";
   return video;
 }
 

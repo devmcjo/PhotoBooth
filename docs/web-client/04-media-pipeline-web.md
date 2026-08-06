@@ -46,24 +46,39 @@
 
 ## 2. 카메라 획득
 
-### 2.1 제약 요청
+### 2.1 제약 **사다리** (2026-08-06 개정)
+
+진실원 구현: **`adapters/camera/cameraConstraints.ts`**(순수) · 호출은 `cameraService.open()`.
 
 ```ts
-const constraints: MediaStreamConstraints = {
-  audio: false,                                  // 오디오는 전혀 쓰지 않는다(무음 규격)
-  video: {
-    width:  { ideal: 1920 },
-    height: { ideal: 1080 },
-    frameRate: { ideal: 30, min: 15 },
-    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: facing } }),
-  },
-};
+// 넓은 것 → 좁은 것. 저장된 deviceId가 없으면 1·2를 건너뛴다.
+1. device+1080p   { deviceId:{exact}, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} }
+2. device+720p    { deviceId:{exact}, width:{ideal:1280}, height:{ideal:720} }
+3. facing+1080p   { facingMode:{ideal:facing}, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} }
+4. facing         { facingMode:{ideal:facing} }
+5. any            { video: true }
 ```
+
+> #### ⚠️ 왜 한 벌 제약을 폐기했는가 (모바일 실패의 직접 원인)
+>
+> 그 전까지 제약은 **한 벌**이었고 `frameRate: { min: 15 }`가 들어 있었다. `min`은 ideal이 아니라
+> **강제 조건**이라, 저조도에서 15fps 아래로 내려가는 모드만 가진 안드로이드 기기가
+> `OverconstrainedError`로 튕겼다. 그때 유일한 폴백이 `{ video: true }` 였고, 그러면
+> **해상도와 `facingMode`가 통째로 사라져** 640×480 후면 카메라가 열렸다.
+>
+> Windows에는 이 문제가 없다. `cap.Set()`으로 1080p를 **요청만** 하고 장치가 거절하면 기본값으로
+> 조용히 내려간다(`OpenCvCameraService.cs:88-92`). 사다리는 그 동작의 브라우저 재현이며,
+> **의미 있는 것(장치 → 전후면)을 마지막까지 지킨다.**
+>
+> **`frameRate`에 `min`·`exact`를 되살리지 마라** — 정적 검사 **CAM-2**가 막는다.
 
 | 규칙 | 내용 |
 |------|------|
 | `audio: false` 고정 | 타임랩스는 **무음**이 규격이다. 오디오 트랙을 얻으면 권한 요청 범위만 넓어진다 |
-| `deviceId: exact` 실패 시 | `OverconstrainedError` → **제약 없이 재시도**(첫 장치) → 그래도 실패면 `Failed` |
+| 다음 칸으로 갈 조건 | `shouldTryNextStep(err.name)` — **권한 거부(`NotAllowedError`·`SecurityError`)에서는 즉시 중단**한다(제약을 낮춰도 결과가 같고, 손님만 기다린다). `NotReadableError`(점유)는 **계속 내려간다** — 해상도를 낮추면 열리는 기기가 실제로 있다 |
+| 사유 확정 | **마지막 실패**로 확정한다. 마지막 칸이 `{video:true}`라서, 그것마저 실패한 이유가 손님에게 가장 정확하다 |
+| 열린 칸 노출 | `cameraService.constraintStep()` → 진단 [적용된 제약] 행. "왜 해상도가 낮은가"를 현장에서 답한다 |
+| 전/후면 힌트 | `webExtras.CameraFacing`이 3·4칸에 들어간다. **호출측이 `start({facing})`으로 넘긴다** — 정적 검사 **CAM-5**가 배선을 고정한다(설정 UI가 있는데 값이 전달되지 않던 상태를 막는다) |
 | 실제 값 확인 | `track.getSettings()`의 `width/height/frameRate`를 **진단 화면에 표시**. 요청값과 다를 수 있다(WC2) |
 | 장치 열기 실패 | **예외를 위로 던지지 않는다.** `false` 반환 → 상위가 `Failed` 상태로 안내(`analysis/14 §2.1`) |
 | 시작 멱등성 | 이미 실행 중이면 무시하고 성공 반환. **다른 장치로 바꿀 때는 정지 후 재시작** |
@@ -83,6 +98,22 @@ const constraints: MediaStreamConstraints = {
 | 숨김 | 프리뷰는 **가공된 canvas**를 보여준다(WM1). `<video>`를 직접 보여주면 거울·크롭이 반영되지 않는다 |
 | `play()` 호출 | `autoplay`가 실패할 수 있으므로 `play()`를 호출하고 rejection은 로그 후 재시도(사용자 제스처 컨텍스트에서) |
 
+> #### ⚠️ 숨김은 `display:none`이 아니다 (2026-08-06 교정)
+>
+> 위 코드 블록의 `style="display:none"`은 **폐기됐다.** WebKit은 렌더링 트리에서 빠진 `<video>`에
+> 대해 `requestVideoFrameCallback`을 발화하지 않는 경우가 있고, 그러면 프레임이 **한 장도 오지
+> 않아** 8초 뒤 Ready 타임아웃이 난다. 화면에는 권한 문제와 구분되지 않는 실패 문구만 뜬다.
+>
+> 현재 구현(`createHiddenVideoElement`)은 **1×1 투명 고정 배치**다 — 렌더링 트리에 남겨 프레임
+> 콜백이 돌게 하고, 시각·접근성에서는 제거한다(`aria-hidden="true"`).
+>
+> ```ts
+> position: fixed; top: 0; left: 0; width: 1px; height: 1px;
+> opacity: 0; pointer-events: none; z-index: -1;
+> ```
+>
+> 정적 검사 **CAM-3**이 `display = "none"` 재발을 막는다.
+
 ### 2.3 OS·브라우저별 주의
 
 | 플랫폼 | 주의 |
@@ -101,8 +132,8 @@ const constraints: MediaStreamConstraints = {
 |-----|----------------------|-------------|----------------|
 | `getUserMedia` + `playsinline` | 카메라 획득 | 오래전부터 ○ | 없음(앱 사용 불가) |
 | `requestVideoFrameCallback` | 프레임 도착 통지 | **15.4+** | `requestAnimationFrame` + `video.currentTime` 중복 스킵(§2.4) |
-| `OffscreenCanvas`(**2D**) | Worker 가공 캔버스 | **16.4+** | ⚠️ 폴백 없음 → **메인 스레드 `<canvas>`에서 가공**(성능 예산 재측정 필요). 16.4 미만은 지원 대상 밖 |
-| `transferControlToOffscreen` | 프리뷰 zero-copy 렌더 | 16.4+ | Worker → `transferToImageBitmap` → 메인 `drawImage`(§4.2의 기본 경로) |
+| `OffscreenCanvas`(**2D**) | Worker 가공 캔버스 | **16.4+** | ✅ **구현됨** → `adapters/camera/mainThreadProcessor.ts`(메인 스레드 가공 · "저성능 모드"로 진단 표시) |
+| `transferControlToOffscreen` | 프리뷰 zero-copy 렌더 | 16.4+ | ✅ **구현됨** → Worker `transferToImageBitmap` → `previewFrame` 메시지 → 메인 `drawImage` |
 | `OffscreenCanvas.getContext("webgl2")` | **뷰티 필터 Worker 경로** | **17+**(16.4는 2D만 — `getContext("webgl")`이 `null`) | `ImageData` CPU 폴백(§6.2) 또는 메인 스레드 WebGL2 |
 | `createImageBitmap(video)` / `(blob)` | Worker 프레임 전달·합성 입력 | 15+ ○ | 없음(필수) |
 | `createImageBitmap` **resize 옵션** | 썸네일·슬롯 축소 | **오래 미지원**(WebKit 이력) | **필수 폴백**: 작은 캔버스에 `drawImage` 또는 절반씩 단계 축소(§5.2) |
@@ -110,6 +141,45 @@ const constraints: MediaStreamConstraints = {
 | `VideoEncoder`(WebCodecs) | 타임랩스 경로 B | 16.4+ | 경로 A(MediaRecorder mp4) → 경로 C(§7.3b) |
 
 > **`OffscreenCanvas` 2D가 없으면 §1의 구조가 성립하지 않는다.** 기능 감지에서 실패하면 "가공을 메인 스레드에서 수행"으로 축소하되, 그 경로는 성능 예산([04 §8](#8-성능메모리-예산))을 만족하지 못할 수 있으므로 **진단에 "저성능 모드"로 표시**하고 실기기 검증 결과로 지원 여부를 판정한다.
+
+#### 2.3.2 폴백 배선 상태와 판정 주체 (2026-08-06 신설)
+
+> **이 절이 신설된 이유**: §2.3.1의 폴백 2개가 **문서에만 있고 코드에 없었다.**
+> `isWorkerPipelineSupported()`는 정의만 되고 호출처가 0건이었고(dead code), `bindPreview`는
+> 이관 실패 시 `false`만 돌려주고 끝났다. 결과:
+> - `OffscreenCanvas` 없음 → `processed`가 한 번도 오지 않음 → 8초 타임아웃 → 사유 `unknown`
+> - 이관 불가 → **상태는 Ready인데 화면은 검은색** (실패로 보고되지도 않는다)
+>
+> 데스크톱 Chrome은 모든 API가 있어 최적 경로만 타므로 이 결함이 드러나지 않았다.
+
+| 판정 | 주체 | 실패 시 |
+|------|------|---------|
+| Worker 가공 가능? | `isWorkerPipelineSupported()` — `Worker` + `OffscreenCanvas` **생성 후 `getContext("2d") !== null`** 까지 확인 | `createMainThreadProcessor()` |
+| `new Worker(...)` | `spawnFrameProcessor()`의 `try` | `createMainThreadProcessor()` |
+| 가공기 생성 자체 | `cameraService.start()`의 `try` | `Failed("pipelineStalled")` — **예외를 위로 던지지 않는다** |
+| 프리뷰 연결 방식 | **가공기**(`FrameProcessor.bindPreview(HTMLCanvasElement)`) | 이관 → 비트맵 → `false` |
+
+**프리뷰 경로 4상태**(`FrameProcessor.previewMode()` · 진단 [프리뷰 경로] 행):
+
+| 값 | 의미 |
+|----|------|
+| `transferred` | `transferControlToOffscreen()` 성공 — 권장 경로 |
+| `bitmap` | 이관 불가 → Worker가 프레임마다 `transferToImageBitmap()`을 보내고 메인이 그린다 |
+| `direct` | 메인 스레드 가공기가 화면 캔버스에 직접 그린다 |
+| `none` | **화면이 검다** — 진단에서 `bad` tone |
+
+⚠️ 비트맵 전송은 Worker `processFrame`의 **맨 마지막**이다. `transferToImageBitmap()`이 캔버스를
+**비우므로**, 스틸·스풀보다 앞에 두면 같은 프레임의 컷과 타임랩스가 빈 이미지가 된다.
+
+⚠️ **캔버스 재이관은 불가능하다.** 한 번 이관된 `<canvas>`는 메인에서 `getContext("2d")`조차
+실패하므로, 카메라 재시작 시 `CameraPreview`가 **`key`를 증가시켜 DOM 노드를 갈아 끼운다**.
+이것이 없으면 [다시 시도] 이후 화면이 영구히 검은색이 된다.
+
+#### 2.3.3 Ready 타임아웃 사유 분리
+
+프레임이 **0장**이면 `pipelineStalled`, 프레임은 오는데 조건 미달이면 `unknown`이다.
+전에는 둘 다 `unknown`이라 "권한 문제인지 브라우저 능력 문제인지" 현장에서 구분할 수 없었다.
+로그에는 `pipelineMode`·`previewMode`·`constraintStep`을 함께 남긴다.
 
 ### 2.4 프레임 획득 루프
 
@@ -478,7 +548,11 @@ WebCodecs·MediaRecorder에는 CRF가 없으므로 해상도별 비트레이트�
 - [ ] 인코더 경로를 **런타임 기능 감지**(`isConfigSupported`/`isTypeSupported`)로만 판정한다(버전 문자열·UA 판정 금지)
 - [ ] 인코더 부재·실패가 예외가 아니라 `null`/스킵으로 처리된다
 - [ ] `createImageBitmap` resize 옵션의 **실효 여부를 결과 크기로 검증**하고 폴백을 둔다(§5.2)
-- [ ] `OffscreenCanvas` 2D·WebGL2 부재 경로에 폴백이 있다(§2.3.1·§6.2)
+- [x] `OffscreenCanvas` 2D 부재 경로에 폴백이 있다(§2.3.1·§2.3.2) — `mainThreadProcessor.ts`
+- [x] `transferControlToOffscreen` 부재·실패 경로에 폴백이 있다(§2.3.2) — 비트맵 채널
+- [x] 제약 요청이 **사다리**이고 `frameRate.min`이 없다(§2.1 · CAM-2)
+- [x] `<video>` 숨김이 `display:none`이 아니다(§2.2 · CAM-3)
+- [ ] WebGL2 부재 경로 폴백(§6.2) — 합성은 현재 `ImageData` CPU 경로만 쓴다(WebGL2 미사용)
 - [ ] 서버 프레임 이미지를 **CORS-clean**하게 로드한다(WM2)
 - [ ] 모든 `VideoFrame`/`ImageBitmap`이 `close()`된다
 - [ ] 화면 이탈 시 시퀀스 취소 → 인코더 정지 → 카메라 정지 순서를 지킨다

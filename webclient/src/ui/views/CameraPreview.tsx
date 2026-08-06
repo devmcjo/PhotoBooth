@@ -34,13 +34,22 @@ export interface CameraPreviewProps {
 
 export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  /** 제어권 이관은 캔버스당 **1회만** 가능하다 — 재이관 시도를 막는다. */
-  const boundRef = useRef(false);
   const [state, setState] = useState<CameraState>(() => getCameraService().state());
   const [reason, setReason] = useState<CameraFailureReason | null>(() =>
     getCameraService().failureReason(),
   );
   const [size, setSize] = useState<ProcessedSize | null>(null);
+  /**
+   * 캔버스 세대. **카메라가 새로 열릴 때마다 증가**해 `<canvas>` DOM 노드를 갈아 끼운다.
+   *
+   * ⚠️ 이것이 없으면 [다시 시도] 이후 화면이 **영구히 검은색**이 된다(2026-08-06 수정).
+   *    `transferControlToOffscreen()`은 캔버스당 1회뿐이고, 한 번 이관된 캔버스는 메인에서
+   *    `getContext("2d")`조차 실패한다 — 즉 새 가공기는 이관도 비트맵 폴백도 쓸 수 없다.
+   *    유일한 복구는 **새 캔버스 노드**다.
+   */
+  const [generation, setGeneration] = useState(0);
+  /** 이 세대를 이미 붙였는가. 세대당 1회만 시도한다. */
+  const boundGenerationRef = useRef(-1);
 
   useEffect(() => {
     const camera = getCameraService();
@@ -50,6 +59,8 @@ export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreview
       setState(next);
       // 사유는 상태와 **같은 통지**에서 읽는다 — 따로 폴링하면 두 값이 어긋난다.
       setReason(camera.failureReason());
+      // 새 가공기가 생기는 전이는 `Starting` 진입뿐이다(stop → start · 재시도 · 장치 변경).
+      if (next === "Starting") setGeneration((current) => current + 1);
     });
     const offFrame = camera.onProcessedFrame(setSize);
     return () => {
@@ -58,18 +69,23 @@ export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreview
     };
   }, []);
 
-  // Worker에 캔버스 제어권을 넘긴다(zero-copy). 실패하면 Worker가 비트맵을 보내는 경로로 동작한다.
+  /**
+   * 프리뷰 연결. **방식은 가공기가 정한다**(이관 → 비트맵 → 직접 렌더).
+   * 여기서는 "언제 붙일지"만 책임진다.
+   */
   useEffect(() => {
-    if (boundRef.current) return;
+    if (boundGenerationRef.current === generation) return;
     const canvas = canvasRef.current;
     if (canvas === null) return;
     if (state !== "Starting" && state !== "Ready") return;
-    boundRef.current = getCameraService().bindPreview(canvas);
-  }, [state]);
+    if (getCameraService().bindPreview(canvas)) boundGenerationRef.current = generation;
+  }, [state, generation]);
 
   return (
     <div className={styles.stage}>
       <canvas
+        // 세대가 바뀌면 React가 노드를 새로 만든다 — 이관된 캔버스를 재사용하지 않기 위함이다.
+        key={generation}
         ref={canvasRef}
         className={styles.canvas}
         // 실제 픽셀 크기는 Worker가 정한다. 여기 값은 첫 프레임 전 레이아웃 안정용이다.

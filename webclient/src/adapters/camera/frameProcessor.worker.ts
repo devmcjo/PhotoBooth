@@ -33,6 +33,12 @@ let ctx: OffscreenCanvasRenderingContext2D | null = null;
 let previewCanvas: OffscreenCanvas | null = null;
 let previewCtx: OffscreenCanvasRenderingContext2D | null = null;
 
+/**
+ * 비트맵 프리뷰 채널(폴백). 캔버스 이관이 불가한 브라우저에서만 켜진다 — 04 §2.3.1.
+ * ⚠️ `previewCanvas`와 **동시에 켜지지 않는다**(클라이언트가 하나만 고른다).
+ */
+let previewChannelEnabled = false;
+
 /** 대기 중인 스틸 요청. 다음 가공 프레임에서 완성한다(04 §5.1 원자성). */
 let pendingStill: { id: number; quality: number } | null = null;
 
@@ -58,7 +64,7 @@ function ensureCanvas(width: number, height: number): OffscreenCanvasRenderingCo
 }
 
 function post(response: FrameProcessorResponse, transfer?: Transferable[]): void {
-  self.postMessage(response, { transfer: transfer ?? [] });
+  self.postMessage(response, { transfer: (transfer ?? []) as Transferable[] });
 }
 
 async function processFrame(payload: ImageBitmap | VideoFrame): Promise<void> {
@@ -142,9 +148,35 @@ async function processFrame(payload: ImageBitmap | VideoFrame): Promise<void> {
       }
     }
 
+    // ── 소비자 4: 프리뷰 비트맵 채널(폴백 — 캔버스 이관이 불가한 브라우저) ──
+    // ⚠️ **반드시 스틸·스풀 뒤**다. `transferToImageBitmap()`은 캔버스를 **비우므로**,
+    //    앞에 두면 같은 프레임의 스틸·스풀이 빈 이미지가 된다. 다음 프레임에서 `drawImage`가
+    //    다시 채우므로 비워진 상태 자체는 무해하다.
+    if (previewChannelEnabled) {
+      const bitmap = takePreviewBitmap(canvas);
+      if (bitmap !== null) post({ type: "previewFrame", bitmap }, [bitmap]);
+    }
+
     post({ type: "processed", width: crop.width, height: crop.height });
   } finally {
     payload.close();
+  }
+}
+
+/**
+ * 가공 캔버스 → 프리뷰 비트맵.
+ *
+ * `transferToImageBitmap()`이 있으면 그것을 쓴다(복사 없음). 없는 구현에서는 이 폴백 경로
+ * 자체가 의미를 잃으므로 `null`을 돌려주고 조용히 넘긴다 — 프리뷰 1프레임 누락은 촬영과 무관하다.
+ */
+function takePreviewBitmap(source: OffscreenCanvas): ImageBitmap | null {
+  const transfer = (source as { transferToImageBitmap?: () => ImageBitmap })
+    .transferToImageBitmap;
+  if (typeof transfer !== "function") return null;
+  try {
+    return transfer.call(source);
+  } catch {
+    return null;
   }
 }
 
@@ -185,6 +217,12 @@ self.addEventListener("message", (event: MessageEvent<FrameProcessorRequest>) =>
     case "bindPreview":
       previewCanvas = request.canvas;
       previewCtx = null;
+      // 이관에 성공했으므로 비트맵 채널은 필요 없다(둘 다 켜면 이중 렌더 + 복사 비용).
+      previewChannelEnabled = false;
+      break;
+
+    case "previewChannel":
+      previewChannelEnabled = request.enabled;
       break;
 
     case "requestStill":

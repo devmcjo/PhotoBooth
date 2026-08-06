@@ -4,6 +4,19 @@ export type FrameProcessorRequest =
   | { readonly type: "configure"; readonly targetAspect: number; readonly mirror: boolean }
   | { readonly type: "frame"; readonly payload: ImageBitmap | VideoFrame }
   | { readonly type: "bindPreview"; readonly canvas: OffscreenCanvas }
+  | {
+      /**
+       * 프리뷰 **비트맵 채널** on/off — 2026-08-06 신설(04 §2.3.1의 미구현 폴백).
+       *
+       * `transferControlToOffscreen()`이 없거나 던지는 브라우저에서는 캔버스 이관이 불가하다.
+       * 그때 Worker가 프레임마다 비트맵을 메인으로 보내고 메인이 `drawImage`로 그린다.
+       *
+       * ⚠️ **이관에 성공했으면 켜지 않는다.** 둘 다 켜면 같은 프레임을 두 번 그리고
+       *    비트맵 복사 비용만 늘어난다.
+       */
+      readonly type: "previewChannel";
+      readonly enabled: boolean;
+    }
   | { readonly type: "requestStill"; readonly id: number; readonly quality: number }
   | {
       /**
@@ -34,6 +47,14 @@ export type FrameProcessorResponse =
       readonly blob: Blob;
       readonly width: number;
       readonly height: number;
+    }
+  | {
+      /**
+       * 프리뷰 1프레임(비트맵 폴백 경로). 메인이 캔버스에 그린 뒤 **반드시 `close()`** 한다 —
+       * `ImageBitmap`은 GC 대상이 아니다.
+       */
+      readonly type: "previewFrame";
+      readonly bitmap: ImageBitmap;
     };
 
 /** 스틸 JPEG 품질 — 04 §5.1(0.95 고정). */

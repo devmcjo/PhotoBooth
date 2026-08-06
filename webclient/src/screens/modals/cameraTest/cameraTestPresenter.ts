@@ -22,6 +22,11 @@ export interface CameraTestOptions {
   readonly flash: boolean;
   /** 대표 슬롯 종횡비. 프레임 미선택 상태에서는 기본값(3:4)을 쓴다. */
   readonly targetAspect?: number;
+  /**
+   * 전/후면 힌트(`webExtras.CameraFacing`). **실촬영과 같은 값을 넘겨야 한다** —
+   * 테스트 모달의 목적이 동일 재현이므로 여기서만 전면이 열리면 테스트가 거짓이 된다.
+   */
+  readonly facing?: "user" | "environment";
 }
 
 export interface CameraTestPresenter {
@@ -50,6 +55,7 @@ export function createCameraTestPresenter(
 
       const started = await camera.start({
         deviceId: options.deviceId,
+        ...(options.facing === undefined ? {} : { facing: options.facing }),
         targetAspect: options.targetAspect ?? slotAspectToRatio(DEFAULT_SLOT_ASPECT),
         mirror: options.mirror,
       });

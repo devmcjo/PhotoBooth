@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { addCut, slotCount as slotCountOf } from "@domain/capture/captureSession";
 import { slotAspectRatio } from "@domain/frames/types";
 import { getCameraService } from "@adapters/camera/cameraService";
+import { listCameras, resolveStartDeviceId } from "@adapters/camera/deviceEnumerator";
 import { getTimelapseService } from "@adapters/encode/timelapseService";
 import { playShutterSound } from "@adapters/platform/shutterSound";
 import { cutFileName } from "@adapters/storage/sessionWorkspace";
@@ -62,6 +63,15 @@ async function makeThumbnail(blob: Blob): Promise<ImageBitmap | undefined> {
 
 export function useCaptureRunner(): CaptureRunner {
   const values = useSettingsStore((s) => s.values);
+  /**
+   * 전/후면 힌트. 설정 화면에 편집 UI가 있는데도 **여기서 넘기지 않아 2026-08-06까지
+   * 항상 전면이 열렸다**(설정이 저장은 되고 적용은 안 되는 상태). `deviceId`가 있으면
+   * 사다리 1·2칸이 그것을 먼저 쓰고, 없거나 실패했을 때 이 힌트가 쓰인다.
+   */
+  const facing = useSettingsStore((s) => s.webExtras.CameraFacing);
+  /** WC3 폴백 매칭 입력. deviceId만으로는 모바일에서 매번 어긋난다. */
+  const deviceLabel = useSettingsStore((s) => s.webExtras.CameraDeviceLabel);
+  const deviceGroupId = useSettingsStore((s) => s.webExtras.CameraDeviceGroupId);
   const [countdown, setCountdown] = useState(0);
   const [flashing, setFlashing] = useState(false);
   const [capturedCount, setCapturedCount] = useState(0);
@@ -104,9 +114,29 @@ export function useCaptureRunner(): CaptureRunner {
     let disposed = false;
 
     async function run(): Promise<void> {
+      // 0. 저장된 장치 참조를 **실제 deviceId로 해석**한다(WC3).
+      //    ⚠️ `values.CameraDevice`를 그대로 넘기지 마라 — deviceId는 브라우저·OS 재시작으로
+      //       바뀌고 모바일에서는 사실상 매번 무효다. 라벨·groupId 폴백이 그때 장치를 되찾는다.
+      //    열거 실패는 빈 배열이고, 그러면 `reason: "none"` → facingMode 경로로 간다(무해).
+      const resolved = resolveStartDeviceId(await listCameras(), {
+        deviceId: values.CameraDevice,
+        label: deviceLabel,
+        groupId: deviceGroupId,
+      });
+      if (disposed) return;
+      if (resolved.reason !== "none" && resolved.reason !== "deviceId") {
+        // 저장값이 어긋났고 폴백이 건져낸 경우 — 현장 진단에 쓰인다.
+        logger.info("저장된 카메라를 폴백으로 찾았다", {
+          reason: resolved.reason,
+          storedDeviceId: values.CameraDevice,
+          resolvedDeviceId: resolved.deviceId,
+        });
+      }
+
       // 1. 카메라 시작 — 실패하면 시퀀스를 시작하지 않는다.
       const started = await camera.start({
-        deviceId: values.CameraDevice.length > 0 ? values.CameraDevice : null,
+        deviceId: resolved.deviceId,
+        facing,
         targetAspect,
         mirror: values.MirrorMode,
       });

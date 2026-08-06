@@ -69,8 +69,28 @@ export interface FrameSource {
   size(): ProcessedSize;
 }
 
-/** Worker 가공기. */
+/**
+ * 가공 경로 — 04 §2.3.1.
+ *
+ * `OffscreenCanvas`가 없는 브라우저에서도 촬영이 되어야 하므로 **두 구현이 같은 인터페이스를
+ * 만족**한다. 어느 것이 쓰였는지는 진단에 표시된다("저성능 모드").
+ */
+export type FrameProcessorMode = "worker" | "main";
+
+/**
+ * 프리뷰 연결 방식. 진단 표시용이며, **`none`이 곧 "화면이 검다"** 는 뜻이다.
+ *
+ * - `transferred` — `transferControlToOffscreen()` 성공(권장 경로 · zero-copy)
+ * - `bitmap` — 이관이 불가해 Worker가 프레임마다 비트맵을 보내고 메인이 그린다(폴백)
+ * - `direct` — 메인 스레드 가공기가 캔버스에 직접 그린다
+ * - `none` — 아직 연결되지 않았다
+ */
+export type PreviewMode = "none" | "transferred" | "bitmap" | "direct";
+
+/** 프레임 가공기(Worker 또는 메인 스레드). */
 export interface FrameProcessor {
+  /** 이 구현이 어느 경로인가(진단 표시). */
+  readonly mode: FrameProcessorMode;
   configure(options: { targetAspect: number; mirror: boolean }): void;
   /** 프레임 1개 가공 요청. 이전 가공이 진행 중이면 **최신 것으로 덮어쓴다**(큐를 쌓지 않는다). */
   process(payload: FramePayload): void;
@@ -78,8 +98,17 @@ export interface FrameProcessor {
   onProcessed(listener: (size: ProcessedSize) => void): () => void;
   /** 다음 가공 프레임에서 스틸을 만든다(원자성 — 04 §5.1). */
   requestStill(quality: number): Promise<Blob | null>;
-  /** 프리뷰 캔버스 제어권을 넘긴다(zero-copy 경로). 미지원이면 무시된다. */
-  bindPreview(canvas: OffscreenCanvas): void;
+  /**
+   * 화면 캔버스를 프리뷰 대상으로 붙인다.
+   *
+   * ⚠️ **`OffscreenCanvas`를 받지 않는다**(2026-08-06 변경). 이관 가능 여부는 구현이 판단해야
+   *    한다 — 전에는 `cameraService`가 `transferControlToOffscreen()`을 직접 불렀고, 그것이
+   *    실패하면 **폴백 없이 검은 화면**이 됐다. 지금은 실패를 구현 안에서 비트맵 경로로 흡수한다.
+   * @returns 프리뷰가 실제로 연결됐는가. `false`면 화면에 아무것도 그려지지 않는다.
+   */
+  bindPreview(canvas: HTMLCanvasElement): boolean;
+  /** 현재 프리뷰 연결 방식(진단 표시). */
+  previewMode(): PreviewMode;
   /**
    * 타임랩스 스풀 채널 on/off(04 §7.2).
    * **스틸 채널과 분리돼 있다** — 스풀이 컷 촬영 요청을 덮어써 컷을 잃는 사고를 막는다.
