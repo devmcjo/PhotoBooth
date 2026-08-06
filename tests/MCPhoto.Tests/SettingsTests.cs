@@ -24,7 +24,7 @@ public class SettingsTests : IDisposable
         var svc = new IniSettingsService(iniPath: _tempPath);
         var s = svc.Load();
 
-        Assert.Equal(6, s.CutCount);
+        Assert.Equal(CutCountPolicy.AutoCutCount, s.CutCount);   // 기본값 = 자동(프레임 슬롯 수에 맞춰 산출)
         Assert.Equal(6, s.CountdownSec);
         Assert.True(s.MirrorMode);
         Assert.False(s.FlashMode);
@@ -325,8 +325,8 @@ public class SettingsTests : IDisposable
         var svc = new IniSettingsService(iniPath: _tempPath);
         var s = svc.Load();
 
-        // 손상 라인 무시 + 파싱 실패 키는 기본값
-        Assert.Equal(6, s.CutCount);
+        // 손상 라인 무시 + 파싱 실패 키는 기본값(컷 수 기본값 = 자동)
+        Assert.Equal(CutCountPolicy.AutoCutCount, s.CutCount);
         Assert.Equal(24, s.RetentionHours);
     }
 
@@ -417,5 +417,34 @@ public class SettingsTests : IDisposable
         var s = new AppSettings { CutCount = stored };
         s.Clamp();
         Assert.Equal(expected, s.CutCount);
+    }
+
+    /// <summary>
+    /// 기본값 = 자동(sentinel 0). Clamp를 통과해도 유지된다 — 신규 설치·ini 키 누락 시 "자동"으로 시작한다.
+    /// </summary>
+    [Fact]
+    public void CutCount_Default_Is_Auto()
+    {
+        var s = new AppSettings();
+        Assert.Equal(CutCountPolicy.AutoCutCount, s.CutCount);
+        Assert.True(CutCountPolicy.IsAuto(s.CutCount));
+
+        s.Clamp();
+        Assert.Equal(CutCountPolicy.AutoCutCount, s.CutCount);
+    }
+
+    /// <summary>
+    /// ini에 CutCount 키가 없으면 자동으로 로드되고, 그 상태로 저장하면 sentinel 0이 기록된다
+    /// (기본값이 6으로 굳어 저장되지 않는다).
+    /// </summary>
+    [Fact]
+    public void CutCount_Missing_Key_Loads_As_Auto_And_Persists_Sentinel()
+    {
+        File.WriteAllText(_tempPath, "[MCPhoto]\nCountdownSec=8\n");
+        var svc = new IniSettingsService(iniPath: _tempPath);
+
+        Assert.Equal(CutCountPolicy.AutoCutCount, svc.Load().CutCount);
+        Assert.True(svc.Save());
+        Assert.Contains("CutCount=0", File.ReadAllText(_tempPath));
     }
 }

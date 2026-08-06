@@ -44,8 +44,12 @@ public sealed class AppSettings
     public const int MaxSlots = 6;
 
     // ── 촬영 옵션 (PRD §F1) ──
-    /// <summary>촬영 컷 수. 기본 6, 옵션 6/8/10(최소 6) 또는 자동(<see cref="CutCountPolicy.AutoCutCount"/>=0 → 실제 컷 수는 CaptureSession.Begin이 산출). (it17)</summary>
-    public int CutCount { get; set; } = 6;
+    /// <summary>
+    /// 촬영 컷 수. **기본 자동**(<see cref="CutCountPolicy.AutoCutCount"/>=0 → 실제 컷 수는 프레임 슬롯 수 확정 후
+    /// CaptureSession.Begin이 산출), 고정 옵션 6/8/10. (it17 · 기본값 자동 전환)
+    /// ⚠️ ini에 <c>CutCount=6</c>이 이미 기록된 기존 설치는 그 명시값이 우선이다(기본값 변경은 신규·키 누락 시에만 적용).
+    /// </summary>
+    public int CutCount { get; set; } = CutCountPolicy.AutoCutCount;
 
     /// <summary>컷당 카운트다운 초. 기본 6, 옵션 3/6/8/10.</summary>
     public int CountdownSec { get; set; } = 6;

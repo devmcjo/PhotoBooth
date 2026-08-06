@@ -129,7 +129,7 @@
 - **목적**: N컷을 컷당 카운트다운 후 자동 셔터로 연속 촬영하며 세션 전체를 녹화.
 - **화면·VM**: `CaptureView`(`CaptureView.xaml`) · `CaptureViewModel`. 서비스: `ICameraService`.
 - **핵심 규칙·옵션**:
-  - **컷수**: `Settings.CutCount`는 **의도**(자동=`0` 또는 고정 6/8/10, 기본 6). 실제 촬영 수 = `Capture.CutCount`로, `CaptureSession.Begin`이 `CutCountPolicy.Resolve`로 산출한다(유일한 해석 지점).
+  - **컷수**: `Settings.CutCount`는 **의도**(자동=`0` 또는 고정 6/8/10, **기본 자동=`0`**). 실제 촬영 수 = `Capture.CutCount`로, `CaptureSession.Begin`이 `CutCountPolicy.Resolve`로 산출한다(유일한 해석 지점).
     - 자동: `max(6, 슬롯수 + 2)` — 슬롯보다 2장 여유를 확보해 컷 선택의 여지를 남긴다(it17). 슬롯 6개면 8컷.
     - 고정: `max(설정컷, 슬롯수)` — 종전 동작 그대로.
     - 자동은 허용 집합에 없는 **7컷**도 만들 수 있다. 실효값은 `AppSettings`를 거치지 않으므로 `AllowedCutCounts` 검사에 닿지 않고, 촬영 루프(`for cut=1..TotalCuts`)·컷 선택(`WrapPanel`)·합성(선택분=슬롯수)은 모두 임의 정수 N을 견딘다.

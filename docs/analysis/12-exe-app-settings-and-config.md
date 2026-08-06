@@ -24,7 +24,7 @@
 
 | 키(프로퍼티) | 타입 | 기본값 | 범위·Clamp | INI 키 | 영향 |
 | --- | --- | --- | --- | --- | --- |
-| `CutCount` | int | **6** | 허용 {6,8,10} **또는 `0`=자동**; 벗어나면 가장 가까운 허용값(동률 시 첫 값)으로 보정. **`0`은 최근접 보정에서 제외**(sentinel 보존, it17) — `-1` 등 다른 값은 종전대로 6으로 보정 | `CutCount` | 촬영 컷 수의 **의도**. 실제 촬영 컷 수는 프레임 슬롯 수 확정 후 `CaptureSession.Begin`이 산출(§1.4) |
+| `CutCount` | int | **`0`=자동** | 허용 {6,8,10} **또는 `0`=자동**; 벗어나면 가장 가까운 허용값(동률 시 첫 값)으로 보정. **`0`은 최근접 보정에서 제외**(sentinel 보존, it17) — `-1` 등 다른 값은 종전대로 6으로 보정 | `CutCount` | 촬영 컷 수의 **의도**. 실제 촬영 컷 수는 프레임 슬롯 수 확정 후 `CaptureSession.Begin`이 산출(§1.4) |
 | `CountdownSec` | int | **6** | 허용 {3,6,8,10}; 최근접 보정 | `CountdownSec` | 컷당 카운트다운 초 |
 | `MirrorMode` | bool | **true** | — | `MirrorMode` | 거울(좌우반전) 프리뷰=저장 WYSIWYG |
 | `FlashMode` | bool | **false** | — | `FlashMode` | 셔터 직전 하양 화면 플래시 |
@@ -74,7 +74,7 @@
 
 ### 1.3 Clamp / QR 정규화 세부
 
-- `Clamp()`(`AppSettings.cs:159-184`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 **제거** → `NormalizeBackend()` → `NormalizeQr()`.
+- `Clamp()`(`AppSettings.cs:163-188`): CutCount/CountdownSec/RetakeLimit 최근접 보정(`ClosestFrom`) → RetentionHours 1~72 → WindowBounds Width/Height 하한 → CameraDevice≥0 → HostingBaseUrl 트레일링 슬래시 **제거** → `NormalizeBackend()` → `NormalizeQr()`.
   - **it17**: CutCount 보정에는 자동 sentinel 가드가 **선행**한다 — `if (!CutCountPolicy.IsAuto(CutCount) && Array.IndexOf(...) < 0)`. `Clamp()`는 로드·저장 양쪽에서 불리므로(`IniSettingsService.Load()`/`Save()`) 가드가 없으면 `ClosestFrom(0,{6,8,10})`이 0을 6으로 덮어써 저장 왕복 1회에 "자동" 설정이 소멸한다.
 - `NormalizeBackend()`(`:187-199`): `BackendBaseUrl`·`BackendApiKey`·`GoogleClientId` 트림 + base URL이 **슬래시로 끝나도록 보정**(`HttpClient.BaseAddress`가 상대 경로를 안전히 결합하도록). ⚠️ `HostingBaseUrl`(슬래시 제거)과 방향이 반대다 — 용도가 다르다(URL 문자열 조립 vs HttpClient base). base URL이 비면 보정하지 않고 그대로 둔다(미구성은 런타임 호출 실패로 드러남).
 - `NormalizeQr()` = `QrDeliveryPolicy.Normalize`: `EnableQrDelivery && !SendPhoto && !SendTimelapse`이면 `EnableQrDelivery=false`(하위 토글 값은 보존). off→on 재활성 시 하위 둘 다 on 강제(`QrDeliveryPolicy.OnReEnabled`)는 UI(`SettingsViewModel`)에서 처리(`AppSettings`/`IniSettingsService` 자체엔 없음).
@@ -91,6 +91,7 @@ AppSettings.CutCount        ← 의도  : 0(자동) | 6 | 8 | 10   (INI 왕복 �
 CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Capture가 읽음)
 ```
 
+- **기본값이 자동(`0`)이다.** 신규 설치·INI 키 누락·파싱 실패는 모두 자동으로 시작한다. 단 `CutCount=6`이 **이미 기록된 기존 INI**는 그 명시값이 우선이므로 여전히 6컷이다(6은 유효한 사용자 선택과 구분할 수 없어 자동 마이그레이션하지 않는다) — 자동으로 되돌리려면 설정 화면에서 "자동"을 고르거나 INI의 `CutCount` 줄을 지운다.
 - 자동(`CutCount=0`): `실제 = max(6, 슬롯 수 + 2)` — 슬롯보다 2장 여유를 확보해 컷 선택의 여지를 남긴다.
 - 고정(`6`/`8`/`10`): `실제 = max(설정값, 슬롯 수)` — 종전 동작 그대로("컷 수 ≥ 슬롯 수" 불변).
 - 슬롯 1~4개에서는 최소 6이 이미 +2를 초과하므로 자동과 고정 6이 같다. 실질 차이는 **슬롯 5개(→7컷)·6개(→8컷)** 에서만 발생한다.
