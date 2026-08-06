@@ -75,6 +75,121 @@ public class FiltersTests
         Assert.True(MeanBrightness(dst) >= MeanBrightness(src), "뷰티 필터의 톤 보정으로 밝기가 낮아지지 않아야 함");
     }
 
+    // ── 뷰티 개선: 피부 영역만 스무딩 + 톤업·채도 (효과가 눈에 보이는 수준인지 수치로 고정) ──
+
+    /// <summary>왼쪽 절반 = 피부톤(YCrCb 범위 안), 오른쪽 절반 = 청록(범위 밖). 양쪽에 같은 격자 노이즈.</summary>
+    private static Mat MakeSkinAndNonSkin()
+    {
+        const int size = 160;
+        var m = new Mat(size, size, MatType.CV_8UC3);
+        var idx = m.GetGenericIndexer<Vec3b>();
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                // 체커 노이즈(±28) — 스무딩이 걸리면 표준편차가 내려간다.
+                int n = ((x / 2 + y / 2) % 2 == 0) ? 28 : -28;
+                Vec3b p = x < size / 2
+                    ? new Vec3b(Clamp(140 + n), Clamp(170 + n), Clamp(210 + n))   // 피부톤 BGR
+                    : new Vec3b(Clamp(200 + n), Clamp(180 + n), Clamp(60 + n));   // 비피부(청록)
+                idx[y, x] = p;
+            }
+        return m;
+    }
+
+    private static byte Clamp(int v) => (byte)Math.Clamp(v, 0, 255);
+
+    /// <summary>ROI의 그레이 표준편차(디테일·노이즈 양의 지표).</summary>
+    private static double StdDevIn(Mat bgr, Rect roi)
+    {
+        using var sub = new Mat(bgr, roi);
+        using var gray = new Mat();
+        Cv2.CvtColor(sub, gray, ColorConversionCodes.BGR2GRAY);
+        Cv2.MeanStdDev(gray, out _, out Scalar sd);
+        return sd.Val0;
+    }
+
+    [Fact]
+    public void Beauty_Smooths_Skin_But_Keeps_NonSkin_Detail()
+    {
+        using var src = MakeSkinAndNonSkin();
+        using var dst = Filters.Apply(src, FilterKind.Beauty);
+
+        // 마스크 소프트 에지가 경계를 넘지 않도록 각 영역 안쪽만 측정.
+        var skinRoi = new Rect(10, 10, 60, 140);
+        var otherRoi = new Rect(90, 10, 60, 140);
+
+        double skinBefore = StdDevIn(src, skinRoi), skinAfter = StdDevIn(dst, skinRoi);
+        double otherBefore = StdDevIn(src, otherRoi), otherAfter = StdDevIn(dst, otherRoi);
+
+        // 피부 영역은 확실히 매끄러워진다(종전 구현은 이 감소폭이 미미해 "구분이 안 된다"는 평가를 받았다).
+        Assert.True(skinAfter < skinBefore * 0.5,
+            $"피부 영역 스무딩 부족: {skinBefore:F1} → {skinAfter:F1}");
+
+        // 비피부(배경·머리카락에 해당)는 피부만큼 뭉개지지 않는다 — 마스크가 실제로 작동하는지의 증거.
+        double skinDrop = 1 - skinAfter / skinBefore;
+        double otherDrop = 1 - otherAfter / otherBefore;
+        Assert.True(skinDrop > otherDrop,
+            $"피부 감소율({skinDrop:P0})이 비피부({otherDrop:P0})보다 커야 마스크가 작동하는 것");
+    }
+
+    [Fact]
+    public void Beauty_Tones_Up_Skin_Region()
+    {
+        using var src = MakeSkinAndNonSkin();
+        using var dst = Filters.Apply(src, FilterKind.Beauty);
+
+        var skinRoi = new Rect(10, 10, 60, 140);
+        using var before = new Mat(src, skinRoi);
+        using var after = new Mat(dst, skinRoi);
+
+        // 감마 톤업(0.88)이 중간톤을 올린다 → 피부가 밝아진다.
+        Assert.True(MeanBrightness(after) > MeanBrightness(before) + 2,
+            $"톤업 부족: {MeanBrightness(before):F1} → {MeanBrightness(after):F1}");
+    }
+
+    [Fact]
+    public void Beauty_Is_Distinguishable_From_Brightness_And_Grayscale()
+    {
+        // 세 필터가 서로 충분히 다른 결과를 내야 사용자가 구분할 수 있다(요청의 핵심).
+        using var src = MakeSkinAndNonSkin();
+        using var beauty = Filters.Apply(src, FilterKind.Beauty);
+        using var bright = Filters.Apply(src, FilterKind.Brightness);
+        using var gray = Filters.Apply(src, FilterKind.Grayscale);
+
+        Assert.True(MeanAbsDiff(beauty, bright) > 5, "뷰티와 밝게가 사실상 같은 결과다");
+        Assert.True(MeanAbsDiff(beauty, gray) > 5, "뷰티와 흑백이 사실상 같은 결과다");
+    }
+
+    private static double MeanAbsDiff(Mat a, Mat b)
+    {
+        using var diff = new Mat();
+        Cv2.Absdiff(a, b, diff);
+        return Cv2.Mean(diff).Val0;
+    }
+
+    [Fact]
+    public void Beauty_Handles_Tiny_Images_Without_Throwing()
+    {
+        // 커널·다운스케일이 해상도 비례라 1px 이미지에서도 커널 크기 규칙(홀수·최소 3)이 깨지지 않아야 한다.
+        foreach (int size in new[] { 1, 2, 3, 7 })
+        {
+            using var tiny = new Mat(size, size, MatType.CV_8UC3, new Scalar(140, 170, 210));
+            using var dst = Filters.Apply(tiny, FilterKind.Beauty);
+            Assert.Equal(size, dst.Width);
+            Assert.Equal(size, dst.Height);
+            Assert.Equal(MatType.CV_8UC3, dst.Type());
+        }
+    }
+
+    [Fact]
+    public void Beauty_Preserves_Size_And_Type()
+    {
+        using var src = MakeSkinAndNonSkin();
+        using var dst = Filters.Apply(src, FilterKind.Beauty);
+        Assert.Equal(src.Size(), dst.Size());
+        Assert.Equal(MatType.CV_8UC3, dst.Type());   // 합성이 BGR 3채널을 전제한다
+    }
+
     // ── A6: 설정 → 노출 필터 목록(항상 None + 켜진 것) ──
 
     [Fact]
