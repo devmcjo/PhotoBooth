@@ -5,6 +5,8 @@ import type { CameraPermission } from "@adapters/camera/cameraPermission";
 import type {
   CameraSettings,
   CameraState,
+  FrameProcessorMode,
+  PreviewMode,
   ProcessedSize,
 } from "@adapters/camera/cameraTypes";
 import { displayLabel, type CameraDevice } from "@adapters/camera/deviceEnumerator";
@@ -70,6 +72,12 @@ export interface DiagnosticsDeps {
   readonly cameraPermission: () => Promise<CameraPermission>;
   /** 마지막 카메라 실패 사유. 실패한 적이 없으면 `null`. */
   readonly cameraFailureReason: () => CameraFailureReason | null;
+  /** 가공 경로. 카메라가 닫혀 있으면 `null`(04 §2.3.1 "저성능 모드" 표시). */
+  readonly pipelineMode: () => FrameProcessorMode | null;
+  /** 프리뷰 연결 방식. `none`이면 화면이 검다. */
+  readonly previewMode: () => PreviewMode;
+  /** 실제로 열린 제약 사다리 칸. 닫혀 있으면 `null`. */
+  readonly constraintStep: () => string | null;
   /** 마지막 로그인 실패 흔적(메모리 전용). 없으면 `null`. */
   readonly lastLoginFailure: () => { reason: LoginFailureReason; at: number } | null;
   /** `null`이면 아직 촬영이 없어 판정 전이다. */
@@ -120,8 +128,46 @@ const CAMERA_FAILURE_LABEL: Readonly<Record<CameraFailureReason, string>> = {
   noDevice: "장치 없음",
   inUse: "사용 중",
   insecureContext: "보안 연결 아님",
+  pipelineStalled: "영상 표시 실패(가공 정체)",
   unknown: "알 수 없음",
 };
+
+/**
+ * 가공 경로 행 — 04 §2.3.1이 요구한 **"저성능 모드 표시"**.
+ * 메인 스레드 경로는 성능 예산을 보장하지 않으므로 `warn`이다(실패는 아니다).
+ */
+function pipelineModeRow(mode: FrameProcessorMode | null): DiagnosticsRow {
+  if (mode === null) {
+    return { label: STRINGS.diagnostics.pipelineMode, value: UNKNOWN, tone: "neutral" };
+  }
+  return mode === "worker"
+    ? {
+        label: STRINGS.diagnostics.pipelineMode,
+        value: STRINGS.diagnostics.pipelineModeWorker,
+        tone: "ok",
+      }
+    : {
+        label: STRINGS.diagnostics.pipelineMode,
+        value: STRINGS.diagnostics.pipelineModeMain,
+        tone: "warn",
+      };
+}
+
+const PREVIEW_MODE_LABEL: Readonly<Record<PreviewMode, string>> = {
+  transferred: STRINGS.diagnostics.previewModeTransferred,
+  bitmap: STRINGS.diagnostics.previewModeBitmap,
+  direct: STRINGS.diagnostics.previewModeDirect,
+  none: STRINGS.diagnostics.previewModeNone,
+};
+
+/** `none`은 **화면이 검다**는 뜻이므로 `bad`다 — 카메라가 Ready여도 그렇다. */
+function previewModeRow(mode: PreviewMode): DiagnosticsRow {
+  return {
+    label: STRINGS.diagnostics.previewMode,
+    value: PREVIEW_MODE_LABEL[mode],
+    tone: mode === "none" ? "bad" : mode === "transferred" ? "ok" : "warn",
+  };
+}
 
 function failureReasonRow(reason: CameraFailureReason | null): DiagnosticsRow {
   if (reason === null) {
@@ -172,6 +218,14 @@ function buildCameraSection(
       neutral(STRINGS.diagnostics.cameraFps, deps.cameraFps().toFixed(1)),
       permissionText(permission),
       failureReasonRow(safeSync(deps.cameraFailureReason, null)),
+      // ↓ 2026-08-06 신설 3행. 이것이 없어서 "카메라가 안 열리는지 / 화면만 검은지"를
+      //   현장에서 구분할 수 없었다(04 §2.3.1 · 10 §6.2).
+      pipelineModeRow(safeSync(deps.pipelineMode, null)),
+      previewModeRow(safeSync(deps.previewMode, "none" as PreviewMode)),
+      neutral(
+        STRINGS.diagnostics.cameraConstraintStep,
+        safeSync(deps.constraintStep, null) ?? UNKNOWN,
+      ),
     ],
   };
 }

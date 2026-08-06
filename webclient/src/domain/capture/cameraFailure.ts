@@ -16,6 +16,16 @@ export type CameraFailureReason =
   | "inUse"
   /** `isSecureContext === false` — http로 열었다. 현장에서 실제로 발생하는 오구성이다. */
   | "insecureContext"
+  /**
+   * **스트림은 열렸는데 가공 프레임이 한 장도 오지 않았다**(2026-08-06 신설).
+   *
+   * `getUserMedia` 예외가 아니라 파이프라인 내부 정체이므로 `classifyCameraFailure`가 만들지
+   * 않는다 — 카메라 서비스가 Ready 타임아웃에서 직접 확정한다.
+   *
+   * 이 사유가 없던 동안 프레임 루프 정체는 전부 `unknown`으로 뭉개졌고, 현장에서 "권한 문제인지
+   * 브라우저 능력 문제인지" 구분할 방법이 없었다. 진단의 [가공 경로] 행과 짝을 이룬다.
+   */
+  | "pipelineStalled"
   /** 그 외 전부. 기존 한 문구를 그대로 재사용한다. */
   | "unknown";
 
@@ -62,6 +72,7 @@ const MESSAGE_KEY_BY_REASON: Readonly<Record<CameraFailureReason, CameraFailureM
   noDevice: "noDevice",
   inUse: "inUse",
   insecureContext: "insecureContext",
+  pipelineStalled: "pipelineStalled",
   unknown: "unknown",
 };
 
@@ -80,6 +91,8 @@ const RETRYABLE_BY_REASON: Readonly<Record<CameraFailureReason, boolean>> = {
   insecureContext: false,
   noDevice: true,
   inUse: true,
+  // 정체는 일시적일 수 있다(첫 프레임이 늦는 기기). 다시 누르면 폴백 경로까지 재시도한다.
+  pipelineStalled: true,
   unknown: true,
 };
 

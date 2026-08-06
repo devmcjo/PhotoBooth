@@ -219,6 +219,13 @@ export const STRINGS = {
       noDevice: "사용할 수 있는 카메라를 찾지 못했습니다. 연결을 확인해 주세요.",
       inUse: "카메라를 다른 앱이 사용 중입니다. 그 앱을 닫고 다시 시도해 주세요.",
       insecureContext: "보안 연결(https)에서만 카메라를 사용할 수 있습니다.",
+      /**
+       * 정체 — 권한·장치는 멀쩡하고 **화면에 그릴 단계에서 막혔다**. 손님이 할 수 있는 조치가
+       * 실제로 있으므로(다시 시도 · 다른 브라우저) 그것만 말한다. 원인 진단은 진단 모달의
+       * [가공 경로]·[프리뷰 경로] 행이 담당한다.
+       */
+      pipelineStalled:
+        "카메라 영상을 표시하지 못했습니다. 다시 시도하거나 다른 브라우저에서 열어 주세요.",
       unknown: "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요.",
     },
     retry: "다시 시도",
@@ -478,6 +485,22 @@ export const STRINGS = {
     processedSize: "가공 해상도",
     cameraFps: "fps",
     cameraFailureReason: "실패 사유",
+    /**
+     * 가공·프리뷰 경로 2행 — 04 §2.3.1이 요구한 **"저성능 모드 표시"** 의 실물이다(2026-08-06).
+     *
+     * 이 두 행이 없던 동안, `OffscreenCanvas`가 없는 기기에서 카메라가 안 열리는지 프리뷰만
+     * 안 보이는지 현장에서 구분할 수 없었다. 값 문자열만으로 판독되게 쓴다(01 §8).
+     */
+    pipelineMode: "가공 경로",
+    pipelineModeWorker: "Worker",
+    pipelineModeMain: "메인 스레드(저성능)",
+    previewMode: "프리뷰 경로",
+    previewModeTransferred: "캔버스 이관(zero-copy)",
+    previewModeBitmap: "비트맵 전송(폴백)",
+    previewModeDirect: "직접 렌더",
+    previewModeNone: "미연결",
+    /** 실제로 열린 제약 사다리 칸(04 §2.1). 요청 해상도가 왜 낮은지 설명해 준다. */
+    cameraConstraintStep: "적용된 제약",
 
     encoderPath: "경로",
     encoderCodec: "코덱",

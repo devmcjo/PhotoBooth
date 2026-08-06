@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCameraService } from "@adapters/camera/cameraService";
-import { listCameras, displayLabel, type CameraDevice } from "@adapters/camera/deviceEnumerator";
+import {
+  listCameras,
+  displayLabel,
+  resolveStartDeviceId,
+  type CameraDevice,
+} from "@adapters/camera/deviceEnumerator";
 import { useSettingsStore } from "@shell/settingsStore";
 import { shellStore } from "@shell/shellStore";
 import { Button, Modal } from "@ui/components";
@@ -26,6 +31,16 @@ export function CameraTestModal() {
   /** StrictMode의 이중 마운트에서 카메라를 두 번 열지 않게 한다. */
   const openedRef = useRef(false);
 
+  /** WC3 폴백 매칭 입력(3개 키를 한 객체로). 실촬영과 **같은 해석**을 쓴다. */
+  const storedRef = useMemo(
+    () => ({
+      deviceId: values.CameraDevice,
+      label: webExtras.CameraDeviceLabel,
+      groupId: webExtras.CameraDeviceGroupId,
+    }),
+    [values.CameraDevice, webExtras.CameraDeviceLabel, webExtras.CameraDeviceGroupId],
+  );
+
   const showFlash = useCallback((durationMs: number): Promise<void> => {
     setFlashing(true);
     return new Promise<void>((resolve) => {
@@ -39,18 +54,20 @@ export function CameraTestModal() {
   useEffect(() => {
     let cancelled = false;
 
+    // ⚠️ 열거 **뒤에** 연다. 저장된 deviceId를 그대로 쓰면 WC3 폴백이 돌지 않아 실촬영과
+    //    다른 장치가 열릴 수 있고, 그러면 "동일 재현"이라는 이 모달의 목적이 무너진다.
     void listCameras().then((found) => {
-      if (!cancelled) setDevices(found);
-    });
-
-    if (!openedRef.current) {
+      if (cancelled) return;
+      setDevices(found);
+      if (openedRef.current) return;
       openedRef.current = true;
       void presenter.open({
-        deviceId: values.CameraDevice.length > 0 ? values.CameraDevice : null,
+        deviceId: resolveStartDeviceId(found, storedRef).deviceId,
+        facing: webExtras.CameraFacing,
         mirror: values.MirrorMode,
         flash: values.FlashMode,
       });
-    }
+    });
 
     return () => {
       cancelled = true;
@@ -58,7 +75,7 @@ export function CameraTestModal() {
       presenter.close();
       openedRef.current = false;
     };
-  }, [presenter, values.CameraDevice, values.MirrorMode, values.FlashMode]);
+  }, [presenter, storedRef, values.MirrorMode, values.FlashMode, webExtras.CameraFacing]);
 
   async function onShutter(): Promise<void> {
     const ok = await presenter.shoot(showFlash);
@@ -70,6 +87,7 @@ export function CameraTestModal() {
     setNotice(null);
     await presenter.open({
       deviceId,
+      facing: webExtras.CameraFacing,
       mirror: values.MirrorMode,
       flash: values.FlashMode,
     });
@@ -99,7 +117,9 @@ export function CameraTestModal() {
           // 장치 부재·점유 실패는 조건이 바뀌면 성공할 수 있다 → 같은 인자로 다시 연다.
           onRetry={() =>
             void presenter.open({
-              deviceId: values.CameraDevice.length > 0 ? values.CameraDevice : null,
+              // 재시도도 같은 해석을 탄다 — 장치가 그새 바뀌었으면 폴백이 다시 건져낸다.
+              deviceId: resolveStartDeviceId(devices, storedRef).deviceId,
+              facing: webExtras.CameraFacing,
               mirror: values.MirrorMode,
               flash: values.FlashMode,
             })

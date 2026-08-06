@@ -12,6 +12,7 @@ import type {
   FramePayload,
   FrameProcessor,
   FrameSource,
+  PreviewMode,
   ProcessedSize,
   SpoolFrame,
   SpoolOptions,
@@ -99,12 +100,16 @@ class FakeFrameSource implements FrameSource {
 }
 
 class FakeProcessor implements FrameProcessor {
+  readonly mode = "worker" as const;
   configured: { targetAspect: number; mirror: boolean }[] = [];
   terminated = false;
   stillRequests = 0;
   stillResult: Blob | null = new Blob(["x"]);
   processedCount = 0;
   boundPreview = false;
+  /** `bindPreview`가 돌려줄 값. 프리뷰 연결 실패를 흉내내려면 false로 둔다. */
+  bindPreviewResult = true;
+  previewModeValue: PreviewMode = "none";
   spoolConfigs: SpoolOptions[] = [];
   private listeners = new Set<(size: ProcessedSize) => void>();
   private spoolListeners = new Set<(frame: SpoolFrame) => void>();
@@ -126,8 +131,13 @@ class FakeProcessor implements FrameProcessor {
     this.stillRequests++;
     return this.stillResult;
   }
-  bindPreview(): void {
+  bindPreview(): boolean {
     this.boundPreview = true;
+    this.previewModeValue = this.bindPreviewResult ? "transferred" : "none";
+    return this.bindPreviewResult;
+  }
+  previewMode(): PreviewMode {
+    return this.previewModeValue;
   }
   configureSpool(options: SpoolOptions): void {
     this.spoolConfigs.push(options);
