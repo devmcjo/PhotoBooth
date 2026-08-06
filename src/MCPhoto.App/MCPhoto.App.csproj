@@ -71,6 +71,46 @@
     <Message Importance="high" Text="ffmpeg 번들 복사 완료 → $(PublishDir)tools\ffmpeg\ffmpeg.exe" />
   </Target>
 
+  <!-- ══════════ 오픈소스 라이선스 고지(licenses/) ══════════
+       GPLv3 바이너리(ffmpeg.exe)를 재배포하므로 라이선스 전문·저작권 고지·대응 소스 안내를
+       배포물에 반드시 동봉해야 한다(GPLv3 §4·§6). 누락은 라이선스 위반이다.
+       설계: docs/design/wpf-ffmpeg-licensing-and-distribution-design.md §5.1 -->
+  <PropertyGroup>
+    <LicensesSource>$(MSBuildProjectDirectory)\..\..\licenses</LicensesSource>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <McPhotoLicenseFile>$(MSBuildProjectDirectory)\..\..\LICENSE</McPhotoLicenseFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(LicensesSource)\**\*.*"
+          Link="licenses\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+    <!-- MC포토 본체(MIT) 전문도 함께 실어야 licenses/README.txt의 안내가 참이 된다.
+         원본은 리포 루트 LICENSE 하나 — 사본을 만들지 않고 링크 복사로 단일 소스를 유지한다. -->
+    <None Include="$(McPhotoLicenseFile)"
+          Condition="Exists('$(McPhotoLicenseFile)')"
+          Link="licenses\MCPhoto-LICENSE-MIT.txt"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- publish 산출물에도 확실히 포함(인스톨러가 publish 폴더 전체를 담는다).
+       ffmpeg와 같은 이유로 명시 복사한다 — 라이선스 누락은 법적 문제라 이중 안전을 둔다. -->
+  <Target Name="CopyLicensesToPublish" AfterTargets="Publish" Condition="Exists('$(LicensesSource)')">
+    <ItemGroup>
+      <LicenseFiles Include="$(LicensesSource)\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(LicenseFiles)"
+          DestinationFiles="@(LicenseFiles->'$(PublishDir)licenses\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(McPhotoLicenseFile)"
+          DestinationFiles="$(PublishDir)licenses\MCPhoto-LICENSE-MIT.txt"
+          Condition="Exists('$(McPhotoLicenseFile)')"
+          SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="라이선스 고지 복사 완료 → $(PublishDir)licenses\" />
+  </Target>
+
   <!-- 번들 기본 프레임(Frame/): 출력 Frame/으로 복사(§9 #11 우선순위 ②) -->
   <ItemGroup>
     <None Include="$(MSBuildProjectDirectory)\..\..\Frame\**\*.*"

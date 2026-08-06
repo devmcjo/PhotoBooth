@@ -31,6 +31,8 @@
 | **웹 클라이언트에서 로그인이 안 된다 / 전체화면·카메라 권한 동작을 바꾼다** | [web-fix 2026-08-01 로그인·전체화면·카메라](./web-fix-20260801-login-fullscreen-camera.md) → [`web-client/07`](../web-client/07-auth-and-permissions-web.md)·[`02 §7`](../web-client/02-app-shell-and-navigation.md)·[`09 §3`](../web-client/09-kiosk-operations.md) + [`analysis/31 §4.2`](../analysis/31-backend-api-reference.md) |
 | **웹 클라이언트의 색·타이포·간격을 Windows 앱과 맞춘다** | [web-fix 2026-08-01 Windows 디자인 정합](./web-fix-20260801-windows-visual-parity.md) — **진실원은 `src/MCPhoto.App/Themes/*.xaml`** . WPF↔CSS 1:1 대조표가 검증 수단이다 |
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
+| **ffmpeg를 빼거나 바꾼다 / 배포물 용량·라이선스를 다룬다** | [ffmpeg 라이선스·배포 설계](./wpf-ffmpeg-licensing-and-distribution-design.md) — GPLv3 준수 이행은 **완료(§10)**. ⚠️ **ffmpeg를 계속 번들하는 한 `licenses/`를 지우면 라이선스 위반**이다. 용량(97MB)을 줄이려면 §5.2(LGPL+`h264_mf`)·§5.3(MF 직접 호출)을 볼 것 — 커스텀 최소 빌드(§3.3)는 **의무를 늘리므로 금지** |
+| 메인 화면·상단바·아이콘·창 크기를 바꾼다 | [it21 메인 시각 리디자인](./wpf-it21-main-visual-redesign-design.md) — 벡터 아이콘 시스템(`Themes/Icons.xaml`)·상단바 배치·창모드 하한 800×600 |
 
 ---
 

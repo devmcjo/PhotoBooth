@@ -48,6 +48,8 @@ internal static class ServiceRegistration
 
         // it11 #14: 진단·상태 모달(관리자 트러블슈팅). 로그 폴더 서비스 + 다이얼로그 서비스.
         services.AddSingleton<ILogFolderService, LogFolderService>();
+        // 오픈소스 라이선스 고지 폴더(설치 폴더의 licenses/). GPLv3 재배포 의무 이행용. (it22 §5.1)
+        services.AddSingleton<ILicenseFolderService, LicenseFolderService>();
         services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();
         // 진단 카드의 개발자 메일 주소 복사(best-effort — 실패해도 예외 없음).
         services.AddSingleton<IClipboardService, ClipboardService>();

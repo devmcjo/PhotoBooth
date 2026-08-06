@@ -1,11 +1,18 @@
-# ffmpeg 라이선스 준수 & 배포 형태 설계 (검토 문서 — 미착수)
+# ffmpeg 라이선스 준수 & 배포 형태 설계
 
-> 프로젝트 루트: `C:\STUDY\PROJECT\PhotoBooth`
-> 선행 커밋: `139a563` (chore: 빌드 버전 변경 — ver 1.1.10)
 > 입력: 사용자 질의(§0.1 원문), 현행 코드 전수 확인(§1), 번들 바이너리 실측(§1.3), 배포처 공개 정보(§8)
-> **상태: 검토·기록 전용. 어떤 방안도 착수하지 않았다.** 사용자 지시로 문서만 남긴다(2026-07-31).
-> 산출물 소비자: 추후 착수 시 `wpf-architect`가 이 문서의 §5에서 선택된 경로를 상세 설계로 전개한다.
-> 이 문서는 **기존 문서를 수정하지 않는다.** 관련 항목의 갱신은 착수 시점에 §9의 목록대로 수행한다.
+> 작성: 2026-07-31 (검토·기록 전용) → **경로 1 착수·완료: 2026-08-06**
+>
+> ## 상태
+>
+> | 경로 | 상태 |
+> |------|------|
+> | **경로 1 — 준수 이행**(§5.1) | ✅ **완료(2026-08-06)**. 구현 결과·검증은 **§10** 참조. **P2(라이선스 위반 상태) 해소됨** |
+> | 경로 2 — LGPL 빌드 + `h264_mf`(§5.2) | ⏸ 미착수. UV-1 게이트(§7)부터. **현행 GPL 번들에 `h264_mf`가 있음은 재확인**(§10.4) |
+> | 경로 3 — MF 직접 호출(§5.3) | ⏸ 미착수 |
+> | 방안 A — 임베드(§3.1) | ⏸ 미착수(P1 전용, 라이선스와 무관) |
+>
+> 경로 2·3은 **P1(97MB 동반)** 만 남은 문제이며 법적 압박이 없다 — 일정에 맞춰 결정하면 된다(§4.2).
 
 ---
 
@@ -342,9 +349,7 @@ IVideoTranscoder   ← FfmpegTranscoder    | MediaFoundationTranscoder
 
 ---
 
-## §9 착수 시 갱신할 기존 문서 (지금은 **수정하지 않았다**)
-
-이 문서는 신규 작성만 했다. 실제 착수 시 아래를 함께 갱신한다.
+## §9 착수 시 갱신할 기존 문서
 
 | 문서 | 갱신 내용 |
 |------|-----------|
@@ -355,3 +360,88 @@ IVideoTranscoder   ← FfmpegTranscoder    | MediaFoundationTranscoder
 | [`docs/analysis/14-media-pipeline-spec.md`](../analysis/14-media-pipeline-spec.md) | 경로 2·3 채택 시 인코더 규격(플랫폼 중립 서술) 갱신 |
 | [`docs/analysis/70-logging-and-troubleshooting.md`](../analysis/70-logging-and-troubleshooting.md) | `:145-151` ffmpeg 탐색·실패 로그 표 — 경로 3 채택 시 갱신 |
 | [`docs/web-client/04-media-pipeline-web.md`](../web-client/04-media-pipeline-web.md) | 웹은 이미 브라우저 인코딩(WebCodecs)이라 **영향 없음**. 참고만 |
+
+---
+
+## §10 경로 1 구현 결과 (2026-08-06 완료)
+
+§5.1의 Step 1-1~1-6을 구현했다. **코드 로직은 한 줄도 바꾸지 않았다** — 인코더·파이프라인·탐색 순서 모두 그대로다.
+
+### 10.1 산출물
+
+| 파일 | 내용 | 의무 |
+|------|------|------|
+| `licenses/FFmpeg-COPYING.GPLv3.txt` | GPLv3 전문(gnu.org 원문 674줄, 무가공) | O1 |
+| `licenses/FFmpeg-README.txt` | 버전·**저작권 표시**·**configuration 문자열 전문(실측)**·소스 URL 2곳·**3년 서면 오퍼**·무수정 재배포 명시·추가제약 없음 명시·상표 고지 | O2·O3·O4·O5 |
+| `licenses/README.txt` | 고지 인덱스. MC포토 본체는 MIT임을 명시, 재배포 대상과 아닌 것을 구분 | O2 |
+| `licenses/MCPhoto-LICENSE-MIT.txt` | MC포토 본체 MIT 전문. **물리 사본이 아니라 리포 루트 `LICENSE`를 csproj가 링크 복사**한다(단일 소스 유지) | — |
+
+configuration 문자열은 문서 작성 시점의 §1.3 발췌가 아니라 **번들 바이너리에서 직접 뽑았다**(`ffmpeg -version`). 실측 결과 §1.3에 없던 항목이 다수 있었다(`--disable-w32threads`, `--enable-cairo`, `--enable-libvmaf`, `--enable-libzimg`, `--enable-libopenmpt` 등) — 대응 소스 범위를 좁게 적으면 O3 이행이 불완전해지므로 전문을 그대로 실었다.
+
+### 10.2 배포 경로 배선
+
+| 대상 | 변경 |
+|------|------|
+| `src/MCPhoto.App/MCPhoto.App.csproj` | `LicensesSource` 프로퍼티 + `None`(빌드 출력 복사) + **`CopyLicensesToPublish` 타겟**(publish 산출물 복사). ffmpeg와 같은 이중 안전 — 라이선스 누락은 법적 문제다 |
+| `installer/MCPhoto.iss` | **변경 없음.** `[Files]`가 `{#PublishDir}\*`를 `recursesubdirs`로 담으므로 publish에만 들어가면 인스톨러는 자동 포함이다(§5.1 Step 1-4는 불필요했다) |
+
+**실측 검증**: `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true` 실행 결과 `licenses/` 3개 파일과 `tools/ffmpeg/ffmpeg.exe`가 모두 산출물에 존재함을 확인했다.
+
+### 10.3 앱 내 고지 (Step 1-6)
+
+진단·상태 창(설정 → 고급)에 **"오픈소스 라이선스" 카드**를 신설했다. 로그 카드와 개발자 문의 카드 사이에 둔다.
+
+- 안내 문구(FFmpeg=GPLv3 사용 / MC포토 본체=MIT) + **라이선스 폴더 절대 경로**(읽기 전용 TextBox — 열기가 실패해도 수동 탐색 가능) + **[라이선스 폴더 열기]** 버튼.
+- **누락 경고**: 폴더가 없으면 = 고지 없이 배포된 것이므로 경고 배너를 띄우고 버튼을 비활성한다. 배포 사고를 현장에서 잡는 마지막 그물이다.
+- 신규 `ILicenseFolderService` / `LicenseFolderService`(`Services/`). `LogFolderService`와 같은 패턴(opener 주입 가능 → 테스트가 explorer를 실제로 띄우지 않는다)이되 **한 가지가 다르다**: 폴더가 없을 때 **생성하지 않는다.** 빈 폴더를 만들어 열면 누락 사실을 은폐하기 때문이다.
+- `DiagnosticsViewModel`에 `LicenseFolderPath` / `HasLicenseFolder` / `IsLicenseFolderMissing` / `OpenLicenseFolderCommand` 추가(생성자에 서비스 1개 주입).
+
+### 10.4 UV-1 부분 진전
+
+경로 2의 게이트인 UV-1(BtbN **LGPL** 빌드의 `h264_mf` 포함 여부)은 **여전히 미검증**이다(zip을 받지 않았다). 다만 **현행 GPL 번들에는 `h264_mf`가 실재함을 재확인**했다(VF-19 확정).
+
+```
+$ ffmpeg -hide_banner -encoders | grep h264
+ V....D libx264 / libx264rgb / h264_amf / h264_d3d12va
+ V....D h264_mf        H264 via MediaFoundation (codec h264)   ← VF-19 확인
+ V....D h264_nvenc / h264_qsv / h264_vaapi
+```
+
+즉 **인코더 교체(2-1·2-2)는 지금 번들 그대로 선행 실험이 가능하다** — LGPL zip 없이도 `-c:v h264_mf`로 화질·속도 A/B(UV-3·UV-4)를 먼저 끝낼 수 있다. 경로 2에 착수한다면 이 순서가 위험이 낮다(바이너리 교체는 A/B 통과 후에).
+
+### 10.5 회귀 방지
+
+`tests/MCPhoto.Tests/LicenseComplianceTests.cs` 신설(9건). 고지 파일은 코드가 아니라서 파일 정리 중 조용히 사라지기 쉽다 — 그때 **테스트가 실패하도록** 고정했다.
+
+| 테스트 | 고정하는 것 |
+|--------|-------------|
+| `GplV3_Full_Text_Is_Bundled` | 전문 존재 + 조항 표제 + 600줄 초과(요약본 교체 방지) |
+| `Ffmpeg_Notice_Has_Version_Config_Source_And_Written_Offer` | 버전·`--enable-gpl`·소스 URL 2곳·3년 오퍼·연락처·추가제약 없음 문구 |
+| `License_Index_Lists_Ffmpeg_And_Keeps_Mcphoto_Mit` | 인덱스가 FFmpeg/GPL/MIT를 모두 언급 |
+| `Csproj_Copies_Licenses_To_Output_And_Publish` | 배포 배선(빌드 출력 + publish 타겟) |
+| **`If_Ffmpeg_Is_Bundled_Then_Notice_Must_Exist`** | **번들과 고지의 연결** — ffmpeg 복사 규칙이 살아 있으면 고지 3종이 반드시 있어야 한다. 경로 3으로 ffmpeg를 빼면 이 검사는 스스로 무효화된다 |
+| `Mcphoto_Mit_License_Is_Shipped_Into_Licenses_Folder` | 루트 `LICENSE` 존재 + csproj 링크 복사 배선 + **`licenses/`에 물리 사본을 두지 않음**(두 곳 관리 방지) |
+| `Service_*` 3건 | 경로 산출 / 존재 시 열기 / **없을 때 생성도 열기도 하지 않음** |
+
+`DiagnosticsViewModelTests`에 VM 배선 4건 추가(경로 노출·커맨드 위임·누락 플래그 반전 2케이스).
+
+**전체 테스트 971건 통과 / 실패 0** (직전 베이스라인 958 + 신규 13). 빌드 오류 0, 경고 증가 0.
+
+### 10.5.1 리뷰에서 잡은 결함 2건 (구현 직후 수정)
+
+테스트가 다 통과한 뒤 산출물을 직접 열어보고 찾은 것들이다. **둘 다 "문서가 거짓말을 하는" 유형**이라 자동 검증으로는 드러나지 않았다.
+
+| # | 결함 | 조치 |
+|---|------|------|
+| D-1 | `licenses/README.txt`가 "설치 폴더의 LICENSE 파일 참조"라고 안내하는데 **MIT 전문이 배포물에 없었다**(csproj에 복사 규칙 부재). 안내가 거짓이었다 | 루트 `LICENSE`를 `licenses/MCPhoto-LICENSE-MIT.txt`로 링크 복사(빌드·publish 양쪽) + 인덱스 문안 정정 + 테스트 추가 |
+| D-2 | **FFmpeg 저작권 표시가 없었다.** 버전·라이선스만 적었는데 GPLv3 §4는 저작권 고지 **유지**를 요구한다 | `Copyright (c) 2000-2026 the FFmpeg developers` + 정적 링크 라이브러리들의 저작권 소재 문단 추가 + 테스트로 고정 |
+
+### 10.6 남은 작업 (사용자 액션 필요)
+
+| # | 항목 | 왜 코드로 못 하나 |
+|---|------|-------------------|
+| **U-1** | §5.1 Step 1-3 **소스 미러링** — 자사 서버에 ffmpeg 8.1.2 소스 사본을 올리고 그 URL을 `FFmpeg-README.txt` 3항에 추가 | 인프라 결정·호스팅 필요(UV-7). 현재는 제3자(gyan.dev·ffmpeg.org)를 가리키고 있고 이는 §6(d)로 허용되지만, **바이너리를 배포하는 동안 그 링크가 살아 있어야 한다**는 조건이 제3자에 걸려 있다 |
+| **U-2** | UV-6 확인 — **USB·현장 설치 동선이 있는지** | 운영 사실 확인. 있으면 §6(a)/(b)가 적용되는데, 서면 오퍼(4항)를 이미 넣어 두어 **현재 문안으로도 충족**된다 |
+| **U-3** | 실기 확인 — 인스톨러로 클린 PC 설치 후 `licenses/` 존재 및 진단 창 카드 동작 | 실제 설치 환경 필요 |
+
+U-1이 없어도 **현재 상태는 준수 상태**다(제3자 소스 링크 + 3년 서면 오퍼). U-1은 제3자 링크가 끊길 위험에 대한 자체 보험이다.

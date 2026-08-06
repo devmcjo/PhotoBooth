@@ -94,6 +94,19 @@ public class DiagnosticsViewModelTests
         public void OpenLogFolder() => OpenCount++;
     }
 
+    private sealed class FakeLicenseFolderService : ILicenseFolderService
+    {
+        public FakeLicenseFolderService(string path, bool exists = true)
+        {
+            LicenseFolderPath = path;
+            Exists = exists;
+        }
+        public string LicenseFolderPath { get; }
+        public bool Exists { get; }
+        public int OpenCount { get; private set; }
+        public void OpenLicenseFolder() => OpenCount++;
+    }
+
     private static DiagnosticsViewModel MakeVm(
         ICameraService? camera = null,
         FfmpegRunner? ffmpeg = null,
@@ -103,7 +116,8 @@ public class DiagnosticsViewModelTests
         User? loginUser = null,
         IBuildInfoService? buildInfo = null,
         IServerDeployInfoService? serverDeploy = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        ILicenseFolderService? licenseFolder = null)
     {
         camera ??= new FakeCameraService();
         // 존재하지 않는 경로를 명시 주입 → FfmpegAvailable=false로 결정적(실제 번들 유무와 무관).
@@ -114,10 +128,11 @@ public class DiagnosticsViewModelTests
         buildInfo ??= new StubBuildInfoService();
         serverDeploy ??= new FakeServerDeployInfoService();
         clipboard ??= new FakeClipboardService();
+        licenseFolder ??= new FakeLicenseFolderService(Path.Combine(Path.GetTempPath(), "licenses"));
         var session = new SessionContext();
         if (loginUser is not null) session.Login(loginUser);
         return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder, new StubSettingsService(settings), session,
-            buildInfo, serverDeploy, clipboard);
+            buildInfo, serverDeploy, clipboard, licenseFolder);
     }
 
     [Fact]
@@ -345,6 +360,44 @@ public class DiagnosticsViewModelTests
         vm.CopyDeveloperEmailCommand.Execute(null);
 
         Assert.Equal("복사에 실패했습니다. 위 주소를 직접 선택해 복사하세요.", vm.CopyNotice);
+    }
+
+    // ── 오픈소스 라이선스 고지 (설계 §5.1 1-6) ──
+
+    [Fact]
+    public void LicenseFolder_Path_Is_Exposed_For_Manual_Navigation()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "licenses-x");
+        var vm = MakeVm(licenseFolder: new FakeLicenseFolderService(path));
+
+        Assert.Equal(path, vm.LicenseFolderPath);
+    }
+
+    [Fact]
+    public void OpenLicenseFolder_Delegates_To_Service()
+    {
+        var fake = new FakeLicenseFolderService(Path.Combine(Path.GetTempPath(), "licenses-y"));
+        var vm = MakeVm(licenseFolder: fake);
+
+        vm.OpenLicenseFolderCommand.Execute(null);
+
+        Assert.Equal(1, fake.OpenCount);
+    }
+
+    /// <summary>
+    /// 고지 폴더가 없으면 = 라이선스 위반 상태로 배포된 것. 화면이 경고를 띄워야 하므로
+    /// 반전 플래그가 정확해야 한다(조용히 넘어가면 위반을 아무도 모른다).
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void License_Missing_Flag_Is_Inverse_Of_Exists(bool exists, bool expectedMissing)
+    {
+        var vm = MakeVm(licenseFolder: new FakeLicenseFolderService(
+            Path.Combine(Path.GetTempPath(), "licenses-z"), exists));
+
+        Assert.Equal(exists, vm.HasLicenseFolder);
+        Assert.Equal(expectedMissing, vm.IsLicenseFolderMissing);
     }
 }
 

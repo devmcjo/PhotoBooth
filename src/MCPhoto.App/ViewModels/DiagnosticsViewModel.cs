@@ -41,13 +41,16 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     private readonly IBuildInfoService _buildInfo;
     private readonly IServerDeployInfoService _serverDeploy;
     private readonly IClipboardService _clipboard;
+    private readonly ILicenseFolderService _licenseFolder;
     private readonly ILogger<DiagnosticsViewModel>? _logger;
 
     public DiagnosticsViewModel(ICameraService camera, FfmpegRunner ffmpeg, IFirebaseClient firebase,
         ILogFolderService logFolder, ISettingsService settings, SessionContext session,
         IBuildInfoService buildInfo, IServerDeployInfoService serverDeploy, IClipboardService clipboard,
+        ILicenseFolderService licenseFolder,
         ILogger<DiagnosticsViewModel>? logger = null)
     {
+        _licenseFolder = licenseFolder;
         _camera = camera;
         _ffmpeg = ffmpeg;
         _firebase = firebase;
@@ -109,6 +112,19 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     /// <summary>로그 폴더 절대 경로(표시·수동 탐색용).</summary>
     public string LogFolderPath => _logFolder.LogFolderPath;
 
+    // ── 오픈소스 라이선스 (it22 §5.1 1-6) ──
+    /// <summary>라이선스 고지 폴더 절대 경로(열기 실패 시 수동 탐색용).</summary>
+    public string LicenseFolderPath => _licenseFolder.LicenseFolderPath;
+
+    /// <summary>
+    /// 고지 폴더가 배포물에 실제로 있는지. false면 **라이선스 위반 상태로 배포된 것**이므로
+    /// 경로만 보여주고 끝내지 않고 화면에 경고를 띄운다(운영자가 즉시 알아야 한다).
+    /// </summary>
+    public bool HasLicenseFolder => _licenseFolder.Exists;
+
+    /// <summary>고지 폴더 누락 경고 노출 여부(바인딩 편의 — HasLicenseFolder의 반전).</summary>
+    public bool IsLicenseFolderMissing => !_licenseFolder.Exists;
+
     // ── 개발자 문의 ──
     /// <summary>개발자 연락처(고정값). 문의 메일에 아래 버전·빌드일·웹 배포일을 함께 적도록 안내한다.</summary>
     public const string DeveloperEmailAddress = "devmcjo@gmail.com";
@@ -168,6 +184,10 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     /// <summary>로그 폴더를 탐색기로 열기(best-effort, 실패해도 크래시 없음).</summary>
     [RelayCommand]
     private void OpenLogFolder() => _logFolder.OpenLogFolder();
+
+    /// <summary>라이선스 고지 폴더를 탐색기로 열기(best-effort). 폴더가 없으면 아무 일도 하지 않는다.</summary>
+    [RelayCommand]
+    private void OpenLicenseFolder() => _licenseFolder.OpenLicenseFolder();
 
     /// <summary>
     /// 최종 웹 배포일 조회(서버 GET /health). 진입 시 다이얼로그 서비스가 1회 호출하고,

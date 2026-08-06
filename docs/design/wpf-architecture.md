@@ -58,7 +58,8 @@ Windows 키오스크에서 동작하는 **단일 프로세스 WPF(.NET 8) MVVM �
 | 로깅 | **Microsoft.Extensions.Logging** + 파일 싱크(Serilog 등) | 무인 동작 진단. |
 | 인스톨러 | **Inno Setup** | PRD §9 #22 확정. 앱+`Frame/`+ffmpeg 번들. |
 
-> **주의(라이선스)**: 배포 ffmpeg 바이너리에 libx264(GPL)가 포함되면 배포물에 GPL 의무가 붙을 수 있음. 배포 시 ffmpeg 빌드 라이선스 확인 필요(§9 리스크).
+> **라이선스(판정 완료)**: 번들 ffmpeg는 `--enable-gpl --enable-version3` 빌드라 **GPLv3**다(libx264 정적 링크). 별도 프로세스 + CLI/파이프 구조라 **MCPhoto 소스는 MIT를 유지**하지만, 재배포자로서 ① 전문 동봉 ② 고지 ③ 대응 소스 접근 제공 의무를 진다 — `licenses/`가 그 산출물이며 **2026-08-06 이행 완료**. 상세·후속 경로(LGPL 전환·ffmpeg 제거)는 [ffmpeg 라이선스·배포 설계](./wpf-ffmpeg-licensing-and-distribution-design.md).
+> ⚠️ **libav\*를 직접 링크하면 MCPhoto 전체가 GPLv3가 되어 MIT 배포가 불가능해진다** — 직접 링크는 영구 제외한다.
 
 ### 1.3 레이어 구조
 

@@ -107,6 +107,21 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 - 리포 `tools/ffmpeg/`에는 `ffmpeg.exe`(~101MB)와 `ffprobe.exe`(~101MB)가 모두 있으나, csproj 는 `ffmpeg.exe`만 복사한다(`MCPhoto.App.csproj:30`). publish 산출물에도 `tools\ffmpeg\ffmpeg.exe`만 포함됨(확인됨, ffprobe 미포함).
 - 타임랩스는 ffmpeg 에 의존하므로 번들 누락 시 타임랩스 기능이 동작하지 않는다(설계상 필수, `MCPhoto.App.csproj:28`).
 
+### 3.3 라이선스 고지 동봉 (필수 — 2026-08-06)
+
+번들 ffmpeg 는 **GPLv3**(`--enable-gpl --enable-version3`)다. 재배포자로서 라이선스 전문·고지·대응 소스 안내를 배포물에 **반드시 동봉**해야 한다(GPLv3 §4·§6). ffmpeg 와 동일한 이중 배선을 쓴다.
+
+| 경로 | 대상 빌드 | 방식 |
+|------|-----------|------|
+| `None` 항목 + `CopyToOutputDirectory` | 일반 빌드/실행 | 리포 루트 `licenses/**` → 출력 `licenses\` |
+| `CopyLicensesToPublish` Target | 단일 파일 publish | `AfterTargets="Publish"`로 게시 완료 후 직접 Copy |
+
+- 산출물: `licenses/FFmpeg-COPYING.GPLv3.txt`(전문) · `FFmpeg-README.txt`(버전·configuration 전문·소스 URL·3년 서면 오퍼) · `README.txt`(인덱스).
+- **인스톨러는 별도 설정이 필요 없다** — `[Files]`가 `{#PublishDir}\*`를 `recursesubdirs`로 담으므로 publish 에 들어가면 자동 포함이다(실측 확인).
+- ⚠️ **ffmpeg 를 계속 번들하는 한 이 폴더를 지우면 라이선스 위반이다.** `LicenseComplianceTests`가 "ffmpeg 복사 규칙이 살아 있으면 고지 3종이 있어야 한다"를 강제한다. 반대로 ffmpeg 를 배포에서 빼면 그 시점에 의무가 소멸한다.
+- 앱 내 고지는 진단·상태 창의 "오픈소스 라이선스" 카드(경로 표시 + 폴더 열기 + 누락 경고).
+- 상세·후속 경로: [ffmpeg 라이선스·배포 설계](../design/wpf-ffmpeg-licensing-and-distribution-design.md).
+
 ---
 
 ## 4. 부가 리소스 복사 (Frame / branding)
