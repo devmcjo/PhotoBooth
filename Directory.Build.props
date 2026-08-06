@@ -20,7 +20,7 @@
          앱이 표기하는 버전은 이 값을 어셈블리에서 읽는다(AssemblyBuildInfoService) — 외부 파일 없음.
          종전 bldinfo.ini 방식은 폐기: 산출물 파일을 따로 교체해야 하고 리소스 버전(1.0.0.0)과
          표기 버전이 어긋나는 이중 관리였다. -->
-    <Version>1.1.11</Version>
+    <Version>1.1.12</Version>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
     <!-- 제품 버전(AssemblyInformationalVersion)에 git 커밋 해시가 붙지 않게 한다.
