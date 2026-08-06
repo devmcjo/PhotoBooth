@@ -130,6 +130,23 @@
                    Style="{StaticResource Text.Caption}"
                    Foreground="{StaticResource Brush.Text.Tertiary}" />
 
+        <!-- 세션 완료 토스트(비모달, 하단 중앙): 전체화면 완료 화면을 폐지한 대체물.
+             홈으로 이미 돌아온 상태에서 완료 사실만 알린다 → 자동 소멸(5초) + [확인]으로 즉시 닫기.
+             모달로 만들지 않는 이유: 무인 키오스크에서 아무도 닫지 않으면 다음 손님이 막힌다. -->
+        <Border Visibility="{Binding HasToast, Converter={StaticResource BoolToVis}}"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,56"
+                Background="{StaticResource Brush.Bg.Elevated}" CornerRadius="{StaticResource Radius.L}"
+                Padding="24,14" MaxWidth="620" Effect="{StaticResource Shadow.Pop}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding ToastMessage}" Style="{StaticResource Text.Body}"
+                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Content="확인" Command="{Binding DismissToastCommand}"
+                        Style="{StaticResource Button.Primary}" Margin="20,0,0,0" Padding="28,0"
+                        VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
         <!-- 유휴 경고 오버레이(모달, 최상위): 2분 무동작 → 10초 카운트다운. 로그아웃 없음. (it8 §2 A1) -->
         <Grid Background="{StaticResource Brush.Scrim}"
               Visibility="{Binding IsIdleWarningVisible, Converter={StaticResource BoolToVis}}">

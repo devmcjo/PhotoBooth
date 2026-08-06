@@ -8,7 +8,8 @@ public class AppStateTests
     [Fact]
     public void Normal_Flow_Is_Legal()
     {
-        // Home→Login→FrameSelect→Guide→Capture→CutSelect→Result→Qr→Done→Home
+        // Home→Login→FrameSelect→Guide→Capture→CutSelect→Result→Qr→Home
+        // (완료 화면 폐지: 세션 완료는 상태 전이가 아니라 홈 복귀 + 완료 토스트다)
         Assert.True(SessionStateMachine.CanTransition(AppState.Home, AppState.Login));
         Assert.True(SessionStateMachine.CanTransition(AppState.Login, AppState.FrameSelect));
         Assert.True(SessionStateMachine.CanTransition(AppState.FrameSelect, AppState.Guide));
@@ -16,8 +17,18 @@ public class AppStateTests
         Assert.True(SessionStateMachine.CanTransition(AppState.Capture, AppState.CutSelect));
         Assert.True(SessionStateMachine.CanTransition(AppState.CutSelect, AppState.Result));
         Assert.True(SessionStateMachine.CanTransition(AppState.Result, AppState.Qr));
-        Assert.True(SessionStateMachine.CanTransition(AppState.Qr, AppState.Done));
-        Assert.True(SessionStateMachine.CanTransition(AppState.Done, AppState.Home));
+        Assert.True(SessionStateMachine.CanTransition(AppState.Qr, AppState.Home));      // QR [완료] → 홈
+        Assert.True(SessionStateMachine.CanTransition(AppState.Result, AppState.Home));  // QR 미사용 즉시 완료 → 홈
+    }
+
+    /// <summary>
+    /// 완료 화면 폐지 회귀: 세션 완료는 상태가 아니라 홈 복귀 + 완료 토스트다
+    /// (<c>AppShellViewModel.CompleteSession</c>). 상태가 되살아나면 화면 하나가 다시 끼어든다.
+    /// </summary>
+    [Fact]
+    public void Done_State_Is_Retired()
+    {
+        Assert.DoesNotContain("Done", Enum.GetNames<AppState>());
     }
 
     [Fact]
@@ -61,9 +72,8 @@ public class AppStateTests
         Assert.True(SessionStateMachine.IsSessionActive(AppState.CutSelect));
         Assert.True(SessionStateMachine.IsSessionActive(AppState.Result));
 
-        // Home·Done은 유휴 감시 비대상
+        // Home은 유휴 감시 비대상
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Home));
-        Assert.False(SessionStateMachine.IsSessionActive(AppState.Done));
         // it2: Settings·Login도 유휴 감시 비대상(설정 조작 중 홈복귀 방지, §5.2)
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Settings));
         Assert.False(SessionStateMachine.IsSessionActive(AppState.Login));
@@ -177,7 +187,6 @@ public class AppStateTests
     [InlineData(AppState.CutSelect)]
     [InlineData(AppState.Result)]
     [InlineData(AppState.Qr)]
-    [InlineData(AppState.Done)]
     [InlineData(AppState.FrameEditor)]
     public void Non_Overlay_Screens_Are_Valid_Return_Points(AppState state)
     {
@@ -194,7 +203,7 @@ public class AppStateTests
     [InlineData(AppState.Guide)]
     [InlineData(AppState.CutSelect)]
     [InlineData(AppState.Result)]
-    [InlineData(AppState.Done)]
+    [InlineData(AppState.Qr)]
     public void Overlay_Return_Direction_Not_Forward_Legal(AppState sessionState)
     {
         // 복귀 방향(Settings→세션화면)은 전이표상 불법이다(특례 아님).
@@ -216,7 +225,7 @@ public class AppStateTests
     public void Overlay_Entry_Direction_Is_Legal_From_Session_States()
     {
         // 진입 방향(세션화면→Settings/Login)은 특례로 항상 합법이어야 한다.
-        foreach (var s in new[] { AppState.FrameSelect, AppState.Guide, AppState.CutSelect, AppState.Result, AppState.Done })
+        foreach (var s in new[] { AppState.FrameSelect, AppState.Guide, AppState.CutSelect, AppState.Result })
         {
             Assert.True(SessionStateMachine.CanTransition(s, AppState.Settings), $"{s}→Settings 합법");
             Assert.True(SessionStateMachine.CanTransition(s, AppState.Login), $"{s}→Login 합법");
@@ -251,7 +260,6 @@ public class AppStateTests
         Assert.True(SessionStateMachine.IsTopBarVisible(AppState.FrameSelect));
         Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Settings));
         Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Result));
-        Assert.True(SessionStateMachine.IsTopBarVisible(AppState.Done));
     }
 
     [Fact]

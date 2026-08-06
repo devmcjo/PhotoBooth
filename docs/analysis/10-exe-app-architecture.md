@@ -95,7 +95,7 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 | `IUploadService`→`UploadService`, `IQrService`→`QrService` | Singleton | Core 구현(백엔드 비의존, `:82-83`) |
 | `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=`AppContext.BaseDirectory\Frame`(`:86-87`) |
 | `SessionContext`, `FrameCatalogService` | Singleton(`:90-91`) |
-| **화면 VM 전부** | **Transient**(진입마다 새 인스턴스) | `RegisterScreens`(`:173-193`): Home/LoginGuest/FrameSelect/Guide/Capture/CutSelect/Result/QrPopup/Done/FrameEditor/FramePicker/Settings/UserMgmt/Account/Diagnostics |
+| **화면 VM 전부** | **Transient**(진입마다 새 인스턴스) | `RegisterScreens`: Home/LoginGuest/FrameSelect/Guide/Capture/CutSelect/Result/QrPopup/FrameEditor/FramePicker/Settings/UserMgmt/Account/Diagnostics (`DoneViewModel`은 완료 화면 폐지로 제거) |
 | `PreviewViewModel` | Transient |
 
 - 백엔드 접근은 **feature flag 분기 없이 HTTP 경로 하나**다 — it15에서 레거시 Admin SDK 직결이 폐지됐다(`ServiceRegistration.cs:80`). 각 Http 구현은 설정에서 `BackendApiKey`·`StorageBucket`을 주입받고, `configured`는 `BackendBaseUrl`이 비어 있지 않은지로 판정한다(`:118-128`).
@@ -115,9 +115,13 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 
 ### 3.1 AppState 목록
 
-`AppState`(`AppState.cs`) enum 13개: `Home`, `Login`, `FrameSelect`, `Guide`, `Capture`, `CutSelect`, `Result`, `Qr`, `Done`, `Settings`, `UserMgmt`, `FrameEditor`, `Account`.
+`AppState`(`AppState.cs`) enum **12개**: `Home`, `Login`, `FrameSelect`, `Guide`, `Capture`, `CutSelect`, `Result`, `Qr`, `Settings`, `UserMgmt`, `FrameEditor`, `Account`.
 
-정상 촬영 흐름: `Home → (Login 선택적) → FrameSelect → Guide → Capture → CutSelect → Result → (Qr) → Done → Home`.
+정상 촬영 흐름: `Home → (Login 선택적) → FrameSelect → Guide → Capture → CutSelect → Result → (Qr) → Home`.
+
+> ⚠️ **완료 화면(종전 `Done`)은 폐지됐다.** 세션 완료는 상태가 아니라 셸 동작이다 —
+> `AppShellViewModel.CompleteSession()` = 홈 복귀 + 완료 토스트(비모달, 5초 자동 소멸 + [확인]).
+> 상태를 되살리면 화면이 하나 다시 끼어든다. 회귀 방지: `AppStateTests.Done_State_Is_Retired`.
 
 ### 3.2 전이표(SessionStateMachine)
 
@@ -131,9 +135,8 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 | Guide | Capture |
 | Capture | CutSelect |
 | CutSelect | Result, Guide(재촬영=세션 전체) |
-| Result | Qr, Done |
-| Qr | Done |
-| Done | Home |
+| Result | Qr *(완료는 Home 특례 — QR 미사용 시 즉시 완료)* |
+| Qr | *(없음 — [완료]는 Home 특례)* |
 | Settings | Login, FrameEditor |
 | UserMgmt | Account(관리자 도구 복귀) |
 | FrameEditor | FrameSelect, Settings, Login |

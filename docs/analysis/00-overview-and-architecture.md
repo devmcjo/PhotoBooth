@@ -74,8 +74,9 @@ flowchart TD
   Put --> Commit["POST /uploads/commit — resultSession 생성"]
   Commit --> Qr[QR 표시]
   Qr --> Web[웹 다운로드 페이지]
-  Result -->|QR off| Done[완료]
-  Qr --> Done
+  Result -->|QR off| Complete["세션 완료 — 홈 복귀 + 완료 토스트"]
+  Qr -->|완료| Complete
+  Complete --> Home
   Prepare -.->|TempUser 한도 초과 403| Local[로컬 보존 안내]
   Web -->|expiresAt 경과| Expired[만료 안내]
 ```

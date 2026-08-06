@@ -201,7 +201,7 @@ internal static class ServiceRegistration
         services.AddTransient<CutSelectViewModel>();
         services.AddTransient<ResultViewModel>();
         services.AddTransient<QrPopupViewModel>();
-        services.AddTransient<DoneViewModel>();
+        // 완료 화면(DoneViewModel)은 폐지 — 세션 완료는 셸의 홈 복귀 + 완료 토스트로 처리한다.
         services.AddTransient<FrameEditorViewModel>();
         // it15 F2: 편집기의 "기존 프레임 불러오기" 선택 모달 목록 VM.
         // 편집기와 같은 Transient — 진입마다 새 인스턴스라 재진입 잔존 없음.

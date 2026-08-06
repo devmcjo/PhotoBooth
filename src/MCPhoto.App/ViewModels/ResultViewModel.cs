@@ -153,7 +153,7 @@ public sealed partial class ResultViewModel : ViewModelBase
             if (qrEffective)
                 await _shell.NavigateAsync(AppState.Qr);
             else
-                await _shell.NavigateAsync(AppState.Done);       // 게스트·TempUser 초과 → 팝업 없이 완료(우아)
+                _shell.CompleteSession("세션 완료(QR 미사용)");   // 게스트·TempUser 초과 → 팝업 없이 완료(우아)
         }
         catch (Exception ex)
         {

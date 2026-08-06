@@ -2,8 +2,10 @@ namespace MCPhoto.Core.Navigation;
 
 /// <summary>
 /// 키오스크 세션 상태 전이 규칙(순수 로직, 테스트 대상). (architecture §4.1)
-/// 정상 흐름: Home→Login→FrameSelect→Guide→Capture→CutSelect→Result→Qr→Done→Home.
+/// 정상 흐름: Home→Login→FrameSelect→Guide→Capture→CutSelect→Result→Qr→Home.
 /// 어느 상태에서든 Home 복귀 허용(유휴 만료·예외·취소·세션 완료).
+/// ⚠️ 완료 화면(종전 `Done`)은 폐지됐다 — 세션 완료는 상태가 아니라 <b>홈 복귀 + 완료 토스트</b>다
+/// (`AppShellViewModel.CompleteSession`). 그래서 Result·Qr의 다음 상태는 Home 특례로만 존재한다.
 /// </summary>
 public static class SessionStateMachine
 {
@@ -17,9 +19,8 @@ public static class SessionStateMachine
         [AppState.Guide] = new[] { AppState.Capture },
         [AppState.Capture] = new[] { AppState.CutSelect },
         [AppState.CutSelect] = new[] { AppState.Result, AppState.Guide }, // Guide=재촬영(세션 전체)
-        [AppState.Result] = new[] { AppState.Qr, AppState.Done },
-        [AppState.Qr] = new[] { AppState.Done },
-        [AppState.Done] = new[] { AppState.Home },
+        // Result·Qr에서 세션이 끝나면 Home으로 간다(Home 전이는 아래 특례로 항상 허용 — 별도 등재 불필요).
+        [AppState.Result] = new[] { AppState.Qr },
         [AppState.Settings] = new[] { AppState.Login, AppState.FrameEditor },
         [AppState.UserMgmt] = new[] { AppState.Account }, // 관리자 도구(Account) 복귀
         [AppState.FrameEditor] = new[] { AppState.FrameSelect, AppState.Settings, AppState.Login },

@@ -184,9 +184,9 @@ public sealed partial class QrPopupViewModel : ViewModelBase
     [RelayCommand]
     private async Task Retry() => await OnEnterAsync();
 
-    /// <summary>[홈으로]/[닫기] → 완료.</summary>
+    /// <summary>[홈으로]/[닫기] → 세션 완료(홈 복귀 + 완료 토스트. 완료 화면은 폐지됨).</summary>
     [RelayCommand]
-    private async Task Done() => await _shell.NavigateAsync(AppState.Done);
+    private void Done() => _shell.CompleteSession("세션 완료(QR 확인)");
 
     [RelayCommand]
     private void GoHome() => _shell.ReturnHome("QR 닫기");

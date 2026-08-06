@@ -39,6 +39,24 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private IdleCountdown? _idleCountdown;
     private DispatcherTimer? _idleCountdownTimer;
 
+    // ── 세션 완료 토스트(전체화면 완료 화면 폐지의 대체물) ──
+
+    /// <summary>세션 완료 안내 문구(단일 지점 — 완료 경로가 둘이므로 문구가 갈리지 않게 상수로 둔다).</summary>
+    public const string SessionCompleteMessage = "촬영이 완료되었습니다. 홈 화면으로 돌아갑니다.";
+
+    /// <summary>토스트 자동 소멸까지(초). 무인 키오스크라 사용자가 닫지 않아도 사라져야 한다.</summary>
+    public int ToastSeconds { get; set; } = 5;
+
+    /// <summary>토스트 문구. 빈 문자열이면 미노출.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasToast))]
+    private string _toastMessage = string.Empty;
+
+    /// <summary>토스트 노출 여부(문구가 있을 때만).</summary>
+    public bool HasToast => !string.IsNullOrEmpty(ToastMessage);
+
+    private DispatcherTimer? _toastTimer;
+
     /// <summary>오버레이(설정/로그인) 진입 전 상태 — 복귀 대상. (it2 §5.3)</summary>
     private AppState _returnState = AppState.Home;
 
@@ -267,7 +285,6 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         AppState.CutSelect => _services.GetRequiredService<CutSelectViewModel>(),
         AppState.Result => _services.GetRequiredService<ResultViewModel>(),
         AppState.Qr => _services.GetRequiredService<QrPopupViewModel>(),
-        AppState.Done => _services.GetRequiredService<DoneViewModel>(),
         AppState.FrameEditor => CreateFrameEditorViewModel(),
         AppState.Settings => _services.GetRequiredService<SettingsViewModel>(),
         AppState.UserMgmt => _services.GetRequiredService<UserMgmtViewModel>(),
@@ -312,6 +329,48 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
 
         _idle.Stop();
         _ = NavigateAsync(AppState.Home);
+    }
+
+    /// <summary>
+    /// 촬영 세션 완료 → 홈 복귀 + 완료 토스트.
+    /// <para>
+    /// 종전에는 전체화면 완료 화면(`Done`: "감사합니다" + [처음으로] + 6초 자동 복귀)이 이 역할을 했다.
+    /// 화면을 하나 더 거치는 것보다 홈으로 바로 돌아가는 편이 키오스크 회전에 낫다는 판단으로 폐지하고,
+    /// 완료 사실은 토스트로만 알린다(자동 소멸 + [확인]으로 즉시 닫기).
+    /// </para>
+    /// 촬영 후 로그인은 유지한다(it5 §4 B8) — 로그아웃은 계정 메뉴 수동 또는 유휴 타임아웃만.
+    /// 완료 경로가 둘(QR 미사용 즉시 완료 · QR 팝업 [완료])이므로 반드시 이 지점을 지나게 한다.
+    /// </summary>
+    public void CompleteSession(string reason)
+    {
+        ReturnHome(reason, clearUser: false);
+        ShowToast(SessionCompleteMessage);
+    }
+
+    /// <summary>토스트 노출(직전 토스트는 교체). <see cref="ToastSeconds"/> 후 자동 소멸.</summary>
+    public void ShowToast(string message)
+    {
+        StopToastTimer();
+        ToastMessage = message;
+        if (string.IsNullOrEmpty(message)) return;
+
+        _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(1, ToastSeconds)) };
+        _toastTimer.Tick += (_, _) => DismissToast();
+        _toastTimer.Start();
+    }
+
+    /// <summary>토스트 닫기([확인] 또는 자동 소멸). 이미 닫혀 있으면 무해한 no-op.</summary>
+    [RelayCommand]
+    private void DismissToast()
+    {
+        StopToastTimer();
+        ToastMessage = string.Empty;
+    }
+
+    private void StopToastTimer()
+    {
+        _toastTimer?.Stop();
+        _toastTimer = null;
     }
 
     /// <summary>
@@ -487,6 +546,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         _idle.IdleTimeout -= OnIdleTimeout;
         _session.CurrentUserChanged -= OnCurrentUserChanged;
         HideIdleWarning(); // 카운트다운 타이머 정리
+        StopToastTimer();  // 완료 토스트 타이머 정리
         (_idle as IDisposable)?.Dispose();
     }
 }

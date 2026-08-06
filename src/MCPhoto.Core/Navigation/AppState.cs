@@ -27,8 +27,8 @@ public enum AppState
     /// <summary>QR 팝업.</summary>
     Qr,
 
-    /// <summary>완료/감사.</summary>
-    Done,
+    // ⚠️ 종전 Done(완료/감사 전체화면)은 폐지됐다 — 세션 완료는 홈 복귀 + 완료 토스트로 처리한다
+    //    (AppShellViewModel.CompleteSession). 상태를 되살리지 말 것.
 
     /// <summary>설정 페이지(앱 설정만). 계정·관리자 기능은 Account로 분리. (it5 §5 C1)</summary>
     Settings,
