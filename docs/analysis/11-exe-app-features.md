@@ -26,7 +26,14 @@
 - **흐름**: 홈 → [촬영하기] → 프레임 선택으로 **직행**(게스트 자동 진행, 로그인 선택 화면을 강제로 거치지 않음).
 - **화면·VM**: `HomeView`(`HomeView.xaml`) · `HomeViewModel`.
 - **규칙**: `Start`는 `Session.Reset(clearUser:false)`로 촬영 데이터만 초기화하고 **로그인은 보존**(로그인 사용자는 커스텀 프레임 사용) 후 `FrameSelect`로 전이. 홈 타이틀은 브랜딩 앱 이름(`DynamicResource Branding.AppName` — `App.xaml.cs`가 런타임 교체하므로 StaticResource 금지).
-- **구성(it21)**: 어트랙트 화면을 4층으로 구성한다 — ① 브랜드(앱 마크 타일 + 워드마크 + 부제) ② 행동(단일 CTA [촬영하기]) ③ 흐름 안내(프레임 선택 → 촬영 → QR로 받기 3단, **비상호작용** `IsHitTestVisible=False`) ④ 게스트 전용 로그인 진입점("로그인하고 내 프레임 쓰기", `IsGuest` 게이트). **주 액션은 여전히 1개**이고 늘어난 것은 비상호작용 안내층이다.
+- **구성(it21)**: 어트랙트 화면을 3층으로 구성한다 — ① 브랜드(앱 마크 타일 + 워드마크 + 부제) ② 행동(단일 CTA [촬영하기]) ③ 흐름 안내(프레임 선택 → 촬영 → QR로 받기 3단, **비상호작용** `IsHitTestVisible=False`). **주 액션은 1개뿐**이고 늘어난 것은 비상호작용 안내층이다.
+- **보조 문구(it21 §7.4 개정)**: 흐름 안내 1번 칸("프레임 선택") 아래에 상태별 한 줄을 로즈 강조로 노출한다. **문구는 현재 권한에서 참이어야 한다** — 프레임 만들기는 `CanWriteFrames`(AdvancedUser·Manager·Admin)만 가능하고 게스트·`user`·`temp_user`는 못 만든다.
+  | 상태 | 문구 |
+  |---|---|
+  | `CanWriteFrames` | "직접 만들 수도 있어요" |
+  | 게스트 | "로그인하면 내 프레임을 쓸 수 있어요" |
+  | 로그인·쓰기 권한 없음 | (없음) |
+  > 종전의 [로그인하고 내 프레임 쓰기] Ghost 버튼은 **폐기**했다 — 주 액션이 둘로 보였고, 로그인은 손님이 아니라 운영자·단골의 행위다. 로그인 진입점은 상단 바 계정 아이콘이 담당한다.
 - **반응형(it21)**: 창 폭 1008 미만이면 Compact — 앱 마크 96→64, 워드마크 64→44, CTA 80→64px/26→22pt, **흐름 안내는 접힘**. `HomeView.xaml.cs`의 `SizeChanged`/`Loaded` 토글(`SettingsView`의 폭 기반 폴백과 같은 선례 패턴).
 - **근거**: `HomeViewModel.cs`, `HomeView.xaml`, `HomeView.xaml.cs`, `docs/design/wpf-it21-main-visual-redesign-design.md` §7.
 

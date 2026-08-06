@@ -14,7 +14,7 @@
         오조작·산만으로 직결된다. 주 액션은 여전히 [촬영하기] 하나뿐이고, 늘어난 것은
         "이 부스가 무엇을 해주는지" 말하는 비상호작용 층이다. (설계 §0.4)
 
-        층0 배경 워시 · 층1 브랜드 · 층2 행동(CTA) · 층3 흐름 안내 · 층4 게스트 로그인 힌트
+        층0 배경 워시 · 층1 브랜드 · 층2 행동(CTA) · 층3 흐름 안내(권한별 보조 문구 포함)
     -->
     <Grid Background="{StaticResource Brush.Bg}">
         <!--
@@ -91,14 +91,14 @@
             -->
             <Grid x:Name="FlowStrip" Margin="0,44,0,0" IsHitTestVisible="False" HorizontalAlignment="Center">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="228" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="228" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="228" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0">
+                <StackPanel Grid.Column="0" VerticalAlignment="Top">
                     <Grid Width="32" Height="32" HorizontalAlignment="Center">
                         <Ellipse Fill="{StaticResource Brush.Accent.Soft}" />
                         <TextBlock Text="1" FontFamily="{StaticResource Font.Primary}"
@@ -110,12 +110,21 @@
                                HorizontalAlignment="Center" Margin="0,10,0,0" />
                     <TextBlock Text="원하는 틀을 고르세요" Style="{StaticResource Text.Caption}"
                                HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                    <!-- 권한·로그인 상태에 따라 달라지는 보조 문구(§7.4).
+                         ⚠️ 프레임 만들기는 CanWriteFrames(AdvancedUser 이상)만 가능하다 — 문구를 고정하면
+                            대다수에게 거짓이 되므로 VM이 현재 상태에서 참인 문장만 내려준다. -->
+                    <!-- Text.Caption에는 TextWrapping이 없다 — 문구가 칸 폭을 넘으면 양끝이 잘린다(첫 렌더에서 확인). -->
+                    <TextBlock Text="{Binding FrameStepHint}" Style="{StaticResource Text.Caption}"
+                               Foreground="{StaticResource Brush.Accent.Text}"
+                               FontWeight="SemiBold" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" TextAlignment="Center" Margin="0,6,0,0"
+                               Visibility="{Binding HasFrameStepHint, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
 
                 <Rectangle Grid.Column="1" Width="1" Margin="24,6" VerticalAlignment="Stretch"
                            Fill="{StaticResource Brush.Divider}" />
 
-                <StackPanel Grid.Column="2">
+                <StackPanel Grid.Column="2" VerticalAlignment="Top">
                     <Grid Width="32" Height="32" HorizontalAlignment="Center">
                         <Ellipse Fill="{StaticResource Brush.Accent.Soft}" />
                         <TextBlock Text="2" FontFamily="{StaticResource Font.Primary}"
@@ -132,7 +141,7 @@
                 <Rectangle Grid.Column="3" Width="1" Margin="24,6" VerticalAlignment="Stretch"
                            Fill="{StaticResource Brush.Divider}" />
 
-                <StackPanel Grid.Column="4">
+                <StackPanel Grid.Column="4" VerticalAlignment="Top">
                     <Grid Width="32" Height="32" HorizontalAlignment="Center">
                         <Ellipse Fill="{StaticResource Brush.Accent.Soft}" />
                         <TextBlock Text="3" FontFamily="{StaticResource Font.Primary}"
@@ -146,16 +155,12 @@
                                HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
                 </StackPanel>
             </Grid>
-
             <!--
-                층4 · 게스트 로그인 진입점. 상단 바 계정 버튼이 아이콘 전용이 되면서 잃은 발견성을
-                여기서 회복한다 — 터치 화면에는 hover 툴팁이 없다(NN/g, 설계 §4.3).
+                종전에 여기 있던 [로그인하고 내 프레임 쓰기] Ghost 버튼은 폐기했다(§7.4 개정).
+                ① 주 액션이 둘로 보였고 ② 로그인은 손님 액션이 아니라 운영자·단골의 행위이며
+                ③ 그 정보는 맥락이 있는 자리(흐름 스트립 1번 칸)에 문구로 두는 편이 낫다.
+                로그인 진입점은 상단 바 계정 아이콘(ToolTip + Automation 이름)이 계속 담당한다.
             -->
-            <Button Content="로그인하고 내 프레임 쓰기"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding LoginCommand}"
-                    Visibility="{Binding IsGuest, Converter={StaticResource BoolToVis}}"
-                    HorizontalAlignment="Center" Margin="0,40,0,0" />
         </StackPanel>
     </Grid>
 </UserControl>

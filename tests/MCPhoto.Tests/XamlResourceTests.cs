@@ -720,26 +720,31 @@ public class XamlResourceTests
     }
 
     /// <summary>
-    /// Home 4층 구조의 바인딩 고정. 특히 게스트 로그인 힌트(층4)는 **게스트에게만** 보여야 한다 —
-    /// 게이트가 빠지면 이미 로그인한 사용자에게 "로그인하고 …" 버튼이 노출된다.
+    /// Home 구조의 바인딩 고정. 층4 안내는 **버튼이 아니라 문구**이며, 문구 자체를 VM이 결정한다
+    /// (권한에 따라 참인 문장이 달라지기 때문 — §7.4 개정).
     /// </summary>
     [Fact]
-    public void HomeView_Bindings_Exist_And_Guest_Hint_Is_Gated()
+    public void HomeView_Bindings_Exist_And_Hint_Is_Vm_Driven()
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "HomeView.xaml"));
         var vmType = typeof(MCPhoto.App.ViewModels.HomeViewModel);
 
-        foreach (var member in new[] { "StartCommand", "LoginCommand", "IsGuest" })
+        foreach (var member in new[] { "StartCommand", "FrameStepHint", "HasFrameStepHint" })
         {
             var binding = new Regex(@"\{Binding\s+" + Regex.Escape(member) + @"\s*[,}]");
             Assert.True(binding.IsMatch(text), $"HomeView.xaml 에 '{{Binding {member}}}' 바인딩이 없다");
             Assert.NotNull(vmType.GetProperty(member));
         }
 
-        var hint = Regex.Match(text, @"<Button\b[^>]*?LoginCommand.*?/>", RegexOptions.Singleline);
-        Assert.True(hint.Success, "HomeView.xaml 에서 게스트 로그인 힌트 버튼을 찾지 못함");
-        Assert.Contains("IsGuest", hint.Value);
+        // 보조 문구는 빈 값일 때 숨겨져야 한다(빈 줄이 남으면 스트립 정렬이 흔들린다).
+        var hint = Regex.Match(text, @"<TextBlock\b[^>]*?FrameStepHint.*?/>", RegexOptions.Singleline);
+        Assert.True(hint.Success, "HomeView.xaml 에서 보조 문구 TextBlock을 찾지 못함");
+        Assert.Contains("HasFrameStepHint", hint.Value);
         Assert.Contains("BoolToVis", hint.Value);
+
+        // 층4 Ghost 버튼은 폐기됐다 — 되살아나면 주 액션이 둘로 보인다(§7.4 개정 사유 ①).
+        Assert.DoesNotContain("LoginCommand", text);
+        Assert.Null(vmType.GetProperty("LoginCommand"));
 
         // 흐름 안내(층3)는 비상호작용이어야 한다 — 눌리는 것처럼 보이면 키오스크 오조작이 된다.
         var strip = Regex.Match(text, @"<Grid\b[^>]*?x:Name=""FlowStrip""[^>]*?>", RegexOptions.Singleline);
