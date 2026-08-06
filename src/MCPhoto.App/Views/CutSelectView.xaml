@@ -10,8 +10,13 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <!-- 배치 프리뷰(프레임 없으면 Collapsed → 폭 0으로 접힘) -->
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,88,0,12">
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" HorizontalAlignment="Center" Margin="0,64,0,12">
             <TextBlock Text="컷 선택" Style="{StaticResource Text.H1}" HorizontalAlignment="Center" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
                 <TextBlock Text="{Binding SelectedCount}" Foreground="{StaticResource Brush.Accent.Text}"
@@ -22,20 +27,73 @@
             </StackPanel>
         </StackPanel>
 
-        <ListBox Grid.Row="1" ItemsSource="{Binding Cuts}" Background="Transparent" BorderThickness="0"
-                 Margin="40,0" SelectionMode="Single"
+        <!-- 배치 프리뷰: 고른 컷이 어느 슬롯에 어떻게 들어가는지 실시간 표시.
+             좌표계를 프레임 원본 픽셀로 두고 축소는 Viewbox에 맡긴다 → 좌표 변환 코드가 없어
+             슬롯 위치가 결과물과 어긋날 여지가 없다(클램프는 VM이 SlotPlacement로 적용). -->
+        <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Card}" Padding="16"
+                Margin="40,0,12,0" Width="288" VerticalAlignment="Center"
+                Visibility="{Binding HasSlotPreview, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <TextBlock Text="완성 미리보기" Style="{StaticResource Text.Label}" Margin="0,0,0,4" />
+                <TextBlock Text="고른 순서대로 슬롯에 들어갑니다" Style="{StaticResource Text.Caption}"
+                           Foreground="{StaticResource Brush.Text.Muted}" TextWrapping="Wrap"
+                           Margin="0,0,0,10" />
+                <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                        CornerRadius="{StaticResource Radius.S}"
+                        Background="{StaticResource Brush.Surface.Alt}">
+                    <Viewbox Stretch="Uniform" MaxHeight="340">
+                        <Grid Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}">
+                            <!-- 프레임 = 배경 레이어. 캔버스 크기가 프레임 원본 픽셀이라 Fill이 1:1 매핑이다. -->
+                            <Image Source="{Binding FrameImage}" Stretch="Fill" />
+                            <ItemsControl ItemsSource="{Binding SlotPreviews}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Width="{Binding Width}" Height="{Binding Height}" ClipToBounds="True">
+                                            <!-- 채워진 슬롯: 합성과 동일하게 cover(중앙 크롭)로 슬롯을 덮는다. -->
+                                            <Image Source="{Binding Image}" Stretch="UniformToFill" />
+                                            <!-- 빈 슬롯: 순번만 표시(선 두께·글자 크기는 프레임 픽셀 기준 → 축소 후에도 보인다). -->
+                                            <Grid Visibility="{Binding IsFilled, Converter={StaticResource InverseBoolToVis}}">
+                                                <Rectangle Fill="{StaticResource Brush.Surface}" Opacity="0.85" />
+                                                <Rectangle Stroke="{StaticResource Brush.Accent}" StrokeThickness="6"
+                                                           StrokeDashArray="4 3" Opacity="0.85" />
+                                                <TextBlock Text="{Binding Number}" FontSize="{Binding NumberFontSize}"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource Brush.Text.Muted}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                    </Viewbox>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <ListBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Cuts}" Background="Transparent"
+                 BorderThickness="0" Margin="0,0,40,0" SelectionMode="Single"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate><WrapPanel HorizontalAlignment="Center" /></ItemsPanelTemplate>
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <!-- 썸네일 컨테이너를 대표 슬롯 종횡비로(폭 200 고정 + 높이=200/aspect) → Uniform으로 왜곡·잘림 없이 표시(WYSIWYG, it5 §3 B7).
+                    <!-- 썸네일 컨테이너를 대표 슬롯 종횡비로(폭 168 고정 + 높이=168/aspect) → Uniform으로 왜곡·잘림 없이 표시(WYSIWYG, it5 §3 B7).
                          SlotAspectRatio는 항목이 아닌 CutSelectViewModel에 있으므로 ListBox의 DataContext를 조상 참조. -->
-                    <Border Width="200"
+                    <Border Width="168"
                             Height="{Binding DataContext.SlotAspectRatio,
                                      RelativeSource={RelativeSource AncestorType=ListBox},
-                                     Converter={StaticResource AspectRatioToHeight}, ConverterParameter=200}"
+                                     Converter={StaticResource AspectRatioToHeight}, ConverterParameter=168}"
                             Margin="8" CornerRadius="12"
                             BorderThickness="3"
                             BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToBrush}}"
@@ -56,7 +114,8 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,28">
+        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Center"
+                    Margin="0,16,0,28">
             <!-- it11 #13: 재촬영 설정 off면 미노출, 횟수 제한 도달 시 Disable. -->
             <Button Content="다시 촬영" Command="{Binding RetakeCommand}"
                     IsEnabled="{Binding CanFullRetake}"

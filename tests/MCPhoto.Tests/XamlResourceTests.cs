@@ -257,6 +257,7 @@ public class XamlResourceTests
     [InlineData("GuideView.xaml")]         // it17: 컷수 옆 "(자동)" 배지
     [InlineData("HomeView.xaml")]          // it21: 4층 구조로 전면 재작성(앱 마크·흐름 안내·게스트 힌트)
     [InlineData("QrPopupView.xaml")]       // it21 §8.4: 좁은 창 대비 스크롤 래핑
+    [InlineData("CutSelectView.xaml")]     // 배치 프리뷰(프레임+슬롯 오버레이) 신설
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
