@@ -48,6 +48,8 @@
 {
   "schemaVersion": 1,
   "values": {
+    // ⚠️ CutCount 기본값은 현재 웹 6 / Windows 0(자동)으로 불일치 — 웹을 0으로 맞추는 것이 후속 과제
+    //    (12 §C11. 저장된 값이 있으면 그 값이 우선이라 기존 사용자는 영향 없음)
     "CutCount": 6, "CountdownSec": 6, "MirrorMode": true, "FlashMode": false,
     "ShutterSound": false, "RetakeEnabled": false, "RetakeLimit": 1,
     "OutputFormat": "Jpg", "RetentionHours": 24,

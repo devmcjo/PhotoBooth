@@ -149,8 +149,14 @@
 
 - **목적**: 촬영된 N컷 중 정확히 슬롯 수만큼 선택(선택 순서=슬롯 순서).
 - **화면·VM**: `CutSelectView` · `CutSelectViewModel`. 상태: `CaptureSession`.
+- **레이아웃**: 2열 — **좌측 배치 프리뷰 카드**(폭 288) + 우측 컷 썸네일 목록(`WrapPanel`, 썸네일 폭 168).
 - **핵심 규칙**:
-  - 진입(`OnEnterAsync`, `CutSelectViewModel.cs:26-44`): 컷 썸네일 생성(`StillImageConverter.ToBitmapSource`), 대표 슬롯 종횡비로 썸네일 컨테이너 비율 맞춤(WYSIWYG, 기본 3:4).
+  - 진입(`OnEnterAsync`): 컷 썸네일 생성(`StillImageConverter.ToBitmapSource`), 대표 슬롯 종횡비로 썸네일 컨테이너 비율 맞춤(WYSIWYG, 기본 3:4), 배치 프리뷰 구성.
+  - **배치 프리뷰**(신설): 프레임 이미지 위에 슬롯 칸을 겹쳐 그리고, 고른 컷이 **어느 슬롯에 어떻게 들어가는지** 실시간으로 보여준다. 빈 칸에는 슬롯 순번(1,2,…)을 표시한다.
+    - 매핑 규칙은 합성과 **같은 순수 함수**를 쓴다(`SlotFillPlan.Build` — 슬롯 `Index` 오름차순 ↔ 선택 순서 1:1). 미리보기와 결과물이 갈리지 않게 하는 유일한 근거이며, 선택을 해제하면 뒤 컷이 앞 슬롯으로 당겨지는 동작도 합성과 동일하다.
+    - 좌표계는 **프레임 원본 픽셀**을 그대로 쓰고 표시 축소는 `Viewbox`가 맡는다(좌표 변환 코드 없음 = 어긋날 여지 없음). 경계 클램프는 합성과 같은 `SlotPlacement.ClampSlotToFrame`.
+    - 컷은 `UniformToFill`+클리핑으로 슬롯을 덮는다(합성의 cover 중앙 크롭과 동일한 시각 결과).
+    - 프레임 이미지 로드 실패·`ImageSize` 미기록 같은 이상 데이터에서도 슬롯 칸 프리뷰는 동작한다(캔버스 크기를 슬롯 bounding box로 폴백). 프레임이 없으면 프리뷰 카드를 숨긴다(`HasSlotPreview`).
   - 토글(`ToggleCut`→`CaptureSession.ToggleSelection`, `CaptureSession.cs:51-65`): 이미 선택이면 해제, 아니면 추가(슬롯 수 초과 불가), 선택 순서 번호 갱신.
   - [다음]은 `IsSelectionComplete`(선택 수==슬롯 수)일 때만.
   - [재촬영] (**전체 재촬영, it11 #13**, `:91-97`): `RetakeEnabled` on일 때만 버튼 노출, `CanFullRetake`(=`FullRetakeCount < RetakeLimit`)면 활성. 클릭 시 `CaptureSession.BeginFullRetake`(컷·선택 폐기 + 카운터 증가, 프레임 유지) → Guide(세션 전체 재촬영). `RetakeLimit`(1~3) 도달 시 버튼 Disable + 커맨드 진입 이중 방어. **컷별 재촬영은 미구현**(버튼 UI 배치 USER-DECISION 대기, [90 로드맵](./90-roadmap-and-future-work.md) §2).
@@ -173,7 +179,9 @@
   - 노출 목록(`BuildFilterOptions`, `ResultViewModel.cs:66-74`): **항상 원본(None)** + 설정에서 켜진 것(`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`). 순수 로직이라 테스트 대상.
   - 필터 변경(`SetFilter`, `:106-114`): `Session.Filter` 갱신 후 **전체 컷 일괄 재합성**.
   - 프리뷰 즉시 반영: `StillImageConverter.FromFile`이 `IgnoreImageCache`로 같은 경로(`final.{ext}`) 재합성 시 WPF URI 캐시가 이전 이미지를 반환하는 문제를 방지(`StillImageConverter.cs:36-51`).
-  - 필터 구현: `Filters.Apply`(Capture) — Grayscale(BGR2GRAY→GRAY2BGR), Brightness(alpha 1.1/beta 20), Beauty(bilateral + 블렌드 + 톤). 컷 전체 일괄(개별 영역 아님).
+  - 필터 구현: `Filters.Apply`(Capture) — Grayscale(BGR2GRAY→GRAY2BGR), Brightness(alpha 1.1/beta 20), **Beauty(피부톤 마스크 기반 선택적 스무딩 + 감마 톤업 + 채도 + 언샵)**. 컷 전체 일괄(개별 영역 아님).
+  - **뷰티 개선**: 종전은 전면 bilateral(`d=7` 고정) + 60% 블렌드여서 고해상도(1080p↑)에서 커널이 상대적으로 너무 작아 효과가 눈에 보이지 않았다("흑백·밝게와 구분이 안 된다"는 평가). 개선 요지는 ① 커널을 **해상도 비례**로(절반 해상도에서 bilateral 2회 후 업스케일 — 비용은 오히려 감소), ② YCrCb 피부톤 마스크로 **피부에만** 스무딩(눈·머리카락·배경 디테일 보존), ③ 감마 톤업(0.88)·채도(1.08)·언샵(0.22)으로 "보정했다"가 읽히게. 파라미터 규격은 [14 §7](./14-media-pipeline-spec.md).
+  - ⚠️ **형상 변경(얼굴 슬리밍 등 워프)은 미지원**: 오검출 시 얼굴이 왜곡된 사진이 그대로 결과물이 되는 되돌릴 수 없는 실패라 범위에서 제외했다. 검토 결과와 구현 경로는 [90 로드맵](./90-roadmap-and-future-work.md).
 - **근거**: `ResultViewModel.cs`, `StillImageConverter.cs`, `SettingsView.xaml:220-255`(필터 노출 토글, 원본은 고정 체크·Disable).
 
 ## 8. 타임랩스 · QR 전송 · 로컬 저장 ([다음] 처리)
@@ -196,7 +204,7 @@
 
 - **목적**: 업로드 후 QR로 모바일 다운로드 페이지 제공.
 - **규칙**:
-  - `EnableQrDelivery` on → `Qr` 상태, off → `Done`(`ResultViewModel.cs:147-151`).
+  - effective QR on → `Qr` 상태, off → **세션 완료**(`AppShellViewModel.CompleteSession` = 홈 복귀 + 완료 토스트. 종전 `Done` 화면은 폐지).
   - 개별 토글(`SendPhoto`/`SendTimelapse`): QR 팝업이 사진/타임랩스 경로를 옵션 기준으로만 전달(`QrPopupViewModel.cs:47-48`).
   - **off→on 재활성 규칙**: `EnableQrDelivery`가 false→true로 켜질 때 하위 토글 둘 다 강제 on(`QrDeliveryPolicy.OnReEnabled`→`SettingsViewModel.OnEnableQrDeliveryChanged`, `SettingsViewModel.cs:158-172`). 둘 다 off면 QR 자체 off로 정규화(`QrDeliveryPolicy.Normalize`).
 - **근거**: `ResultViewModel.cs`, `QrPopupViewModel.cs`, `QrDeliveryPolicy.cs`, `SettingsViewModel.cs`.
@@ -214,12 +222,17 @@
   - **실패 시 우아 처리**(Storage 버킷 부재 등): 흐름을 막지 않는 비위협 안내, 결과물은 로컬 보존(QR 분기 이전 저장으로 손실 0), [완료]/[재시도](`Retry`) 제공(재시도 시 진행률·상태 0에서 재시작). 로컬 저장 여부에 따라 안내 문구 분기.
 - **근거**: `QrPopupViewModel.cs`, `IUploadService`, `QrService.cs`.
 
-### 9.2 완료
+### 9.2 세션 완료 (완료 화면 폐지 → 홈 복귀 + 토스트)
 
-- **목적**: 감사 화면 후 자동 홈 복귀(1회 세션).
-- **화면·VM**: `DoneView` · `DoneViewModel`.
-- **규칙**: 진입 시 6초 타이머 후 자동 홈 복귀(`DoneViewModel.cs:16-27`). **로그아웃 없음**(`clearUser:false`, 촬영 후 로그인 유지, it5 B8). 촬영 데이터는 Reset이 항상 폐기. 로그아웃은 계정 메뉴 수동 또는 유휴 타임아웃만.
-- **근거**: `DoneViewModel.cs`.
+- **목적**: 1회 세션을 끝내고 다음 손님을 받을 수 있는 상태(홈)로 되돌린다.
+- **구현**: 화면이 아니라 셸 동작이다 — `AppShellViewModel.CompleteSession(reason)` = `ReturnHome(clearUser:false)` + 완료 토스트(`ShowToast`).
+- **규칙**:
+  - 완료 경로는 둘이며 **반드시 이 지점을 지난다** — ① QR 미사용(effective QR off) 즉시 완료(`ResultViewModel.Next`), ② QR 팝업 [완료](`QrPopupViewModel.Done`). 문구가 갈리지 않도록 `AppShellViewModel.SessionCompleteMessage` 상수를 공유한다.
+  - 토스트: 하단 중앙, **비모달**, 5초 자동 소멸 + [확인]으로 즉시 닫기. 문구 "촬영이 완료되었습니다. 홈 화면으로 돌아갑니다."
+  - 모달로 만들지 않는 이유: 무인 키오스크에서 아무도 닫지 않으면 **다음 손님이 막힌다**. 자동 소멸이 필수 요건이다.
+  - **로그아웃 없음**(`clearUser:false`, 촬영 후 로그인 유지, it5 B8). 촬영 데이터는 `Reset`이 항상 폐기. 로그아웃은 계정 메뉴 수동 또는 유휴 타임아웃만.
+- **폐지 이력**: 종전에는 전체화면 완료 화면(`AppState.Done` · `DoneView`: "감사합니다" + [처음으로] + 6초 자동 복귀)이 이 역할을 했다. 화면을 하나 더 거치는 것보다 홈으로 바로 돌아가는 편이 키오스크 회전에 낫다는 판단으로 상태·VM·View를 모두 제거했다(`AppState`에 `Done`이 없음을 `AppStateTests.Done_State_Is_Retired`가 고정).
+- **근거**: `AppShellViewModel.cs`(`CompleteSession`·`ShowToast`·`DismissToast`), `MainWindow.xaml`(토스트 오버레이), `ResultViewModel.cs`, `QrPopupViewModel.cs`.
 
 ## 10. 유휴 감시(경고 팝업)
 
