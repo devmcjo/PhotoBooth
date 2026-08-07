@@ -143,6 +143,15 @@ public sealed partial class AccountViewModel : ViewModelBase
             TempUserQrHours = limits.QrHours;
             TempUserQrCount = limits.QrCount;
         }
+        catch (Exception ex) when (ex is BackendNotConfiguredException
+                                      or BackendUnavailableException
+                                      or BackendLoginRequiredException)
+        {
+            // 저장 경로와 같은 이유로 원인을 밝힌다 — "불러오지 못했습니다"만으로는
+            // 서버가 죽었는지 내 네트워크가 끊겼는지 로그인이 풀렸는지 알 수 없다.
+            _logger?.LogWarning(ex, "TempUser 전역 한도 조회 실패(서버 도달·인증)");
+            SetTempUserLimitsMessage($"현재 한도를 불러오지 못했습니다. {BackendFailureMessage.Describe(ex)}", isError: true);
+        }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "TempUser 전역 한도 조회 실패");

@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using MCPhoto.Core.Accounts;
+using MCPhoto.Core.Backend;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Upload;
 using MCPhoto.Http.Dto;
@@ -218,15 +219,22 @@ public sealed class HttpFirebaseClient : HttpBackendClient, IFirebaseClient
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            // 도달 불가로 분류 → UI가 "네트워크를 확인해 주세요"를 고를 수 있다.
+            // (사진 업로드는 실패해도 로컬 저장본이 남으므로 촬영 자체가 무산되지는 않는다.)
             Logger?.LogWarning(ex, "파일 PUT 실패(네트워크)");
-            throw new InvalidOperationException("파일 업로드에 실패했습니다(네트워크).", ex);
+            throw new BackendUnavailableException("파일을 업로드하지 못했습니다(네트워크).", ex);
         }
 
         using (response)
         {
             if (!response.IsSuccessStatusCode)
+            {
+                // 서명 URL 거부. 흔한 원인은 서명 만료(업로드가 길어짐)나 헤더 불일치다.
+                Logger?.LogWarning("파일 PUT 거부: HTTP {Status}", (int)response.StatusCode);
                 throw new InvalidOperationException(
-                    $"파일 업로드에 실패했습니다(HTTP {(int)response.StatusCode}).");
+                    "파일을 업로드하지 못했습니다. 업로드가 너무 오래 걸려 저장 시간이 초과됐을 수 있습니다. "
+                    + $"네트워크를 확인한 뒤 다시 시도해 주세요(서버 응답 {(int)response.StatusCode}).");
+            }
         }
 
         // StreamContent가 전량 전송 후에도 100% 보고 보장(길이 미상 대비).
