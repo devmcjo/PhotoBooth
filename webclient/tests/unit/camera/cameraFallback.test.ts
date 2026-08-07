@@ -16,6 +16,8 @@ import type {
   FramePayload,
   FrameProcessor,
   FrameSource,
+  FrameSourceAttachResult,
+  FrameTransferMode,
   ProcessedSize,
 } from "@adapters/camera/cameraTypes";
 import {
@@ -64,8 +66,12 @@ class FakeStream {
 
 class FakeSource implements FrameSource {
   private listener: ((payload: FramePayload) => void) | null = null;
-  async attach(): Promise<boolean> {
-    return true;
+  /** `{ok:false, errorName}`을 주면 `video.play()` reject를 흉내낸다. */
+  attachResult: FrameSourceAttachResult = { ok: true };
+  transferModeValue: FrameTransferMode = "videoFrame";
+
+  async attach(): Promise<FrameSourceAttachResult> {
+    return this.attachResult;
   }
   onFrame(listener: (payload: FramePayload) => void): () => void {
     this.listener = listener;
@@ -78,6 +84,9 @@ class FakeSource implements FrameSource {
   }
   size(): ProcessedSize {
     return { width: 1280, height: 720 };
+  }
+  transferMode(): FrameTransferMode {
+    return this.transferModeValue;
   }
   emit(): void {
     this.listener?.({ close: () => undefined } as unknown as FramePayload);

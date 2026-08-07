@@ -12,6 +12,8 @@ import type {
   FramePayload,
   FrameProcessor,
   FrameSource,
+  FrameSourceAttachResult,
+  FrameTransferMode,
   PreviewMode,
   ProcessedSize,
   SpoolFrame,
@@ -73,11 +75,13 @@ function fakeStream(overrides: Partial<MediaTrackSettings> = {}): FakeStream {
 class FakeFrameSource implements FrameSource {
   attached = false;
   detached = false;
-  attachResult = true;
+  /** `{ok:false, errorName}`을 주면 `video.play()` reject를 흉내낸다. */
+  attachResult: FrameSourceAttachResult = { ok: true };
+  transferModeValue: FrameTransferMode = "videoFrame";
   private listener: ((payload: FramePayload) => void) | null = null;
 
-  async attach(): Promise<boolean> {
-    this.attached = this.attachResult;
+  async attach(): Promise<FrameSourceAttachResult> {
+    this.attached = this.attachResult.ok;
     return this.attachResult;
   }
   onFrame(listener: (payload: FramePayload) => void): () => void {
@@ -92,6 +96,9 @@ class FakeFrameSource implements FrameSource {
   }
   size(): ProcessedSize {
     return { width: 1920, height: 1080 };
+  }
+  transferMode(): FrameTransferMode {
+    return this.transferModeValue;
   }
   /** 테스트에서 프레임 도착을 흉내낸다. */
   emit(): void {
@@ -176,7 +183,9 @@ function harness(
   const source = new FakeFrameSource();
   const processor = new FakeProcessor();
   const stream = fakeStream();
-  if (options.attachResult === false) source.attachResult = false;
+  if (options.attachResult === false) {
+    source.attachResult = { ok: false, errorName: "NotAllowedError" };
+  }
 
   const camera = createCameraService({
     openStream:
