@@ -44,6 +44,18 @@
   font-size: var(--fs-body);
 }
 
+/*
+ * 실패 오버레이의 오류 코드 캡션 — 손님의 시선을 [다시 시도]에서 빼앗지 않도록 caption 크기 ·
+ * muted 색으로 낮춘다. 눈으로 옮겨 적는 값이라 고정폭이 필요하다(`.stats`와 같은 계열).
+ */
+.failureCode {
+  margin: var(--gap-sm) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .stats {
   margin: var(--gap-sm) 0 0;
   color: var(--fg-muted);

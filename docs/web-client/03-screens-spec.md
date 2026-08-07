@@ -285,20 +285,35 @@ interface ScreenLogic {
 
 | 항목 | 내용 |
 |------|------|
-| 권한 프롬프트 | `getUserMedia` 호출 시 브라우저 권한 대화상자가 뜬다. 실패는 **사유 5종으로 갈라진다**(아래 표) — 권한 거부와 장치 부재는 손님이 할 조치가 완전히 다르다 |
+| 권한 프롬프트 | `getUserMedia` 호출 시 브라우저 권한 대화상자가 뜬다. 실패는 **사유 9종으로 갈라진다**(아래 표) — 권한 거부와 장치 부재는 손님이 할 조치가 완전히 다르다 |
 
-**실패 사유 5종**(판정: `domain/capture/cameraFailure.ts` 순수 함수 · 예외 `name`에서만 유도)
+**실패 사유 9종**(판정: `domain/capture/cameraFailure.ts` 순수 함수 · 예외 `name`에서만 유도)
 
-| 사유 | 유발 예외 | 문구 | [다시 시도] |
-|------|-----------|------|:-----------:|
+| 사유 | 확정 지점 / 유발 예외 | 문구 | [다시 시도] |
+|------|-----------------------|------|:-----------:|
 | `insecureContext` | `isSecureContext === false`(**가장 먼저 판정**) | "보안 연결(https)에서만 카메라를 사용할 수 있습니다." | ✕ |
 | `permissionDenied` | `NotAllowedError`·`SecurityError` | "카메라 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요." | ✕ |
+| `unsupportedBrowser` | `TypeError`(보안 컨텍스트일 때 = `navigator.mediaDevices` 부재 · **인앱브라우저·구형 WebView**) | "이 브라우저에서는 카메라를 사용할 수 없습니다. Safari·Chrome 등 기본 브라우저에서 열어 주세요." | ✕ |
 | `noDevice` | `NotFoundError`·`OverconstrainedError`(**제약 없는 재시도 후에도** 실패) | "사용할 수 있는 카메라를 찾지 못했습니다. 연결을 확인해 주세요." | ○ |
 | `inUse` | `NotReadableError`·`TrackStartError` | "카메라를 다른 앱이 사용 중입니다. 그 앱을 닫고 다시 시도해 주세요." | ○ |
-| `unknown` | 그 외 전부 | "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요." | ○ |
+| `playbackBlocked` | `FrameSource.attach()`가 `{ok:false}` — 스트림은 열렸는데 `video.play()`가 reject(iOS 자동재생 정책) | "카메라 영상을 시작하지 못했습니다. 화면을 한 번 누른 뒤 다시 시도해 주세요." | ○ |
+| `pipelineStalled` | Ready 타임아웃 · 가공 프레임 **0장**([04 §2.3.3](./04-media-pipeline-web.md)) | "카메라 영상을 표시하지 못했습니다. 다시 시도하거나 다른 브라우저에서 열어 주세요." | ○ |
+| `pipelineSlow` | Ready 타임아웃 · 가공 프레임 **1장 이상**(막힌 것이 아니라 느리다) | "카메라 영상이 원활하지 않습니다. 다시 시도하거나 다른 브라우저에서 열어 주세요." | ○ |
+| `unknown` | 그 외 전부(`AbortError`·`InvalidStateError` 등) | "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요." | ○ |
 
-⚠️ **`permissionDenied`·`insecureContext`에는 [다시 시도]를 붙이지 않는다**(`isCameraRetryable`) — 같은 조건에서 다시 눌러도 반드시 실패해 손님을 헛돌게 한다. 복구는 브라우저 사이트 설정([09 §3](./09-kiosk-operations.md))에서만 가능하다.
-⚠️ **`insecureContext`를 가장 먼저 판정한다** — `http://`로 열면 `navigator.mediaDevices` 자체가 `undefined`라 예외 `name`이 `TypeError`가 되어 `unknown`으로 뭉개진다.
+⚠️ **`permissionDenied`·`insecureContext`·`unsupportedBrowser`에는 [다시 시도]를 붙이지 않는다**(`isCameraRetryable`) — 같은 조건에서 다시 눌러도 반드시 실패해 손님을 헛돌게 한다. 권한 복구는 브라우저 사이트 설정([09 §3](./09-kiosk-operations.md))에서만, `unsupportedBrowser`는 **다른 브라우저로 여는 것**으로만 가능하다.
+⚠️ **`insecureContext`를 가장 먼저 판정한다** — `http://`로 열면 `navigator.mediaDevices` 자체가 `undefined`라 예외 `name`이 `TypeError`가 되고, 선판정이 없으면 `unsupportedBrowser`로 오진된다. 이 **순서가 계약이다**.
+⚠️ **`AbortError`는 매핑하지 않는다**(2026-08-07). 규격상 `NotReadableError`와 분리된 잔여 범주라 "다른 앱 점유"로 단정할 근거가 약하다 — 실기기에서 관측된 뒤에 결정한다. 그동안은 아래 오류 코드가 `unknown/AbortError`로 이름을 실어 나른다.
+
+**오류 코드 캡션**(2026-08-07 신설 · `CameraPreview`의 `Failed` 오버레이 최하단)
+
+| 항목 | 규격 |
+|------|------|
+| 표시 | `오류 코드 <사유>/<상세>`(예: `unknown/AbortError` · `playbackBlocked/NotAllowedError` · `pipelineStalled/main-none` · `pipelineSlow/f3`). 상세가 없으면 사유만 |
+| 노출 조건 | 카메라가 `Failed`일 때만. `Idle`·`Starting`·`Ready`에서는 렌더되지 않는다 |
+| 스타일 | caption 크기 · `--fg-muted` · 고정폭(`tabular-nums`) — [다시 시도]의 우선순위를 흐리지 않는다 |
+| 왜 게스트에게도 보이는가 | 진단 모달은 **로그인 전용**(§15.2)이고 클라이언트 로그는 기기 IndexedDB에만 쌓인다. 현장 운영자·테스터가 실패 원인을 전할 수 있는 **유일한 창구**다 |
+| 안전 | 상세는 `/^[A-Za-z0-9_.:+-]{1,32}$/`를 통과한 값뿐이다 — 공백·`@`·한글·32자 초과를 거부하므로 예외 **메시지**·이메일·토큰·게이트 키·기기 `label`이 원리적으로 섞일 수 없다(DIAG-1·AUTH-3와 같은 계열) |
 
 | 권한 사전 승인 | 키오스크는 브라우저 정책으로 사전 허용하는 것을 권장([09 §3](./09-kiosk-operations.md)) |
 | 세션 녹화 | **하지 않는다.** 타임랩스용 프레임을 샘플링해 바로 인코딩한다(WD2, [04 §7](./04-media-pipeline-web.md)) |

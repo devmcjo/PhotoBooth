@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  cameraFailure,
   cameraFailureMessageKey,
   classifyCameraFailure,
+  classifyCameraFailureFrom,
+  formatCameraFailureCode,
   isCameraRetryable,
+  sanitizeFailureDetail,
   type CameraFailureReason,
 } from "@domain/capture/cameraFailure";
 import { STRINGS } from "@ui/strings";
@@ -269,7 +273,15 @@ describe("classifyCameraFailure", () => {
 
   it("알 수 없는 이름은 unknown이다", () => {
     expect(classifyCameraFailure("", true)).toBe("unknown");
+    // ⚠️ `AbortError`는 **의도적으로 unknown이다**(2026-08-07 설계 리뷰). 규격상 잔여 범주라
+    //    "다른 앱 점유"로 단정할 근거가 약하다. 실기기 관측 전에는 매핑하지 않는다 —
+    //    사유 대신 `CameraFailure.detail`이 `unknown/AbortError`로 이름을 실어 나른다.
     expect(classifyCameraFailure("AbortError", true)).toBe("unknown");
+  });
+
+  it("보안 컨텍스트인데 TypeError면 브라우저 미지원이다(인앱브라우저·구형 WebView)", () => {
+    // `navigator.mediaDevices`가 없다는 뜻이다. http는 위 insecureContext 선판정이 먼저 걸러낸다.
+    expect(classifyCameraFailure("TypeError", true)).toBe("unsupportedBrowser");
   });
 
   it("보안 컨텍스트가 아니면 **이름과 무관하게** insecureContext가 먼저다", () => {
@@ -282,15 +294,16 @@ describe("classifyCameraFailure", () => {
 });
 
 describe("cameraFailureMessageKey · isCameraRetryable", () => {
-  const ALL: readonly CameraFailureReason[] = [
-    "permissionDenied",
-    "noDevice",
-    "inUse",
-    "insecureContext",
-    "unknown",
-  ];
+  /**
+   * ⚠️ **손으로 열거하지 않는다.** 전에는 5종을 손으로 적어 두어 `pipelineStalled`가 신설된
+   * 뒤에도 **검증에서 통째로 빠져 있었다** — 같은 누락이 반복되는 구조였다.
+   * `STRINGS.camera.errors`의 키는 `CameraFailureMessageKey`(= `CameraFailureReason`)와
+   * 1:1이므로 여기서 유도하면 사유를 늘릴 때 **테스트가 자동으로 커진다**.
+   */
+  const ALL = Object.keys(STRINGS.camera.errors) as readonly CameraFailureReason[];
 
-  it("사유 5종 전부가 실제 문구 카탈로그에 매핑된다(빈 문구 없음)", () => {
+  it("사유 전부가 실제 문구 카탈로그에 매핑된다(빈 문구 없음)", () => {
+    expect(ALL.length).toBeGreaterThanOrEqual(9);
     for (const reason of ALL) {
       const message = STRINGS.camera.errors[cameraFailureMessageKey(reason)];
       expect(typeof message, reason).toBe("string");
@@ -298,14 +311,95 @@ describe("cameraFailureMessageKey · isCameraRetryable", () => {
     }
   });
 
-  it("권한 거부·비보안 연결에는 [다시 시도]를 붙이지 않는다 — 반드시 다시 실패한다", () => {
-    expect(isCameraRetryable("permissionDenied")).toBe(false);
-    expect(isCameraRetryable("insecureContext")).toBe(false);
+  it("사유 전부가 retryable 판정을 갖는다(undefined 누락 없음)", () => {
+    for (const reason of ALL) {
+      expect(typeof isCameraRetryable(reason), reason).toBe("boolean");
+    }
   });
 
-  it("장치 부재·점유·미상은 재시도 가능하다", () => {
+  it("권한 거부·비보안 연결·브라우저 미지원에는 [다시 시도]를 붙이지 않는다", () => {
+    expect(isCameraRetryable("permissionDenied")).toBe(false);
+    expect(isCameraRetryable("insecureContext")).toBe(false);
+    // 같은 브라우저에서 다시 눌러도 `mediaDevices`는 생기지 않는다 — 헛도는 버튼이다.
+    expect(isCameraRetryable("unsupportedBrowser")).toBe(false);
+  });
+
+  it("장치 부재·점유·미상·재생 차단·지연은 재시도 가능하다", () => {
     expect(isCameraRetryable("noDevice")).toBe(true);
     expect(isCameraRetryable("inUse")).toBe(true);
     expect(isCameraRetryable("unknown")).toBe(true);
+    // 터치 한 번으로 자동재생 정책이 풀린다 — 재시도에 실효가 있다.
+    expect(isCameraRetryable("playbackBlocked")).toBe(true);
+    expect(isCameraRetryable("pipelineSlow")).toBe(true);
+  });
+});
+
+// ─────────── 진단 코드 새니타이즈 (설계 §2.1 — 2026-08-07 신설) ───────────
+
+describe("sanitizeFailureDetail — 화면에 나가는 값의 보안 경계", () => {
+  it("브라우저 예외 이름과 우리 경로 토큰은 통과한다", () => {
+    for (const value of ["AbortError", "NotAllowedError", "main-none", "f3", "worker-transferred"]) {
+      expect(sanitizeFailureDetail(value), value).toBe(value);
+    }
+  });
+
+  it("이메일·토큰·공백·한글·33자 이상을 전부 null로 접는다", () => {
+    // 이 관문이 뚫리면 게이트 키·계정 email·기기 label·예외 **메시지**가 화면 코드로 새어 나간다
+    // (기존 정적 검사 DIAG-1·AUTH-3와 같은 계열의 방어다).
+    for (const value of [
+      "a@b.com",
+      "Could not start video source",
+      "권한이 거부되었습니다",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
+      "a".repeat(33),
+      "",
+      "path/to/thing",
+      "key=value",
+    ]) {
+      expect(sanitizeFailureDetail(value), value).toBeNull();
+    }
+  });
+
+  it("null·undefined·비문자열은 null이다", () => {
+    expect(sanitizeFailureDetail(null)).toBeNull();
+    expect(sanitizeFailureDetail(undefined)).toBeNull();
+  });
+});
+
+describe("cameraFailure · classifyCameraFailureFrom · formatCameraFailureCode", () => {
+  it("상세가 없으면 사유만, 있으면 `사유/상세`다", () => {
+    expect(formatCameraFailureCode(cameraFailure("insecureContext"))).toBe("insecureContext");
+    expect(formatCameraFailureCode(cameraFailure("unknown", "AbortError"))).toBe(
+      "unknown/AbortError",
+    );
+    expect(formatCameraFailureCode(cameraFailure("pipelineStalled", "main-none"))).toBe(
+      "pipelineStalled/main-none",
+    );
+  });
+
+  it("새니타이즈를 통과하지 못한 상세는 코드에서 통째로 사라진다", () => {
+    const failure = cameraFailure("unknown", "Could not start video source");
+    expect(failure.detail).toBeNull();
+    expect(formatCameraFailureCode(failure)).toBe("unknown");
+  });
+
+  it("예외에서 만들면 사유는 classifyCameraFailure와 **같은 판정**이고 상세는 `name`이다", () => {
+    const err = new DOMException("dev /dev/video0 is busy", "NotReadableError");
+    const failure = classifyCameraFailureFrom(err, true);
+    expect(failure.reason).toBe(classifyCameraFailure("NotReadableError", true));
+    // ⚠️ `message`가 아니라 `name`이다 — 메시지에는 기기명·경로가 섞인다.
+    expect(failure.detail).toBe("NotReadableError");
+    expect(formatCameraFailureCode(failure)).toBe("inUse/NotReadableError");
+  });
+
+  it("Error가 아닌 값도 예외를 던지지 않고 unknown으로 접는다", () => {
+    const failure = classifyCameraFailureFrom("문자열 오류", true);
+    expect(failure.reason).toBe("unknown");
+    expect(failure.detail).toBeNull();
+  });
+
+  it("보안 컨텍스트가 아니면 이름과 무관하게 insecureContext다(순서 불변)", () => {
+    const failure = classifyCameraFailureFrom(new DOMException("x", "NotAllowedError"), false);
+    expect(failure.reason).toBe("insecureContext");
   });
 });

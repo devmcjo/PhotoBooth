@@ -1,5 +1,8 @@
 import {
-  classifyCameraFailure,
+  cameraFailure,
+  classifyCameraFailureFrom,
+  formatCameraFailureCode,
+  type CameraFailure,
   type CameraFailureReason,
 } from "@domain/capture/cameraFailure";
 import {
@@ -16,6 +19,7 @@ import type {
   FrameProcessor,
   FrameProcessorMode,
   FrameSource,
+  FrameTransferMode,
   PreviewMode,
   ProcessedSize,
   SpoolFrame,
@@ -68,6 +72,13 @@ export interface CameraService {
    * 권한 거부와 장치 부재는 손님이 할 조치가 완전히 다르다.
    */
   failureReason(): CameraFailureReason | null;
+  /**
+   * 마지막 실패의 **사유 + 상세**. 실패한 적이 없으면 `null`.
+   *
+   * 화면·진단이 `오류 코드 <사유>/<상세>`를 보이는 근거다 — 사유만으로는 `unknown` 하나에
+   * 성격이 다른 예외가 모여 현장에서 원인을 좁힐 수 없다(2026-08-07 신설).
+   */
+  failure(): CameraFailure | null;
   /** 실제 획득값. 열려 있지 않으면 null. */
   settings(): CameraSettings | null;
   /** 가공 결과 크기(크롭 후). */
@@ -81,6 +92,11 @@ export interface CameraService {
   pipelineMode(): FrameProcessorMode | null;
   /** 현재 프리뷰 연결 방식. `none`이면 화면에 아무것도 그려지지 않는다. */
   previewMode(): PreviewMode;
+  /**
+   * 현재 프레임 전달 경로(04 §2.3.2). 카메라가 닫혀 있으면 `null`.
+   * `imageBitmapDemoted`는 **정상 폴백이 아니라 브라우저 결함 신호**다.
+   */
+  frameTransferMode(): FrameTransferMode | null;
   /** 실제로 스트림이 열린 제약 사다리 칸(04 §2.1). 열려 있지 않으면 `null`. */
   constraintStep(): string | null;
   onState(listener: CameraStateListener): () => void;
@@ -126,8 +142,13 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
   let currentOptions: CameraStartOptions | null = null;
   /** 실제로 열린 제약 사다리 칸. 진단이 "왜 해상도가 낮은가"를 답하는 근거다. */
   let currentStep: string | null = null;
-  /** 마지막 실패 사유. `teardown()`이 지우지 않는다 — 실패 직후 teardown이 돌기 때문이다. */
-  let lastFailureReason: CameraFailureReason | null = null;
+  /**
+   * 마지막 실패(사유 + 상세). `teardown()`이 지우지 않는다 — 실패 직후 teardown이 돌기 때문이다.
+   *
+   * ⚠️ **대입은 `null` 또는 `cameraFailure(...)`/`classifyCameraFailureFrom(...)` 결과뿐이다**
+   *    (정적 검사 CAM-7). 객체 리터럴로 우회하면 `err.message`가 화면 코드로 새어 나간다.
+   */
+  let lastFailure: CameraFailure | null = null;
 
   const stateListeners = new Set<CameraStateListener>();
   const processedListeners = new Set<(size: ProcessedSize) => void>();
@@ -205,11 +226,22 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
     return typeof isSecureContext === "boolean" ? isSecureContext : true;
   }
 
-  /** 실패 사유를 분류해 보관한다. 화면은 `failureReason()`으로 읽는다. */
-  function recordFailure(err: unknown): CameraFailureReason {
-    const reason = classifyCameraFailure(err instanceof Error ? err.name : "", secureContext());
-    lastFailureReason = reason;
-    return reason;
+  /**
+   * `getUserMedia` 예외를 사유+상세로 분류해 보관한다. 화면은 `failure()`/`failureReason()`으로 읽는다.
+   * 상세는 예외 **이름**이다(`message`가 아니다 — 기기명·경로가 섞일 수 있다).
+   */
+  function recordFailure(err: unknown): CameraFailure {
+    lastFailure = classifyCameraFailureFrom(err, secureContext());
+    return lastFailure;
+  }
+
+  /** 파이프라인 내부 사유(예외가 없는 실패)를 보관한다. */
+  function recordPipelineFailure(
+    reason: CameraFailureReason,
+    detail?: string | null,
+  ): CameraFailure {
+    lastFailure = cameraFailure(reason, detail);
+    return lastFailure;
   }
 
   /**
@@ -233,7 +265,7 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       const step = ladder[index]!;
       try {
         const opened = await openStream(step.constraints);
-        lastFailureReason = null; // 성공하면 직전 실패 흔적을 지운다.
+        lastFailure = null; // 성공하면 직전 실패 흔적을 지운다.
         if (index > 0) {
           // 첫 칸이 아니면 요청 해상도가 낮아졌을 수 있다 — 진단에서 원인을 찾을 수 있게 남긴다.
           logger.warn("카메라를 낮은 제약으로 열었다", { step: step.label, attempts: index + 1 });
@@ -243,9 +275,13 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
         lastError = err;
         const name = err instanceof Error ? err.name : "";
         if (!shouldTryNextStep(name)) {
-          // 권한 거부 — 제약을 낮춰도 결과가 같다. 즉시 확정한다.
-          const reason = recordFailure(err);
-          logger.error("카메라 열기 실패(권한)", { step: step.label, failureReason: reason });
+          // 권한 거부·브라우저 미지원 — 제약을 낮춰도 결과가 같다. 즉시 확정한다.
+          const failure = recordFailure(err);
+          logger.error("카메라 열기 실패(즉시 확정)", {
+            step: step.label,
+            failureReason: failure.reason,
+            failureCode: formatCameraFailureCode(failure),
+          });
           return null;
         }
         logger.warn("카메라 제약 단계 실패 — 다음 단계 시도", {
@@ -256,10 +292,15 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       }
     }
 
-    const reason = recordFailure(lastError);
+    const failure = recordFailure(lastError);
     logger.error("카메라 열기 실패(사다리 전부 소진)", {
       steps: ladder.length,
-      failureReason: reason,
+      failureReason: failure.reason,
+      // ⚠️ 확정 단계의 예외 **이름**을 남긴다. 이것이 없어서 `unknown`이 떴을 때 어떤 예외였는지
+      //    통째로 유실됐다(중간 단계 로그는 `name`을 남기는데 확정 단계만 빠져 있었다).
+      name: lastError instanceof Error ? lastError.name : "",
+      failureCode: formatCameraFailureCode(failure),
+      // `message`는 진단에 도움이 되지만 **`failureCode`에는 절대 넣지 않는다**(기기명·경로 혼입).
       reason: lastError instanceof Error ? lastError.message : String(lastError),
     });
     return null;
@@ -267,12 +308,15 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
 
   return {
     state: () => state,
-    failureReason: () => lastFailureReason,
+    failure: () => lastFailure,
+    // 기존 호출처(문구·[다시 시도] 판정)는 사유만 보면 된다 — 두 값이 어긋나지 않게 파생시킨다.
+    failureReason: () => lastFailure?.reason ?? null,
     settings: () => currentSettings,
     processedSize: () => lastProcessedSize,
     fps: () => meter.fps(now()),
     pipelineMode: () => processor?.mode ?? null,
     previewMode: () => processor?.previewMode() ?? "none",
+    frameTransferMode: () => source?.transferMode() ?? null,
     constraintStep: () => currentStep,
 
     onState(listener) {
@@ -312,7 +356,7 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       const opened = await open(options);
       if (opened === null) {
         // detail은 **사유 열거값**이다(한국어 문장이 아니다) — 문구 결정은 화면이 한다(03 §6.3).
-        setState("Failed", lastFailureReason ?? "unknown");
+        setState("Failed", lastFailure?.reason ?? "unknown");
         teardown();
         return false;
       }
@@ -347,7 +391,7 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
         logger.error("프레임 가공기 생성 실패", {
           reason: err instanceof Error ? err.message : String(err),
         });
-        lastFailureReason = "pipelineStalled";
+        recordPipelineFailure("pipelineStalled", "processor-spawn");
         setState("Failed", "pipelineStalled");
         teardown();
         return false;
@@ -361,11 +405,21 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       source = makeFrameSource();
       unsubscribeFrames = source.onFrame((payload) => processor?.process(payload));
 
-      const attached = await source.attach(stream);
-      if (!attached) {
-        // 스트림은 열렸는데 재생이 시작되지 않았다 — 권한·장치 문제가 아니므로 `unknown`이다.
-        lastFailureReason = "unknown";
-        setState("Failed", "unknown");
+      /*
+       * ⚠️ **`if (!result.ok)`이다 — `if (!result)`로 되돌리지 마라.** `attach()`는 이제 객체를
+       *    돌려주고 객체는 항상 truthy라, `!result`는 구문상 유효한데 **항상 거짓**이다
+       *    (`tsc`가 잡지 못한다). 그러면 재생 실패가 조용히 성공으로 처리되어 Ready 타임아웃
+       *    8초를 기다린 뒤 엉뚱한 사유로 실패한다.
+       */
+      const result = await source.attach(stream);
+      if (!result.ok) {
+        // 스트림은 열렸는데 재생이 시작되지 않았다 — 권한·장치 문제가 아니다(iOS 자동재생 정책 등).
+        const failure = recordPipelineFailure("playbackBlocked", result.errorName);
+        logger.error("카메라 재생 시작 실패", {
+          failureReason: failure.reason,
+          failureCode: formatCameraFailureCode(failure),
+        });
+        setState("Failed", "playbackBlocked");
         teardown();
         return false;
       }
@@ -374,20 +428,31 @@ export function createCameraService(deps: CameraServiceDeps = {}): CameraService
       readyTimer = setTimeout(() => {
         readyTimer = null;
         if (state === "Starting") {
-          // 가공 프레임이 **한 장도** 없으면 파이프라인 정체다(권한·장치 문제가 아니다).
-          // 프레임이 오는데도 Ready가 아니면 fps·경과 조건 미달이라 성격이 다르다 → `unknown`.
-          const stalled = meter.total === 0;
-          const reason = stalled ? "pipelineStalled" : "unknown";
+          /*
+           * 가공 프레임이 **한 장도** 없으면 파이프라인 정체다(권한·장치 문제가 아니다).
+           * 프레임이 오는데도 Ready가 아니면 **느린 것**이지 막힌 것이 아니다 → `pipelineSlow`.
+           *
+           * 상세가 방향을 가른다: 정체는 `{가공경로}-{프리뷰경로}`(`worker-transferred`면
+           * 프레임 소스 쪽, `main-none`이면 프리뷰가 못 붙은 것), 느림은 `f{가공프레임수}`.
+           */
+          const failure =
+            meter.total === 0
+              ? recordPipelineFailure(
+                  "pipelineStalled",
+                  `${processor?.mode ?? "?"}-${processor?.previewMode() ?? "none"}`,
+                )
+              : recordPipelineFailure("pipelineSlow", `f${meter.total}`);
           logger.error("카메라 Ready 타임아웃", {
             elapsedMs: Math.round(now() - startedAt),
             processedFrames: meter.total,
-            failureReason: reason,
+            failureReason: failure.reason,
+            failureCode: formatCameraFailureCode(failure),
             pipelineMode: processor?.mode ?? null,
             previewMode: processor?.previewMode() ?? "none",
+            frameTransferMode: source?.transferMode() ?? null,
             constraintStep: currentStep,
           });
-          lastFailureReason = reason;
-          setState("Failed", reason);
+          setState("Failed", failure.reason);
           teardown();
         }
       }, readyTimeoutMs);

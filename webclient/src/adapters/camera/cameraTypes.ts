@@ -53,12 +53,39 @@ export interface SpoolOptions {
 }
 
 /**
+ * `attach()` 결과 — 성패**와 이유**(2026-08-07 신설).
+ *
+ * 전에는 `boolean`이라 `video.play()`가 왜 reject됐는지(`err.name`)가 통째로 버려졌고,
+ * 그래서 스트림 획득 성공 후의 재생 실패가 권한 실패와 같은 `unknown`으로 보고됐다.
+ *
+ * ⚠️ **호출측은 반드시 `result.ok`를 본다.** 이 타입은 객체라 `if (!result)`는 항상 거짓이고
+ *    `tsc`가 그 실수를 잡지 못한다 — 재생 실패가 조용히 성공으로 처리된다.
+ */
+export type FrameSourceAttachResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly errorName: string };
+
+/**
+ * 프레임을 Worker로 넘기는 실제 경로 — 진단 [프레임 전달] 행의 값(04 §2.3.2).
+ *
+ * - `videoFrame` — WebCodecs `VideoFrame` zero-copy(권장 경로)
+ * - `imageBitmap` — `VideoFrame`이 **애초에 없거나 실증 프로브가 실패**해 처음부터 폴백(정상)
+ * - `imageBitmapDemoted` — `VideoFrame`이 있었는데 **런타임에 깨져 강등**됐다(브라우저 결함
+ *   신호 · 성능 예산 재측정 대상). 진단 tone이 `imageBitmap`과 갈리는 이유다 — 합치면
+ *   "폴백 기기"와 "고장난 기기"를 현장에서 구분할 수 없다.
+ */
+export type FrameTransferMode = "videoFrame" | "imageBitmap" | "imageBitmapDemoted";
+
+/**
  * `<video>` + 프레임 도착 루프. 브라우저 전용이라 인터페이스로 분리해
  * `cameraService`를 노드 환경에서 테스트할 수 있게 한다.
  */
 export interface FrameSource {
-  /** 스트림을 붙이고 재생을 시작한다. 실패 시 `false`(예외 전파 금지 — 01 §2.1). */
-  attach(stream: MediaStream): Promise<boolean>;
+  /**
+   * 스트림을 붙이고 재생을 시작한다. 실패해도 **예외를 던지지 않는다**(01 §2.1) —
+   * `{ok:false, errorName}`으로 이유를 돌려준다.
+   */
+  attach(stream: MediaStream): Promise<FrameSourceAttachResult>;
   /**
    * 프레임 도착 구독. 중복 프레임(`mediaTime` 동일)은 소스가 **걸러서** 넘긴다.
    * @returns 구독 해제 함수
@@ -67,6 +94,8 @@ export interface FrameSource {
   detach(): void;
   /** 원본 해상도(video 메타데이터). */
   size(): ProcessedSize;
+  /** 현재 프레임 전달 경로(진단 표시). */
+  transferMode(): FrameTransferMode;
 }
 
 /**
