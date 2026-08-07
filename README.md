@@ -10,12 +10,12 @@
 
 | 영역 | 기능 |
 |------|------|
-| 촬영 | N컷 연속 촬영(6/8/10), 컷당 카운트다운, [바로 촬영], 플래시(화면 하양), 거울모드, 카메라 Ready 게이트 |
-| 프레임 | 프레임 선택은 누구나, 생성·편집(슬롯 좌표/종횡비)·삭제는 **고급 유저 이상**. 공용(서버) 프레임 관리는 매니저 이상 |
-| 후처리 | 필터(원본·흑백·밝게·뷰티, 결과 화면에서 실시간 반영), 컷 합성, 배속 타임랩스(ffmpeg) |
+| 촬영 | N컷 연속 촬영(**자동**/6/8/10 — 기본은 자동 `max(6, 슬롯+2)`), 컷당 카운트다운, [바로 촬영], 플래시(화면 하양), 거울모드, 카메라 Ready 게이트 |
+| 프레임 | 선택은 누구나, 생성·삭제는 **고급 유저 이상**(공용 프레임 생성은 매니저 이상). 개인 프레임은 **서버가 정본**이라 다른 PC에서도 같은 계정으로 보입니다. **수정 기능은 없습니다** — 새로 만듭니다 |
+| 후처리 | 필터(원본·흑백·밝게·뷰티, 결과 화면에서 실시간 반영), 컷 선택 시 **슬롯 배치 프리뷰**, 컷 합성, 배속 타임랩스(ffmpeg) |
 | 전달 | QR 전송(사진·타임랩스 개별 토글), 모바일 다운로드 페이지, 보관시간(1~72h) 후 자동 만료. 임시 유저는 QR 전송에 시간·횟수 한도(서버 판정) |
-| 운영 | 로컬 저장, 유휴 감시(무동작 시 경고 후 홈 복귀, 로그아웃 없음), 카메라 테스트 모달, 진단 모달, 전체화면/창모드 |
-| 계정 | 게스트 / **Google 로그인(SSO)**, 역할 5종(임시 유저·사용자·고급 유저·매니저·관리자), 설정·계정 관리 진입은 **PIN 게이트**, 관리자 도구(계정·프레임 관리) |
+| 운영 | 로컬 저장, 촬영 완료 시 **홈 복귀 + 완료 토스트**(별도 완료 화면 없음), 유휴 감시(무동작 시 경고 후 홈 복귀, 로그아웃 없음), 카메라 테스트 모달, 진단 모달(**프레임 파일 검사** 포함), 전체화면/창모드 |
+| 계정 | 게스트 / **Google 로그인(SSO)**, 역할 5종(임시 유저·사용자·고급 유저·매니저·관리자), 설정·계정 관리 진입은 **PIN 게이트**, 관리자 도구(계정·프레임 관리, 계정별 **개인 프레임 개수** 표시) |
 
 ## 🧱 기술 스택
 
@@ -23,7 +23,7 @@
 - **영상/이미지**: [OpenCvSharp4](https://github.com/shimat/opencvsharp)(카메라·필터·합성), [ffmpeg](https://ffmpeg.org/)(세션 녹화·타임랩스)
 - **백엔드**: Firebase — Cloud Firestore, Cloud Storage. 앱은 **Cloud Functions(2nd gen, TypeScript) HTTPS API를 경유**하며, Admin 자격증명은 서버에만 둡니다(앱에 서비스 계정 키 없음). QR: [QRCoder](https://github.com/codebude/QRCoder)
 - **인증**: Google SSO(시스템 브라우저 + loopback + PKCE) → 서버가 발급한 JWT로 API 호출
-- **웹**: Firebase Hosting(바닐라 JS 다운로드 페이지) + Cloud Functions(백엔드 API)
+- **웹**: Firebase Hosting(바닐라 JS 다운로드 페이지) + Cloud Functions(백엔드 API) + **웹 클라이언트**(React + TypeScript + Vite — Windows 앱과 같은 촬영 흐름을 브라우저에서, `webclient/`)
 
 ## 📁 프로젝트 구조
 
@@ -35,12 +35,13 @@ photobooth/
 │  ├─ MCPhoto.Capture/     # OpenCvSharp 카메라, ffmpeg 녹화/타임랩스, 합성, 필터
 │  ├─ MCPhoto.Http/        # 백엔드(HTTPS API) 클라이언트 — 계정·프레임·업로드·설정
 │  └─ MCPhoto.App/         # WPF UI(Views/ViewModels), DI 부트스트랩, 상태머신
-├─ tests/MCPhoto.Tests/    # 단위·headless XAML 회귀 테스트 (721개)
+├─ tests/MCPhoto.Tests/    # 단위·headless XAML 회귀 테스트 (1006개)
 ├─ web/
 │  ├─ public/              # 모바일 다운로드 페이지(바닐라 JS)
-│  ├─ functions/           # 백엔드 API (Cloud Functions 2nd gen, TypeScript)
+│  ├─ functions/           # 백엔드 API (Cloud Functions 2nd gen, TypeScript) — 테스트 350개
 │  ├─ *.rules              # Firestore/Storage 보안 규칙
 │  └─ deploy-web.bat       # 웹·Functions 배포 스크립트 (+ OPS-ttl.md 운영문서)
+├─ webclient/              # 웹 클라이언트(React+TS+Vite) — 브라우저에서 촬영까지
 ├─ installer/              # Inno Setup 스크립트 (MCPhoto.iss)
 ├─ tools/ffmpeg/           # 번들 ffmpeg.exe (타임랩스용)
 ├─ docs/                   # PRD·설계·분석 문서  ← 상세는 docs/analysis/ 참고
@@ -53,14 +54,14 @@ photobooth/
 ```bash
 # 요구: .NET 8 SDK (Windows)
 dotnet build MCPhoto.sln -c Debug        # 빌드
-dotnet test  MCPhoto.sln                 # 테스트 (721개)
+dotnet test  MCPhoto.sln                 # 테스트 (1006개)
 dotnet run  --project src/MCPhoto.App    # 실행
 ```
 
 - 일반 빌드 산출물: `src/MCPhoto.App/bin/Debug/net8.0-windows/`
 - **웹캠**이 없어도 앱은 실행됩니다(카메라 미연결 처리).
-- **백엔드에 도달할 수 없으면**(오프라인 / 게이트 키 미설정) 로그인·업로드·QR은 실패하지만 **게스트 촬영과 로컬 저장은 계속 동작**합니다. 오프라인 로그인 폴백은 없습니다.
-- 웹/백엔드 테스트: `web/functions`에서 `npm test`(Jest), `web`에서 `npm run test:rules`(Firestore·Storage 규칙 Emulator 테스트).
+- **백엔드에 도달할 수 없으면**(오프라인 / 게이트 키 미설정) 로그인·업로드·QR은 실패하지만 **게스트 촬영과 로컬 저장은 계속 동작**합니다. 오프라인 로그인 폴백은 없습니다. 프레임은 서버가 정본이라 **오프라인에서 새로 만들 수 없지만**, 이미 받아 둔 프레임으로 촬영하는 것은 됩니다.
+- 웹/백엔드 테스트: `web/functions`에서 `npm test`(Jest 350개), `web`에서 `npm run test:rules`(Firestore·Storage 규칙 Emulator 테스트), `webclient`에서 `npx vitest run`.
 
 ## 📦 배포 (단일 EXE)
 
@@ -102,19 +103,31 @@ publish.bat  더블클릭    (또는)  powershell -ExecutionPolicy Bypass -File 
 | 문서 | 내용 |
 |------|------|
 | `00-overview-and-architecture.md` | 전체 아키텍처·컴포넌트·데이터 흐름 |
+| `05-cross-platform-client-guide.md` | 클라이언트 공통 규격(플랫폼 간 동일 동작의 기준) |
 | `10~12-exe-app-*.md` | WPF 앱 구조 / 기능 상세 / 설정·구성 |
+| `13-client-behavior-spec.md` · `14-media-pipeline-spec.md` | 화면·전이·타이밍 규격 / 촬영·합성·필터 규격 |
 | `20-frontend-web-download-page.md` | 웹 다운로드 페이지 |
-| `30-backend-firebase-integration.md` | 백엔드 API 연동(인증·업로드·프레임/계정·한도) |
-| `40-database-firestore-and-storage-schema.md` | Firestore/Storage 스키마·경로·규칙 |
+| `30-backend-firebase-integration.md` · `31-backend-api-reference.md` | 백엔드 연동 / **API 계약 전문**(라우트·게이트·에러 매핑) |
+| `40-database-firestore-and-storage-schema.md` · `41-local-data-and-file-formats.md` | Firestore/Storage 스키마 / 로컬 파일 포맷(`.slots` 등) |
 | `50-infra-gcp-lifecycle-and-ttl.md` | GCP 인프라·보관/만료(Lifecycle·TTL) |
-| `60-auth-accounts-and-roles.md` | 로그인·계정·역할 권한 |
+| `60-auth-accounts-and-roles.md` · `61-auth-platform-integration.md` | 로그인·계정·역할 권한 / 플랫폼별 인증 연동 |
 | `70-logging-and-troubleshooting.md` | 로그 위치·이슈 진단 가이드 |
 | `80-build-and-deployment.md` | 빌드·단일 EXE 배포 |
 | `90-roadmap-and-future-work.md` | 추후 개발·미결정·비범위 |
 
 이 밖에 제품 요구사항은 [`docs/prd/`](docs/prd/), 이터레이션별 설계·WBS·인터페이스 계약(WPF ↔ 백엔드 ↔ 웹)은 [`docs/design/`](docs/design/)에 있습니다.
 
+| 문서 세트 | 내용 |
+|-----------|------|
+| [`docs/web-client/`](docs/web-client/) | 웹 클라이언트 설계 전체. **[12](docs/web-client/12-web-vs-windows-differences.md)가 Windows와의 동작 차이 단일 목록**이며, 여기 없는 차이는 버그로 취급합니다 |
+| [`docs/billing/`](docs/billing/) | 과금 제도 설계(초안). 가격·기간은 전부 미확정이며 [11](docs/billing/11-open-decisions.md)이 결정 대기 항목을 관리합니다 |
+| [`docs/spec-vectors/`](docs/spec-vectors/) | **플랫폼 공통 테스트 벡터·골든 이미지.** 클라이언트가 같은 입력에 같은 결과를 내는지 여기로 대조합니다 |
+
 > ⚠️ **기능을 추가/변경하면 `docs/analysis/`의 해당 문서도 함께 갱신**해 주세요.
+>
+> ⚠️ **한 클라이언트만 고치면 안 되는 것들이 있습니다.** 설정 기본값·필터 규격·화면 전이·파일 포맷은
+> 플랫폼 계약입니다. Windows만 바꿨다면 [`docs/web-client/12`](docs/web-client/12-web-vs-windows-differences.md)에
+> 차이를 등재하고 웹 수정 지시를 남겨야 합니다(`docs/spec-vectors/`의 벡터·골든도 함께 갱신 대상).
 
 ---
 
