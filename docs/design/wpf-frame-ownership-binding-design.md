@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | 로컬 커스텀 프레임의 **소유 계정 바인딩**(`.slots` 서명 포맷 v2) · **서버 정본 전환** · **수정 기능 폐지** · **삭제 동기화** |
 | 요구 출처 | 사용자 요청(2026-08-07, 다회 협의) |
-| 상태 | **설계 확정 — 구현 착수** |
+| 상태 | **구현 완료**(2026-08-07). WPF 987 · 서버 350 테스트 통과. 서버 배포·규칙 반영 완료 |
 | 전제 | **클린 상태.** Release 전이라 기존 로컬 개인 프레임·DB default 로컬 캐시가 **없다**고 가정 → 마이그레이션 없음(§7) |
 | 관련 소스 | `src/MCPhoto.Core/Frames/**` · `src/MCPhoto.App/Services/FrameCatalogService.cs` · `src/MCPhoto.App/ViewModels/{FrameEditor,FramePicker,FrameSelect}ViewModel.cs` · `src/MCPhoto.App/Views/{FrameEditorView,FrameSelectView}.xaml(.cs)` · `src/MCPhoto.Http/**` · `web/functions/src/{routes,services,domain,http}/**` |
 | 관련 문서 | [`analysis/41 §3`](../analysis/41-local-data-and-file-formats.md) · [`analysis/40 §2.2`](../analysis/40-database-firestore-and-storage-schema.md) · [`analysis/31`](../analysis/31-backend-api-reference.md) · [`billing/04`](../billing/04-custom-frames-billing-and-lifecycle.md) · [`web-client/12`](../web-client/12-web-vs-windows-differences.md) |
@@ -500,7 +500,29 @@ Release 전이라 기존 로컬 개인 프레임·DB default 캐시가 없다. v
 
 | # | 내용 |
 |---|------|
-| 1 | **캐시 검증 실패 처리** — 손상 캐시가 재다운로드 루프를 만들 수 있다(실패 → 목록 제외 → "로컬에 없음" 판정 → 재다운로드 → …). `.invalid` 격리 또는 세션 내 재시도 가드가 필요하다 |
+| ~~1~~ | ~~캐시 검증 실패 처리~~ → **해소**: 실패한 문서 id를 이번 실행 동안 건너뛴다(`FrameCatalogService._cacheFailedIds`). 영구 배제가 아니라 재시작으로 회복된다 |
 | 2 | 공용 프레임 목록 관리(숨김·정렬·비활성) — 수정 폐지로 공용 오염 시 대응 수단이 삭제뿐이다 |
 | 3 | 프레임 이미지 자체의 비공개(암호화) — 현재 PNG는 평문이라 탐색기로 볼 수 있다 |
-| 4 | 관리자 화면의 계정별 정보 노출(개인 프레임 수 · 일일 QR 한도) — 별도 설계 |
+| 4 | 관리자 화면의 계정별 정보 노출(개인 프레임 수 · 일일 QR 한도) — **별도 설계 대기**(사용자 요청 접수, 미착수) |
+
+---
+
+## 18. 운영 — 기존 데이터 점검·이관
+
+`web/functions/scripts/migrate-frame-storage-paths.mjs`
+
+```
+cd web/functions && npm run build          # 스크립트가 lib/domain/framePaths.js를 참조한다
+node scripts/migrate-frame-storage-paths.mjs --project mcphoto-955fb           # 점검(dry-run)
+node scripts/migrate-frame-storage-paths.mjs --project mcphoto-955fb --apply   # 이관 실행
+```
+
+| 대상 | 처리 |
+|------|------|
+| **공용(default) 프레임** | 경로가 `frames/default/{id}.png`로 **변경되지 않았다** → 이관 대상이 아니다. 이미지 존재 여부·이름 규약만 점검한다 |
+| 개인 프레임(레거시 `userId != null`) | `frames/{userId}/` → `frames/users/{userId}/` 이관. **복사 → imageUrl 갱신 → 원본 삭제** 순(삭제 먼저면 실패 시 유실) |
+| 이미지 없는 고아 문서 | 보고만 한다(**삭제하지 않는다**) |
+| 이름에 `_`가 있는 문서 | 보고만 한다. 조회·사용은 정상이나 서버가 재저장을 거부한다 |
+
+⚠️ 경로 규칙은 `src/domain/framePaths.ts` **한 곳**에 있고 서버·스크립트가 함께 쓴다. 복제하면
+스크립트가 멀쩡한 파일을 옮기거나 고아로 오판한다 — 회귀는 `__tests__/framePaths.test.ts`가 잡는다.
