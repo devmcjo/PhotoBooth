@@ -141,18 +141,27 @@ describe("라우트 게이트 구조 회귀(it16 §8.4-37)", () => {
     expect(countRequirePower("accounts.ts")).toBe(4);
   });
 
-  test("frames.ts의 requirePower()는 3회 — post·put·delete(it16에서 변경되지 않아야 한다)", () => {
-    expect(countRequirePower("frames.ts")).toBe(3);
+  test("frames.ts의 requirePower()는 2회 — post·put(공용 기본 프레임 전용)", () => {
+    // 소유권 바인딩(설계 D-12)에서 DELETE가 requireFrameWrite로 내려갔다.
+    // 개인 프레임이 서버 정본이 되면서 advanced_user가 **자기 프레임을 지울 수단**이 필요해졌기 때문이다.
+    expect(countRequirePower("frames.ts")).toBe(2);
   });
 
-  test("frames.ts: 쓰기 3라우트만 power 게이트, 조회 2라우트는 게이트 없음", () => {
+  test("frames.ts: 공용 쓰기 2라우트만 power 게이트, 개인·조회는 아님", () => {
     expect(powerGatedRoutes("frames.ts")).toEqual({
       "GET /default": false, // API키(게스트 조회)
       "GET /": false, // Bearer, 본인 or power는 핸들러 내부에서 판정
       "POST /": true, // 공용 기본 프레임 생성
-      "PUT /:id": true, // 공용 기본 프레임 수정
-      "DELETE /:id": true, // 공용 기본 프레임 삭제
+      "POST /mine": false, // 개인 프레임 생성 — requireFrameWrite(고급 유저 이상)
+      "PUT /:id": true, // 공용 기본 프레임 수정(운영 도구 전용, 앱 미호출)
+      "DELETE /:id": false, // requireFrameWrite + 핸들러에서 소유자·공용 분기(D-12)
     });
+  });
+
+  test("frames.ts: 개인 프레임 쓰기 2라우트는 requireFrameWrite 게이트", () => {
+    const code = routeCode("frames.ts");
+    // 게이트가 사라지면 temp_user·user에게 프레임 생성이 열린다(it16 E4 위반).
+    expect((code.match(/requireFrameWrite\(\)/g) ?? []).length).toBe(2);
   });
 
   test("accounts.ts: 타 계정 조작 4라우트만 power 게이트, 본인 경로는 게이트 없음", () => {

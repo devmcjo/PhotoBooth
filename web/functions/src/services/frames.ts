@@ -1,6 +1,10 @@
 /**
- * 프레임 서비스 — Firestore frameTemplates + Storage frames/{owner}/ 조작.
- * WPF `FrameRepository`(C#)의 서버 이식. 10개 제한·owner 경로·고아 방지 로직을 서버로 이전(설계 §5.3).
+ * 프레임 서비스 — Firestore frameTemplates + Storage 조작.
+ * WPF `FrameRepository`(C#)의 서버 이식. owner 경로·고아 방지 로직을 서버로 이전(설계 §5.3).
+ *
+ * ⚠️ Storage 경로는 `framePath()` 한 곳에서만 만든다. 개인 프레임은 `frames/users/{userId}/`로
+ *    분리한다 — `frames/{userId}/`를 쓰면 계정 id가 "default"인 사용자(default@… 로 가입 가능)의
+ *    프레임이 공용 경로에 섞이고, 최악의 경우 cascade 삭제가 공용 프레임을 지운다.
  *
  * 근거: src/MCPhoto.Firebase/FrameRepository.cs, src/MCPhoto.Core/Frames/IFrameRepository.cs
  */
@@ -14,7 +18,33 @@ import { createSignedUpload, deleteStoragePrefix, SignedUpload } from "./signing
 import { ImageSize, Slot } from "../domain/validation";
 
 const COLLECTION = "frameTemplates";
-const MAX_PER_USER = 10;
+
+/**
+ * 프레임 이미지 최대 바이트(8MB). 클라 `FrameImageValidator.MaxBytes`와 **같은 값이어야 한다** —
+ * 어긋나면 사용자가 업로드 직전까지 갔다가 실패한다.
+ *
+ * ⚠️ 개수 상한을 폐지했으므로(설계 D-10) 이 값이 **유일한 총량 방어선**이다. 프레임은 TTL 비대상이라
+ *    한 번 올라간 용량은 영구 비용이 된다.
+ */
+const FRAME_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+/** 공용 기본 프레임의 Storage 폴더명(계정 id와 충돌하지 않도록 개인은 users/ 아래로 분리한다). */
+const DEFAULT_OWNER_FOLDER = "default";
+
+/**
+ * 프레임 이미지 Storage 경로(단일 출처).
+ * 개인 `frames/users/{userId}/{frameId}.png` · 공용 `frames/default/{frameId}.png`.
+ */
+function framePath(userId: string | null, frameId: string): string {
+  return userId
+    ? `frames/users/${userId}/${frameId}.png`
+    : `frames/${DEFAULT_OWNER_FOLDER}/${frameId}.png`;
+}
+
+/** 계정 소유 프레임 전체의 Storage 접두(cascade 삭제용). `framePath`와 반드시 같은 규칙이어야 한다. */
+function userFramesPrefix(userId: string): string {
+  return `frames/users/${userId}/`;
+}
 
 function toResponse(doc: FrameTemplateDoc): FrameResponse {
   return {
@@ -83,28 +113,33 @@ export interface UpdateFrameResult {
  * 프레임 저장: 메타 검증 → 서명 PUT URL + 다운로드 토큰 URL 발급 → 문서 생성(imageUrl=다운로드URL).
  * 이미지 바이트는 클라가 서명 URL로 직접 PUT한다(설계 §5.4-A, 함수 비용 최소).
  *
- * 10개 제한(userId 있을 때만) 서버 재검증. 트레이드오프: 문서를 이미지 PUT 전에 생성하므로
- * PUT 실패 시 이미지 없는 문서가 남을 수 있다(현행 SaveAsync는 업로드 후 문서 생성). 프레임은
- * 웹 접근이 없고 재저장으로 덮어쓰기 가능하므로 수용(설계 §5.3 단일 POST /frames 계약 준수).
+ * ⚠️ **개수 상한은 폐지됐다**(설계 D-10). 프레임은 1회성 구매 + 영구 사용이라 개수 제한과 모순이고,
+ * 생성 과금이 이미 원가를 덮으며(보관 12.6원/년 vs 판매 500원), 유료라 오남용 유인도 없다.
+ * 총량 방어는 **이미지 8MB 상한**(서명 조건, `signing.ts`) 하나뿐이므로 그것을 절대 빼지 말 것.
+ *
+ * 트레이드오프: 문서를 이미지 PUT 전에 생성하므로 PUT 실패 시 이미지 없는 문서가 남을 수 있다.
+ * 프레임은 웹 접근이 없고 재저장으로 덮어쓰기 가능하므로 수용(설계 §5.3 계약 준수).
  */
 export async function saveFrame(input: SaveFrameInput): Promise<SaveFrameResult> {
   const cfg = loadConfig();
 
-  // 계정당 10개 제한(userId 있을 때만). 신규 생성이므로 초과 시 거부.
+  // 계정 내 이름 중복 거부(설계 D-17·S8). 클라도 사전 검증하지만 **PC 두 대에서 동시 생성**은
+  // 서버만 막을 수 있다 — 통과시키면 로컬 캐시에서 한쪽이 다른 쪽을 덮어쓴다.
   if (input.userId) {
     const existing = await getUserFrames(input.userId);
-    if (existing.length >= MAX_PER_USER) {
-      throw HttpError.conflict(
-        `프레임은 계정당 최대 ${MAX_PER_USER}개까지 저장할 수 있습니다.`
-      );
+    const dup = existing.some(
+      (f) => f.name.trim().toLowerCase() === input.name.trim().toLowerCase()
+    );
+    if (dup) {
+      throw HttpError.conflict(`같은 이름의 프레임이 이미 있습니다: ${input.name}`);
     }
   }
 
   const frameId = randomUUID();
-  const owner = input.userId ?? "default";
-  const storagePath = `frames/${owner}/${frameId}.png`;
+  const storagePath = framePath(input.userId, frameId);
 
-  const upload = await createSignedUpload(cfg.storageBucket, storagePath, input.contentType);
+  const upload = await createSignedUpload(
+    cfg.storageBucket, storagePath, input.contentType, FRAME_IMAGE_MAX_BYTES);
 
   const now = Timestamp.now();
   const doc: FrameTemplateDoc = {
@@ -165,7 +200,8 @@ export async function updateFrame(input: UpdateFrameInput): Promise<UpdateFrameR
   if (input.replaceImage) {
     // 이미지 교체: 같은 owner 경로(default)·같은 frameId 키에 덮어쓰기. 새 다운로드 토큰 URL로 갱신.
     const storagePath = `frames/default/${current.id}.png`;
-    upload = await createSignedUpload(cfg.storageBucket, storagePath, input.contentType);
+    upload = await createSignedUpload(
+      cfg.storageBucket, storagePath, input.contentType, FRAME_IMAGE_MAX_BYTES);
     updated.imageUrl = upload.downloadUrl;
   }
 
@@ -179,6 +215,18 @@ export async function updateFrame(input: UpdateFrameInput): Promise<UpdateFrameR
  * 반환=문서가 실제로 존재해 삭제됐는지(없으면 false, 현행 계약).
  * 근거: FrameRepository.DeleteAsync (FrameRepository.cs:76-104)
  */
+/**
+ * 삭제 권한 판정을 위한 소유자 조회.
+ * @returns 개인 프레임이면 소유 계정 id, 공용이면 `null`, **문서가 없으면 `undefined`**.
+ */
+export async function getFrameOwnerId(
+  frameId: string
+): Promise<string | null | undefined> {
+  const snap = await db().collection(COLLECTION).doc(frameId).get();
+  if (!snap.exists) return undefined;
+  return (snap.data() as FrameTemplateDoc).userId ?? null;
+}
+
 export async function deleteFrame(frameId: string): Promise<boolean> {
   const cfg = loadConfig();
   const ref = db().collection(COLLECTION).doc(frameId);
@@ -186,10 +234,9 @@ export async function deleteFrame(frameId: string): Promise<boolean> {
   if (!snap.exists) return false;
 
   const doc = snap.data() as FrameTemplateDoc;
-  const owner = doc.userId ? doc.userId : "default";
   // 고아 이미지 방지: 문서 삭제 전에 Storage 경로로 이미지 삭제(실패해도 문서는 삭제 진행).
   try {
-    await deleteStoragePrefix(cfg.storageBucket, `frames/${owner}/${frameId}.png`);
+    await deleteStoragePrefix(cfg.storageBucket, framePath(doc.userId, frameId));
   } catch {
     // Storage 삭제 실패는 문서 삭제를 막지 않는다(로그성 무시, 현행 동작).
   }
@@ -198,7 +245,8 @@ export async function deleteFrame(frameId: string): Promise<boolean> {
 }
 
 /**
- * 계정 소유 프레임 전부 삭제(계정 삭제 cascade). 문서 + Storage frames/{userId}/ 전체.
+ * 계정 소유 프레임 전부 삭제(계정 삭제 cascade). 문서 + Storage frames/users/{userId}/ 전체.
+ * ⚠️ 접두는 `userFramesPrefix`를 쓴다 — `framePath`와 규칙이 어긋나면 이미지가 영구 잔존한다.
  * 근거: FrameRepository.DeleteAllByUserAsync (FrameRepository.cs:106-118)
  */
 export async function deleteAllFramesByUser(userId: string): Promise<void> {
@@ -208,7 +256,7 @@ export async function deleteAllFramesByUser(userId: string): Promise<void> {
   snap.docs.forEach((d) => batch.delete(d.ref));
   await batch.commit();
   try {
-    await deleteStoragePrefix(cfg.storageBucket, `frames/${userId}/`);
+    await deleteStoragePrefix(cfg.storageBucket, userFramesPrefix(userId));
   } catch {
     // Storage 삭제 실패는 cascade를 막지 않는다(현행 동작).
   }

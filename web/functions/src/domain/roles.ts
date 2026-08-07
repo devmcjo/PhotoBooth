@@ -77,6 +77,18 @@ export function isPower(role: UserRole): boolean {
 }
 
 /**
+ * 프레임 저작(생성·삭제) 권한 — advanced_user 이상. C# `UserRoleExtensions.CanWriteFrames`의 이식.
+ *
+ * ⚠️ `isPower`와 **다른 축**이다(it16 설계 §5.2). power(manager/admin)는 공용 기본 프레임을 만들 수 있고,
+ *    이 함수는 "개인 프레임을 만들 수 있는가"를 답한다. 두 축을 하나로 합치면 권한 오판이 생긴다 —
+ *    advanced_user에게 공용 프레임 생성이 열리거나, power에게 개인 프레임이 막힌다.
+ *    회귀는 `__tests__/authGates.test.ts`가 잡는다.
+ */
+export function canWriteFrames(role: UserRole): boolean {
+  return MANAGE_RANK[role] >= MANAGE_RANK["advanced_user"];
+}
+
+/**
  * actingRole이 생성할 수 있는 역할 목록(위계 오름차순): admin→[temp_user,user,advanced_user,manager],
  * manager→[temp_user,user,advanced_user], 그 외→[]. (admin→admin 불가: 최종 1인 규칙)
  *

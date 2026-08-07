@@ -55,22 +55,33 @@ export interface SignedUpload {
  * @param storagePath results/... 또는 frames/... 경로.
  * @param contentType PUT 시 Content-Type(서명에 포함).
  */
+/**
+ * 업로드 크기 상한 조건 헤더. 값을 **서명에 포함**하므로 클라이언트가 우회할 수 없다
+ * (GCS가 범위를 벗어난 PUT을 거부한다). 클라 사전 검증은 즉시 피드백용일 뿐 방어선이 아니다.
+ */
+const CONTENT_LENGTH_RANGE_HEADER = "x-goog-content-length-range";
+
 export async function createSignedUpload(
   bucketName: string,
   storagePath: string,
-  contentType: string
+  contentType: string,
+  maxBytes?: number
 ): Promise<SignedUpload> {
   const downloadToken = randomUUID();
+
+  const rangeValue = maxBytes && maxBytes > 0 ? `0,${maxBytes}` : undefined;
 
   const emuHost = storageEmulatorHost();
   if (emuHost) {
     // Emulator 경로: 서명 불가 → Emulator 업로드 URL. 다운로드 URL은 계약 형식 그대로 조립.
+    // ⚠️ Emulator는 크기 조건을 강제하지 못한다(서명이 없다) — 운영 배포에서만 유효한 방어다.
     return {
       putUrl: emulatorPutUrl(emuHost, bucketName, storagePath),
       downloadUrl: tokenDownloadUrl(bucketName, storagePath, downloadToken),
       requiredHeaders: {
         "Content-Type": contentType,
         [DOWNLOAD_TOKEN_HEADER]: downloadToken,
+        ...(rangeValue ? { [CONTENT_LENGTH_RANGE_HEADER]: rangeValue } : {}),
       },
     };
   }
@@ -80,6 +91,8 @@ export async function createSignedUpload(
 
   const extensionHeaders: Record<string, string> = {
     [DOWNLOAD_TOKEN_HEADER]: downloadToken,
+    // 서명에 포함되어야 GCS가 강제한다. requiredHeaders에도 같은 값을 실어 클라가 그대로 보내게 한다.
+    ...(rangeValue ? { [CONTENT_LENGTH_RANGE_HEADER]: rangeValue } : {}),
   };
 
   const [putUrl] = await file.getSignedUrl({
@@ -96,6 +109,7 @@ export async function createSignedUpload(
     requiredHeaders: {
       "Content-Type": contentType,
       [DOWNLOAD_TOKEN_HEADER]: downloadToken,
+      ...(rangeValue ? { [CONTENT_LENGTH_RANGE_HEADER]: rangeValue } : {}),
     },
   };
 }

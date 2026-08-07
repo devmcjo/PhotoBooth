@@ -10,7 +10,7 @@
 import { NextFunction, Request, RequestHandler, Response } from "express";
 import { loadConfig } from "../config";
 import { AuthPrincipal, extractBearer, TokenError, verifyToken } from "../domain/jwt";
-import { isPower } from "../domain/roles";
+import { canWriteFrames, isPower } from "../domain/roles";
 import { HttpError } from "./errors";
 
 /** API 키 헤더명(설계 §6.1 예시). */
@@ -119,6 +119,22 @@ export function requirePower(): RequestHandler {
     if (!p) return next(HttpError.unauthorized());
     if (!isPower(p.role)) {
       return next(HttpError.forbidden("파워 계정(manager/admin) 권한이 필요합니다."));
+    }
+    next();
+  };
+}
+
+/**
+ * requireBearer 이후 사용. **프레임 저작 권한**(advanced_user 이상)만 통과.
+ *
+ * ⚠️ `requirePower`와 다른 축이다 — 공용 기본 프레임 생성은 power, 개인 프레임 생성은 이 게이트다.
+ */
+export function requireFrameWrite(): RequestHandler {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const p = req.principal;
+    if (!p) return next(HttpError.unauthorized());
+    if (!canWriteFrames(p.role)) {
+      return next(HttpError.forbidden("프레임을 만들 권한이 없습니다(고급 유저 이상)."));
     }
     next();
   };
