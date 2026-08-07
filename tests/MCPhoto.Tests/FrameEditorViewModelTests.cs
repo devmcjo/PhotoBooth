@@ -458,7 +458,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     {
         var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
         Assert.True(vm.LoadImage(_imagePath));
-        local.UserFrames["u1"] = new List<FrameTemplate>
+        local.UserFrames["u1@test.com"] = new List<FrameTemplate>   // 조회 키는 이메일(D-4)
         {
             new() { Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1" }
         };

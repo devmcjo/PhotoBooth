@@ -6,6 +6,7 @@ using MCPhoto.App.ViewModels;
 using MCPhoto.Capture;
 using MCPhoto.Core.Build;
 using MCPhoto.Core.Capture;
+using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
@@ -131,8 +132,10 @@ public class DiagnosticsViewModelTests
         licenseFolder ??= new FakeLicenseFolderService(Path.Combine(Path.GetTempPath(), "licenses"));
         var session = new SessionContext();
         if (loginUser is not null) session.Login(loginUser);
+        // 프레임 검사 도구용 저장소(테스트는 임시 폴더 — 실제 파일이 없으면 빈 결과).
+        var frameStore = new LocalFrameStore(Path.Combine(Path.GetTempPath(), $"diagframes_{Guid.NewGuid():N}"));
         return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder, new StubSettingsService(settings), session,
-            buildInfo, serverDeploy, clipboard, licenseFolder);
+            buildInfo, serverDeploy, clipboard, licenseFolder, frameStore);
     }
 
     [Fact]

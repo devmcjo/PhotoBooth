@@ -18,6 +18,17 @@ public sealed class FrameCatalogService
     private readonly Func<string, CancellationToken, Task<byte[]?>> _downloadImage;
     private readonly ILogger<FrameCatalogService>? _logger;
 
+    /// <summary>
+    /// 이번 실행에서 캐시 기록에 실패한 서버 문서 id(재시도 차단).
+    /// <para>
+    /// ⚠️ <b>재다운로드 루프 방지</b>(설계 §17-1): 캐시가 손상되거나 기록에 실패하면 그 프레임은
+    /// 로컬 목록에 오르지 못한다 → 다음 동기화가 "로컬에 없음"으로 판정 → 다시 내려받는다 → 또 실패…
+    /// 목록을 열 때마다 같은 파일을 무한히 받게 된다. 한 번 실패한 id는 <b>앱을 다시 켤 때까지</b>
+    /// 건너뛴다(영구 배제가 아니다 — 일시적 디스크 문제였다면 재시작으로 회복된다).
+    /// </para>
+    /// </summary>
+    private readonly HashSet<string> _cacheFailedIds = new(StringComparer.Ordinal);
+
     // ── it20: 단일 비행(single-flight) — 종전 세마포어 게이트(_defaultFramesGate) 대체 ──
     // it10 S3-2의 목적(중복 다운로드 방지)은 그대로 유지하면서 "줄 세우기"를 없앤다.
     // 종전 게이트는 시작 prefetch(App.OnStartup)가 잡고 있으면 화면 진입이 그 완료까지 대기하고
@@ -154,13 +165,16 @@ public sealed class FrameCatalogService
             local = SyncPublicCache(local, dbFrames);
 
             var localDbIds = DbIdsOf(local);
-            var pending = dbFrames.Where(f => !localDbIds.Contains(f.Id)).ToList();
+            var pending = dbFrames
+                .Where(f => !localDbIds.Contains(f.Id) && !IsCacheBlocked(f.Id))
+                .ToList();
             for (int i = 0; i < pending.Count; i++)
             {
                 ReportShared(new FrameCatalogProgress(
                     FrameCatalogPhase.DownloadingImage, i + 1, pending.Count));
                 var cached = await TryCacheAsync(pending[i], CancellationToken.None).ConfigureAwait(false);
                 if (cached is not null) local = Append(local, cached);
+                else BlockCacheRetry(pending[i].Id);   // 루프 방지: 이번 실행에서는 다시 시도하지 않는다
             }
         }
         catch (Exception ex)
@@ -218,6 +232,23 @@ public sealed class FrameCatalogService
         return removed.Count == 0
             ? local
             : local.Where(f => !removed.Contains(f.Id)).ToList();
+    }
+
+    /// <summary>이번 실행에서 캐시에 실패해 재시도를 막아 둔 프레임인가.</summary>
+    private bool IsCacheBlocked(string? dbId)
+    {
+        if (string.IsNullOrEmpty(dbId)) return false;
+        lock (_sync) return _cacheFailedIds.Contains(dbId);
+    }
+
+    /// <summary>캐시 실패를 기록해 이번 실행 동안 재다운로드를 건너뛰게 한다.</summary>
+    private void BlockCacheRetry(string? dbId)
+    {
+        if (string.IsNullOrEmpty(dbId)) return;
+        bool added;
+        lock (_sync) added = _cacheFailedIds.Add(dbId);
+        if (added)
+            _logger?.LogWarning("프레임 캐시 실패 — 이번 실행에서는 재시도하지 않는다(재다운로드 루프 방지): {Id}", dbId);
     }
 
     /// <summary>서버 문서 id를 가진 로컬 프레임의 id 집합(`local:` 접두는 서버 미동기라 제외).</summary>
@@ -306,10 +337,11 @@ public sealed class FrameCatalogService
 
         // 서버에만 있는 것 내려받기(다른 기기에서 만든 프레임).
         var localDbIds = DbIdsOf(local);
-        foreach (var f in serverFrames.Where(f => !localDbIds.Contains(f.Id)))
+        foreach (var f in serverFrames.Where(f => !localDbIds.Contains(f.Id) && !IsCacheBlocked(f.Id)))
         {
             var cached = await TryCacheUserFrameAsync(f, ownerEmail, ct).ConfigureAwait(false);
             if (cached is not null) local = Append(local, cached);
+            else BlockCacheRetry(f.Id);
         }
 
         return local;

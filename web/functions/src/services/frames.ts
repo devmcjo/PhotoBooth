@@ -16,6 +16,8 @@ import { HttpError } from "../http/errors";
 import { FrameTemplateDoc, FrameResponse } from "./dto";
 import { createSignedUpload, deleteStoragePrefix, SignedUpload } from "./signing";
 import { ImageSize, Slot } from "../domain/validation";
+// ⚠️ 경로 규칙은 단일 출처다 — 이관 스크립트도 같은 모듈을 쓴다(복제 금지).
+import { framePath, userFramesPrefix } from "../domain/framePaths";
 
 const COLLECTION = "frameTemplates";
 
@@ -27,24 +29,6 @@ const COLLECTION = "frameTemplates";
  *    한 번 올라간 용량은 영구 비용이 된다.
  */
 const FRAME_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-
-/** 공용 기본 프레임의 Storage 폴더명(계정 id와 충돌하지 않도록 개인은 users/ 아래로 분리한다). */
-const DEFAULT_OWNER_FOLDER = "default";
-
-/**
- * 프레임 이미지 Storage 경로(단일 출처).
- * 개인 `frames/users/{userId}/{frameId}.png` · 공용 `frames/default/{frameId}.png`.
- */
-function framePath(userId: string | null, frameId: string): string {
-  return userId
-    ? `frames/users/${userId}/${frameId}.png`
-    : `frames/${DEFAULT_OWNER_FOLDER}/${frameId}.png`;
-}
-
-/** 계정 소유 프레임 전체의 Storage 접두(cascade 삭제용). `framePath`와 반드시 같은 규칙이어야 한다. */
-function userFramesPrefix(userId: string): string {
-  return `frames/users/${userId}/`;
-}
 
 function toResponse(doc: FrameTemplateDoc): FrameResponse {
   return {

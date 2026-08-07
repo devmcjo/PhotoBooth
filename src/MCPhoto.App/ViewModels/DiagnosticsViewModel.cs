@@ -6,6 +6,8 @@ using MCPhoto.App.Services;
 using MCPhoto.Capture;
 using MCPhoto.Core.Build;
 using MCPhoto.Core.Capture;
+using MCPhoto.Core.Frames;
+using System.Linq;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
@@ -42,15 +44,18 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     private readonly IServerDeployInfoService _serverDeploy;
     private readonly IClipboardService _clipboard;
     private readonly ILicenseFolderService _licenseFolder;
+    private readonly ILocalFrameStore _localFrames;
     private readonly ILogger<DiagnosticsViewModel>? _logger;
 
     public DiagnosticsViewModel(ICameraService camera, FfmpegRunner ffmpeg, IFirebaseClient firebase,
         ILogFolderService logFolder, ISettingsService settings, SessionContext session,
         IBuildInfoService buildInfo, IServerDeployInfoService serverDeploy, IClipboardService clipboard,
         ILicenseFolderService licenseFolder,
+        ILocalFrameStore localFrames,
         ILogger<DiagnosticsViewModel>? logger = null)
     {
         _licenseFolder = licenseFolder;
+        _localFrames = localFrames;
         _camera = camera;
         _ffmpeg = ffmpeg;
         _firebase = firebase;
@@ -222,4 +227,81 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
         => CopyNotice = _clipboard.TrySetText(DeveloperEmailAddress)
             ? "메일 주소를 복사했습니다."
             : "복사에 실패했습니다. 위 주소를 직접 선택해 복사하세요.";
+
+    // ── 프레임 파일 검사(설계 §6.1) ──
+
+    /// <summary>
+    /// 로컬 프레임 파일 진단 결과. 개인 프레임 폴더가 <b>이메일 해시</b>라 탐색기로는 소유자를 알 수 없고,
+    /// `.slots`는 base64+서명이라 내용도 볼 수 없다 — 그 둘을 사람이 확인할 수 있게 하는 유일한 창구다.
+    /// </summary>
+    public ObservableCollection<FrameInspectRow> FrameFiles { get; } = new();
+
+    /// <summary>검사 결과 요약(건수·깨진 파일 수).</summary>
+    [ObservableProperty] private string _frameInspectSummary = string.Empty;
+
+    /// <summary>
+    /// 전체 계정의 프레임을 볼 수 있는가(설계 D-24). <b>power만</b> — 다른 사용자의 이메일이 노출되므로
+    /// advanced_user에게는 본인 것과 공용만 보여준다.
+    /// </summary>
+    public bool CanInspectAllFrames => _session.CurrentUser?.Role.IsPower() == true;
+
+    /// <summary>프레임 파일 검사 실행. 서명이 깨진 파일도 사유와 함께 보여준다(왜 목록에 없는지 알아야 한다).</summary>
+    [RelayCommand]
+    private void InspectFrames()
+    {
+        FrameFiles.Clear();
+        try
+        {
+            // power가 아니면 본인 소유 + 공용만 조회된다(Inspect의 ownerEmail 인자가 범위를 정한다).
+            var entries = _localFrames.Inspect(_session.CurrentUser?.Email);
+
+            foreach (var e in entries)
+            {
+                FrameFiles.Add(new FrameInspectRow(
+                    e.DisplayName,
+                    e.Owner ?? "(알 수 없음)",
+                    e.Status == SlotsDecodeStatus.Ok ? "정상" : StatusLabel(e.Status),
+                    e.Status == SlotsDecodeStatus.Ok,
+                    e.SlotCount,
+                    string.IsNullOrEmpty(e.DbId) ? "미동기" : "동기"));
+            }
+
+            int broken = FrameFiles.Count(f => !f.IsValid);
+            FrameInspectSummary = broken == 0
+                ? $"프레임 {FrameFiles.Count}건 — 모두 정상"
+                : $"프레임 {FrameFiles.Count}건 — {broken}건 이상(목록에 표시되지 않음)";
+        }
+        catch (Exception ex)
+        {
+            FrameInspectSummary = $"프레임 검사 실패: {ex.Message}";
+            _logger?.LogWarning(ex, "프레임 파일 검사 실패");
+        }
+    }
+
+    /// <summary>해석 실패 사유를 사람이 읽는 말로.</summary>
+    private static string StatusLabel(SlotsDecodeStatus status) => status switch
+    {
+        SlotsDecodeStatus.NotEncoded => "구 포맷 또는 손상",
+        SlotsDecodeStatus.SignatureMissing => "서명 없음",
+        SlotsDecodeStatus.SignatureInvalid => "서명 불일치(변조)",
+        SlotsDecodeStatus.Malformed => "내용 불완전",
+        _ => "알 수 없음"
+    };
+}
+
+/// <summary>프레임 검사 표의 한 행.</summary>
+/// <param name="Name">프레임 이름(파일 base name).</param>
+/// <param name="Owner">소유자(`default` 또는 이메일).</param>
+/// <param name="StatusText">상태 표기.</param>
+/// <param name="IsValid">서명 검증 통과 여부(false면 목록에 표시되지 않는다).</param>
+/// <param name="SlotCount">슬롯 수.</param>
+/// <param name="SyncText">서버 동기 여부.</param>
+public sealed record FrameInspectRow(
+    string Name, string Owner, string StatusText, bool IsValid, int SlotCount, string SyncText)
+{
+    /// <summary>
+    /// 이상 여부. <c>BoolToNoticeBrush</c>가 <b>true=위험(빨강)</b> 규약이라 <see cref="IsValid"/>를
+    /// 그대로 넘기면 색이 뒤집힌다 — 반전 값을 바인딩한다.
+    /// </summary>
+    public bool IsBroken => !IsValid;
 }

@@ -193,6 +193,57 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ══════════ 프레임 파일 검사 ══════════ -->
+                <!-- 개인 프레임 폴더는 이메일 해시라 탐색기로 소유자를 알 수 없고, .slots는 base64+서명이라
+                     내용도 볼 수 없다 → 사람이 확인할 수 있는 유일한 창구다(설계 §6.1).
+                     ⚠️ 다른 계정의 이메일이 보이므로 전체 조회는 power만(D-24) — VM의 Inspect 인자가 범위를 정한다. -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="프레임 파일" Style="{StaticResource Text.Title}" Margin="0,0,0,8" />
+                        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,0,12"
+                                   Text="서명이 깨진 파일은 프레임 목록에 나타나지 않습니다. 여기서 사유를 확인할 수 있습니다." />
+                        <Button Content="프레임 검사" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Left" MinWidth="0" Padding="20,0" Margin="0,0,0,12"
+                                Command="{Binding InspectFramesCommand}" />
+                        <TextBlock Text="{Binding FrameInspectSummary}" Style="{StaticResource Text.Body}"
+                                   TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <ItemsControl ItemsSource="{Binding FrameFiles}" MaxHeight="220">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="ItemsControl">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Owner}" Style="{StaticResource Text.Caption}"
+                                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding SyncText}"
+                                                   Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource Brush.Text.Muted}" Margin="12,0" />
+                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}"
+                                                   Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                                                   Foreground="{Binding IsBroken, Converter={StaticResource BoolToNoticeBrush}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
                 <!-- ══════════ 로그 ══════════ -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                     <StackPanel>

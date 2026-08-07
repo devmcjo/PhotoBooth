@@ -488,22 +488,29 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 현재 저장 스코프의 기존 프레임 이름들(사본 이름 계산 + 저장 전 충돌 검사용).
-    /// power=공용 목록, user=본인 개인 목록. 조회 실패는 비차단(충돌 검사만 생략).
+    /// <b>현재 사용자에게 보이는</b> 프레임 이름 전부(공용 + 본인 개인). 사본 이름 계산·저장 전 충돌 검사용.
+    /// <para>
+    /// 설계 D-17: 판정 집합은 스코프별이 아니라 "보이는 것 전부"다 — 목록에서 같은 이름 둘이 보이면
+    /// 사용자가 구분할 수 없기 때문이다. 다른 계정의 개인 프레임과는 겹쳐도 된다(폴더가 다르고 보이지도 않는다).
+    /// </para>
+    /// ⚠️ 개인 프레임 조회 키는 <b>이메일</b>이다(계정 id 아님 — 소유 판정 단일 기준, D-4).
+    /// 조회 실패는 비차단(충돌 검사만 생략)이며, 서버가 최종적으로 409로 거부한다(S8).
     /// </summary>
     private IEnumerable<string> ExistingNamesForCurrentScope()
     {
-        var user = _shell.Session.CurrentUser;
-        if (user is null) return Array.Empty<string>();
         try
         {
-            return user.Role.IsPower()
-                ? _localStore.PublicFrameNames()
-                : _localStore.LoadUser(user.Id).Select(f => f.Name).ToList();
+            var names = new List<string>(_localStore.PublicFrameNames());
+
+            var email = _shell.Session.CurrentUser?.Email;
+            if (!string.IsNullOrWhiteSpace(email))
+                names.AddRange(_localStore.UserFrameNames(email!));
+
+            return names;
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "기존 프레임 이름 조회 실패 — 사본 이름 충돌 검사를 생략");
+            _logger?.LogWarning(ex, "기존 프레임 이름 조회 실패 — 이름 충돌 검사를 생략");
             return Array.Empty<string>();
         }
     }
@@ -610,11 +617,13 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             return false;
         }
 
-        // ⑦ 스코프 이름 충돌 가드(최우선 데이터 손실 방지): SaveLocal은 같은 이름 파일을 **경고 없이
-        // 덮어쓴다** → 덮어쓰기가 세션의 의도인 EditOwnLocal만 예외로 두고, New·ForkFromCatalog에서
-        // 스코프 내 기존 이름과 겹치면 차단한다. 비교 축은 LocalFrameStore 파일명 규약과 같은 Ordinal.
+        // ⑦ 이름 충돌 가드(설계 D-17): 본인에게 보이는 프레임과 이름이 겹치면 차단한다.
+        // 저장은 같은 이름 파일을 경고 없이 덮어쓰므로 이 가드가 데이터 손실의 마지막 방어선이다.
+        // 대소문자 무시 — Windows 파일시스템이 "Abc"와 "abc"를 같은 파일로 본다.
+        // ⚠️ 클라 검증은 즉시 피드백일 뿐이다. PC 두 대에서 동시에 같은 이름을 만드는 경우는
+        //    서버가 409로 막는다(S8) — 그 응답도 저장 실패로 사용자에게 그대로 노출된다.
         if (_sessionSource != FrameSessionSource.EditOwnLocal
-            && ExistingNamesForCurrentScope().Contains(FrameName, StringComparer.Ordinal))
+            && !FrameNaming.IsNameAvailable(FrameName, ExistingNamesForCurrentScope()))
         {
             error = "이미 같은 이름의 프레임이 있습니다. 다른 이름을 입력해 주세요.";
             return false;
