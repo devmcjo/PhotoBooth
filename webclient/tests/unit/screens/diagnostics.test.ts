@@ -116,6 +116,84 @@ describe("collectDiagnostics — 6섹션", () => {
     expect(findRow(snapshot, STRINGS.diagnostics.cameraFps)).toBe("29.5");
   });
 
+  // ─────── 실패 사유 코드 병기 · [프레임 전달] 행 (2026-08-07 신설) ───────
+
+  it("실패가 없으면 [실패 사유]는 '없음'이다", async () => {
+    expect(findRow(await collectDiagnostics(deps()), STRINGS.diagnostics.cameraFailureReason)).toBe(
+      "없음",
+    );
+  });
+
+  it("[실패 사유]에 라벨과 **오류 코드**를 함께 낸다 — 화면 캡션과 같은 값이다", async () => {
+    const snapshot = await collectDiagnostics(
+      deps({ cameraFailure: () => ({ reason: "unknown", detail: "AbortError" }) }),
+    );
+    expect(findRow(snapshot, STRINGS.diagnostics.cameraFailureReason)).toBe(
+      "알 수 없음 · unknown/AbortError",
+    );
+  });
+
+  it("신설 사유 3종도 라벨을 갖는다(Record 누락이 없다)", async () => {
+    const cases: Record<string, string> = {
+      playbackBlocked: "영상 재생 시작 실패 · playbackBlocked/NotAllowedError",
+      pipelineSlow: "영상 지연(Ready 미달) · pipelineSlow/f3",
+      unsupportedBrowser: "브라우저 미지원 · unsupportedBrowser/TypeError",
+    };
+    const details: Record<string, string> = {
+      playbackBlocked: "NotAllowedError",
+      pipelineSlow: "f3",
+      unsupportedBrowser: "TypeError",
+    };
+    for (const [reason, expected] of Object.entries(cases)) {
+      const snapshot = await collectDiagnostics(
+        deps({
+          cameraFailure: () => ({
+            reason: reason as "playbackBlocked",
+            detail: details[reason]!,
+          }),
+        }),
+      );
+      expect(findRow(snapshot, STRINGS.diagnostics.cameraFailureReason), reason).toBe(expected);
+    }
+  });
+
+  it("상세가 없으면 코드가 사유만이다(빈 슬래시를 만들지 않는다)", async () => {
+    const snapshot = await collectDiagnostics(
+      deps({ cameraFailure: () => ({ reason: "insecureContext", detail: null }) }),
+    );
+    expect(findRow(snapshot, STRINGS.diagnostics.cameraFailureReason)).toBe(
+      "보안 연결 아님 · insecureContext",
+    );
+  });
+
+  it("[프레임 전달] 3값을 구분해 낸다 — 폴백과 **강등**은 성격이 다르다", async () => {
+    const camera = (snapshot: DiagnosticsSnapshot) =>
+      snapshot.sections
+        .find((section) => section.id === "camera")
+        ?.rows.find((row) => row.label === STRINGS.diagnostics.frameTransfer);
+
+    const ok = camera(await collectDiagnostics(deps({ frameTransferMode: () => "videoFrame" })));
+    expect(ok?.value).toBe(STRINGS.diagnostics.frameTransferVideoFrame);
+    expect(ok?.tone).toBe("ok");
+
+    const fallback = camera(
+      await collectDiagnostics(deps({ frameTransferMode: () => "imageBitmap" })),
+    );
+    expect(fallback?.value).toBe(STRINGS.diagnostics.frameTransferBitmap);
+    // 애초에 `VideoFrame`이 없는 기기 — 정상 폴백이다.
+    expect(fallback?.tone).toBe("neutral");
+
+    const demoted = camera(
+      await collectDiagnostics(deps({ frameTransferMode: () => "imageBitmapDemoted" })),
+    );
+    expect(demoted?.value).toBe(STRINGS.diagnostics.frameTransferDemoted);
+    // 있었는데 런타임에 깨진 것 — 브라우저 결함 신호이자 성능 예산 재측정 대상이다.
+    expect(demoted?.tone).toBe("warn");
+
+    const closed = camera(await collectDiagnostics(deps({ frameTransferMode: () => null })));
+    expect(closed?.value).toBe(STRINGS.account.unknown);
+  });
+
   it("`encoderProbe()`가 null이면 '아직 판정 전'이다", async () => {
     const snapshot = await collectDiagnostics(deps({ encoderProbe: () => null }));
     expect(findRow(snapshot, STRINGS.diagnostics.encoderPath)).toBe(
