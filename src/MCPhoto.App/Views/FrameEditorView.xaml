@@ -37,7 +37,10 @@
                      SlotCanvas가 좌표계 기준(EditorTransform이 SlotCanvas.ActualWidth 사용, it4 §2.3). -->
                 <Image x:Name="FramePreview" Source="{Binding FrameImage}" Stretch="Uniform"
                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                <!-- Focusable: 방향키로 슬롯을 옮기려면 캔버스가 키 입력을 받아야 한다(설계 §12).
+                     FocusVisualStyle은 끄고 선택 슬롯 자체를 강조한다(캔버스 전체 점선 테두리는 방해). -->
                 <Canvas x:Name="SlotCanvas" Background="Transparent"
+                        Focusable="True" FocusVisualStyle="{x:Null}"
                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 <TextBlock Text="프레임 이미지를 불러오세요"
                            Style="{StaticResource Text.Body}" Foreground="{StaticResource Brush.Text.Muted}"

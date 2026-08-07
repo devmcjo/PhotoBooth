@@ -310,6 +310,56 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     }
 
     /// <summary>드래그 후 슬롯 위치·크기 반영(경계 클램프). 스케일 기준(_baseSlots) 위치도 중심 맞춰 갱신.</summary>
+    // ── 슬롯 키보드 이동(설계 §12) ──
+
+    /// <summary>방향키 1회 이동량(px).</summary>
+    public const int NudgeStep = 1;
+
+    /// <summary>Shift+방향키 1회 이동량(px). 마우스로 잡기 힘든 미세 조정과 큰 이동을 함께 지원한다.</summary>
+    public const int NudgeStepFast = 10;
+
+    /// <summary>
+    /// 키보드로 옮길 대상 슬롯(−1=미선택). 클릭 또는 Tab으로 바뀐다.
+    /// <para>
+    /// 종전에는 드래그 중에만 유효한 <c>_dragIndex</c>뿐이라 마우스를 놓으면 대상이 사라졌다 —
+    /// 방향키로 옮기려면 "지금 무엇을 옮기는지"가 유지돼야 한다.
+    /// </para>
+    /// </summary>
+    [ObservableProperty] private int _selectedSlotIndex = -1;
+
+    /// <summary>선택 슬롯을 상대 이동. 경계 클램프는 <see cref="UpdateSlot"/>이 처리한다.</summary>
+    /// <returns>실제로 이동했으면 true(선택이 없거나 범위 밖이면 false).</returns>
+    public bool NudgeSelectedSlot(int dx, int dy)
+    {
+        if (SelectedSlotIndex < 0 || SelectedSlotIndex >= Slots.Count) return false;
+
+        var s = Slots[SelectedSlotIndex];
+        // ⚠️ 크기는 건드리지 않는다(요구: "크기는 일관되게"). 겹침은 드래그와 같이 허용하고
+        //    최종 검증은 저장 시점의 SlotLayout.IsValid가 맡는다 — 두 조작의 규칙을 갈라놓지 않는다.
+        UpdateSlot(SelectedSlotIndex, s.X + dx, s.Y + dy, s.Width, s.Height);
+        return true;
+    }
+
+    /// <summary>Tab 순환으로 선택 슬롯 전환. 슬롯이 없으면 아무 일도 하지 않는다.</summary>
+    /// <param name="backward">Shift+Tab이면 true(역방향).</param>
+    public bool SelectAdjacentSlot(bool backward)
+    {
+        if (Slots.Count == 0) { SelectedSlotIndex = -1; return false; }
+
+        int next = SelectedSlotIndex < 0
+            ? (backward ? Slots.Count - 1 : 0)
+            : (SelectedSlotIndex + (backward ? -1 : 1) + Slots.Count) % Slots.Count;
+
+        SelectedSlotIndex = next;
+        return true;
+    }
+
+    /// <summary>슬롯 목록이 바뀐 뒤 선택이 범위를 벗어났으면 해제한다(개수 변경·이미지 교체).</summary>
+    public void ClampSlotSelection()
+    {
+        if (SelectedSlotIndex >= Slots.Count) SelectedSlotIndex = -1;
+    }
+
     public void UpdateSlot(int index, int x, int y, int width, int height)
     {
         if (index < 0 || index >= Slots.Count) return;
