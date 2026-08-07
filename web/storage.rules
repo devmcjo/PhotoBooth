@@ -19,7 +19,10 @@ service firebase.storage {
     }
 
     // frames/: 프레임 이미지 (WPF 전용). 웹 접근 전면 차단.
-    match /frames/{userId}/{fileName} {
+    // ⚠️ 2026-08-07: 개인 프레임 경로가 frames/users/{userId}/ 로 한 단계 깊어졌다.
+    //    {userId}/{fileName} 2단 매치로는 새 경로를 덮지 못하므로 하위 전체를 매치한다
+    //    (미매치 시에도 기본 차단이 적용되지만, 의도를 명시적으로 남긴다).
+    match /frames/{allPaths=**} {
       allow read, write: if false;
     }
 

@@ -81,7 +81,10 @@
 - **서버가 소유·공개 여부를 강제한다**: `POST /frames`는 클라가 보낸 값과 무관하게 `userId=null`·`isDefault=true`로 고정한다(`routes/frames.ts:71-80`). 즉 신규 서버 문서는 **공용 기본 프레임뿐**이다.
 - **문서 먼저, 이미지 나중**: 서명 URL 발급 → 문서 `set` → 클라가 이미지 PUT 순서라, PUT이 실패하면 이미지 없는 문서가 남을 수 있다(수용된 트레이드오프 — 프레임은 웹 접근이 없고 재저장으로 덮어쓰기 가능, `services/frames.ts:85-89`).
 - **Slot 도메인 파생값**: `Slot.AspectRatio = Width/Height`는 앱의 계산 프로퍼티로 **저장되지 않는다**(`Slot.cs`).
-- 계정당 최대 10개(`userId`가 있을 때만) 서버 재검증 — 초과 시 409(`services/frames.ts:93-101`).
+- ⚠️ **2026-08-07: 개수 상한 폐지.** 대신 **계정 내 이름 중복**을 409로 거부한다(`services/frames.ts`).
+  총량 방어는 **이미지 8MB**(서명 조건 `x-goog-content-length-range`)뿐이다 — 절대 빼지 말 것.
+- ⚠️ **개인 프레임이 서버에 저장된다**(it8 A2 하이브리드 종료). `POST /frames/mine`(advanced_user 이상)로
+  생성하며 서버가 `userId=principal.id`·`isDefault=false`를 강제한다. 로컬은 캐시다.
 - **하이브리드(it8 A2)**: 일반 사용자 커스텀 프레임은 **로컬 파일 전용**(`ILocalFrameStore`, `.png` + `.slots`)이며 DB에 올라가지 않는다. 서버의 `userId != null` 경로는 레거시 문서 방어용으로만 남아 있다(`services/frames.ts:130-131`). 로컬 저장 스키마는 이 문서 범위 밖.
 
 ### 2.3 `resultSessions` (문서 ID = `{yyyyMMdd_HHmmss}_{UUIDv4}` 토큰)
@@ -183,7 +186,7 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 | 경로 | read | write | 의도 | 근거 |
 |------|------|-------|------|------|
 | `results/{sessionId}/{fileName}` | deny | deny | SDK 경로 열거·직접 접근 차단(토큰 URL은 규칙 우회하여 동작) | `storage.rules:16-19` |
-| `frames/{userId}/{fileName}` | deny | deny | 웹 접근 없음(WPF 전용) | `storage.rules:22-24` |
+| `frames/users/{userId}/{fileName}` | deny | deny | 웹 접근 없음(WPF 전용). ⚠️ 2026-08-07 경로 변경 — 계정 id가 `default`일 때 공용 경로와 충돌하던 문제 차단 | `storage.rules:22-24` |
 | `{allPaths=**}` | deny | deny | 그 외 기본 차단 | `storage.rules:27-29` |
 
 - `results/` read를 deny해도 웹 다운로드는 정상(토큰 URL 직접 GET). 닫아두는 편이 SDK 경로 열거를 막아 안전(주석 `storage.rules:5-8`).
@@ -234,7 +237,7 @@ https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{urlEncodedPath}?alt=medi
 | 3 | 삭제는 **문서 + Storage 파일 함께** 정리(고아 최소화) — 현재는 Lifecycle(파일)+TTL(문서) 둘을 켜서 충족 | `OPS-ttl.md:32`, [50 §1.1](./50-infra-gcp-lifecycle-and-ttl.md) |
 | 4 | 미만료 `resultSessions` 문서는 미디어 URL **최소 1개 non-null**(둘 다 off면 문서 미생성) — 앱·서버 양쪽에서 강제 | `UploadService.cs:38-39`, `services/uploads.ts:169-176` |
 | 5 | 프레임 삭제 시 문서 삭제 **전에** owner를 읽어 Storage 경로 확정(고아 이미지 방지) | `services/frames.ts:184-192` |
-| 6 | 계정 삭제 시 소유 프레임(Firestore 문서 + `frames/{userId}/`) cascade 삭제 — **서버가 수행**(클라 no-op) | `services/frames.ts:201-211`, `HttpFrameRepository.cs:117-126` |
+| 6 | 계정 삭제 시 소유 프레임(Firestore 문서 + `frames/users/{userId}/`) cascade 삭제 — **서버가 수행**(클라 no-op) | `services/frames.ts:201-211`, `HttpFrameRepository.cs:117-126` |
 | 7 | `resultSessions` 문서 ID·프레임 다운로드 토큰은 **추측 불가 UUID**(토큰은 서버가 `randomUUID()`로 발급) | `UploadContract.cs:12,25`, `services/signing.ts:63` |
 | 8 | commit의 미디어 URL은 **서버 버킷 + 해당 세션 경로**여야 한다(prepare 없이 임의 URL 주입 차단) | `services/uploads.ts:129-152` |
 
