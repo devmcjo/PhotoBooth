@@ -226,9 +226,36 @@ export const STRINGS = {
        */
       pipelineStalled:
         "카메라 영상을 표시하지 못했습니다. 다시 시도하거나 다른 브라우저에서 열어 주세요.",
+      /**
+       * 재생 차단 — 스트림은 열렸는데 `video.play()`가 reject됐다. 권한·장치 문제가 아니다.
+       * iOS 자동재생 정책이 대표 원인이고, 그 정책에서 **실효가 있는 유일한 조치**가
+       * "사용자 제스처 한 번"이라 그것만 말한다.
+       */
+      playbackBlocked:
+        "카메라 영상을 시작하지 못했습니다. 화면을 한 번 누른 뒤 다시 시도해 주세요.",
+      /**
+       * 느림 — 프레임은 도착하는데 8초 안에 Ready 게이트를 못 넘었다. 정체와 달리 파이프라인은
+       * 돌고 있으므로 "표시하지 못했습니다"가 아니라 "원활하지 않습니다"다.
+       */
+      pipelineSlow:
+        "카메라 영상이 원활하지 않습니다. 다시 시도하거나 다른 브라우저에서 열어 주세요.",
+      /**
+       * `navigator.mediaDevices`가 없다 — 인앱브라우저·구형 WebView. 같은 브라우저에서 다시
+       * 눌러도 반드시 실패하므로([다시 시도] 없음) **나가는 방법**만 말한다.
+       */
+      unsupportedBrowser:
+        "이 브라우저에서는 카메라를 사용할 수 없습니다. Safari·Chrome 등 기본 브라우저에서 열어 주세요.",
       unknown: "카메라를 사용할 수 없습니다. 권한과 연결을 확인해 주세요.",
     },
     retry: "다시 시도",
+    /**
+     * 실패 오버레이 하단의 오류 코드 캡션(2026-08-07 신설 · 03 §6.3).
+     *
+     * 진단 모달은 **로그인 전용**이고 클라이언트 로그는 기기 IndexedDB에만 쌓인다 —
+     * 게스트 손님·현장 테스터가 실패 원인을 우리에게 전할 수 있는 **유일한 창구**다.
+     * ⚠️ 값에는 `CameraFailure.detail`(새니타이즈 통과분)만 붙는다 — 예외 메시지가 아니다.
+     */
+    failureCodeLabel: "오류 코드",
     /** Guide 화면 권한 사전 요청 블록(03 §5 · 07 §3). */
     allowButton: "카메라 사용 허용",
     allowHint: "촬영 전에 카메라 사용을 허용해 주세요.",
@@ -499,6 +526,17 @@ export const STRINGS = {
     previewModeBitmap: "비트맵 전송(폴백)",
     previewModeDirect: "직접 렌더",
     previewModeNone: "미연결",
+    /**
+     * 프레임 전달 경로 — 04 §2.3.2(2026-08-07 신설).
+     *
+     * ⚠️ `frameTransferBitmap`(애초에 `VideoFrame`이 없음)과 `frameTransferDemoted`(있었는데
+     *    런타임에 깨져 강등됨)는 **성격이 다르다.** 전자는 정상 폴백, 후자는 브라우저 결함
+     *    신호이자 성능 예산 재측정 대상이다 — 합치면 그 구분이 현장에서 사라진다.
+     */
+    frameTransfer: "프레임 전달",
+    frameTransferVideoFrame: "VideoFrame(zero-copy)",
+    frameTransferBitmap: "ImageBitmap(폴백)",
+    frameTransferDemoted: "ImageBitmap(강등)",
     /** 실제로 열린 제약 사다리 칸(04 §2.1). 요청 해상도가 왜 낮은지 설명해 준다. */
     cameraConstraintStep: "적용된 제약",
 

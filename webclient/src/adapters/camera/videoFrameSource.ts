@@ -1,5 +1,11 @@
 import { logger } from "@adapters/storage/logStore";
-import type { FramePayload, FrameSource, ProcessedSize } from "./cameraTypes";
+import type {
+  FramePayload,
+  FrameSource,
+  FrameSourceAttachResult,
+  FrameTransferMode,
+  ProcessedSize,
+} from "./cameraTypes";
 
 /**
  * `<video>` + 프레임 도착 루프 — 04 §2.2·§2.4
@@ -54,9 +60,86 @@ export function createHiddenVideoElement(doc: Document = document): HTMLVideoEle
   return video;
 }
 
-/** `VideoFrame`(WebCodecs)이 있으면 zero-copy로 넘긴다. 없으면 `createImageBitmap` 폴백. */
-function hasVideoFrame(): boolean {
-  return typeof VideoFrame !== "undefined";
+/**
+ * `VideoFrame` 전달 경로의 상태 — **모듈 레벨**이며 전이는 단방향이다(2026-08-07 신설).
+ *
+ * ```
+ *   unprobed ──프로브 true──▶ videoFrame ──런타임 실패 1회──▶ imageBitmapDemoted
+ *       │                                                          │
+ *       └──── false ────▶ imageBitmap              (되돌아가지 않는다)
+ * ```
+ *
+ * ⚠️ **모듈 레벨이어야 한다.** `createVideoFrameSource()`는 카메라를 열 때마다 새로 불리므로
+ *    소스 인스턴스에 두면 강등이 재시작마다 초기화된다 — 못 하던 기기가 갑자기 하게 된다.
+ *    `frameThumbnails.ts`의 resize 프로브 캐시가 같은 선례다.
+ * ⚠️ **되돌아가는 전이가 없다** = "프레임마다 재시도해서 매번 실패"가 구조적으로 불가능하다.
+ */
+type VideoFramePathState = "unprobed" | FrameTransferMode;
+
+let videoFramePath: VideoFramePathState = "unprobed";
+
+/** 테스트용 상태 리셋. 운영 경로에서는 부르지 않는다(`resetThumbnailProbeForTests`와 같은 형태). */
+export function resetVideoFramePathForTests(): void {
+  videoFramePath = "unprobed";
+}
+
+/**
+ * `VideoFrame`을 1×1 캔버스로 **실제로 하나 만들어** 본다 —
+ * 대조군은 `frameProcessorClient.isWorkerPipelineSupported()`다(존재 검사만으로는 부족하다).
+ *
+ * ⚠️ **`<video>`로 프로브하지 마라.** 재생 시작 전 `<video>`로 `VideoFrame`을 만들면 지원하는
+ *    브라우저에서도 던져 **거짓 음성**이 되고 zero-copy 경로를 영구히 잃는다.
+ *    캔버스가 유일하게 안전한 입력이다(캔버스 소스는 `timestamp`가 필수다).
+ */
+function probeVideoFrame(doc: Document): boolean {
+  if (typeof VideoFrame === "undefined") return false;
+  try {
+    const canvas = doc.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const frame = new VideoFrame(canvas, { timestamp: 0 });
+    // ⚠️ `VideoFrame`은 GC 대상이 아니다 — 프로브가 만든 것도 반드시 닫는다(04 §2.4).
+    frame.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 이 프레임을 `VideoFrame`으로 넘길 수 있는가. 첫 호출에서 실증 프로브가 돈다. */
+function videoFramePathUsable(doc: Document): boolean {
+  if (videoFramePath === "unprobed") {
+    videoFramePath = probeVideoFrame(doc) ? "videoFrame" : "imageBitmap";
+    if (videoFramePath === "imageBitmap") {
+      logger.info("VideoFrame 실증 프로브 실패 — ImageBitmap 경로로 시작한다");
+    }
+  }
+  return videoFramePath === "videoFrame";
+}
+
+/**
+ * 런타임 실패 1회에서 **영구 강등**한다(생성자는 통과했는데 Worker transfer가 터지는 경우 포함).
+ *
+ * 로그는 **1회만** 남긴다 — 초당 30회 경고가 로그 링버퍼를 태우면 정작 필요한 기록이 밀려난다.
+ */
+function demoteVideoFramePath(err: unknown): void {
+  if (videoFramePath === "imageBitmapDemoted") return;
+  videoFramePath = "imageBitmapDemoted";
+  logger.warn("VideoFrame 전달 실패 — ImageBitmap 경로로 영구 강등", {
+    name: err instanceof Error ? err.name : "",
+  });
+}
+
+/**
+ * transfer에 성공한 프레임은 detach되어 `close()`가 던질 수 있다 — 삼킨다.
+ * 실패해 남은 프레임을 닫지 않으면 그대로 누수다(`VideoFrame`은 GC 대상이 아니다).
+ */
+function closeQuietly(frame: VideoFrame | null): void {
+  try {
+    frame?.close();
+  } catch {
+    /* 이미 detach됐다 */
+  }
 }
 
 export function createVideoFrameSource(
@@ -92,8 +175,23 @@ export function createVideoFrameSource(
 
     converting = true;
     try {
-      if (hasVideoFrame()) {
-        emit(new VideoFrame(video));
+      if (videoFramePathUsable(doc)) {
+        /*
+         * ⚠️ `emit()` 안에서 던질 수 있다(Worker `postMessage(..., {transfer})` 실패).
+         *    예전에는 그 예외가 아래 catch로 흘러 warn만 남기고 **매 프레임 같은 실패를
+         *    반복**했다 — `createImageBitmap` 폴백으로 절대 내려가지 않았다.
+         *    게다가 만들어진 프레임이 닫히지 않아 소유권까지 샜다.
+         */
+        let frame: VideoFrame | null = null;
+        try {
+          frame = new VideoFrame(video);
+          emit(frame);
+          frame = null; // 정상: 소유권이 소비자에게 넘어갔다
+        } catch (err) {
+          closeQuietly(frame);
+          demoteVideoFramePath(err);
+          return; // 이 프레임 1장은 버린다 — 다음 프레임부터 비트맵 경로
+        }
       } else {
         emit(await createImageBitmap(video));
       }
@@ -124,7 +222,7 @@ export function createVideoFrameSource(
   }
 
   return {
-    async attach(stream) {
+    async attach(stream): Promise<FrameSourceAttachResult> {
       video.srcObject = stream;
       if (video.parentNode === null) {
         // DOM에 붙어 있어야 일부 브라우저에서 재생이 시작된다.
@@ -134,17 +232,24 @@ export function createVideoFrameSource(
         // `autoplay`가 실패할 수 있으므로 명시 호출한다.
         await video.play();
       } catch (err) {
+        /*
+         * ⚠️ **`name`을 돌려준다.** 전에는 `message`만 로그로 남기고 `name`을 버려서,
+         *    호출측이 이 실패를 권한 실패와 같은 `unknown`으로 보고할 수밖에 없었다.
+         *    iOS에서 실제로 나오는 것: `NotAllowedError`(자동재생 정책) · `AbortError`(로드 중단).
+         */
+        const errorName = err instanceof Error ? err.name : "";
         logger.warn("video.play() 실패 — 제스처 컨텍스트에서 재시도 필요", {
+          name: errorName,
           reason: err instanceof Error ? err.message : String(err),
         });
-        return false;
+        return { ok: false, errorName };
       }
 
       running = true;
       lastMediaTime = -1;
       if (withCallback.requestVideoFrameCallback !== undefined) loopWithRvfc();
       else loopWithRaf();
-      return true;
+      return { ok: true };
     },
 
     onFrame(listener) {
@@ -167,6 +272,14 @@ export function createVideoFrameSource(
 
     size(): ProcessedSize {
       return { width: video.videoWidth, height: video.videoHeight };
+    },
+
+    /**
+     * 아직 프로브 전이면 `imageBitmap`으로 **보수적으로** 보고한다 —
+     * 프레임이 한 장도 오지 않은 상태에서 zero-copy를 주장하면 진단이 거짓을 말한다.
+     */
+    transferMode(): FrameTransferMode {
+      return videoFramePath === "unprobed" ? "imageBitmap" : videoFramePath;
     },
   };
 }

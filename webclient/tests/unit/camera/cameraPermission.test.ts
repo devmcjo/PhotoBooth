@@ -184,11 +184,16 @@ describe("requestCameraPermission — 프라이밍은 즉시 정지한다", () =
     });
   });
 
-  it("mediaDevices 자체가 없으면(구형·http) unknown 사유로 실패한다 — 예외 전파 금지", async () => {
+  it("mediaDevices 자체가 없으면 unsupportedBrowser로 실패한다 — 예외 전파 금지", async () => {
+    /*
+     * 2026-08-07 이전에는 `unknown`("권한과 연결을 확인해 주세요")이었다. 그런데 이 경로는
+     * 권한과 아무 관계가 없다 — 인앱브라우저·구형 WebView라 **다른 브라우저로 나가야** 한다.
+     * `classifyCameraFailure`의 `TypeError` 매핑이 UA 분기 없이 그 안내를 만들어 준다.
+     */
     stubCamera("Idle");
     setNavigator({});
     const outcome = await requestCameraPermission();
     expect(outcome.ok).toBe(false);
-    if (!outcome.ok) expect(outcome.reason).toBe("unknown");
+    if (!outcome.ok) expect(outcome.reason).toBe("unsupportedBrowser");
   });
 });

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   cameraFailureMessageKey,
+  formatCameraFailureCode,
   isCameraRetryable,
-  type CameraFailureReason,
+  type CameraFailure,
 } from "@domain/capture/cameraFailure";
 import { getCameraService } from "@adapters/camera/cameraService";
 import type { CameraState, ProcessedSize } from "@adapters/camera/cameraTypes";
@@ -35,9 +36,11 @@ export interface CameraPreviewProps {
 export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<CameraState>(() => getCameraService().state());
-  const [reason, setReason] = useState<CameraFailureReason | null>(() =>
-    getCameraService().failureReason(),
-  );
+  /**
+   * 사유 + 상세를 **한 값으로** 들고 있는다. 사유와 코드를 따로 폴링하면 서로 다른 시점의
+   * `lastFailure`를 읽어 문구와 코드가 어긋난다.
+   */
+  const [failure, setFailure] = useState<CameraFailure | null>(() => getCameraService().failure());
   const [size, setSize] = useState<ProcessedSize | null>(null);
   /**
    * 캔버스 세대. **카메라가 새로 열릴 때마다 증가**해 `<canvas>` DOM 노드를 갈아 끼운다.
@@ -54,11 +57,11 @@ export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreview
   useEffect(() => {
     const camera = getCameraService();
     setState(camera.state());
-    setReason(camera.failureReason());
+    setFailure(camera.failure());
     const offState = camera.onState((next) => {
       setState(next);
       // 사유는 상태와 **같은 통지**에서 읽는다 — 따로 폴링하면 두 값이 어긋난다.
-      setReason(camera.failureReason());
+      setFailure(camera.failure());
       // 새 가공기가 생기는 전이는 `Starting` 진입뿐이다(stop → start · 재시도 · 장치 변경).
       if (next === "Starting") setGeneration((current) => current + 1);
     });
@@ -105,12 +108,25 @@ export function CameraPreview({ overlay, failedMessage, onRetry }: CameraPreview
       {state === "Failed" && (
         <div className={styles.overlay} role="alert">
           <p className={styles.overlayText}>
-            {failedMessage ?? STRINGS.camera.errors[cameraFailureMessageKey(reason ?? "unknown")]}
+            {failedMessage ??
+              STRINGS.camera.errors[cameraFailureMessageKey(failure?.reason ?? "unknown")]}
           </p>
-          {onRetry !== undefined && isCameraRetryable(reason ?? "unknown") && (
+          {onRetry !== undefined && isCameraRetryable(failure?.reason ?? "unknown") && (
             <Button variant="primary" onClick={onRetry}>
               {STRINGS.camera.retry}
             </Button>
+          )}
+          {/*
+            오류 코드 캡션 — 손님에게는 의미 없는 문자열이지만, 진단 모달이 로그인 전용이고
+            로그가 기기 IndexedDB에만 쌓이는 지금 **현장 운영자·테스터가 원인을 보고할 수 있는
+            유일한 창구**다. 값은 `DETAIL_PATTERN`을 통과한 것뿐이라 게이트 키·토큰·email·
+            기기 label·예외 메시지가 원리적으로 섞일 수 없다.
+            ⚠️ JSX 텍스트 노드만 쓴다 — `innerHTML`/`dangerouslySetInnerHTML` 금지.
+          */}
+          {failure !== null && (
+            <p className={styles.failureCode}>
+              {STRINGS.camera.failureCodeLabel} {formatCameraFailureCode(failure)}
+            </p>
           )}
         </div>
       )}

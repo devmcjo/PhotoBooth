@@ -85,11 +85,14 @@ export function constraintLadder(request: ConstraintRequest): readonly Constrain
  *    상태가 흔들리고, 손님은 "왜 이렇게 오래 걸리나"만 겪는다.
  * ⚠️ `NotReadableError`(점유)는 **계속 내려간다** — 해상도를 낮추면 열리는 안드로이드 기기가
  *    실제로 있다(다른 앱이 고해상도 모드를 잡고 있는 경우).
+ * ⚠️ `TypeError`도 **즉시 멈춘다**(2026-08-07). `navigator.mediaDevices`가 없다는 뜻이라
+ *    사다리 5칸을 내려가 봐야 5번 같은 예외가 난다 — 권한 거부와 같은 이유다.
  */
 export function shouldTryNextStep(errorName: string): boolean {
   return (
     errorName !== "NotAllowedError" &&
     errorName !== "SecurityError" &&
-    errorName !== "PermissionDeniedError"
+    errorName !== "PermissionDeniedError" &&
+    errorName !== "TypeError"
   );
 }

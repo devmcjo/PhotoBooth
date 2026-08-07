@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createCameraService, READY_TIMEOUT_MS } from "@adapters/camera/cameraService";
+import {
+  createCameraService,
+  READY_TIMEOUT_MS,
+  type CameraService,
+} from "@adapters/camera/cameraService";
+import { formatCameraFailureCode } from "@domain/capture/cameraFailure";
 import {
   constraintLadder,
   shouldTryNextStep,
@@ -16,6 +21,8 @@ import type {
   FramePayload,
   FrameProcessor,
   FrameSource,
+  FrameSourceAttachResult,
+  FrameTransferMode,
   ProcessedSize,
 } from "@adapters/camera/cameraTypes";
 import {
@@ -64,8 +71,12 @@ class FakeStream {
 
 class FakeSource implements FrameSource {
   private listener: ((payload: FramePayload) => void) | null = null;
-  async attach(): Promise<boolean> {
-    return true;
+  /** `{ok:false, errorName}`을 주면 `video.play()` reject를 흉내낸다. */
+  attachResult: FrameSourceAttachResult = { ok: true };
+  transferModeValue: FrameTransferMode = "videoFrame";
+
+  async attach(): Promise<FrameSourceAttachResult> {
+    return this.attachResult;
   }
   onFrame(listener: (payload: FramePayload) => void): () => void {
     this.listener = listener;
@@ -78,6 +89,9 @@ class FakeSource implements FrameSource {
   }
   size(): ProcessedSize {
     return { width: 1280, height: 720 };
+  }
+  transferMode(): FrameTransferMode {
+    return this.transferModeValue;
   }
   emit(): void {
     this.listener?.({ close: () => undefined } as unknown as FramePayload);
@@ -229,6 +243,103 @@ describe("cameraService — 사다리를 실제로 내려간다", () => {
   });
 });
 
+// ─────────── 7. 실패 사유 확정 3경로 + 진단 코드 (2026-08-07 신설) ───────────
+
+/**
+ * `unknown` 하나에 성격이 다른 3경로가 모여 있어 현장에서 원인을 좁힐 수 없었다.
+ * 여기서 고정하는 것은 **화면에 뜨는 오류 코드 문자열**이다 — 그것이 유일한 보고 창구다.
+ */
+describe("cameraService — 실패 사유와 진단 코드", () => {
+  function ladderFailure(errorName: string): CameraService {
+    return createCameraService({
+      openStream: async () => {
+        throw new DOMException("boom", errorName);
+      },
+      createFrameSource: () => new FakeSource(),
+      createProcessor: stubProcessor,
+      now: () => 0,
+    });
+  }
+
+  it("사다리 소진 + AbortError → unknown/AbortError (사유는 나누지 않되 이름은 남긴다)", async () => {
+    const camera = ladderFailure("AbortError");
+    await camera.start({ targetAspect: 0.75, mirror: false });
+    expect(camera.failureReason()).toBe("unknown");
+    expect(formatCameraFailureCode(camera.failure()!)).toBe("unknown/AbortError");
+  });
+
+  it("사다리 소진 + InvalidStateError → unknown/InvalidStateError", async () => {
+    const camera = ladderFailure("InvalidStateError");
+    await camera.start({ targetAspect: 0.75, mirror: false });
+    expect(formatCameraFailureCode(camera.failure()!)).toBe("unknown/InvalidStateError");
+  });
+
+  it("mediaDevices 부재(TypeError)는 unsupportedBrowser이고 **사다리를 내려가지 않는다**", async () => {
+    // 제약을 낮춰도 `mediaDevices`는 생기지 않는다 — 5번 같은 예외를 반복할 이유가 없다.
+    let calls = 0;
+    const camera = createCameraService({
+      openStream: async () => {
+        calls++;
+        throw new TypeError("navigator.mediaDevices is undefined");
+      },
+      createFrameSource: () => new FakeSource(),
+      createProcessor: stubProcessor,
+      now: () => 0,
+    });
+
+    expect(await camera.start({ deviceId: "cam", targetAspect: 0.75, mirror: false })).toBe(false);
+    expect(calls).toBe(1);
+    expect(camera.failureReason()).toBe("unsupportedBrowser");
+    expect(formatCameraFailureCode(camera.failure()!)).toBe("unsupportedBrowser/TypeError");
+  });
+
+  it("attach 실패는 playbackBlocked다 — 권한 실패와 구분되고 트랙이 멈춘다", async () => {
+    /*
+     * ⚠️ 이 케이스가 `if (!result.ok)` 회귀를 잡는 **유일한 안전망**이다.
+     *    `attach()`가 객체를 돌려주게 된 뒤 `if (!attached)`를 그대로 두면 객체는 항상 참이라
+     *    **타입 에러 없이** 항상 거짓이 되고, 재생 실패가 조용히 성공으로 처리된다.
+     */
+    const stream = new FakeStream();
+    const source = new FakeSource();
+    source.attachResult = { ok: false, errorName: "NotAllowedError" };
+    const camera = createCameraService({
+      openStream: async () => stream as unknown as MediaStream,
+      createFrameSource: () => source,
+      createProcessor: stubProcessor,
+      now: () => 0,
+    });
+
+    expect(await camera.start({ targetAspect: 0.75, mirror: false })).toBe(false);
+    expect(camera.state()).toBe("Failed");
+    expect(camera.failureReason()).toBe("playbackBlocked");
+    expect(formatCameraFailureCode(camera.failure()!)).toBe("playbackBlocked/NotAllowedError");
+    // LED가 켜진 채 남지 않는다.
+    expect(stream.track.stopped).toBe(true);
+  });
+
+  it("성공하면 직전 실패 흔적이 지워진다", async () => {
+    const stream = new FakeStream();
+    let fail = true;
+    const camera = createCameraService({
+      openStream: async () => {
+        if (fail) throw new DOMException("none", "NotFoundError");
+        return stream as unknown as MediaStream;
+      },
+      createFrameSource: () => new FakeSource(),
+      createProcessor: stubProcessor,
+      now: () => 0,
+    });
+
+    await camera.start({ targetAspect: 0.75, mirror: false });
+    expect(camera.failure()).not.toBeNull();
+
+    fail = false;
+    camera.stop();
+    await camera.start({ targetAspect: 0.75, mirror: false });
+    expect(camera.failure()).toBeNull();
+  });
+});
+
 // ──────────────────── 3·4. 가공기 생성 실패와 정체 판정 ────────────────────
 
 describe("cameraService — 가공기 생성 실패를 예외로 흘리지 않는다", () => {
@@ -270,9 +381,11 @@ describe("cameraService — Ready 타임아웃 사유를 가른다", () => {
 
     expect(camera.state()).toBe("Failed");
     expect(camera.failureReason()).toBe("pipelineStalled");
+    // 상세가 방향을 가른다: `worker-transferred`면 프레임 소스 쪽, `main-none`이면 프리뷰 미연결.
+    expect(formatCameraFailureCode(camera.failure()!)).toBe("pipelineStalled/worker-transferred");
   });
 
-  it("프레임은 오는데 조건 미달이면 unknown이다(정체가 아니다)", async () => {
+  it("프레임은 오는데 조건 미달이면 pipelineSlow다(막힌 것이 아니라 느린 것이다)", async () => {
     vi.useFakeTimers();
     const stream = new FakeStream();
     const source = new FakeSource();
@@ -289,7 +402,9 @@ describe("cameraService — Ready 타임아웃 사유를 가른다", () => {
     vi.advanceTimersByTime(READY_TIMEOUT_MS + 1);
 
     expect(camera.state()).toBe("Failed");
-    expect(camera.failureReason()).toBe("unknown");
+    // 2026-08-07 이전에는 이것도 `unknown`이라 "권한과 연결을 확인해 주세요"가 떴다.
+    expect(camera.failureReason()).toBe("pipelineSlow");
+    expect(formatCameraFailureCode(camera.failure()!)).toBe("pipelineSlow/f10");
   });
 });
 
