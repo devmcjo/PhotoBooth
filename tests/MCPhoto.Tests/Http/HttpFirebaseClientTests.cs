@@ -185,7 +185,9 @@ public class HttpFirebaseClientTests
         try
         {
             var storagePath = "results/20260101_120000_11111111-2222-3333-4444-555555555555/final.jpg";
-            await Assert.ThrowsAsync<InvalidOperationException>(
+            // 계약은 InvalidOperationException 계열 유지. 실제 타입은 파생 BackendUnavailableException으로
+            // 좁혀졌다(UI가 "네트워크를 확인해 주세요"를 고를 수 있게) → ThrowsAny로 계열만 검증한다.
+            await Assert.ThrowsAnyAsync<InvalidOperationException>(
                 () => client.UploadFileAsync(storagePath, local, "image/jpeg"));
         }
         finally { File.Delete(local); }

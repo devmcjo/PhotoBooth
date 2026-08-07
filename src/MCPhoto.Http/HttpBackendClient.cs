@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using MCPhoto.Core.Backend;
 using MCPhoto.Http.Dto;
 using MCPhoto.Http.Session;
 using Microsoft.Extensions.Logging;
@@ -110,7 +111,7 @@ public abstract class HttpBackendClient
             {
                 // Required: 토큰 없으면 즉시 거부(로그인 필요). Optional: 토큰 없으면 익명 통과(게스트 업로드, it13 §5.1).
                 if (bearer == BearerMode.Required)
-                    throw new UnauthorizedAccessException("로그인이 필요합니다(토큰 없음).");
+                    throw new BackendLoginRequiredException("로그인이 필요합니다(토큰 없음).", expired: false);
             }
             else
             {
@@ -124,6 +125,16 @@ public abstract class HttpBackendClient
     private async Task<HttpResponseMessage> SendCoreAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var client = CreateClient();
+
+        // 서버 주소 미설정 판정을 SendAsync보다 **먼저** 한다. 그냥 보내면 HttpClient가
+        // "An invalid request URI was provided…"라는 영문 InvalidOperationException을 던지고,
+        // 그 문장이 아래 catch(네트워크)에도 걸리지 않아 그대로 사용자 화면까지 올라간다.
+        if (client.BaseAddress is null && request.RequestUri is { IsAbsoluteUri: false })
+        {
+            _logger?.LogWarning("백엔드 주소 미설정: {Method} {Url}", request.Method, request.RequestUri);
+            throw new BackendNotConfiguredException("백엔드 서버 주소가 설정되지 않았습니다.");
+        }
+
         try
         {
             return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
@@ -135,9 +146,10 @@ public abstract class HttpBackendClient
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            // 네트워크/타임아웃 = 백엔드 도달 불가. 현행 계약(5xx/네트워크→InvalidOperationException)과 정합.
+            // 네트워크/타임아웃 = 백엔드 도달 불가. 현행 계약(5xx/네트워크→InvalidOperationException)과 정합
+            // (BackendUnavailableException이 InvalidOperationException 파생이므로 기존 catch가 그대로 잡는다).
             _logger?.LogWarning(ex, "백엔드 요청 실패(네트워크/타임아웃): {Method} {Url}", request.Method, request.RequestUri);
-            throw new InvalidOperationException("백엔드에 연결할 수 없습니다.", ex);
+            throw new BackendUnavailableException("백엔드에 연결할 수 없습니다.", ex);
         }
     }
 
@@ -184,10 +196,17 @@ public abstract class HttpBackendClient
     /// <summary>
     /// <see cref="BackendException"/>을 현행 UI 계약 예외로 변환(설계 §6.1):
     /// 403→UnauthorizedAccessException, 409→InvalidOperationException(중복), 404→InvalidOperationException,
-    /// 400→ArgumentException, 그 외→InvalidOperationException. 401 처리는 호출부가 결정(로그인만 null).
+    /// 400→ArgumentException, 그 외→InvalidOperationException.
+    /// <para>
+    /// 401→<see cref="BackendLoginRequiredException"/>(UnauthorizedAccessException 파생). 401을 일반
+    /// InvalidOperationException으로 흘리면 서버가 준 <c>"토큰 검증 실패: jwt expired"</c>가 그대로
+    /// 사용자 화면에 찍힌다 — "로그인이 만료됐다"는 사실을 타입으로 남겨 UI가 제 문구를 고르게 한다.
+    /// 로그인 자체의 401은 <see cref="HttpAccountService"/>가 이 변환 전에 가로채 null로 처리한다(계약 유지).
+    /// </para>
     /// </summary>
     protected static Exception MapToDomainException(BackendException ex) => ex.StatusCode switch
     {
+        HttpStatusCode.Unauthorized => new BackendLoginRequiredException(ex.Message, expired: true),
         HttpStatusCode.Forbidden => new UnauthorizedAccessException(ex.Message),
         HttpStatusCode.Conflict => new InvalidOperationException(ex.Message),
         HttpStatusCode.NotFound => new InvalidOperationException(ex.Message),

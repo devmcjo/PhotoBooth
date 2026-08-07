@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using MCPhoto.Core.Backend;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using MCPhoto.Http.Dto;
@@ -185,15 +186,24 @@ public sealed class HttpFrameRepository : HttpBackendClient, IFrameRepository
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            // 메타 POST는 성공했는데 이미지 PUT만 끊긴 상태 = 서버에 이미지 없는 문서가 남는다.
+            // 도달불가로 분류해 "네트워크 확인 후 재시도" 안내를 받게 한다(재시도하면 새 문서가 생기고
+            // 이미지 없는 앞선 문서는 목록에서 걸러진다 — 설계 §10 고아 문서 처리).
             Logger?.LogWarning(ex, "프레임 이미지 PUT 실패(네트워크)");
-            throw new InvalidOperationException("프레임 이미지 업로드에 실패했습니다(네트워크).", ex);
+            throw new BackendUnavailableException("프레임 이미지를 업로드하지 못했습니다(네트워크).", ex);
         }
 
         using (response)
         {
             if (!response.IsSuccessStatusCode)
+            {
+                // 서명 URL 거부. 흔한 원인은 ①서명 만료(수 분 경과) ②8MB 초과로
+                // x-goog-content-length-range 위반. 사용자가 조치할 수 있는 말로 바꾼다.
+                Logger?.LogWarning("프레임 이미지 PUT 거부: HTTP {Status}", (int)response.StatusCode);
                 throw new InvalidOperationException(
-                    $"프레임 이미지 업로드에 실패했습니다(HTTP {(int)response.StatusCode}).");
+                    "프레임 이미지를 업로드하지 못했습니다. 이미지 용량이 8MB를 넘거나 저장 시간이 초과됐을 수 있습니다. "
+                    + $"이미지를 줄여 다시 시도해 주세요(서버 응답 {(int)response.StatusCode}).");
+            }
         }
     }
 

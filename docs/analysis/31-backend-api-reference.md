@@ -77,10 +77,10 @@
 
 | `code` | 상태 | 의미 | 클라이언트 권장 처리 |
 |--------|:----:|------|----------------------|
-| `unauthorized` | 401 | 인증 필요/실패(게이트 키 무효, Bearer 없음·만료·위조, PIN 불일치, 로그인 자격 실패) | **호출부가 결정** — 로그인은 "자격 실패", PIN 검증은 "불일치", 그 외는 "다시 로그인" 유도 |
+| `unauthorized` | 401 | 인증 필요/실패(게이트 키 무효, Bearer 없음·만료·위조, PIN 불일치, 로그인 자격 실패) | **호출부가 결정** — 로그인은 "자격 실패", PIN은 "불일치", 그 외는 "다시 로그인" 유도. ⚠️ 아래 3.2 참고 |
 | `forbidden` | 403 | 권한 없음(power/admin/위계 위반, 타 계정 프레임 조회, 자기 자신 삭제) | "권한이 없습니다" 안내 |
 | `not_found` | 404 | 대상 없음(계정·프레임) 또는 미정의 엔드포인트 | "대상을 찾을 수 없습니다" |
-| `conflict` | 409 | 중복(동일 `sessionId` 재commit, 프레임 10개 초과) 또는 **PIN 미설정** | 문맥별 분기 필수(§4.5 참고) |
+| `conflict` | 409 | 중복(동일 `sessionId` 재commit, **프레임 이름 중복**) 또는 **PIN 미설정** | 문맥별 분기 필수(§4.5 참고). 프레임 개수 상한은 폐지됐다 |
 | `invalid_argument` | 400 | 입력 검증 실패, JSON 파싱 실패, 자기 자신 대상 PIN 재설정 | 입력 오류 안내 |
 | `not_implemented` | 501 | 서버 기능 미구성 — **Google SSO 미구성 또는 OAuth 클라이언트 자격 오류**(client_id/secret이 Google에 등록된 값과 불일치) | "로그인이 구성되지 않았습니다. 관리자에게 문의" — 자격 실패·네트워크와 **구분해서** 안내 |
 | `internal` | 500 | 서버 오류 | 재시도 가능 안내 |
@@ -92,6 +92,28 @@
 ### 3.1 네트워크 계층 실패
 
 서버가 응답하지 못한 경우(연결 실패·타임아웃·DNS)는 HTTP 상태코드가 없다. 클라이언트는 이를 **"백엔드에 연결할 수 없습니다"** 류의 별도 상태로 다뤄야 하며, 401/403과 섞지 않는다. 현행 Windows 클라이언트가 이 구분을 유지한다([70 §6.3](./70-logging-and-troubleshooting.md)).
+
+**서버 주소 미설정은 또 다른 상태다.** 상태코드도 없고 네트워크 실패도 아니다(요청을 보내지조차 않는다). 이 셋을 뭉뜽그리면 조치 방법이 달라 사용자가 헤맨다 — 네트워크를 고칠 일인지, 설정에 주소를 넣을 일인지, 다시 로그인할 일인지.
+
+### 3.2 클라이언트 예외 매핑 (Windows)
+
+`MapToDomainException`이 서버 응답을 도메인 예외로 바꾼다. **문구 분기는 이 타입으로 한다** — 예외 메시지 문자열을 되짚으면 문구를 고칠 수 없게 된다.
+
+| 상황 | 예외 타입 | 기반 타입 |
+|------|----------|----------|
+| 서버 주소 미설정 | `BackendNotConfiguredException` | `InvalidOperationException` |
+| 연결 실패·타임아웃·이미지 PUT 실패 | `BackendUnavailableException` | `InvalidOperationException` |
+| Bearer 없음 | `BackendLoginRequiredException(Expired=false)` | `UnauthorizedAccessException` |
+| **401** | `BackendLoginRequiredException(Expired=true)` | `UnauthorizedAccessException` |
+| 403 | `UnauthorizedAccessException` | |
+| 400 | `ArgumentException` | |
+| 404 · 409 · 5xx | `InvalidOperationException`(서버 message 인용) | |
+
+기반 타입을 유지하는 이유: 기존 `catch (InvalidOperationException)` / `catch (UnauthorizedAccessException)` 코드가 그대로 동작한다(계약 무변경).
+
+> ⚠️ **`PUT /accounts/me/pin`만 401 매핑에서 제외된다.** 이 라우트의 401은 *현재 PIN 불일치*(§4.9)이거나 *토큰 만료*인데 서버가 둘 다 `unauthorized`로 준다. 만료로 단정하면 PIN을 틀린 사용자에게 재로그인을 시키게 되므로, 이 라우트만 일반 `UnauthorizedAccessException`으로 올려 호출부가 두 경우를 함께 덮는 문구를 쓴다.
+>
+> **서버 개선 후보**: 토큰 검증 실패에 `token_invalid` 같은 별도 code를 주면 이 예외 케이스가 사라진다. 지금 바꾸면 구버전 클라이언트가 401 처리를 잃으므로 클라이언트 배포 이후로 미룬다.
 
 ---
 

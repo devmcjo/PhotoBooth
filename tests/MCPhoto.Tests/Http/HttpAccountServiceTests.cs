@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using MCPhoto.Core.Backend;
 using MCPhoto.Core.Models;
 using MCPhoto.Http;
 using MCPhoto.Http.Session;
@@ -66,7 +67,10 @@ public class HttpAccountServiceTests
     {
         var (svc, _, _) = Make();
         // 토큰 없음 → Bearer 요청 조립 단계에서 UnauthorizedAccessException.
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetAllAsync());
+        // ThrowsAny인 이유: 실제 타입은 파생 BackendLoginRequiredException이다(UI가 "로그인 만료"와
+        // "토큰 없음"을 구분한 문구를 쓰기 위한 타입). 계약은 여전히 UnauthorizedAccessException 계열.
+        var ex = await Assert.ThrowsAnyAsync<UnauthorizedAccessException>(() => svc.GetAllAsync());
+        Assert.False(Assert.IsType<BackendLoginRequiredException>(ex).Expired);   // 만료가 아니라 무토큰
     }
 
     // ── 계정 관리(power) ──
@@ -287,12 +291,17 @@ public class HttpAccountServiceTests
     {
         var (svc, handler, _) = Make();
         await SignInAsync(svc, handler);
-        // 현재 PIN 불일치(401)는 예외로 전파(호출부가 안내). MapToDomainException으로 InvalidOperationException.
+        // 현재 PIN 불일치(401)는 예외로 전파(호출부가 안내).
         handler.WhenJson(HttpMethod.Put, "accounts/me/pin", HttpStatusCode.Unauthorized,
             "{\"error\":{\"code\":\"unauthorized\",\"message\":\"현재 PIN이 올바르지 않습니다.\"}}");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        // 이 라우트의 401은 PIN 불일치 **또는** 토큰 만료다(서버가 둘 다 code="unauthorized"로 준다).
+        // 공용 매핑(401→BackendLoginRequiredException="로그인이 만료되었습니다")을 쓰면 PIN을 틀린
+        // 사용자에게 재로그인을 시키는 틀린 안내가 되므로, 여기서는 원인을 단정하지 않는
+        // 일반 UnauthorizedAccessException으로 올린다.
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.SetOwnPinAsync("me", currentPin: "0000", newPin: "2222"));
+        Assert.IsNotType<BackendLoginRequiredException>(ex);   // 만료로 단정하지 않았는지
     }
 
     [Fact]

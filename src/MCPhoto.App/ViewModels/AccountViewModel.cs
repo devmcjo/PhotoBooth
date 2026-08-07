@@ -3,6 +3,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.Core.Accounts;
+using MCPhoto.Core.Backend;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using Microsoft.Extensions.Logging;
@@ -188,11 +189,18 @@ public sealed partial class AccountViewModel : ViewModelBase
             OnPropertyChanged(nameof(HasPin));  // 현재 PIN 입력란 노출 갱신(최초 설정 후 변경 모드로).
             SetPinMessage("PIN이 설정되었습니다.", isError: false);
         }
+        catch (Exception ex) when (ex is BackendNotConfiguredException or BackendUnavailableException)
+        {
+            // 서버에 닿지 못한 경우. 이 catch가 없으면 아래 InvalidOperationException 절이 잡아
+            // "현재 PIN이 올바르지 않다"는 **사실과 다른 안내**를 한다(오프라인인데 PIN을 의심하게 된다).
+            _logger?.LogWarning(ex, "PIN 설정/변경 실패(서버 도달 불가)");
+            SetPinMessage(BackendFailureMessage.Describe(ex), isError: true);
+        }
         catch (UnauthorizedAccessException)
         {
-            // 서버 401(현재 PIN 불일치)은 UI 계약상 401→호출부 처리이나, HTTP 구현은 401을 예외로 올리지 않고
-            // MapToDomainException 경로를 타지 않는 케이스가 있어 방어적으로 처리(현재 PIN 오류 안내).
-            SetPinMessage("현재 PIN이 올바르지 않습니다.", isError: true);
+            // 이 라우트의 401은 현재 PIN 불일치이거나 토큰 만료다 — 서버가 둘 다 code="unauthorized"로 주므로
+            // 구분할 수 없다(HttpAccountService.SetOwnPinAsync 주석). 한쪽으로 단정하지 않는 문구를 쓴다.
+            SetPinMessage("현재 PIN이 올바르지 않습니다. 계속 실패하면 로그인이 만료된 것일 수 있으니 다시 로그인해 주세요.", isError: true);
         }
         catch (ArgumentException)
         {
@@ -200,9 +208,9 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         catch (InvalidOperationException ex)
         {
-            // 서버 401(현재 PIN 불일치)·404 등이 InvalidOperationException으로 매핑됨(BackendException 매핑).
+            // 404(계정 없음)·서버 5xx 등.
             _logger?.LogWarning(ex, "PIN 설정/변경 실패(서버 거부)");
-            SetPinMessage("현재 PIN이 올바르지 않거나 변경할 수 없습니다.", isError: true);
+            SetPinMessage("PIN을 변경할 수 없습니다. 잠시 후 다시 시도해 주세요.", isError: true);
         }
         catch (Exception ex)
         {
@@ -247,13 +255,22 @@ public sealed partial class AccountViewModel : ViewModelBase
             await _tempUserLimits.SetLimitsAsync(new TempUserLimits(TempUserQrHours, TempUserQrCount));
             SetTempUserLimitsMessage("한도를 저장했습니다.", isError: false);
         }
+        catch (Exception ex) when (ex is BackendNotConfiguredException
+                                      or BackendUnavailableException
+                                      or BackendLoginRequiredException)
+        {
+            // 오프라인·미설정·로그인 만료를 "권한 없음"이나 "저장 실패"로 뭉뜽그리지 않는다 —
+            // 조치 방법이 서로 다르다(네트워크 확인 / 설정 입력 / 재로그인).
+            _logger?.LogWarning(ex, "TempUser 한도 저장 실패(서버 도달·인증)");
+            SetTempUserLimitsMessage(BackendFailureMessage.Describe(ex), isError: true);
+        }
         catch (UnauthorizedAccessException)
         {
             SetTempUserLimitsMessage("한도를 변경할 권한이 없습니다.", isError: true);
         }
         catch (ArgumentException ex)
         {
-            // 서버 범위 검증 위반(400) 등.
+            // 서버 범위 검증 위반(400) 등 — 서버가 한국어 사용자 문구를 준다.
             SetTempUserLimitsMessage(ex.Message, isError: true);
         }
         catch (Exception ex)

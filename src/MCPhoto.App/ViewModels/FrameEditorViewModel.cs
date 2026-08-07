@@ -4,6 +4,7 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.Imaging;
+using MCPhoto.Core.Backend;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
@@ -71,13 +72,17 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             var scope = isPower
                 ? _sessionSource switch
                 {
-                    // power 신규 생성은 공용 기본 프레임 DB 등록이 가능한 유일한 경로지만, R2 이후 서버 등록은
-                    // 저장 시 확인 팝업의 체크박스에 달려 있다 → 여기서 "등록됩니다"로 단정하지 않는다.
+                    // power 신규 생성은 공용 기본 프레임 DB 등록이 가능한 유일한 경로지만, 개인/공용 선택은
+                    // 저장 시 확인 팝업의 라디오에 달려 있다 → 여기서 어느 쪽이라고 단정하지 않는다(D-21).
                     FrameSessionSource.New =>
-                        $"저장 시 '{FrameName}'을(를) 이 PC의 공용 목록에 만듭니다. 서버 등록 여부는 저장할 때 선택합니다.",
+                        $"저장할 때 '{FrameName}'을(를) 내 프레임으로 만들지 공용 프레임으로 만들지 선택합니다.",
                     _ => $"원본은 그대로 두고 '{FrameName}'(으)로 새 프레임을 만듭니다."
                 }
                 : $"'{FrameName}'을(를) 내 프레임으로 저장합니다.";
+
+            // 사전 안내(설계 §5.4): 프레임은 서버에 보관된다 — 다 만들고 [저장]을 눌러서야 실패를 아는 대신
+            // 저장 전에 조건을 알린다. 실패 문구(BackendFailureMessage)와 짝을 이루는 예방 문구다.
+            scope += " 프레임은 서버에 보관되므로 저장하려면 인터넷 연결이 필요합니다.";
 
             // 로컬 접두 규약은 폐지됐지만(설계 D-3) **서버가 여전히 '_'를 거부**한다
             // (validateFrameName — 웹·모바일이 아직 접두 규약을 쓰기 때문, 설계 §9). 저장 전에 알린다(비차단).
@@ -650,9 +655,9 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                 {
                     // D6 원자성: 서버 등록이 실패하면 로컬 저장도 화면 전환도 하지 않는다(부분 성공 금지).
                     // 로컬만 저장해두면 재시도 시 이름 충돌 가드가 자기 자신과 충돌해 저장을 막는다.
-                    // 편집 세션(이미지·슬롯·이름·배율)이 그대로 남으므로 체크만 해제해 즉시 로컬 저장할 수 있다.
+                    // 편집 세션(이미지·슬롯·이름·배율)은 그대로 남으므로 원인만 해소하면 [저장]을 다시 누르면 된다.
                     _logger?.LogError(ex, "프레임 서버 등록 실패: {Name}", FrameName);
-                    StatusMessage = $"서버 등록 실패: {ex.Message} 이 PC에만 저장하려면 '서버에도 등록'을 해제하고 다시 저장해 주세요.";
+                    StatusMessage = BackendFailureMessage.ForFrameSave(ex);
                     return;
                 }
 
@@ -691,7 +696,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     // 원자성: 서버 저장이 실패하면 로컬에도 남기지 않는다(부분 성공 금지).
                     // 로컬만 저장해두면 이름 충돌 가드가 자기 자신과 충돌해 재시도를 막는다.
                     _logger?.LogError(ex, "개인 프레임 서버 저장 실패: {Name}", FrameName);
-                    StatusMessage = $"저장 실패: {ex.Message}";
+                    StatusMessage = BackendFailureMessage.ForFrameSave(ex);
                     return;
                 }
 
@@ -706,8 +711,9 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         }
         catch (InvalidOperationException ex)
         {
-            // 10개 초과 등
-            StatusMessage = ex.Message;
+            // 위 try/catch가 서버 실패를 이미 처리하므로 여기 오는 것은 로컬 저장 실패가 대부분이다.
+            // 그래도 Describe를 거친다 — 서버 예외가 다른 경로로 새어 나와도 영문 메시지가 노출되지 않게.
+            StatusMessage = BackendFailureMessage.Describe(ex);
         }
         catch (IOException ex)
         {

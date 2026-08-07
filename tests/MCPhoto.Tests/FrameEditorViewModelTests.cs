@@ -331,8 +331,10 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 
         Assert.Null(repo.Saved);
         Assert.Null(local.SavedFrame);                       // 부분 성공 없음
-        Assert.Contains("서버 등록 실패", vm.StatusMessage);
+        Assert.Contains("저장하지 못했습니다", vm.StatusMessage);
         Assert.Contains("서버 오류", vm.StatusMessage);        // 구체적 사유가 가려지지 않는다
+        // 편집 세션이 살아 있다는 사실을 알려야 사용자가 처음부터 다시 만들지 않는다.
+        Assert.Contains("편집 중인 내용은 그대로", vm.StatusMessage);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.Services;
+using MCPhoto.Core.Backend;
 using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
@@ -407,7 +408,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         {
             // 성공 오인 금지: 서버 삭제 실패를 사용자에게 노출(미초기화·권한·오프라인 등).
             // 실패했으므로 로컬도 지우지 않는다(D-19) — 호출부가 false를 보고 중단한다.
-            DeleteNotice = $"서버 삭제 실패: {ex.Message} 이 PC의 파일은 그대로 둡니다.";
+            DeleteNotice = BackendFailureMessage.ForFrameDelete(ex);
             DeleteNoticeIsError = true;
             _logger?.LogError(ex, "프레임 서버 삭제 실패 id={Id}", serverId);
             return false;

@@ -154,9 +154,18 @@ public sealed class HttpAccountService : HttpBackendClient, IAccountService
                 new SetPinRequest { NewPin = newPin, CurrentPin = normalizedCurrent },
                 bearer: true, ct).ConfigureAwait(false);
         }
+        catch (BackendException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // ⚠️ 이 라우트에서만 401이 두 가지를 뜻한다: **현재 PIN 불일치**(services/accounts.ts setOwnPin)와
+            // 토큰 만료(requireBearer). 서버가 둘 다 code="unauthorized"로 주므로 클라가 구분할 수 없다.
+            // 공용 매핑(401→BackendLoginRequiredException=만료)을 그대로 쓰면 PIN을 틀린 사용자에게
+            // "다시 로그인해 주세요"라는 **틀린 안내**를 하게 된다 → 여기서는 원인을 단정하지 않는
+            // 일반 UnauthorizedAccessException으로 올리고, 호출부가 두 경우를 함께 덮는 문구를 쓴다.
+            throw new UnauthorizedAccessException(ex.Message);
+        }
         catch (BackendException ex)
         {
-            // 현재 PIN 불일치(401)·형식 오류(400)·계정 없음(404) 등 모두 예외로 전파(호출부가 안내).
+            // 형식 오류(400)·계정 없음(404) 등 모두 예외로 전파(호출부가 안내).
             throw MapToDomainException(ex);
         }
     }

@@ -250,14 +250,24 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 
 | 코드 | 서버 판정 | 앱 동작 |
 | --- | --- | --- |
-| 401 | 게이트 키 무효 / Bearer 없음·만료·위조 | 로그인은 `null`(자격 실패), PIN 검증은 `false`, 그 외 예외 전파 |
+| 401 | 게이트 키 무효 / Bearer 없음·만료·위조 | 로그인은 `null`(자격 실패), PIN 검증은 `false`, 그 외 `BackendLoginRequiredException(Expired=true)` |
+| Bearer 미보유(전송 전) | — | `BackendLoginRequiredException(Expired=false)` |
 | 403 | 권한 부족(power·admin·`canManage`) 또는 **TempUser QR 한도 초과** | `UnauthorizedAccessException` / 한도는 `QrLimitExceededException`(사유별 문구) |
 | 404 | 대상 없음(문서·엔드포인트) | `InvalidOperationException` |
-| 409 | 중복(세션 ID 재commit·PIN 미설정) | `InvalidOperationException` |
+| 409 | 중복(세션 ID 재commit·**프레임 이름**·PIN 미설정) | `InvalidOperationException` |
 | 501 | **Google SSO 미구성**(서버에 `GOOGLE_OAUTH_CLIENT_ID` 없음) | `GoogleSsoNotConfiguredException` — 자격 문제·네트워크와 구분됨 |
-| 네트워크·타임아웃(100초) | — | `InvalidOperationException("백엔드에 연결할 수 없습니다.")` + Warning 로그 |
+| 네트워크·타임아웃(100초) | — | `BackendUnavailableException("백엔드에 연결할 수 없습니다.")` + Warning 로그 |
+| **서버 주소 미설정** | — (요청을 보내지 않음) | `BackendNotConfiguredException` + Warning 로그 |
 
-근거: `HttpBackendClient.cs:158-196`, `HttpAccountService.cs:57-72`, `HttpFirebaseClient.cs:156-161`.
+근거: `HttpBackendClient.cs`(`SendCoreAsync`·`MapToDomainException`), `HttpAccountService.cs`, `HttpFirebaseClient.cs`.
+
+> **로그에서 오프라인을 찾을 때**: 세 상태가 서로 다른 Warning을 남긴다 —
+> `백엔드 주소 미설정:` / `백엔드 요청 실패(네트워크/타임아웃):` / `프레임 이미지 PUT 실패(네트워크)`.
+> 사용자 화면 문구는 `BackendFailureMessage`가 조립하므로 **로그 문장과 화면 문장은 다르다**.
+> 사용자가 "서버에 연결할 수 없어 저장하지 못했습니다"를 봤다고 신고하면 위 두 번째 Warning을 찾으면 된다.
+>
+> ⚠️ `PUT /accounts/me/pin`의 401만 예외적으로 일반 `UnauthorizedAccessException`이다(PIN 불일치와 토큰
+> 만료가 같은 401이라 단정할 수 없다 — [31 §3.2](./31-backend-api-reference.md)).
 
 ### 6.4 미도달의 파급
 
