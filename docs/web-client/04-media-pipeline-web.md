@@ -137,7 +137,7 @@
 | `OffscreenCanvas.getContext("webgl2")` | **뷰티 필터 Worker 경로** | **17+**(16.4는 2D만 — `getContext("webgl")`이 `null`) | `ImageData` CPU 폴백(§6.2) 또는 메인 스레드 WebGL2 |
 | `createImageBitmap(video)` / `(blob)` | Worker 프레임 전달·합성 입력 | 15+ ○ | 없음(필수) |
 | `createImageBitmap` **resize 옵션** | 썸네일·슬롯 축소 | **오래 미지원**(WebKit 이력) | **필수 폴백**: 작은 캔버스에 `drawImage` 또는 절반씩 단계 축소(§5.2) |
-| `VideoFrame`(WebCodecs) | zero-copy 프레임 전달 | 16.4+ | `createImageBitmap(video)`(§2.4의 폴백 경로) |
+| `VideoFrame`(WebCodecs) | zero-copy 프레임 전달 | 16.4+ | `createImageBitmap(video)`(§2.4의 폴백 경로). ⚠️ **존재 검사로는 부족하다** — 1×1 캔버스 **실증 프로브** + 런타임 실패 시 **영구 강등**(§2.3.2) |
 | `VideoEncoder`(WebCodecs) | 타임랩스 경로 B | 16.4+ | 경로 A(MediaRecorder mp4) → 경로 C(§7.3b) |
 
 > **`OffscreenCanvas` 2D가 없으면 §1의 구조가 성립하지 않는다.** 기능 감지에서 실패하면 "가공을 메인 스레드에서 수행"으로 축소하되, 그 경로는 성능 예산([04 §8](#8-성능메모리-예산))을 만족하지 못할 수 있으므로 **진단에 "저성능 모드"로 표시**하고 실기기 검증 결과로 지원 여부를 판정한다.
@@ -175,11 +175,44 @@
 실패하므로, 카메라 재시작 시 `CameraPreview`가 **`key`를 증가시켜 DOM 노드를 갈아 끼운다**.
 이것이 없으면 [다시 시도] 이후 화면이 영구히 검은색이 된다.
 
-#### 2.3.3 Ready 타임아웃 사유 분리
+**프레임 전달 경로 3상태**(`FrameSource.transferMode()` · 진단 [프레임 전달] 행 · 2026-08-07 신설):
 
-프레임이 **0장**이면 `pipelineStalled`, 프레임은 오는데 조건 미달이면 `unknown`이다.
-전에는 둘 다 `unknown`이라 "권한 문제인지 브라우저 능력 문제인지" 현장에서 구분할 수 없었다.
-로그에는 `pipelineMode`·`previewMode`·`constraintStep`을 함께 남긴다.
+| 값 | 의미 | 진단 tone |
+|----|------|-----------|
+| `videoFrame` | `VideoFrame` **실증 프로브 통과** — zero-copy 경로 | `ok` |
+| `imageBitmap` | `VideoFrame`이 애초에 없거나 프로브가 실패 — 정상 폴백 | `neutral` |
+| `imageBitmapDemoted` | `VideoFrame`이 있었는데 **런타임에 깨져 강등** — 브라우저 결함 신호 · 성능 예산 재측정 대상 | `warn` |
+
+카메라가 닫혀 있으면 `null`("알 수 없음")이다. **네 번째 상태처럼 보이지만 값이 아니다.**
+
+⚠️ **존재 검사(`typeof VideoFrame !== "undefined"`)만으로는 부족하다.** 생성자는 있는데 생성이
+실패하는 구현이 있고, 그러면 매 프레임 throw하며 가공 프레임이 **0장**이 된다(→ `pipelineStalled`).
+`isWorkerPipelineSupported()`가 1×1 `OffscreenCanvas`를 실제로 만드는 것과 **같은 급**으로,
+1×1 **캔버스**로 `VideoFrame`을 하나 만들어 본다. `<video>`로 프로브하면 재생 시작 전이라
+지원 브라우저에서도 던져 **거짓 음성**이 되고 zero-copy 경로를 영구히 잃는다.
+
+⚠️ **강등 전이는 단방향이며 상태는 모듈 레벨이다.** `new VideoFrame(...)`이 성공해도 Worker로의
+`postMessage(..., {transfer})`가 실패할 수 있으므로(프로브로는 못 잡는다) 런타임 실패 1회에서
+영구 강등한다. 되돌아가는 전이가 없어야 "프레임마다 재시도해서 매번 실패"가 구조적으로 불가능하고,
+모듈 레벨이어야 카메라 재시작(`createVideoFrameSource()`가 매번 새로 불린다)을 넘어 유지된다.
+강등 로그는 **1회만** 남긴다 — 초당 30회 경고가 로그 링버퍼를 태우면 안 된다.
+전송에 실패해 남은 프레임은 `closeQuietly()`로 닫는다(성공한 프레임은 detach되어 `close()`가
+던질 수 있으므로 삼킨다).
+
+#### 2.3.3 Ready 타임아웃 · 재생 실패 사유 분리
+
+| 조건 | 사유 | 진단 코드 상세 |
+|------|------|----------------|
+| Ready 타임아웃 · 가공 프레임 **0장** | `pipelineStalled` | `{가공경로}-{프리뷰경로}` (예: `main-none` · `worker-transferred`) |
+| Ready 타임아웃 · 가공 프레임 **1장 이상** | `pipelineSlow` | `f{가공프레임수}` (예: `f3`) |
+| `FrameSource.attach()`가 `{ok:false}` | `playbackBlocked` | `video.play()` rejection의 `name` (예: `NotAllowedError`) |
+
+전에는 셋 다 `unknown`("권한과 연결을 확인해 주세요")이라 "권한 문제인지 브라우저 능력 문제인지"
+현장에서 구분할 수 없었다. `pipelineStalled`의 상세가 특히 값이 크다 — `worker-transferred`면
+rVFC/프레임 소스 쪽, `main-none`이면 폴백 경로에서 프리뷰까지 못 붙은 것이라 방향이 완전히 갈린다.
+
+로그에는 `pipelineMode`·`previewMode`·`frameTransferMode`·`constraintStep`과 `failureCode`를
+함께 남긴다. ⚠️ `failureCode`에는 예외 **메시지**를 절대 넣지 않는다(기기명·경로 혼입 — 03 §6.3).
 
 ### 2.4 프레임 획득 루프
 
