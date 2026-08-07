@@ -63,8 +63,6 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// <summary>계정 페이지 진입 모드(비번변경/계정생성/관리자). Account VM 생성 직후 주입. (it5 §5 C2)</summary>
     private ViewModels.AccountMode _pendingAccountMode = ViewModels.AccountMode.Account;
 
-    /// <summary>프레임 편집기 진입 시 편집할 기존 프레임(null이면 신규 생성). (기능 요청)</summary>
-    private MCPhoto.Core.Models.FrameTemplate? _pendingEditFrame;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTopBarVisible))]
@@ -285,7 +283,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         AppState.CutSelect => _services.GetRequiredService<CutSelectViewModel>(),
         AppState.Result => _services.GetRequiredService<ResultViewModel>(),
         AppState.Qr => _services.GetRequiredService<QrPopupViewModel>(),
-        AppState.FrameEditor => CreateFrameEditorViewModel(),
+        AppState.FrameEditor => _services.GetRequiredService<FrameEditorViewModel>(),
         AppState.Settings => _services.GetRequiredService<SettingsViewModel>(),
         AppState.UserMgmt => _services.GetRequiredService<UserMgmtViewModel>(),
         AppState.Account => CreateAccountViewModel(),
@@ -299,23 +297,11 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         return vm;
     }
 
-    private FrameEditorViewModel CreateFrameEditorViewModel()
-    {
-        var vm = _services.GetRequiredService<FrameEditorViewModel>();
-        if (_pendingEditFrame is { } f)
-        {
-            vm.LoadForEdit(f); // 기존 프레임 편집으로 진입
-            _pendingEditFrame = null; // 1회성
-        }
-        return vm;
-    }
-
-    /// <summary>프레임 편집기 진입. edit=null이면 신규 생성, 아니면 해당 프레임 편집. (기능 요청)</summary>
-    public async Task OpenFrameEditor(MCPhoto.Core.Models.FrameTemplate? edit)
-    {
-        _pendingEditFrame = edit;
-        await NavigateAsync(AppState.FrameEditor);
-    }
+    /// <summary>
+    /// 프레임 편집기 진입. <b>항상 신규 생성</b>이다 — 기존 프레임 수정 기능은 폐지됐고(설계 D-16),
+    /// 재활용은 편집기 안의 [기존 프레임 불러오기]가 담당한다.
+    /// </summary>
+    public async Task OpenFrameEditor() => await NavigateAsync(AppState.FrameEditor);
 
     /// <summary>
     /// 어디서든 Home으로 강제 복귀. 촬영 세션 데이터는 항상 폐기.

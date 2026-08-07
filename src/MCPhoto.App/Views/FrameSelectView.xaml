@@ -46,6 +46,9 @@
                                     <Binding Path="DataContext.CanDeleteFrames" RelativeSource="{RelativeSource AncestorType=ListBox}" />
                                     <Binding Path="DataContext.IsPower" RelativeSource="{RelativeSource AncestorType=ListBox}" />
                                     <Binding Path="Id" />
+                                    <!-- 소유자(UserId)가 있으면 본인 개인 프레임 — id 접두만으로는 서버 동기분을
+                                         공용으로 오판한다(설계 D-2). -->
+                                    <Binding Path="UserId" />
                                 </MultiBinding>
                             </Button.Visibility>
                         </Button>

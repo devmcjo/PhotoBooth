@@ -24,12 +24,8 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
 
     private byte[]? _imageBytes;
 
-    // 편집 모드 상태(기존 프레임 편집 시 LoadForEdit가 set). 신규 생성이면 _isEditing=false.
-    // FrameEditorViewModel은 Transient 등록(ServiceRegistration.cs) → 진입마다 새 인스턴스라 재진입 잔존 없음.
-    // it15 F1: DB 업데이트 경로 제거로 편집 대상 원본 참조·서버 문서 id가 불필요해졌다
-    // (fork/덮어쓰기 판정은 아래 _sessionSource가 전담).
-    private bool _isEditing;
-    private bool _suppressArrange; // LoadForEdit 중 SlotCount 설정이 기존 슬롯을 자동 배치로 덮어쓰지 않도록.
+    // 편집 모드는 폐지됐다(설계 D-16) — 편집기는 **항상 신규 생성**이다.
+    private bool _suppressArrange; // 불러오기 중 SlotCount 설정이 기존 슬롯을 자동 배치로 덮어쓰지 않도록.
 
     /// <summary>편집 세션의 진입 경로 = 저장 방식(fork vs 덮어쓰기)의 유일한 판정 축. (it15 §3.3)</summary>
     private enum FrameSessionSource
@@ -37,10 +33,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         /// <summary>빈 편집기에서 시작한 신규 생성(power면 DB 등록 경로).</summary>
         New,
 
-        /// <summary>본인 로컬 프레임 편집 → 같은 이름 덮어쓰기.</summary>
-        EditOwnLocal,
-
-        /// <summary>DB/번들/fallback 유래(편집 또는 F2 불러오기) → 원본 보존 + 새 이름 분기.</summary>
+        /// <summary>기존 프레임을 불러와 만든 세션 → 원본 보존 + 새 이름 분기(덮어쓰기 없음).</summary>
         ForkFromCatalog
     }
 
@@ -58,12 +51,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     [ObservableProperty] private bool _canSave;
 
     /// <summary>
-    /// 신규 생성 흐름인지(= <see cref="LoadForEdit"/>로 진입하지 않았는지).
-    /// 두 곳의 게이트: F2 "기존 프레임 불러오기" 버튼 노출(it15 F2-D6)과
-    /// F1 "해당 PC에서만" 정책 배너 노출(it15 F1-D1 정정 — 기존 프레임 수정 시에만 배너를 띄운다).
-    /// 편집 세션 도중에는 바뀌지 않는다(<see cref="ApplyPickedFrame"/>도 _isEditing을 건드리지 않는다).
+    /// 항상 <c>true</c> — 편집기는 신규 생성 전용이다(설계 D-16으로 편집 진입이 사라졌다).
+    /// [기존 프레임 불러오기] 버튼 노출 게이트로 남겨 둔다(바인딩 계약 유지).
     /// </summary>
-    public bool IsCreateMode => !_isEditing;
+    public bool IsCreateMode => true;
 
     /// <summary>
     /// 이번 저장의 실제 결과 안내(저장 버튼 위 캡션). 상단 배너가 정책(로컬 전용)을 말하고
@@ -84,12 +75,9 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     // 저장 시 확인 팝업의 체크박스에 달려 있다 → 여기서 "등록됩니다"로 단정하지 않는다.
                     FrameSessionSource.New =>
                         $"저장 시 '{FrameName}'을(를) 이 PC의 공용 목록에 만듭니다. 서버 등록 여부는 저장할 때 선택합니다.",
-                    FrameSessionSource.ForkFromCatalog => $"원본은 그대로 두고 '{FrameName}'(으)로 이 PC의 공용 목록에 저장됩니다.",
-                    _ => $"'{FrameName}'을(를) 이 PC에 덮어씁니다."
+                    _ => $"원본은 그대로 두고 '{FrameName}'(으)로 새 프레임을 만듭니다."
                 }
-                : _sessionSource == FrameSessionSource.EditOwnLocal
-                    ? $"'{FrameName}'을(를) 이 PC에 덮어씁니다."
-                    : $"'{FrameName}'을(를) 내 프레임으로 이 PC에 저장합니다.";
+                : $"'{FrameName}'을(를) 내 프레임으로 저장합니다.";
 
             // 로컬 접두 규약은 폐지됐지만(설계 D-3) **서버가 여전히 '_'를 거부**한다
             // (validateFrameName — 웹·모바일이 아직 접두 규약을 쓰기 때문, 설계 §9). 저장 전에 알린다(비차단).
@@ -207,66 +195,8 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// 기존 프레임을 편집기로 불러온다(파워=공용/DB 프레임, user=본인 로컬). 이미지·슬롯을 그대로 로드.
-    /// it15 F1: 저장은 항상 로컬 전용이며, DB/번들 유래(<see cref="FrameEditPolicy.RequiresFork"/>)면
-    /// 원본을 보존하고 "{원본이름} 사본"으로 분기 저장한다(이름 제안값만 계산 — 사용자가 수정 가능).
-    /// </summary>
-    public void LoadForEdit(FrameTemplate frame)
-    {
-        _isEditing = true;
-        EditorTitle = "프레임 편집";
-
-        // 수정 폐지(D-16) 이후 이 경로는 "기존 프레임 불러오기"로 들어온 것뿐이며 항상 새로 만든다.
-        // 카탈로그 유래(DB·번들·fallback)는 원본을 보존해야 하므로 fork 이름을 제안한다.
-        if (FrameOrigin.Classify(frame) != FrameOriginKind.UserLocal)
-        {
-            // 카탈로그 유래(DB·번들·fallback): 원본 파일 불변 + 새 이름으로 분기 저장.
-            _sessionSource = FrameSessionSource.ForkFromCatalog;
-            _sourceName = frame.Name;
-            FrameName = FrameNaming.NextCopyName(frame.Name, ExistingNamesForCurrentScope());
-        }
-        else
-        {
-            // 본인 로컬 프레임: 현행대로 같은 이름 덮어쓰기.
-            _sessionSource = FrameSessionSource.EditOwnLocal;
-            _sourceName = string.Empty;
-            FrameName = frame.Name;
-        }
-        OnPropertyChanged(nameof(IsCreateMode));
-        OnPropertyChanged(nameof(SaveScopeNotice));
-
-        if (string.IsNullOrEmpty(frame.ImageUrl) || !File.Exists(frame.ImageUrl))
-        {
-            StatusMessage = "프레임 이미지를 불러올 수 없습니다(로컬 파일 없음).";
-            return;
-        }
-        try
-        {
-            _imageBytes = File.ReadAllBytes(frame.ImageUrl); // 로컬 저장분은 이미 PNG(가공본)
-            FrameImage = StillImageConverter.FromPngBytes(_imageBytes);
-            if (frame.ImageSize.Width > 0) FrameWidth = frame.ImageSize.Width;
-            if (frame.ImageSize.Height > 0) FrameHeight = frame.ImageSize.Height;
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "편집 이미지 로드 실패: {Path}", frame.ImageUrl);
-            StatusMessage = "이미지 로드 실패";
-            return;
-        }
-
-        // 슬롯 개수 콤보 반영 — 자동 배치(OnSlotCountChanged) 억제하고 기존 슬롯 유지.
-        _suppressArrange = true;
-        SlotCount = Math.Clamp(frame.Slots.Count, SlotCountOptions[0], SlotCountOptions[^1]);
-        _suppressArrange = false;
-
-        // 기존 슬롯을 스케일 기준(_baseSlots)으로 로드하고 100%로 표시(자동 배치 아님).
-        _baseSlots.Clear();
-        foreach (var s in frame.Slots)
-            _baseSlots.Add(new Slot { Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height });
-        SlotScalePercent = 100;
-        ApplyScale(); // Slots = _baseSlots (100%)
-    }
+    // LoadForEdit(기존 프레임 편집 진입)은 제거했다 — 프레임 수정 기능 폐지(설계 D-16).
+    // "기존 프레임 불러오기"는 ApplyPickedFrame이 LoadImage를 경유해 **새 프레임으로** 만든다.
 
     /// <summary>슬롯 개수 변경 → 자동 배치. (편집 로드 중에는 억제해 기존 슬롯 보존)</summary>
     partial void OnSlotCountChanged(int value)
@@ -622,8 +552,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         // 대소문자 무시 — Windows 파일시스템이 "Abc"와 "abc"를 같은 파일로 본다.
         // ⚠️ 클라 검증은 즉시 피드백일 뿐이다. PC 두 대에서 동시에 같은 이름을 만드는 경우는
         //    서버가 409로 막는다(S8) — 그 응답도 저장 실패로 사용자에게 그대로 노출된다.
-        if (_sessionSource != FrameSessionSource.EditOwnLocal
-            && !FrameNaming.IsNameAvailable(FrameName, ExistingNamesForCurrentScope()))
+        if (!FrameNaming.IsNameAvailable(FrameName, ExistingNamesForCurrentScope()))
         {
             error = "이미 같은 이름의 프레임이 있습니다. 다른 이름을 입력해 주세요.";
             return false;

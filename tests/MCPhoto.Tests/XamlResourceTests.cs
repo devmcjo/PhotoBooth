@@ -271,28 +271,9 @@ public class XamlResourceTests
                 $"{file} 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
         });
     }
+    // FrameEditor_LocalOnly_Banner_Is_Gated_By_IsCreateMode 는 삭제했다 —
+    // "이 PC에만 적용" 배너 자체가 제거됐다(설계 D-16 수정 폐지 · D-7 서버 정본).
 
-    /// <summary>
-    /// it15 F1-D1(정정): "해당 PC에서만 적용됩니다" 배너는 **기존 프레임 수정 시에만** 노출해야 한다.
-    /// 신규 생성(특히 power=서버 등록)에서 배너가 보이면 문구가 거짓이 되고 같은 화면의
-    /// SaveScopeNotice("서버에 등록됩니다")와 모순되므로, Visibility 게이트가 사라지는 회귀를 정적으로 막는다.
-    /// (VM 단위 테스트로는 XAML 바인딩 소실을 잡을 수 없어 소스 텍스트를 직접 검사한다.)
-    /// </summary>
-    [Fact]
-    public void FrameEditor_LocalOnly_Banner_Is_Gated_By_IsCreateMode()
-    {
-        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "FrameEditorView.xaml"));
-
-        // 배너 Border = Brush.Warning.Surface 배경 엘리먼트. 그 엘리먼트 안에 Visibility 게이트가 있어야 한다.
-        var banner = Regex.Match(text, @"<Border\b[^>]*Brush\.Warning\.Surface[^>]*>", RegexOptions.Singleline);
-        Assert.True(banner.Success, "FrameEditorView.xaml 에서 정책 배너(Brush.Warning.Surface Border)를 찾지 못함");
-
-        Assert.Contains("IsCreateMode", banner.Value);
-        Assert.Contains("InverseBoolToVis", banner.Value);  // IsCreateMode=true(신규) → Collapsed
-
-        // 배너가 숨어도 콘텐츠가 상단 바(오프셋 88)에 파고들지 않도록 행 MinHeight가 남아 있어야 한다.
-        Assert.Matches(@"<RowDefinition\s+Height=""Auto""\s+MinHeight=""88""\s*/>", text);
-    }
 
     /// <summary>
     /// R2/§5.7 함정 회귀 방지: 서버 등록 확인 오버레이의 상태·커맨드는 **편집기 VM**이 갖는다.

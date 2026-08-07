@@ -90,7 +90,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         public object? GetService(Type serviceType) => null;
     }
 
-    /// <summary>진단용: VM이 catch로 삼킨 예외(LoadForEdit/LoadImage)를 테스트에서 볼 수 있게 한다.</summary>
+    /// <summary>진단용: VM이 catch로 삼킨 예외(LoadImage 등)를 테스트에서 볼 수 있게 한다.</summary>
     private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger<FrameEditorViewModel>
     {
         public List<string> Entries { get; } = new();
@@ -205,87 +205,10 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     private FrameTemplate DbDefaultFrame() => new()
     {
         Id = "GUID-abc", Name = "공용프레임", UserId = null, IsDefault = true,
-        ImageUrl = _imagePath, // LoadForEdit가 읽을 로컬 png(File.Exists 성립)
+        ImageUrl = _imagePath, // 불러오기가 읽을 로컬 png(File.Exists 성립)
         ImageSize = new ImageSize { Width = 1200, Height = 1600 },
         Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
     };
-
-    [Fact]
-    public async Task Fork_Save_Blocked_When_Name_Equals_Source_In_Public_Scope()
-    {
-        // C4: 공용 스코프 fork에서 원본과 같은 이름은 원본 파일을 덮어쓰므로 차단.
-        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
-        vm.LoadForEdit(DbDefaultFrame());
-        // 전제 확인: LoadForEdit가 완주해야 아래 단언이 '이름 충돌' 가드를 검사한다. 이미지 로드가
-        // 조용히 실패하면 Save가 "슬롯이 겹치거나..."로 먼저 빠져 원인이 가려지므로 여기서 잡는다.
-        Assert.True(vm.FrameImage is not null && vm.Slots.Count == 4,
-            $"LoadForEdit 미완료: status='{vm.StatusMessage}', image={(vm.FrameImage is null ? "null" : "ok")}, " +
-            $"slots={vm.Slots.Count}, w={vm.FrameWidth}, h={vm.FrameHeight}, " +
-            $"fileExists={File.Exists(_imagePath)}, log=[{string.Join(" ;; ", _vmLog.Entries)}]");
-        vm.FrameName = "공용프레임"; // 원본 이름으로 되돌림
-
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);
-        Assert.Null(local.SavedFrame);                  // 저장 중단
-        Assert.Contains("원본과 같은 이름", vm.StatusMessage);
-    }
-
-    [Fact]
-    public void SaveScopeNotice_Reflects_Scope()
-    {
-        // C6: 배너(정책)와 별개로 이번 저장의 실제 결과를 안내.
-        // R2/D5: power 신규 생성은 "서버에 등록됩니다" 단정이 아니라 "선택합니다"로 바뀌었다.
-        var (powerNew, _, _, _) = MakeVm(UserRole.Admin);
-        Assert.Contains("이 PC의 공용 목록에 만듭니다", powerNew.SaveScopeNotice);
-        Assert.Contains("서버 등록 여부는", powerNew.SaveScopeNotice);
-        Assert.DoesNotContain("서버에 등록됩니다", powerNew.SaveScopeNotice);
-
-        var (powerFork, _, _, _) = MakeVm(UserRole.Admin);
-        powerFork.LoadForEdit(DbDefaultFrame());
-        Assert.Contains("원본은 그대로", powerFork.SaveScopeNotice);
-
-        var (userNew, _, _, _) = MakeVm(UserRole.User);
-        Assert.Contains("내 프레임", userNew.SaveScopeNotice);
-
-        // it16 §8.2-23: AdvancedUser는 비power 분기를 타서 it15 User와 **같은 문구**다(스코프 판정 불변).
-        var (advNew, _, _, _) = MakeVm(UserRole.AdvancedUser);
-        Assert.Contains("내 프레임", advNew.SaveScopeNotice);
-        Assert.DoesNotContain("서버 등록", advNew.SaveScopeNotice);
-    }
-
-    [Fact]
-    public void IsCreateMode_Gates_LocalOnly_Banner()
-    {
-        // it15 F1-D1(정정): "해당 PC에서만" 배너는 기존 프레임 수정 시에만 노출한다(배너 Visibility = !IsCreateMode).
-        // 신규 생성은 서버 등록이 가능한 경로(power)라 "이 PC에만 적용" 배너 문구가 사실과 어긋난다.
-
-        // ① 신규 생성(power) → 배너 숨김. SaveScopeNotice가 서버 등록 선택 가능성을 안내하므로 모순이 없다.
-        var (powerNew, _, _, _) = MakeVm(UserRole.Admin);
-        Assert.True(powerNew.IsCreateMode);
-        Assert.Contains("서버 등록 여부는", powerNew.SaveScopeNotice);
-
-        // ② 기존 프레임 수정(power, DB 기본 → fork) → 배너 노출.
-        var (powerEdit, _, _, _) = MakeVm(UserRole.Admin);
-        powerEdit.LoadForEdit(DbDefaultFrame());
-        Assert.False(powerEdit.IsCreateMode);
-
-        // ③ 기존 프레임 수정(user, 본인 로컬 → 덮어쓰기) → 배너 노출.
-        var (userEdit, _, _, _) = MakeVm(UserRole.User);
-        userEdit.LoadForEdit(new FrameTemplate
-        {
-            Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1",
-            ImageUrl = _imagePath,
-            ImageSize = new ImageSize { Width = 1200, Height = 1600 },
-            Slots = SlotLayout.AutoArrange(2, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
-        });
-        Assert.False(userEdit.IsCreateMode);
-
-        // ④ F2로 카탈로그 프레임을 불러온 세션은 정체성이 "새 프레임"(fork 저장 → 원본 불변) → 배너 계속 숨김.
-        var (picked, _, _, _) = MakeVm(UserRole.Admin);
-        Assert.True(picked.ApplyPickedFrame(DbDefaultFrame()));
-        Assert.True(picked.IsCreateMode);
-    }
 
     [Fact]
     public async Task SaveScopeNotice_Warns_Before_Save_When_Public_Name_Has_Underscore()
@@ -501,38 +424,6 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.Null(local.SavedFrame);
         Assert.False(vm.IsServerRegisterConfirmVisible);
         Assert.Contains("이름을 입력", vm.StatusMessage);
-    }
-
-    /// <summary>
-    /// N14(D1의 F1 확장분): fork 세션에서 **원본이 아닌** 다른 공용 프레임 이름을 직접 타이핑해도 차단된다.
-    /// 자동 사본 이름은 충돌 회피값이므로 정상 흐름은 영향받지 않는다.
-    /// </summary>
-    [Fact]
-    public async Task Fork_Session_Blocked_When_Name_Collides_With_Other_Public_Frame()
-    {
-        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
-        local.PublicNames.Add("다른공용");
-        vm.LoadForEdit(DbDefaultFrame());
-        Assert.Equal("공용프레임 사본", vm.FrameName);   // 전제: fork 세션 진입 완료
-
-        vm.FrameName = "다른공용";
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);
-        Assert.Null(local.SavedFrame);
-        Assert.Contains("이미 같은 이름", vm.StatusMessage);
-    }
-
-    [Fact]
-    public void Fork_Name_Avoids_Existing_Names_In_Scope()
-    {
-        // 사본 이름은 같은 스코프의 기존 이름과 충돌하지 않는다(power=공용 집합).
-        var (vm, _, local, _) = MakeVm(UserRole.Admin);
-        local.PublicNames.Add("공용프레임 사본");
-
-        vm.LoadForEdit(DbDefaultFrame());
-
-        Assert.Equal("공용프레임 사본 2", vm.FrameName);
     }
 
     // ── it15 F2: 기존 프레임 불러오기(이미지·슬롯 메모리 복사, 원본 불변) ──

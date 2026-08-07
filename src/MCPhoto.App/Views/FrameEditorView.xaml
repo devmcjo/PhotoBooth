@@ -16,19 +16,9 @@
             <ColumnDefinition Width="320" />
         </Grid.ColumnDefinitions>
 
-        <!-- it15 F1(정정): 프레임 편집 정책 안내 = **기존 프레임 수정 시에만** 노출한다.
-             신규 생성은 power면 서버 등록이 가능한 경로(R2: 저장 시 확인 팝업에서 선택)라 "해당 PC에서만"이
-             사실과 어긋나고 같은 화면의 SaveScopeNotice와도 모순된다 → IsCreateMode로 게이트.
-             F2로 카탈로그 프레임을 불러온 세션은 정체성이 "새 프레임"(_isEditing 불변)이고 원본은 저장 전
-             이름 충돌 가드가 지키므로 배너는 계속 숨김이 맞다. 저장의 실제 결과는 SaveScopeNotice가 안내. -->
-        <Border Grid.Row="0" Grid.ColumnSpan="2" Margin="40,88,40,12" Padding="16,10"
-                Background="{StaticResource Brush.Warning.Surface}"
-                CornerRadius="{StaticResource Radius.M}"
-                Visibility="{Binding IsCreateMode, Converter={StaticResource InverseBoolToVis}}">
-            <TextBlock Text="이 프레임 편집은 이 PC에만 적용되며, 서버와 다른 PC에는 반영되지 않습니다."
-                       Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Warning}"
-                       TextWrapping="Wrap" />
-        </Border>
+        <!-- "이 프레임 편집은 이 PC에만 적용됩니다" 배너는 제거했다 — 프레임 수정 기능이 폐지되고(D-16)
+             개인 프레임도 서버 정본이 되어(D-7) 문구가 둘 다 사실이 아니게 됐다.
+             저장의 실제 결과는 SaveScopeNotice와 저장 확인 팝업이 안내한다. -->
 
         <!-- 편집 캔버스(프레임 이미지 + 슬롯 오버레이) -->
         <Border Grid.Row="1" Grid.Column="0" Margin="40,0,20,40" Style="{StaticResource Card}" Padding="16">

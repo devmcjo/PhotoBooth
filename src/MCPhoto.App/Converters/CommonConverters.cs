@@ -239,12 +239,19 @@ public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
         bool canDelete = values.Length > 0 && values[0] is true;
         bool isPower = values.Length > 1 && values[1] is true;
         var id = values.Length > 2 ? values[2] as string : null;
+        var ownerId = values.Length > 3 ? values[3] as string : null;   // FrameTemplate.UserId(=소유자 이메일)
 
         if (!canDelete || string.IsNullOrEmpty(id)) return Visibility.Collapsed;
         if (id.StartsWith("bundle:", StringComparison.Ordinal)
             || id.StartsWith("fallback", StringComparison.Ordinal)) return Visibility.Collapsed;
 
-        if (id.StartsWith("local:", StringComparison.Ordinal)) return Visibility.Visible; // 본인 로컬
+        // ⚠️ 소유자 유무가 개인/공용을 가른다(설계 D-2). id 접두만 보면 **서버 정본 전환 후** 개인 프레임이
+        //    실 DB id를 갖게 되어 공용으로 오판되고, advanced_user에게 삭제 ✕가 사라진다.
+        //    목록에 오르는 개인 프레임은 이미 CanShow가 본인 것만 통과시켰으므로 소유자가 있으면 표시한다.
+        //    (같은 이유로 FrameOrigin.Classify도 UserId 우선 판정으로 고쳤다.)
+        if (!string.IsNullOrEmpty(ownerId)) return Visibility.Visible;
+        if (id.StartsWith("local:", StringComparison.Ordinal)) return Visibility.Visible; // 서버 미동기 로컬 전용
+
         return isPower ? Visibility.Visible : Visibility.Collapsed;                        // 공용/DB=파워만
     }
 

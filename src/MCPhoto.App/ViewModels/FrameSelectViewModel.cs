@@ -440,7 +440,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     {
         if (!IsInteractive) return;      // it20 §5.4
         if (!CanCreateFrame) return;
-        await _shell.OpenFrameEditor(null);
+        await _shell.OpenFrameEditor();
     }
 
     // [선택 편집] 커맨드와 CanEdit 판정은 폐지됐다(설계 D-16 — 프레임 수정 기능 자체가 없다).

@@ -117,8 +117,9 @@
 | `GET /frames/default` | apiKey | 200 |
 | `GET /frames?userId=` | Bearer | 200 |
 | `POST /frames` | Bearer + power | **201** |
+| `POST /frames/mine` | Bearer + **프레임 저작 권한**(advanced_user 이상) | **201** |
 | `PUT /frames/{id}` | Bearer + power | 200 |
-| `DELETE /frames/{id}` | Bearer + power | 200 |
+| `DELETE /frames/{id}` | Bearer + **프레임 저작 권한**(본인 소유) / 공용은 power | 200 |
 | `POST /uploads/prepare` | apiKey + optionalBearer | 200 |
 | `POST /uploads/commit` | apiKey + optionalBearer | **201** |
 
@@ -455,6 +456,22 @@ PIN은 **정확히 4자리 숫자**(`^\d{4}$`)이며 서버에 bcrypt 해시로 
 
 > ℹ️ 현재 정책상 **일반 사용자 커스텀 프레임은 서버에 올라가지 않는다**(클라이언트 로컬 전용, [41 §3](./41-local-data-and-file-formats.md)). 이 엔드포인트는 레거시 문서 조회용으로 남아 있으며 보통 빈 배열을 돌려준다.
 
+### 4.11a `POST /frames/mine` — **개인 프레임 생성** (advanced_user 이상, 2026-08-07 신설)
+
+**게이트**: Bearer + `requireFrameWrite`(advanced_user 이상). ⚠️ `requirePower`와 **다른 축**이다 — 공용은 power, 개인은 저작 권한.
+
+**요청**: `POST /frames`와 동일 DTO(`{name, imageSize, slots}`). `userId`·`isDefault`는 **서버가 강제**한다(body 값 무시) — `userId = principal.id`, `isDefault = false`.
+
+**응답 201**: `{frame, upload}` — `POST /frames`와 동일 형태.
+
+| 검증 | 내용 |
+|------|------|
+| 이름 | 1~100자, `_` 금지(기존 `validateFrameName`) |
+| **이름 중복** | 같은 계정 안에서 같은 이름이면 **409**. 클라 사전 검증만으로는 PC 두 대 동시 생성을 막을 수 없다 |
+| **개수 상한** | **없다**(2026-08-07 폐지). 총량 방어는 이미지 8MB뿐 |
+| 이미지 크기 | 서명 URL에 `x-goog-content-length-range: 0,8388608` 조건이 포함되어 **GCS가 8MB 초과를 거부**한다(클라 우회 불가) |
+| Storage 경로 | `frames/users/{계정id}/{frameId}.png` |
+
 ### 4.12 `POST /frames` — 공용 기본 프레임 생성 (power)
 
 **게이트**: Bearer + power
@@ -509,7 +526,12 @@ PIN은 **정확히 4자리 숫자**(`^\d{4}$`)이며 서버에 bcrypt 해시로 
 
 > ⚠️ **현행 클라이언트는 이 엔드포인트를 호출하지 않는다.** "프레임 편집은 해당 기기에서만 적용" 정책이라 편집 저장은 로컬 분기(사본)로 처리된다([13 §6](./13-client-behavior-spec.md)). 새 클라이언트도 같은 정책을 따라야 한다 — 라우트는 운영/관리 도구를 위해 남아 있을 뿐이다.
 
-### 4.14 `DELETE /frames/{id}` — 공용 프레임 삭제 (power)
+### 4.14 `DELETE /frames/{id}` — 프레임 삭제
+
+> ⚠️ **2026-08-07 게이트 완화**: `requirePower` → `requireFrameWrite` + 핸들러 분기.
+> **본인 소유 프레임은 본인이** 삭제한다(개인 프레임이 서버 정본이 되면서 필수가 됐다 — 종전에는
+> advanced_user가 자기 프레임을 서버에서 지울 방법이 없었다). **공용 기본 프레임은 종전대로 power만.**
+> 타인의 개인 프레임 삭제는 403. 문서가 없으면 종전 계약대로 `200 {deleted:false}`.
 
 **게이트**: Bearer + power
 
