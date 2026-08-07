@@ -1,9 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.Services;
 using MCPhoto.Core.Accounts;
+using MCPhoto.Core.Backend;
+using MCPhoto.Core.Frames;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using Microsoft.Extensions.Logging;
@@ -60,6 +63,18 @@ public sealed partial class UserRowViewModel : ObservableObject
     /// <summary>이메일(Google SSO 신원). 없으면 빈 문자열 — 목록 보조 줄에 표시.</summary>
     public string EmailText => User.Email ?? string.Empty;
 
+    /// <summary>
+    /// 이 계정이 소유한 개인 프레임 개수. <b>null = 아직 모른다</b>(미조회 또는 조회 실패).
+    /// 목록 로드를 막지 않기 위해 뒤늦게 채워지며, 실패해도 null로 남는다 — 실패를 사용자에게 알리지 않는다.
+    /// ⚠️ 0(진짜 0개)과 null(모름)은 다른 값이다. 기본값 0으로 두면 조회 전 화면이 "전원 0개"라고 거짓말한다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FrameCountText))]
+    private int? _frameCount;
+
+    /// <summary>개인 프레임 개수 표시값. 모르면 "—"(다른 셀의 미해당 표기와 같은 문자).</summary>
+    public string FrameCountText => FrameCount?.ToString(CultureInfo.InvariantCulture) ?? "—";
+
     public UserRowViewModel(User user, UserRole actorRole, bool isSelf)
     {
         User = user;
@@ -84,6 +99,26 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     private readonly IPinPromptDialogService? _pinPrompt;
     private readonly ILogger<UserMgmtViewModel>? _logger;
 
+    /// <summary>개인 프레임 개수 조회용. 미주입(null)이면 개수 기능만 조용히 꺼진다(fail-soft).</summary>
+    private readonly IFrameRepository? _frames;
+
+    /// <summary>진행 중인 개수 조회의 취소원. Dispose 소유자는 "그 조회 자신"(FrameSelectViewModel 관례).</summary>
+    private CancellationTokenSource? _frameCountCts;
+
+    /// <summary>
+    /// 연속 실패 상한. HttpClient.Timeout=100초라(ServiceRegistration) 서버가 죽은 채 전 계정을 돌면
+    /// 백그라운드 루프가 수십 분 살아 있게 된다. 결과는 어차피 전부 "—"이므로 조기에 포기한다.
+    /// 산발적 실패 1~2건은 상한에 닿지 않고 다음 행으로 넘어간다(성공 시 카운터 리셋).
+    /// </summary>
+    private const int MaxConsecutiveFrameCountFailures = 3;
+
+    /// <summary>
+    /// 진행 중(또는 직전) 개수 채우기 작업. <b>테스트·진단용 관측점</b>이며 절대 faulted가 되지 않는다
+    /// (본체가 모든 예외를 삼킨다). 목록 로드는 이 작업을 기다리지 않는다 — 기다리면 [사용자 관리] 버튼이
+    /// N회 HTTP 동안 잠긴다. 폴링 대기는 플래키하므로 결정적 검증을 위해 핸들로 노출한다.
+    /// </summary>
+    public Task FrameCountLoadTask { get; private set; } = Task.CompletedTask;
+
     /// <summary>행 목록(계정 + 역할 변경 상태). it13 §9.5로 User 직접 바인딩 → 행 래퍼로 승격.</summary>
     public ObservableCollection<UserRowViewModel> Rows { get; } = new();
 
@@ -100,13 +135,19 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
     /// <summary>목록이 비었는지(빈 상태 안내 노출 조건).</summary>
     [ObservableProperty] private bool _isEmpty;
 
+    /// <summary>
+    /// <paramref name="frames"/>는 <b>마지막 선택 파라미터</b>다 — 기존 위치 인수 호출부를 그대로 두기 위함이며,
+    /// 미등록/미주입이면 개수 열만 "—"로 남고 화면은 완전히 동작한다(fail-soft).
+    /// </summary>
     public UserMgmtViewModel(AppShellViewModel shell, IAccountService accounts,
-        ILogger<UserMgmtViewModel>? logger = null, IPinPromptDialogService? pinPrompt = null)
+        ILogger<UserMgmtViewModel>? logger = null, IPinPromptDialogService? pinPrompt = null,
+        IFrameRepository? frames = null)
     {
         _shell = shell;
         _accounts = accounts;
         _pinPrompt = pinPrompt;
         _logger = logger;
+        _frames = frames;
     }
 
     public override async Task OnEnterAsync()
@@ -116,8 +157,28 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         await ReloadAsync();
     }
 
+    /// <summary>화면 이탈 시 진행 중 개수 조회 취소 — 뒤늦은 완료가 폐기된 VM 상태를 건드리지 않게 한다.</summary>
+    public override Task OnLeaveAsync()
+    {
+        CancelFrameCounts();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 신호만 보낸다. Dispose는 조회 본체의 finally가 수행(이중 해제 불가) —
+    /// 취소자가 Dispose하면 진행 중 본체의 Cancel/Token 접근이 ObjectDisposedException으로 터진다.
+    /// </summary>
+    private void CancelFrameCounts()
+    {
+        var cts = _frameCountCts;
+        _frameCountCts = null;
+        try { cts?.Cancel(); }
+        catch (ObjectDisposedException) { /* 이미 완료·해제된 조회 — 무해 */ }
+    }
+
     private async Task ReloadAsync()
     {
+        CancelFrameCounts();   // 이전 개수 조회 취소(새로고침·삭제·역할변경 재로드 모두 이 경로를 지난다)
         Rows.Clear();
         try
         {
@@ -138,7 +199,76 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
             SetStatus("사용자 목록을 불러올 수 없습니다.", isError: true);
         }
         UpdateSummary();
+        StartFrameCountLoad();   // 행이 다 채워진 뒤에 개수 조회를 띄운다(await하지 않는다 — 목록을 막지 않는다)
     }
+
+    /// <summary>
+    /// 행이 채워진 뒤 개인 프레임 개수를 순차로 채운다(fire-and-forget). 목록 로드를 막지 않는 것이 요점이다.
+    /// 저장소 미주입(_frames=null)이면 전 행이 "—"로 남고 화면은 정상 동작한다(fail-soft).
+    /// </summary>
+    private void StartFrameCountLoad()
+    {
+        if (_frames is null || Rows.Count == 0) return;
+        var cts = new CancellationTokenSource();
+        _frameCountCts = cts;
+        // 스냅샷: 루프 도중 Rows가 교체돼도 컬렉션을 순회하지 않는다(InvalidOperationException 방지).
+        FrameCountLoadTask = LoadFrameCountsAsync(Rows.ToArray(), cts);
+    }
+
+    /// <summary>
+    /// 계정별 개인 프레임 개수 조회. <b>순차</b>(동시 발사 금지 — 계정 수만큼 요청이 나간다),
+    /// <b>취소 가능</b>(화면 이탈·새로고침), <b>실패는 조용히</b>(행은 "—" 유지, Warning 로그만).
+    /// 어떤 경로로도 예외를 던지지 않는다 — 호출자가 await하지 않으므로 던지면 관측되지 않는 예외가 된다.
+    /// </summary>
+    private async Task LoadFrameCountsAsync(IReadOnlyList<UserRowViewModel> rows, CancellationTokenSource cts)
+    {
+        int consecutiveFailures = 0;
+        try
+        {
+            foreach (var row in rows)
+            {
+                // 이 조회가 아직 "현재" 조회인지 매 회 확인 — 새 로드가 시작됐으면 즉시 손을 뗀다.
+                if (!ReferenceEquals(cts, _frameCountCts) || cts.IsCancellationRequested) return;
+
+                try
+                {
+                    // ⚠️ ConfigureAwait(false)를 쓰지 않는다 — UI 스레드로 돌아와야 아래 대입(PropertyChanged)이
+                    //    UI 스레드에서 일어난다. 의도를 남기려고 명시적으로 true를 붙인다.
+                    var frames = await _frames!.GetUserFramesAsync(row.User.Id, cts.Token).ConfigureAwait(true);
+                    if (!ReferenceEquals(cts, _frameCountCts)) return;   // stale 결과가 새 목록을 덮지 않게
+                    row.FrameCount = frames.Count;
+                    consecutiveFailures = 0;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;   // 이탈·새로고침에 의한 정상 종료. 로그도 남기지 않는다.
+                }
+                catch (Exception ex)
+                {
+                    // 관리 화면 전체가 프레임 조회 실패로 막히면 안 된다.
+                    // 사용자에게는 아무것도 알리지 않는다(StatusMessage 불변) — 행은 "—"로 남는다.
+                    consecutiveFailures++;
+                    _logger?.LogWarning(ex, "개인 프레임 개수 조회 실패: {Id}", row.User.Id);
+
+                    if (IsHopelessForRemaining(ex) || consecutiveFailures >= MaxConsecutiveFrameCountFailures)
+                    {
+                        _logger?.LogWarning("개인 프레임 개수 조회 중단 — 남은 계정은 '—'로 둔다(연속 실패 {Count}회)",
+                            consecutiveFailures);
+                        return;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(cts, _frameCountCts)) _frameCountCts = null;
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>남은 계정도 같은 이유로 반드시 실패하는 예외인가(주소 미설정·인증 없음/만료).</summary>
+    private static bool IsHopelessForRemaining(Exception ex)
+        => ex is BackendNotConfiguredException || ex is BackendLoginRequiredException;
 
     /// <summary>역할별 인원 요약 갱신(위계 높은 역할부터, 0명 역할은 생략).</summary>
     private void UpdateSummary()

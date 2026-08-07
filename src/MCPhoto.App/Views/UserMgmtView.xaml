@@ -43,6 +43,21 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 개인 프레임 개수: 숫자는 본문색, 미조회·실패("—")는 흐리게 —
+             "0개"(진짜 0)와 "모름"이 같은 명도로 보이면 관리자가 잘못 읽는다. 배지를 쓰지 않는 이유는
+             개수가 경보성 이분 상태가 아니라 크기 비교용 수치라서다(색을 입히면 없는 의미를 만든다). -->
+        <Style x:Key="Cell.FrameCount" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Primary}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding FrameCount}" Value="{x:Null}">
+                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Muted}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- ── 셀 컨트롤(표 밀도용 파생) ── -->
         <Style x:Key="Cell.Combo" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="MinHeight" Value="38" />
@@ -201,7 +216,7 @@
                         <GridView ColumnHeaderContainerStyle="{StaticResource Table.Header}"
                                   AllowsColumnReorder="False">
                             <!-- 계정: 아이디(주) + 이메일(보조). 자기 계정은 "나" 배지로 오조작 방지. -->
-                            <GridViewColumn Header="계정" Width="300">
+                            <GridViewColumn Header="계정" Width="260">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="12,0,8,0" VerticalAlignment="Center">
@@ -225,7 +240,7 @@
                             </GridViewColumn>
 
                             <!-- 역할: 위계 색 배지(한글 라벨). ▼ = 이 열이 1차 내림차순 정렬 기준. -->
-                            <GridViewColumn Header="역할 ▼" Width="128">
+                            <GridViewColumn Header="역할 ▼" Width="108">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource Badge}" Margin="12,0,0,0"
@@ -238,7 +253,7 @@
                             </GridViewColumn>
 
                             <!-- 가입 일시: 날짜(주) + 시각(보조), 로컬 시간. ▲ = 2차 오름차순 정렬 기준. -->
-                            <GridViewColumn Header="가입 일시 ▲" Width="150">
+                            <GridViewColumn Header="가입 일시 ▲" Width="132">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
@@ -257,6 +272,22 @@
                                         <Border Style="{StaticResource PinBadge}" Margin="12,0,0,0">
                                             <TextBlock Text="{Binding PinStateLabel}" Style="{StaticResource PinBadge.Text}" />
                                         </Border>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <!-- 개인 프레임 개수(정보성·읽기 전용). 목록이 먼저 그려지고 뒤이어 순차 조회로 채운다 —
+                                 미조회·조회 실패는 모두 "—"다. 편집·삭제·재시도 진입점을 두지 않는다.
+                                 설계: docs/design/wpf-usermgmt-frame-count-design.md -->
+                            <GridViewColumn Header="개인 프레임" Width="96">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- ⚠️ AutomationProperties.Name을 쓰지 않는다 — TextBlock의 Name은 기본적으로
+                                             Text에서 온다. 여기에 "개인 프레임 개수"를 넣으면 스크린리더가 **값 대신
+                                             그 문구를 읽어** 정작 숫자를 못 듣는다. 맥락은 HelpText로 보탠다. -->
+                                        <TextBlock Text="{Binding FrameCountText}" Style="{StaticResource Cell.FrameCount}"
+                                                   Margin="12,0,8,0"
+                                                   AutomationProperties.HelpText="개인 프레임 개수" />
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
@@ -291,7 +322,7 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="작업" Width="240">
+                            <GridViewColumn Header="작업" Width="222">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <!-- 관리 액션은 행위자와 같거나 낮은 역할에만 노출(예: manager는 admin 행에 미노출).

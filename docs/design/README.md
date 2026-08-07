@@ -93,6 +93,7 @@
 | [wpf-it20-frame-download-waiting-design](./wpf-it20-frame-download-waiting-design.md) | **it20** 기본 프레임 다운로드 대기 UI. 로딩 4국면(`Loading`/`Ready`/`Degraded`/`Failed`)·무진행 30초/총 60초 2단 상한·`finally`가 국면을 무조건 확정하는 구조·`FrameCatalogService` 단일 비행(single-flight) + 진행 중계 |
 | [wpf-ffmpeg-licensing-and-distribution-design](./wpf-ffmpeg-licensing-and-distribution-design.md) | **검토 전용(미착수)** ffmpeg GPLv3 준수 의무와 배포 형태. 동봉 자체는 위반이 아니고 **조건 미이행**이 위반이라는 판정, LGPL 빌드·`h264_mf` 전환 경로 |
 | [wpf-it17-auto-cutcount-design](./wpf-it17-auto-cutcount-design.md) | 촬영 컷 수 "자동" 모드(ini sentinel 0 → `max(6, 슬롯+2)`). 설정 도메인과 실효값 도메인을 분리한 근거, 단일 해석 지점(`CaptureSession.Begin`) |
+| [wpf-usermgmt-frame-count-design](./wpf-usermgmt-frame-count-design.md) | 사용자 관리 표의 **계정별 개인 프레임 개수**(정보성 읽기 전용). 목록 로드를 막지 않는 fire-and-forget 순차 조회·취소·무성 실패(`"—"` 유지) 설계. **일일 QR 한도 편집 UI는 범위 밖**(과금 도입 시) — [소유권 설계 §17 항목 4](./wpf-frame-ownership-binding-design.md#17-추후-개선-항목)의 분할 결정 |
 
 ---
 

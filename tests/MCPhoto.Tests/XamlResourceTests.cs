@@ -274,6 +274,26 @@ public class XamlResourceTests
     // FrameEditor_LocalOnly_Banner_Is_Gated_By_IsCreateMode 는 삭제했다 —
     // "이 PC에만 적용" 배너 자체가 제거됐다(설계 D-16 수정 폐지 · D-7 서버 정본).
 
+    /// <summary>
+    /// 사용자 관리 표의 "개인 프레임" 열 바인딩을 정적으로 고정한다.
+    /// 바인딩 경로 오타는 예외 없이 조용히 실패해(빈 셀) 단위 테스트로는 잡히지 않는다.
+    /// 함께 범위 경계도 고정한다 — <b>일일 QR 한도 편집 UI는 이번 범위가 아니다</b>
+    /// (강제 로직 없는 편집 UI는 "설정했는데 왜 안 막히지"를 만든다. 과금 도입 시 함께 만든다).
+    /// 설계: docs/design/wpf-usermgmt-frame-count-design.md §1·D-1
+    /// </summary>
+    [Fact]
+    public void UserMgmtView_Binds_FrameCountText()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "UserMgmtView.xaml"));
+
+        // ⚠️ 부분 문자열 검사로는 부족하다(주석에만 남은 이름도 통과한다) — 실제 `{Binding …}` 형태를 요구한다.
+        Assert.Matches(@"\{Binding\s+FrameCountText\s*[,}]", text);
+        Assert.NotNull(typeof(MCPhoto.App.ViewModels.UserRowViewModel).GetProperty("FrameCountText"));
+
+        foreach (var forbidden in new[] { "일일", "한도" })
+            Assert.DoesNotContain(forbidden, text);
+    }
+
 
     /// <summary>
     /// R2/§5.7 함정 회귀 방지: 서버 등록 확인 오버레이의 상태·커맨드는 **편집기 VM**이 갖는다.
