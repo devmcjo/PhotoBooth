@@ -1,11 +1,16 @@
 import { describeLoginFailure, type LoginFailureReason } from "@domain/auth/loginFailure";
-import type { CameraFailureReason } from "@domain/capture/cameraFailure";
+import {
+  formatCameraFailureCode,
+  type CameraFailure,
+  type CameraFailureReason,
+} from "@domain/capture/cameraFailure";
 import { formatBytes } from "@domain/results/byteFormat";
 import type { CameraPermission } from "@adapters/camera/cameraPermission";
 import type {
   CameraSettings,
   CameraState,
   FrameProcessorMode,
+  FrameTransferMode,
   PreviewMode,
   ProcessedSize,
 } from "@adapters/camera/cameraTypes";
@@ -70,12 +75,19 @@ export interface DiagnosticsDeps {
   readonly processedSize: () => ProcessedSize | null;
   readonly cameraFps: () => number;
   readonly cameraPermission: () => Promise<CameraPermission>;
-  /** 마지막 카메라 실패 사유. 실패한 적이 없으면 `null`. */
-  readonly cameraFailureReason: () => CameraFailureReason | null;
+  /**
+   * 마지막 카메라 실패(사유 + 상세). 실패한 적이 없으면 `null`.
+   *
+   * ⚠️ 사유와 코드를 **한 접근자로** 읽는다(2026-08-07). 별 접근자를 병렬로 두면 두 값이
+   *    다른 시점의 `lastFailure`를 읽어 라벨과 코드가 어긋난다.
+   */
+  readonly cameraFailure: () => CameraFailure | null;
   /** 가공 경로. 카메라가 닫혀 있으면 `null`(04 §2.3.1 "저성능 모드" 표시). */
   readonly pipelineMode: () => FrameProcessorMode | null;
   /** 프리뷰 연결 방식. `none`이면 화면이 검다. */
   readonly previewMode: () => PreviewMode;
+  /** 프레임 전달 경로. 카메라가 닫혀 있으면 `null`(04 §2.3.2). */
+  readonly frameTransferMode: () => FrameTransferMode | null;
   /** 실제로 열린 제약 사다리 칸. 닫혀 있으면 `null`. */
   readonly constraintStep: () => string | null;
   /** 마지막 로그인 실패 흔적(메모리 전용). 없으면 `null`. */
@@ -129,6 +141,9 @@ const CAMERA_FAILURE_LABEL: Readonly<Record<CameraFailureReason, string>> = {
   inUse: "사용 중",
   insecureContext: "보안 연결 아님",
   pipelineStalled: "영상 표시 실패(가공 정체)",
+  playbackBlocked: "영상 재생 시작 실패",
+  pipelineSlow: "영상 지연(Ready 미달)",
+  unsupportedBrowser: "브라우저 미지원",
   unknown: "알 수 없음",
 };
 
@@ -169,14 +184,39 @@ function previewModeRow(mode: PreviewMode): DiagnosticsRow {
   };
 }
 
-function failureReasonRow(reason: CameraFailureReason | null): DiagnosticsRow {
-  if (reason === null) {
+/**
+ * 라벨 **· 코드**로 함께 낸다 — 라벨은 운영자가 읽고, 코드는 우리에게 전달된다.
+ * 코드에는 새니타이즈를 통과한 값만 들어간다(계정·서버·기기 식별자와 무관하다 — DIAG-1·AUTH-3).
+ */
+function failureReasonRow(failure: CameraFailure | null): DiagnosticsRow {
+  if (failure === null) {
     return { label: STRINGS.diagnostics.cameraFailureReason, value: "없음", tone: "ok" };
   }
   return {
     label: STRINGS.diagnostics.cameraFailureReason,
-    value: CAMERA_FAILURE_LABEL[reason],
+    value: `${CAMERA_FAILURE_LABEL[failure.reason]} · ${formatCameraFailureCode(failure)}`,
     tone: "bad",
+  };
+}
+
+const FRAME_TRANSFER_LABEL: Readonly<Record<FrameTransferMode, string>> = {
+  videoFrame: STRINGS.diagnostics.frameTransferVideoFrame,
+  imageBitmap: STRINGS.diagnostics.frameTransferBitmap,
+  imageBitmapDemoted: STRINGS.diagnostics.frameTransferDemoted,
+};
+
+/**
+ * `imageBitmapDemoted`가 **`warn`인 이유**: 정상 폴백(`imageBitmap`)과 달리 `VideoFrame`이
+ * 있었는데 런타임에 깨진 것이라 브라우저 결함 신호이며 성능 예산 재측정 대상이다.
+ */
+function frameTransferRow(mode: FrameTransferMode | null): DiagnosticsRow {
+  if (mode === null) {
+    return { label: STRINGS.diagnostics.frameTransfer, value: UNKNOWN, tone: "neutral" };
+  }
+  return {
+    label: STRINGS.diagnostics.frameTransfer,
+    value: FRAME_TRANSFER_LABEL[mode],
+    tone: mode === "videoFrame" ? "ok" : mode === "imageBitmap" ? "neutral" : "warn",
   };
 }
 
@@ -217,11 +257,13 @@ function buildCameraSection(
       ),
       neutral(STRINGS.diagnostics.cameraFps, deps.cameraFps().toFixed(1)),
       permissionText(permission),
-      failureReasonRow(safeSync(deps.cameraFailureReason, null)),
+      failureReasonRow(safeSync(deps.cameraFailure, null)),
       // ↓ 2026-08-06 신설 3행. 이것이 없어서 "카메라가 안 열리는지 / 화면만 검은지"를
       //   현장에서 구분할 수 없었다(04 §2.3.1 · 10 §6.2).
       pipelineModeRow(safeSync(deps.pipelineMode, null)),
       previewModeRow(safeSync(deps.previewMode, "none" as PreviewMode)),
+      // ↓ 2026-08-07 신설. zero-copy가 살아 있는지, 아니면 런타임에 강등됐는지를 가른다.
+      frameTransferRow(safeSync(deps.frameTransferMode, null)),
       neutral(
         STRINGS.diagnostics.cameraConstraintStep,
         safeSync(deps.constraintStep, null) ?? UNKNOWN,
