@@ -66,13 +66,27 @@
                     <TextBlock Text="{Binding FrameToDelete.Name}" Style="{StaticResource Text.Body}"
                                Foreground="{StaticResource Brush.Text.Muted}"
                                HorizontalAlignment="Center" Margin="0,0,0,20" />
-                    <CheckBox Content="서버에서도 제거" IsChecked="{Binding DeleteAlsoServer}"
-                              Visibility="{Binding IsPower, Converter={StaticResource BoolToVis}}"
-                              Margin="0,0,0,20" HorizontalAlignment="Center" />
+                    <!-- D-22: "서버에서도 제거" 선택지는 없앴다 — 삭제는 항상 서버+로컬 둘 다이며,
+                         서버 삭제가 성공해야 로컬을 지운다(D-19). 개인/공용에 따라 경고 강도만 다르다. -->
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                               TextAlignment="Center" MaxWidth="340" Margin="0,0,0,16"
+                               Visibility="{Binding IsDeletingPublicFrame, Converter={StaticResource InverseBoolToVis}}"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               Text="영구적으로 삭제됩니다. 이 PC와 서버에서 모두 지워지며, 다른 기기에서도 사라집니다. 복구할 수 없습니다." />
+                    <StackPanel Visibility="{Binding IsDeletingPublicFrame, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   TextAlignment="Center" MaxWidth="340" Margin="0,0,0,12"
+                                   Foreground="{StaticResource Brush.Danger}"
+                                   Text="⚠️ 공용 프레임입니다. 삭제하면 모든 사용자와 게스트의 목록에서 사라집니다. 복구할 수 없습니다." />
+                        <CheckBox Content="모든 사용자에게서 사라진다는 것을 이해했습니다"
+                                  IsChecked="{Binding DeleteAcknowledged}"
+                                  HorizontalAlignment="Center" Margin="0,0,0,16" />
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button Content="삭제" Command="{Binding ConfirmDeleteCommand}"
+                                IsEnabled="{Binding CanConfirmDelete}"
                                 Style="{StaticResource Button.Danger}" Margin="0,0,12,0" />
-                        <Button Content="취소" Command="{Binding CancelDeleteCommand}"
+                        <Button Content="닫기" Command="{Binding CancelDeleteCommand}"
                                 Style="{StaticResource Button.Ghost}" />
                     </StackPanel>
                 </StackPanel>

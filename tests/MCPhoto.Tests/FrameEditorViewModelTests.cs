@@ -125,7 +125,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     private (FrameEditorViewModel vm, CapturingFrameRepository repo, CapturingLocalStore local, SessionContext session) MakeVm(UserRole role = UserRole.User)
     {
         var session = new SessionContext();
-        session.Login(new User { Id = "u1", Role = role });
+        session.Login(new User { Id = "u1", Role = role, Email = "u1@test.com" });   // 개인 저장은 이메일이 필요(D-4)
         var repo = new CapturingFrameRepository();
         var local = new CapturingLocalStore();
         var picker = new FramePickerViewModel(new FrameCatalogService(repo, local));
@@ -188,7 +188,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.True(vm.IsServerRegisterConfirmVisible);  // 팝업 대기
         Assert.Null(repo.Saved);                         // 아직 아무것도 저장하지 않았다
 
-        vm.RegisterToServer = true;
+        vm.SaveScope = FrameEditorViewModel.FrameSaveScope.PublicServer;
         await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
 
         Assert.NotNull(repo.Saved);
@@ -296,21 +296,23 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.True(vm.LoadImage(_imagePath));
 
         vm.FrameName = "내_프레임";
-        Assert.Contains("'_'가 있어", vm.SaveScopeNotice);
+        Assert.Contains("'_'가 있으면", vm.SaveScopeNotice);
 
         vm.FrameName = "내프레임";
-        Assert.DoesNotContain("'_'가 있어", vm.SaveScopeNotice);
+        Assert.DoesNotContain("'_'가 있으면", vm.SaveScopeNotice);
 
         // user 스코프는 파일명이 '{계정}_{이름}'이라 '_'가 문제되지 않는다 → 경고 없음.
         var (userVm, _, _, _) = MakeVm(UserRole.User);
         Assert.True(userVm.LoadImage(_imagePath));
         userVm.FrameName = "내_프레임";
-        Assert.DoesNotContain("'_'가 있어", userVm.SaveScopeNotice);
+        Assert.DoesNotContain("'_'가 있으면", userVm.SaveScopeNotice);
 
         // 저장은 차단되지 않는다(비차단 경고). Admin+신규 생성이므로 확인 팝업을 한 번 거친다(체크 off = 로컬만).
         vm.FrameName = "내_프레임";
         await vm.SaveCommand.ExecuteAsync(null);
         Assert.True(vm.IsServerRegisterConfirmVisible);
+        Assert.False(vm.CanConfirmSaveScope);                                   // D-21: 미선택이면 저장 불가
+        vm.SaveScope = FrameEditorViewModel.FrameSaveScope.Personal;
         await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
         Assert.NotNull(local.SavedFrame);
     }
@@ -327,7 +329,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         await vm.SaveCommand.ExecuteAsync(null);
 
         Assert.True(vm.IsServerRegisterConfirmVisible);
-        Assert.True(vm.RegisterToServer);           // D4: 기본 on
+        Assert.Equal(FrameEditorViewModel.FrameSaveScope.None, vm.SaveScope);  // D-21: 기본 미선택           // D4: 기본 on
         Assert.Null(repo.Saved);                    // 팝업 시점엔 아직 아무것도 쓰지 않는다
         Assert.Null(local.SavedFrame);
     }
@@ -340,7 +342,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.True(vm.LoadImage(_imagePath));
         await vm.SaveCommand.ExecuteAsync(null);
 
-        vm.RegisterToServer = true;
+        vm.SaveScope = FrameEditorViewModel.FrameSaveScope.PublicServer;
         await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
 
         Assert.NotNull(repo.Saved);
@@ -361,12 +363,12 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         vm.FrameName = "작업중";
         var image = vm.FrameImage;
         await vm.SaveCommand.ExecuteAsync(null);
-        vm.RegisterToServer = false;               // 기본값(on)과 다른 값으로 바꿔 둔다
+        vm.SaveScope = FrameEditorViewModel.FrameSaveScope.Personal;               // 기본값(on)과 다른 값으로 바꿔 둔다
 
         vm.CancelServerRegisterCommand.Execute(null);
 
         Assert.False(vm.IsServerRegisterConfirmVisible);
-        Assert.True(vm.RegisterToServer);          // 취소도 기본값(D4=on)으로 되돌린다
+        Assert.Equal(FrameEditorViewModel.FrameSaveScope.None, vm.SaveScope);  // D-21: 기본 미선택          // 취소도 기본값(D4=on)으로 되돌린다
         Assert.Null(repo.Saved);
         Assert.Null(local.SavedFrame);
         Assert.Equal("작업중", vm.FrameName);      // 편집 세션 불변
@@ -401,7 +403,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         repo.ThrowOnSave = true;
         await vm.SaveCommand.ExecuteAsync(null);
 
-        vm.RegisterToServer = true;
+        vm.SaveScope = FrameEditorViewModel.FrameSaveScope.PublicServer;
         await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
 
         Assert.Null(repo.Saved);
@@ -423,12 +425,12 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 
         await vm.SaveCommand.ExecuteAsync(null);
         vm.CancelServerRegisterCommand.Execute(null);
-        vm.RegisterToServer = false;               // 취소의 리셋을 무력화 → 재오픈 리셋만이 단언을 통과시킨다
+        vm.SaveScope = FrameEditorViewModel.FrameSaveScope.Personal;               // 취소의 리셋을 무력화 → 재오픈 리셋만이 단언을 통과시킨다
 
         await vm.SaveCommand.ExecuteAsync(null);
 
         Assert.True(vm.IsServerRegisterConfirmVisible);
-        Assert.True(vm.RegisterToServer);
+        Assert.Equal(FrameEditorViewModel.FrameSaveScope.None, vm.SaveScope);  // D-21: 기본 미선택
     }
 
     // ── D1: 이름 충돌 / 이름 안전성 저장 전 차단(데이터 손실 방지) ──

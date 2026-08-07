@@ -212,16 +212,34 @@
                                Foreground="{StaticResource Brush.Text.Muted}"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
                                MaxWidth="360" Margin="0,0,0,20" />
-                    <!-- D4: 기본 on(신규 생성은 대개 공용 배포가 목적). 열 때마다 VM이 기본값으로 리셋한다. -->
-                    <CheckBox Content="서버에도 등록(공용 기본 프레임)" IsChecked="{Binding RegisterToServer}"
-                              HorizontalAlignment="Center" Margin="0,0,0,8" />
-                    <TextBlock Text="체크하면 서버에 공용 기본 프레임으로 등록되어 다른 PC에서도 내려받습니다. 체크하지 않으면 이 PC에만 저장됩니다."
-                               Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360" Margin="0,0,0,20" />
+                    <!-- D-21: 라디오 2개 + 기본 미선택. 공용은 전원에게 노출되는 되돌리기 어려운 작업이라
+                         명시적 선택을 요구한다. 안전한 쪽(개인)을 위에 두고 "권장"을 붙인다. -->
+                    <RadioButton GroupName="SaveScope" IsChecked="{Binding IsPersonalScope}"
+                                 Margin="0,0,0,10" HorizontalAlignment="Left">
+                        <StackPanel>
+                            <TextBlock Text="개인 프레임으로 저장  (권장)" Style="{StaticResource Text.Body}" />
+                            <TextBlock Text="나만 사용합니다. 다른 계정에는 보이지 않습니다."
+                                       Style="{StaticResource Text.Caption}"
+                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                       TextWrapping="Wrap" MaxWidth="340" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="SaveScope" IsChecked="{Binding IsPublicScope}"
+                                 Margin="0,0,0,20" HorizontalAlignment="Left">
+                        <StackPanel>
+                            <TextBlock Text="서버 공용 프레임으로 저장" Style="{StaticResource Text.Body}" />
+                            <TextBlock Text="모든 사용자와 게스트에게 노출됩니다."
+                                       Style="{StaticResource Text.Caption}"
+                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                       TextWrapping="Wrap" MaxWidth="340" />
+                        </StackPanel>
+                    </RadioButton>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <!-- 스코프를 고르기 전에는 비활성(D-21) -->
                         <Button Content="저장" Command="{Binding ConfirmServerRegisterCommand}"
+                                IsEnabled="{Binding CanConfirmSaveScope}"
                                 Style="{StaticResource Button.Primary}" Margin="0,0,12,0" />
-                        <Button Content="취소" Command="{Binding CancelServerRegisterCommand}"
+                        <Button Content="닫기" Command="{Binding CancelServerRegisterCommand}"
                                 Style="{StaticResource Button.Ghost}" />
                     </StackPanel>
                 </StackPanel>

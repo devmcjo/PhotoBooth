@@ -137,19 +137,24 @@ public sealed class FrameCatalogService
     {
         ReportShared(new FrameCatalogProgress(FrameCatalogPhase.ResolvingLocal));
 
-        // ① 로컬 공용(접두 없는 파일 = 번들 + 파워 캐시)
+        // ① 로컬 공용(루트 = 번들 + DB default 캐시)
         var local = _localStore.LoadPublic();
-        var localNames = _localStore.PublicFrameNames();
 
-        // ② DB isDefault 중 로컬에 이름이 없는 것만 다운로드·캐시(이름 기준 dedup, 중복 집계 없음)
+        // ② DB isDefault와 `#dbid` 기준으로 대조 → 없는 것만 받고, 서버에서 지워진 캐시는 삭제한다.
+        //    ⚠️ 이름 기준 dedup은 폐기했다(D-20) — 삭제 판정과 기준이 갈리면 "다운로드는 건너뛰는데
+        //    삭제 대상으로 잡히는" 모순이 생긴다.
         try
         {
             ReportShared(new FrameCatalogProgress(FrameCatalogPhase.QueryingServer));
             var dbFrames = await _repository.GetDefaultFramesAsync(CancellationToken.None)
                 .ConfigureAwait(false);
 
-            // 로컬에 이미 있는 이름(캐시 히트)은 분모에서 제외해 (n/m)을 정직하게 만든다.
-            var pending = dbFrames.Where(f => !localNames.Contains(f.Name)).ToList();
+            // 서버 조회가 성공한 경우에만 삭제 판정을 한다(FrameSyncPlan 안전장치 1).
+            // 예외로 빠지면 이 블록에 오지 않으므로 오프라인에서 캐시가 지워질 일이 없다.
+            local = SyncPublicCache(local, dbFrames);
+
+            var localDbIds = DbIdsOf(local);
+            var pending = dbFrames.Where(f => !localDbIds.Contains(f.Id)).ToList();
             for (int i = 0; i < pending.Count; i++)
             {
                 ReportShared(new FrameCatalogProgress(
@@ -166,6 +171,64 @@ public sealed class FrameCatalogService
         ReportShared(new FrameCatalogProgress(FrameCatalogPhase.Completed));
         return ResolveLocalFrames(local);
     }
+
+    /// <summary>
+    /// 서버 정본에 없는 공용 캐시를 지운다(설계 §10 삭제 동기화).
+    /// <para>
+    /// power가 서버에서 공용 프레임을 지워도, 이미 내려받은 PC에는 파일이 남아 계속 촬영에 쓰인다.
+    /// 그 잔재를 정리하는 것이 이 함수다.
+    /// </para>
+    /// <b>안전장치는 <see cref="FrameSyncPlan"/>이 강제한다</b> — 서버 목록이 비었으면 삭제하지 않고
+    /// (장애로 0개를 받았을 때의 참사 방지), <c>#dbid</c>가 없는 번들 프레임은 애초에 대상이 아니다.
+    /// </summary>
+    private IReadOnlyList<FrameTemplate> SyncPublicCache(
+        IReadOnlyList<FrameTemplate> local, IReadOnlyList<FrameTemplate> serverFrames)
+    {
+        var decision = FrameSyncPlan.Build(
+            serverReachable: true,
+            serverDbIds: serverFrames.Select(f => f.Id).ToList(),
+            localDbIds: DbIdsOf(local).ToList());
+
+        if (decision.DeleteSkipped)
+        {
+            _logger?.LogInformation("공용 캐시 삭제 동기화 보류: {Reason}", decision.DeleteSkipReason);
+            return local;
+        }
+        if (decision.ToDelete.Count == 0) return local;
+
+        var removed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in decision.ToDelete)
+        {
+            var victim = local.FirstOrDefault(f => string.Equals(f.Id, id, StringComparison.Ordinal));
+            if (victim is null) continue;
+
+            if (_localStore.DeleteLocal(victim))
+            {
+                removed.Add(id);
+                _logger?.LogInformation("서버에서 삭제된 공용 프레임 캐시 제거: {Name} ({Id})", victim.Name, id);
+            }
+            else
+            {
+                // 파일 잠금 등으로 실패 — 목록에서만 빼고 다음 동기화에서 재시도한다.
+                removed.Add(id);
+                _logger?.LogWarning("공용 프레임 캐시 삭제 실패(다음 동기화에서 재시도): {Name}", victim.Name);
+            }
+        }
+
+        return removed.Count == 0
+            ? local
+            : local.Where(f => !removed.Contains(f.Id)).ToList();
+    }
+
+    /// <summary>서버 문서 id를 가진 로컬 프레임의 id 집합(`local:` 접두는 서버 미동기라 제외).</summary>
+    private static IReadOnlySet<string> DbIdsOf(IReadOnlyList<FrameTemplate> frames)
+        => new HashSet<string>(
+            frames.Where(f => !string.IsNullOrEmpty(f.Id)
+                              && !f.Id.StartsWith("local:", StringComparison.Ordinal)
+                              && !f.Id.StartsWith("bundle:", StringComparison.Ordinal)
+                              && !f.Id.StartsWith("fallback", StringComparison.Ordinal))
+                  .Select(f => f.Id),
+            StringComparer.Ordinal);
 
     /// <summary>
     /// 네트워크를 전혀 쓰지 않는 기본 프레임 해석(로컬 공용 → 번들 → fallback). (it20)
@@ -204,14 +267,100 @@ public sealed class FrameCatalogService
         return new[] { EnsureFallbackFrame() };
     }
 
-    /// <summary>로그인 사용자 커스텀 프레임(로컬 전용, `{계정}_` 접두). DB 미조회. (it8 §3 정정)</summary>
-    public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
+    /// <summary>
+    /// 로그인 사용자 개인 프레임. <b>서버가 정본</b>이고 로컬은 캐시다(설계 D-7).
+    /// <para>
+    /// 서버 조회 성공 시 <c>#dbid</c>로 대조해 ① 없는 것은 내려받고 ② 서버에서 지워진 캐시는 삭제한다
+    /// (다른 기기에서 지운 프레임이 이 PC에 남지 않게 — 사용자 요구). 서버에 닿지 못하면
+    /// <b>캐시를 그대로 쓴다</b>(오프라인 촬영 불변식, 삭제도 하지 않는다).
+    /// </para>
+    /// </summary>
+    /// <param name="userId">서버 조회용 계정 id.</param>
+    /// <param name="ownerEmail">로컬 저장·로드용 소유자 이메일(로컬 소유 판정의 단일 기준).</param>
+    public async Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(
+        string userId, string ownerEmail, CancellationToken ct = default)
     {
-        try { return Task.FromResult(_localStore.LoadUser(userId)); }
+        IReadOnlyList<FrameTemplate> local;
+        try { local = _localStore.LoadUser(ownerEmail); }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "로컬 커스텀 프레임 로드 실패: {User}", userId);
-            return Task.FromResult((IReadOnlyList<FrameTemplate>)Array.Empty<FrameTemplate>());
+            _logger?.LogWarning(ex, "로컬 개인 프레임 로드 실패");
+            local = Array.Empty<FrameTemplate>();
+        }
+
+        if (string.IsNullOrWhiteSpace(userId)) return local;
+
+        IReadOnlyList<FrameTemplate> serverFrames;
+        try
+        {
+            serverFrames = await _repository.GetUserFramesAsync(userId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // 서버 미도달 → 삭제 판정을 하지 않는다(FrameSyncPlan 안전장치 1). 캐시로 계속 진행.
+            _logger?.LogWarning(ex, "개인 프레임 서버 조회 실패 — 로컬 캐시로 진행(오프라인)");
+            return local;
+        }
+
+        local = SyncUserCache(local, serverFrames, ownerEmail);
+
+        // 서버에만 있는 것 내려받기(다른 기기에서 만든 프레임).
+        var localDbIds = DbIdsOf(local);
+        foreach (var f in serverFrames.Where(f => !localDbIds.Contains(f.Id)))
+        {
+            var cached = await TryCacheUserFrameAsync(f, ownerEmail, ct).ConfigureAwait(false);
+            if (cached is not null) local = Append(local, cached);
+        }
+
+        return local;
+    }
+
+    /// <summary>서버 정본에 없는 개인 캐시를 지운다(다른 기기에서 삭제된 프레임). 규칙은 공용과 동일.</summary>
+    private IReadOnlyList<FrameTemplate> SyncUserCache(
+        IReadOnlyList<FrameTemplate> local, IReadOnlyList<FrameTemplate> serverFrames, string ownerEmail)
+    {
+        var decision = FrameSyncPlan.Build(
+            serverReachable: true,
+            serverDbIds: serverFrames.Select(f => f.Id).ToList(),
+            localDbIds: DbIdsOf(local).ToList());
+
+        if (decision.DeleteSkipped)
+        {
+            _logger?.LogInformation("개인 캐시 삭제 동기화 보류: {Reason}", decision.DeleteSkipReason);
+            return local;
+        }
+        if (decision.ToDelete.Count == 0) return local;
+
+        var removed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in decision.ToDelete)
+        {
+            var victim = local.FirstOrDefault(f => string.Equals(f.Id, id, StringComparison.Ordinal));
+            if (victim is null) continue;
+            _localStore.DeleteLocal(victim);   // 실패해도 목록에서는 빼고 다음 동기화에서 재시도
+            removed.Add(id);
+            _logger?.LogInformation("서버에서 삭제된 개인 프레임 캐시 제거: {Name}", victim.Name);
+        }
+
+        return removed.Count == 0 ? local : local.Where(f => !removed.Contains(f.Id)).ToList();
+    }
+
+    /// <summary>서버 개인 프레임 이미지를 내려받아 개인 캐시로 기록(#owner=이메일, #dbid 보존). 실패 시 null.</summary>
+    private async Task<FrameTemplate?> TryCacheUserFrameAsync(FrameTemplate f, string ownerEmail, CancellationToken ct)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(f.ImageUrl)) return null;
+            var bytes = await _downloadImage(f.ImageUrl, ct);
+            if (bytes is not { Length: > 0 }) return null;
+
+            var cached = _localStore.SaveUserFrame(f, bytes, ownerEmail, dbId: f.Id);
+            _logger?.LogInformation("개인 프레임 캐시: {Name} ← 서버({Id})", cached.Name, f.Id);
+            return cached;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "개인 프레임 캐시 실패: {Name}", f.Name);
+            return null;
         }
     }
 

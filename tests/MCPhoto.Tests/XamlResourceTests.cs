@@ -320,7 +320,7 @@ public class XamlResourceTests
         // 오버레이·캡션이 참조하는 편집기 VM 멤버가 XAML에서 사라지지 않았는지 고정.
         foreach (var member in new[]
                  {
-                     "IsServerRegisterConfirmVisible", "RegisterToServer",
+                     "IsServerRegisterConfirmVisible", "IsPersonalScope", "IsPublicScope", "CanConfirmSaveScope",
                      "ConfirmServerRegisterCommand", "CancelServerRegisterCommand",
                      "PickedSourceNotice", "HasPickedSource",
                  })

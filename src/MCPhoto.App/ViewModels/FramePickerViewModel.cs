@@ -43,7 +43,14 @@ public sealed partial class FramePickerViewModel : ObservableObject
     /// 전 구간 await — UI 스레드를 블로킹하지 않는다. 취소 시 예외를 전파하지 않고 조용히 종료한다.
     /// </summary>
     /// <param name="userId">로그인 계정 id. null이면 공용 프레임만 로드.</param>
-    public async Task LoadAsync(string? userId, CancellationToken ct = default)
+    /// <param name="ownerEmail">로컬 개인 프레임 소유 판정용 이메일(설계 D-4).</param>
+    /// <param name="includePublic">
+    /// 공용 프레임을 후보에 넣을지. <b>power만 true</b>다(설계 D-23) — advanced_user에게는
+    /// 본인 프레임 재활용만 열어 둔다. 수정 기능이 폐지된 뒤로 이 모달이 유일한 재활용 경로라
+    /// 완전히 막으면 자기 프레임을 다시 쓸 방법이 사라진다(파일이 해시 폴더에 있어 탐색기로 못 찾는다).
+    /// </param>
+    public async Task LoadAsync(
+        string? userId, string? ownerEmail = null, bool includePublic = true, CancellationToken ct = default)
     {
         IsLoading = true;
         EmptyNotice = string.Empty;
@@ -55,12 +62,13 @@ public sealed partial class FramePickerViewModel : ObservableObject
             // 공용: 번들 + 파워 캐시 + DB isDefault 다운로드(이름 dedup).
             // it20: FrameCatalogService는 동시 호출을 **공유**한다(단일 비행) — 줄 세우기가 아니라 합류다.
             // 취소는 경계에서 OperationCanceledException으로 전파되고(아래 catch가 흡수) 공유 작업은 계속 진행한다.
-            foreach (var f in await _catalog.GetDefaultFramesAsync(ct))
-                Frames.Add(f);
+            if (includePublic)
+                foreach (var f in await _catalog.GetDefaultFramesAsync(ct))
+                    Frames.Add(f);
 
-            // 개인: 본인 `{계정}_` 접두 로컬만(타인 것은 LoadUser가 접두로 자동 제외).
+            // 개인: 본인 소유만(서명된 #owner가 판정 — 타인 것은 애초에 로드되지 않는다).
             if (!string.IsNullOrEmpty(userId))
-                foreach (var f in await _catalog.GetUserFramesAsync(userId, ct))
+                foreach (var f in await _catalog.GetUserFramesAsync(userId, ownerEmail ?? string.Empty, ct))
                     Frames.Add(f);
 
             if (Frames.Count == 0)

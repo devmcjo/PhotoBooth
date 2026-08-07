@@ -91,10 +91,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     ? $"'{FrameName}'을(를) 이 PC에 덮어씁니다."
                     : $"'{FrameName}'을(를) 내 프레임으로 이 PC에 저장합니다.";
 
-            // 공용 파일명 규약상 '_'는 user 접두 구분자다(§1.5) → 이름에 '_'가 있으면 저장은 되지만
-            // LoadPublic에서 탈락해 목록에 보이지 않는다. 저장 전에 알린다(비차단).
+            // 로컬 접두 규약은 폐지됐지만(설계 D-3) **서버가 여전히 '_'를 거부**한다
+            // (validateFrameName — 웹·모바일이 아직 접두 규약을 쓰기 때문, 설계 §9). 저장 전에 알린다(비차단).
             return isPower && FrameName.Contains('_')
-                ? $"{scope} ⚠ 이름에 '_'가 있어 공용 목록에서 보이지 않을 수 있습니다."
+                ? $"{scope} ⚠ 이름에 '_'가 있으면 서버 저장이 거부됩니다."
                 : scope;
         }
     }
@@ -168,7 +168,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         var info = new FileInfo(path);
         if (!FrameImageValidator.IsSizeWithinLimit(info.Length))
         {
-            StatusMessage = "이미지가 10MB를 초과합니다.";
+            StatusMessage = "프레임 이미지는 8MB 이하여야 합니다.";
             return false;
         }
 
@@ -401,7 +401,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         _pickerCts = new CancellationTokenSource();
 
         IsFramePickerVisible = true;
-        await Picker.LoadAsync(_shell.Session.CurrentUser?.Id, _pickerCts.Token);
+        // D-23: power는 공용까지, advanced_user는 본인 프레임만 후보로 본다.
+        var picker = _shell.Session.CurrentUser;
+        await Picker.LoadAsync(
+            picker?.Id, picker?.Email, includePublic: picker?.Role.IsPower() == true, _pickerCts.Token);
     }
 
     /// <summary>[불러오기]: 선택 프레임의 이미지·슬롯을 새 편집 세션으로 복사. 실패해도 모달만 닫고 편집 상태 보존.</summary>
@@ -511,17 +514,48 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     [ObservableProperty] private bool _isServerRegisterConfirmVisible;
 
     /// <summary>
-    /// "서버에도 등록" 체크박스의 기본값(D4, 운영 판단으로 on 채택).
-    /// manager/admin이 프레임을 **새로 만드는** 목적은 대개 공용 배포이므로 매번 체크하게 하면 손이 번거롭다.
-    /// ⚠️ 삭제 팝업의 "서버에서도 제거"는 기본 off다 — 관례가 갈리는 것이 아니라 축이 다르다(그쪽은 파괴적
-    ///    행위라 opt-in, 이쪽은 생성 행위). 이 값을 다시 뒤집을 때는 N1·N2·N4·N13 기대값이 함께 움직인다.
+    /// 저장 스코프 선택(설계 D-21). <b>기본은 미선택</b>이며 고르기 전에는 [저장]이 비활성이다.
+    /// <para>
+    /// 종전에는 "서버에도 등록" 체크박스 하나였고 <b>기본 on</b>이었다. 체크박스는 "선택 안 함" 상태를
+    /// 표현할 수 없어 강제 선택이 불가능했고, 기본 on이라 무심코 [저장]을 누르면 공용으로 배포됐다 —
+    /// 공용은 게스트를 포함한 전원에게 노출되는 되돌리기 어려운 작업이라 명시적 선택을 요구한다.
+    /// </para>
     /// </summary>
-    private const bool DefaultRegisterToServer = true;
+    public enum FrameSaveScope
+    {
+        /// <summary>아직 고르지 않음. [저장] 비활성.</summary>
+        None,
 
-    /// <summary>
-    /// "서버에도 등록" 체크박스 상태. 팝업을 열 때마다 <see cref="DefaultRegisterToServer"/>로 리셋한다(값 잔존 금지).
-    /// </summary>
-    [ObservableProperty] private bool _registerToServer = DefaultRegisterToServer;
+        /// <summary>개인 프레임(권장) — 본인에게만 보인다.</summary>
+        Personal,
+
+        /// <summary>서버 공용 프레임 — 모든 사용자·게스트에게 노출된다. power만 선택 가능.</summary>
+        PublicServer
+    }
+
+    /// <summary>선택된 저장 스코프. 팝업을 열 때마다 <see cref="FrameSaveScope.None"/>으로 리셋한다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPersonalScope))]
+    [NotifyPropertyChangedFor(nameof(IsPublicScope))]
+    [NotifyPropertyChangedFor(nameof(CanConfirmSaveScope))]
+    private FrameSaveScope _saveScope = FrameSaveScope.None;
+
+    /// <summary>라디오 바인딩(개인). 값 기반 바인딩 컨버터 없이 두 bool로 노출한다.</summary>
+    public bool IsPersonalScope
+    {
+        get => SaveScope == FrameSaveScope.Personal;
+        set { if (value) SaveScope = FrameSaveScope.Personal; }
+    }
+
+    /// <summary>라디오 바인딩(공용).</summary>
+    public bool IsPublicScope
+    {
+        get => SaveScope == FrameSaveScope.PublicServer;
+        set { if (value) SaveScope = FrameSaveScope.PublicServer; }
+    }
+
+    /// <summary>[저장] 활성 조건 — 스코프를 골라야 한다(D-21).</summary>
+    public bool CanConfirmSaveScope => SaveScope != FrameSaveScope.None;
 
     /// <summary>
     /// 확인 팝업을 띄워야 하는 세션인지 = **DB insert 분기와 완전히 동일한 조건**.
@@ -605,7 +639,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         // R2: DB insert가 가능한 세션이면 "서버에도 만들지" 먼저 묻는다 — 이 시점에는 아무것도 저장하지 않는다.
         if (RequiresServerRegisterPrompt)
         {
-            RegisterToServer = DefaultRegisterToServer;   // D4: 열 때마다 기본값으로 리셋(직전 선택 잔존 금지)
+            SaveScope = FrameSaveScope.None;   // D-21: 열 때마다 미선택으로 리셋(직전 선택 잔존 금지)
             IsServerRegisterConfirmVisible = true;
             return;
         }
@@ -620,10 +654,12 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     [RelayCommand]
     private async Task ConfirmServerRegister()
     {
-        var alsoServer = RegisterToServer;
+        if (!CanConfirmSaveScope) return;          // 방어: 미선택이면 저장하지 않는다(버튼도 비활성)
+
+        var toPublic = SaveScope == FrameSaveScope.PublicServer;
         IsServerRegisterConfirmVisible = false;
-        RegisterToServer = DefaultRegisterToServer;
-        await PersistAsync(alsoServer);
+        SaveScope = FrameSaveScope.None;
+        await PersistAsync(toPublic);
     }
 
     /// <summary>[팝업 취소]: 팝업만 닫는다. 저장·화면 전환·디스크 모두 무변경(편집 세션 그대로 유지).</summary>
@@ -631,7 +667,7 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
     private void CancelServerRegister()
     {
         IsServerRegisterConfirmVisible = false;
-        RegisterToServer = DefaultRegisterToServer;
+        SaveScope = FrameSaveScope.None;
     }
 
     /// <summary>

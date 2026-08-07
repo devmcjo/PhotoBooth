@@ -181,7 +181,7 @@ public class FrameSelectViewModelTests
     }
 
     [Fact]
-    public async Task Power_Delete_With_Server_Option_Strips_Local_Prefix()
+    public async Task Local_Only_Frame_Is_Deleted_Without_Server_Call()
     {
         var (vm, repo, local) = MakeVm(UserRole.Admin);
         await vm.OnEnterAsync();
@@ -189,30 +189,11 @@ public class FrameSelectViewModelTests
         vm.Frames.Add(frame);
 
         vm.RequestDeleteCommand.Execute(frame);
-        Assert.True(vm.IsPower);
-        vm.DeleteAlsoServer = true;
-
+        // `local:` 프레임은 서버 문서가 없다 → 서버를 호출하지 않고 로컬만 지운다(설계 D-19).
         await vm.ConfirmDeleteCommand.ExecuteAsync(null);
 
         Assert.Equal(1, local.DeleteLocalCalls);
-        Assert.Equal(1, repo.DeleteCalls);
-        Assert.Equal("u1_myframe", repo.DeletedId); // "local:" 접두 제거
-    }
-
-    [Fact]
-    public async Task Power_Delete_Without_Server_Option_Local_Only()
-    {
-        var (vm, repo, local) = MakeVm(UserRole.Admin);
-        await vm.OnEnterAsync();
-        var frame = LocalFrame();
-        vm.Frames.Add(frame);
-
-        vm.RequestDeleteCommand.Execute(frame);
-        // DeleteAlsoServer 기본 false 유지
-        await vm.ConfirmDeleteCommand.ExecuteAsync(null);
-
-        Assert.Equal(1, local.DeleteLocalCalls);
-        Assert.Equal(0, repo.DeleteCalls); // 체크 안 하면 DB 미삭제
+        Assert.Equal(0, repo.DeleteCalls); // 서버 문서가 없으므로 호출 자체가 없다
     }
 
     [Fact]
@@ -226,7 +207,9 @@ public class FrameSelectViewModelTests
         vm.Frames.Add(frame);
 
         vm.RequestDeleteCommand.Execute(frame);
-        vm.DeleteAlsoServer = true;
+        Assert.True(vm.IsDeletingPublicFrame);          // 공용 → 경고 + 확인 체크 요구
+        Assert.False(vm.CanConfirmDelete);              // 체크 전에는 [삭제] 비활성
+        vm.DeleteAcknowledged = true;
         await vm.ConfirmDeleteCommand.ExecuteAsync(null);
 
         Assert.Equal(1, repo.DeleteCalls);
@@ -239,18 +222,18 @@ public class FrameSelectViewModelTests
     {
         var (vm, repo, _) = MakeVm(UserRole.Admin);
         await vm.OnEnterAsync();
-        // 로컬 id에 #dbid가 없어 local:name 으로 로드된 상황 — 직접 id로는 서버에서 못 찾음.
-        var frame = new FrameTemplate { Id = "local:myframe", Name = "myframe", ImageSize = new ImageSize { Width = 100, Height = 100 } };
+        // 캐시의 #dbid가 낡아 서버에서 그 id를 못 찾는 상황(문서가 재생성된 경우 등).
+        var frame = new FrameTemplate { Id = "GUID-stale", Name = "myframe", ImageSize = new ImageSize { Width = 100, Height = 100 } };
         // 서버에는 이름이 같은 실제 문서(GUID)가 존재.
         repo.Defaults.Add(new FrameTemplate { Id = "GUID-xyz", Name = "myframe" });
         repo.ExistingServerIds.Add("GUID-xyz");
         vm.Frames.Add(frame);
 
         vm.RequestDeleteCommand.Execute(frame);
-        vm.DeleteAlsoServer = true;
+        vm.DeleteAcknowledged = true;                   // 공용 삭제 확인(D-22)
         await vm.ConfirmDeleteCommand.ExecuteAsync(null);
 
-        Assert.Equal(2, repo.DeleteCalls);              // 1) local id 실패 → 2) 이름 매칭 재삭제
+        Assert.Equal(2, repo.DeleteCalls);              // 1) 낡은 id 실패 → 2) 이름 매칭 재삭제
         Assert.Equal("GUID-xyz", repo.DeletedId);       // 이름으로 찾은 실제 문서 삭제
         Assert.False(vm.DeleteNoticeIsError);           // 최종 성공
     }
@@ -258,16 +241,19 @@ public class FrameSelectViewModelTests
     [Fact]
     public async Task Power_Server_Delete_Reports_Error_When_Not_Found()
     {
-        var (vm, repo, _) = MakeVm(UserRole.Admin);
+        var (vm, repo, local) = MakeVm(UserRole.Admin);
         await vm.OnEnterAsync();
-        var frame = LocalFrame(); // 서버에도 없고 이름 매칭도 없음
+        // 서버 문서 id를 가졌지만 서버에는 없다(이름 매칭도 실패).
+        var frame = new FrameTemplate { Id = "GUID-gone", Name = "사라진프레임", ImageSize = new ImageSize { Width = 100, Height = 100 } };
         vm.Frames.Add(frame);
 
         vm.RequestDeleteCommand.Execute(frame);
-        vm.DeleteAlsoServer = true;
+        vm.DeleteAcknowledged = true;
         await vm.ConfirmDeleteCommand.ExecuteAsync(null);
 
         Assert.True(vm.DeleteNoticeIsError);            // 성공 오인 금지: 실패 안내
+        // ⚠️ D-19: 서버 삭제가 실패하면 로컬도 지우지 않는다(지우면 다음 동기화에서 되살아난다).
+        Assert.Equal(0, local.DeleteLocalCalls);
     }
 
     // ── item2 Step 2: 편집 게이트(FrameEditPolicy 위임) ──

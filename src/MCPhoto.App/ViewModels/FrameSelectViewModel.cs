@@ -65,9 +65,20 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     /// <summary>삭제 ✕ 노출의 1차 입력. it16 E4: 로그인 여부 → **프레임 쓰기 권한**(AdvancedUser 이상)으로 강화.</summary>
     [ObservableProperty] private bool _canDeleteFrames;
     [ObservableProperty] private bool _isPower;
-    [ObservableProperty] private bool _isDeleteConfirmVisible;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConfirmDelete))]
+    private bool _isDeleteConfirmVisible;
     [ObservableProperty] private FrameTemplate? _frameToDelete;
-    [ObservableProperty] private bool _deleteAlsoServer;  // 파워만 노출·유효
+    /// <summary>삭제 대상이 공용 프레임인가(전원에게서 사라진다 → 확인 체크 요구, D-22).</summary>
+    [ObservableProperty] private bool _isDeletingPublicFrame;
+
+    /// <summary>공용 삭제 확인 체크. 체크 전에는 [삭제] 비활성.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConfirmDelete))]
+    private bool _deleteAcknowledged;
+
+    /// <summary>[삭제] 활성 조건 — 개인은 즉시, 공용은 확인 체크 후.</summary>
+    public bool CanConfirmDelete => !IsDeletingPublicFrame || DeleteAcknowledged;
 
     // 삭제 결과 안내(서버 삭제 성공/실패/미발견). 성공 오인 방지.
     [ObservableProperty] private string _deleteNotice = string.Empty;
@@ -209,7 +220,8 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
                 // 개인 프레임 로드 실패가 공용 목록까지 무너뜨리지 않게 개별 방어(로컬 파일 스캔).
                 try
                 {
-                    resolved.AddRange(await _catalog.GetUserFramesAsync(user.Id, CancellationToken.None));
+                    resolved.AddRange(await _catalog.GetUserFramesAsync(
+                        user.Id, user.Email ?? string.Empty, CancellationToken.None));
                 }
                 catch (Exception ex)
                 {
@@ -303,41 +315,53 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         var user = _shell.Session.CurrentUser;
         if (!FrameEditPolicy.CanDelete(frame, user?.Role) || !IsDeletable(frame)) return;
         FrameToDelete = frame;
-        DeleteAlsoServer = false;          // 기본 off
+        // 공용 프레임은 전원에게서 사라지므로 별도 확인 체크를 요구한다(설계 D-22).
+        IsDeletingPublicFrame = FrameOrigin.Classify(frame) == FrameOriginKind.DbDefault;
+        DeleteAcknowledged = false;
         IsDeleteConfirmVisible = true;
     }
 
-    /// <summary>[확인]: 로컬 삭제 항상, "서버에서도 제거" 체크(파워) 시 DB 삭제(결과를 명확히 안내).</summary>
+    /// <summary>
+    /// [확인]: <b>서버 먼저 → 성공했을 때만 로컬</b>(설계 D-19).
+    /// <para>
+    /// 순서가 중요하다. 로컬을 먼저 지우면 서버 삭제가 실패했을 때 다음 동기화에서 프레임이 다시
+    /// 내려와 "지웠는데 되살아났다"가 된다. 서버가 정본이므로 정본을 먼저 지운다.
+    /// </para>
+    /// 삭제는 항상 서버+로컬 둘 다이며 선택 항목이 아니다("영구적으로 삭제됩니다").
+    /// </summary>
     [RelayCommand]
     private async Task ConfirmDelete()
     {
         var frame = FrameToDelete;
         if (frame is null) { CancelDelete(); return; }
+        if (IsDeletingPublicFrame && !DeleteAcknowledged) return;   // 방어(버튼도 비활성)
 
-        bool localOk = _localStore.DeleteLocal(frame);  // 로컬 파일(이미지+슬롯) 삭제
-        var alsoServer = DeleteAlsoServer && IsPower;    // 팝업이 곧 닫히며 값이 리셋되므로 미리 확정
+        CancelDelete();
         DeleteNotice = string.Empty;
         DeleteNoticeIsError = false;
 
-        Frames.Remove(frame);
-        if (SelectedFrame == frame) SelectedFrame = Frames.FirstOrDefault();
-        CancelDelete();
-
-        if (alsoServer)
-            await DeleteFromServerAsync(frame);
-
-        if (!localOk)
+        // 서버 문서가 있는 프레임은 서버 삭제가 성공해야 로컬을 지운다.
+        bool hasServerDoc = !frame.Id.StartsWith("local:", StringComparison.Ordinal)
+                            && !frame.Id.StartsWith("bundle:", StringComparison.Ordinal)
+                            && !frame.Id.StartsWith("fallback", StringComparison.Ordinal)
+                            && !string.IsNullOrEmpty(frame.Id);
+        if (hasServerDoc && !await DeleteFromServerAsync(frame))
         {
-            // 성공 오인 금지: 로컬 파일이 실제로 지워지지 않았음을 알림(사용 중 등).
-            DeleteNotice = string.IsNullOrEmpty(DeleteNotice)
-                ? "로컬 프레임 파일을 삭제하지 못했습니다(사용 중일 수 있음)."
-                : DeleteNotice + " (단, 로컬 파일 삭제 실패)";
+            // 로컬을 건드리지 않는다 — 다음 동기화에서 되살아나는 혼란을 만들지 않기 위함.
+            DeleteNoticeIsError = true;
+            return;
+        }
+
+        if (!_localStore.DeleteLocal(frame))
+        {
+            DeleteNotice = "이 PC의 프레임 파일을 삭제하지 못했습니다(사용 중일 수 있음).";
             DeleteNoticeIsError = true;
             _logger?.LogWarning("로컬 프레임 삭제 실패: {Name} ({Path})", frame.Name, frame.ImageUrl);
         }
 
-        // 디스크 기준 재스캔으로 목록을 실제 상태와 일치(삭제 성공분은 사라지고, 실패분은 다시 노출). (보완#3)
-        // it20 §6.5: 목록이 이미 보이는 상태이므로 조용히 갱신한다 — 삭제마다 대기 오버레이가 번쩍이지 않게.
+        Frames.Remove(frame);
+        if (SelectedFrame == frame) SelectedFrame = Frames.FirstOrDefault();
+
         await ReloadFramesAsync(ReloadReason.Refresh);
     }
 
@@ -345,7 +369,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     /// 서버(DB+Storage) 삭제. 저장된 서버 id(#dbid=GUID)로 삭제 시도 →
     /// 없으면(로컬 id 불일치·#dbid 누락) 이름으로 서버 기본 프레임을 재탐색해 삭제. 결과를 사용자에게 안내(성공 오인 금지).
     /// </summary>
-    private async Task DeleteFromServerAsync(FrameTemplate frame)
+    private async Task<bool> DeleteFromServerAsync(FrameTemplate frame)
     {
         // local: 접두는 로컬 전용 프레임(서버 문서 없음). 그 외는 실 DB 문서 id(GUID)를 담고 있음.
         var serverId = frame.Id.StartsWith("local:", StringComparison.Ordinal)
@@ -370,32 +394,34 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
 
             if (deleted)
             {
-                DeleteNotice = "서버에서도 삭제되었습니다.";
+                DeleteNotice = "영구적으로 삭제되었습니다.";
                 DeleteNoticeIsError = false;
+                return true;
             }
-            else
-            {
-                DeleteNotice = $"로컬은 삭제했지만 서버에서 '{frame.Name}' 문서를 찾지 못했습니다.";
-                DeleteNoticeIsError = true;
-                _logger?.LogWarning("서버 삭제 실패: 문서 미발견 name={Name} triedId={Id}", frame.Name, serverId);
-            }
+
+            DeleteNotice = $"서버에서 '{frame.Name}'을(를) 찾지 못해 삭제하지 못했습니다. 이 PC의 파일은 그대로 둡니다.";
+            _logger?.LogWarning("서버 삭제 실패: 문서 미발견 name={Name} triedId={Id}", frame.Name, serverId);
+            return false;
         }
         catch (Exception ex)
         {
-            // 성공 오인 금지: 서버 삭제 실패를 사용자에게 노출(미초기화·권한 등).
-            DeleteNotice = $"서버 삭제 실패: {ex.Message}";
+            // 성공 오인 금지: 서버 삭제 실패를 사용자에게 노출(미초기화·권한·오프라인 등).
+            // 실패했으므로 로컬도 지우지 않는다(D-19) — 호출부가 false를 보고 중단한다.
+            DeleteNotice = $"서버 삭제 실패: {ex.Message} 이 PC의 파일은 그대로 둡니다.";
             DeleteNoticeIsError = true;
             _logger?.LogError(ex, "프레임 서버 삭제 실패 id={Id}", serverId);
+            return false;
         }
     }
 
-    /// <summary>[취소]: 팝업 닫기.</summary>
+    /// <summary>[닫기]: 팝업만 닫는다(삭제하지 않는다).</summary>
     [RelayCommand]
     private void CancelDelete()
     {
         IsDeleteConfirmVisible = false;
         FrameToDelete = null;
-        DeleteAlsoServer = false;
+        DeleteAcknowledged = false;
+        IsDeletingPublicFrame = false;
     }
 
     [RelayCommand]

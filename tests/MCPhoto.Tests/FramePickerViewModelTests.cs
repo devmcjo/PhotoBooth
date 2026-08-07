@@ -78,7 +78,7 @@ public class FramePickerViewModelTests : IDisposable
         _store.SaveUserFrame(Frame("내것"), Png, ownerEmail: "u1", dbId: null);
         var vm = MakeVm();
 
-        await vm.LoadAsync("u1");
+        await vm.LoadAsync("u1", "u1");
 
         Assert.Equal(3, vm.Frames.Count);
         Assert.Contains(vm.Frames, f => f.Name == "내것");
@@ -94,7 +94,7 @@ public class FramePickerViewModelTests : IDisposable
         _store.SaveUserFrame(Frame("내것"), Png, ownerEmail: "u1", dbId: null);
         var vm = MakeVm();
 
-        await vm.LoadAsync(userId: null);
+        await vm.LoadAsync(userId: null, ownerEmail: null);
 
         Assert.Single(vm.Frames);
         Assert.Equal("공용1", vm.Frames[0].Name);
@@ -115,7 +115,7 @@ public class FramePickerViewModelTests : IDisposable
         try
         {
             Assert.False(vm.IsLoading);      // 호출 전
-            await vm.LoadAsync("u1");
+            await vm.LoadAsync("u1", "u1");
         }
         finally { vm.PropertyChanged -= OnChanged; } // 구독 해제 경로
 
@@ -131,7 +131,7 @@ public class FramePickerViewModelTests : IDisposable
         //    실전에서 도달하지 않는다 → 도달 가능한 실패 경로(로컬 조회 예외)로 안내를 검증한다.
         var vm = MakeVm(new ThrowingLocalStore());
 
-        await vm.LoadAsync("u1");
+        await vm.LoadAsync("u1", "u1");
 
         Assert.NotEmpty(vm.EmptyNotice);
         Assert.Empty(vm.Frames);
@@ -168,7 +168,7 @@ public class FramePickerViewModelTests : IDisposable
         // D6: 모달을 닫을 때 상태 초기화 — 재오픈 시 이전 선택이 남지 않는다.
         _store.SaveDefaultFrame(Frame("공용1"), Png, dbId: null);
         var vm = MakeVm();
-        await vm.LoadAsync("u1");
+        await vm.LoadAsync("u1", "u1");
         vm.SelectedFrame = vm.Frames[0];
 
         vm.Reset();
@@ -188,7 +188,7 @@ public class FramePickerViewModelTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await vm.LoadAsync("u1", cts.Token); // 예외 없이 종료
+        await vm.LoadAsync("u1", "u1", ct: cts.Token); // 예외 없이 종료
 
         Assert.False(vm.IsLoading);
     }

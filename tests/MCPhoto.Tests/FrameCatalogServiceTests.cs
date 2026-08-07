@@ -52,7 +52,7 @@ public class FrameCatalogServiceTests : IDisposable
     private static FrameTemplate DbFrame(string name) => new()
     {
         Id = "doc-" + name,   // DB 문서 id
-        Name = name,          // 이름 기준 dedup
+        Name = name,          // 표시 이름(dedup 기준은 #dbid — 설계 D-20)
         IsDefault = true,
         ImageUrl = "https://example/frame.png",
         ImageSize = new ImageSize { Width = 1200, Height = 1600 },
@@ -63,7 +63,7 @@ public class FrameCatalogServiceTests : IDisposable
     public async Task Cache_Hit_Skips_Download()
     {
         // 로컬에 같은 이름 공용 프레임이 이미 있으면 그 이름은 다운로드 스킵(이름 dedup, 정정 §3.3).
-        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "f1"); // 미리 캐시(이름 f1)
+        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "doc-f1"); // 미리 캐시(문서 id 기준)
 
         var repo = new CountingFrameRepository { DefaultFrames = new List<FrameTemplate> { DbFrame("f1") } };
         var svc = MakeService(repo);
@@ -434,7 +434,7 @@ public class FrameCatalogServiceTests : IDisposable
     [Fact]
     public async Task Progress_Counter_Excludes_Cache_Hits()
     {
-        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "f1");   // f1은 로컬 캐시 히트
+        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "doc-f1");   // f1은 로컬 캐시 히트(#dbid 기준)
 
         var repo = new CountingFrameRepository
         {
@@ -517,7 +517,7 @@ public class FrameCatalogServiceTests : IDisposable
         var repo = new CountingFrameRepository();
         var svc = MakeService(repo);
 
-        var user = await svc.GetUserFramesAsync("alice");
+        var user = await svc.GetUserFramesAsync("alice", "alice");
 
         Assert.Single(user);
         Assert.Equal("mine", user[0].Name);
