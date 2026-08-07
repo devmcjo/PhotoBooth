@@ -96,8 +96,39 @@ public sealed class HttpFrameRepository : HttpBackendClient, IFrameRepository
         }
     }
 
-    // it15 F1-D2/F1-D3: 앱은 프레임을 서버에 업데이트하지 않는다(편집은 해당 PC에서만 적용).
-    // 서버 라우트 PUT /frames/{id}는 운영/관리 도구 전용으로 유지되며 클라이언트 호출 코드는 0이다.
+    /// <summary>
+    /// 개인 프레임 생성(`POST /frames/mine`). 서버가 소유자·isDefault를 강제하므로 요청에 담지 않는다.
+    /// 이미지 업로드 절차는 공용과 동일(메타 POST → 서명 URL PUT).
+    /// </summary>
+    public async Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+    {
+        try
+        {
+            var req = new SaveFrameRequest
+            {
+                Name = frame.Name,
+                IsDefault = false, // 서버가 강제(개인만). 하위 필드 정합 위해 명시.
+                ImageSize = new ImageSizeDto { Width = frame.ImageSize.Width, Height = frame.ImageSize.Height },
+                Slots = frame.Slots.Select(s => new SlotDto
+                {
+                    Index = s.Index, X = s.X, Y = s.Y, Width = s.Width, Height = s.Height
+                }).ToList(),
+            };
+            var res = await SendJsonAsync<SaveFrameResponse>(
+                HttpMethod.Post, "frames/mine", req, bearer: true, ct).ConfigureAwait(false);
+
+            await PutImageAsync(res.Upload, imageBytes, ct).ConfigureAwait(false);
+
+            return ToTemplate(res.Frame);
+        }
+        catch (BackendException ex)
+        {
+            throw MapToDomainException(ex);
+        }
+    }
+
+    // 프레임 수정(PUT /frames/{id})은 앱에서 폐지됐다(설계 D-16 — 수정 기능 자체가 없다).
+    // 서버 라우트는 운영/관리 도구 전용으로 유지되며 클라이언트 호출 코드는 0이다.
 
     public async Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
     {

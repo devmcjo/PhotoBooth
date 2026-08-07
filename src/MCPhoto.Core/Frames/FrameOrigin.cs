@@ -29,22 +29,41 @@ public static class FrameOrigin
     private const string BundlePrefix = "bundle:";
     private const string FallbackPrefix = "fallback";
 
-    /// <summary>Id 접두·IsDefault로 출처 종류를 판정(순수). 우선순위: bundle → fallback/빈Id → local → DbDefault.</summary>
+    /// <summary>
+    /// 출처 종류 판정(순수). 우선순위: bundle → fallback/빈Id → <b>소유자 유무</b> → local 접두 → DbDefault.
+    /// <para>
+    /// ⚠️ <b>소유자 유무가 개인/공용을 가르는 기준이다</b>(서버 정본 전환). 종전에는 id 접두(<c>local:</c>)만
+    /// 봤는데, 개인 프레임이 서버에 저장되면서 <b>실 DB id를 갖게 되어</b> 접두 판정만으로는 DbDefault(공용)로
+    /// 오판한다. 그러면 <c>FrameEditPolicy.CanDelete</c>가 power만 허용해 <b>본인이 만든 프레임을 본인이
+    /// 지우지 못한다</b>. <c>UserId</c>(=소유자 이메일)가 있으면 무조건 개인이다.
+    /// </para>
+    /// </summary>
     public static FrameOriginKind Classify(FrameTemplate frame)
     {
         var id = frame.Id ?? string.Empty;
         if (id.StartsWith(BundlePrefix, StringComparison.Ordinal)) return FrameOriginKind.Bundle;
         if (string.IsNullOrEmpty(id) || id.StartsWith(FallbackPrefix, StringComparison.Ordinal))
             return FrameOriginKind.Fallback;
+
+        // 소유자가 있으면 개인 프레임(서버 동기 여부·id 형태와 무관).
+        if (!string.IsNullOrEmpty(frame.UserId) && !FrameOwnership.IsDefault(frame.UserId))
+            return FrameOriginKind.UserLocal;
+
         if (id.StartsWith(LocalPrefix, StringComparison.Ordinal)) return FrameOriginKind.UserLocal;
         return FrameOriginKind.DbDefault;
     }
 
-    /// <summary>이 프레임이 지정 계정이 소유한 로컬 프레임인지(local: 접두 && UserId==userId, 요구 2 엄격 해석).</summary>
-    public static bool IsOwnedLocal(FrameTemplate frame, string? userId)
-        => Classify(frame) == FrameOriginKind.UserLocal
-           && !string.IsNullOrEmpty(userId)
-           && string.Equals(frame.UserId, userId, StringComparison.Ordinal);
+    /// <summary>
+    /// 이 프레임을 지정 계정이 소유하는지. 소유자 식별자는 <b>이메일</b>이며 정규화 후 비교한다
+    /// (<see cref="FrameOwnership.NormalizeEmail"/> — 대소문자만 다른 이메일이 다른 소유자로 갈리지 않게).
+    /// </summary>
+    public static bool IsOwnedBy(FrameTemplate frame, string? ownerEmail)
+    {
+        if (Classify(frame) != FrameOriginKind.UserLocal) return false;
+        var me = FrameOwnership.NormalizeEmail(ownerEmail);
+        return me.Length > 0
+               && string.Equals(FrameOwnership.NormalizeEmail(frame.UserId), me, StringComparison.Ordinal);
+    }
 
     /// <summary>이 프레임이 DB 공용 기본 프레임인지(접두 없는 실 DB id && isDefault=true).</summary>
     public static bool IsDbDefault(FrameTemplate frame)

@@ -30,6 +30,8 @@ public class FrameSelectViewModelTests
             => Task.FromResult((IReadOnlyList<FrameTemplate>)Defaults);
         public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
+        public Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+            => Task.FromResult(frame);
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
         public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
@@ -49,15 +51,18 @@ public class FrameSelectViewModelTests
         /// "로컬 폴백까지 실패 → Failed 카드" 경로를 결정론적으로 재현하기 위한 이음새.
         /// </summary>
         public bool ThrowOnLoadPublic { get; set; }
-        public FrameTemplate SaveLocal(FrameTemplate frame, byte[] png, string? ownerName) => frame;
+        public FrameTemplate SaveDefaultFrame(FrameTemplate frame, byte[] png, string? dbId) => frame;
+        public FrameTemplate SaveUserFrame(FrameTemplate frame, byte[] png, string ownerEmail, string? dbId) => frame;
         public IReadOnlyList<FrameTemplate> LoadPublic()
             => ThrowOnLoadPublic
                 ? throw new IOException("테스트: 로컬 스캔 실패")
                 : new List<FrameTemplate>();
-        public IReadOnlyList<FrameTemplate> LoadUser(string ownerName) => UserFrames;
-        public FrameTemplate CacheFromDb(FrameTemplate frame, byte[] png) => frame;
+        public IReadOnlyList<FrameTemplate> LoadUser(string ownerEmail) => UserFrames;
         public bool DeleteLocal(FrameTemplate frame) { DeleteLocalCalls++; return true; }
         public IReadOnlySet<string> PublicFrameNames() => new HashSet<string>();
+        public IReadOnlySet<string> UserFrameNames(string ownerEmail)
+            => new HashSet<string>(UserFrames.Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyList<LocalFrameEntry> Inspect(string? ownerEmail) => Array.Empty<LocalFrameEntry>();
     }
 
     private sealed class EmptyServiceProvider : IServiceProvider
@@ -279,55 +284,6 @@ public class FrameSelectViewModelTests
         ImageSize = new ImageSize { Width = 100, Height = 100 }
     };
 
-    [Fact]
-    public async Task Guest_Cannot_Edit_Any_Frame()
-    {
-        var (vm, _, _) = MakeVm(role: null);
-        await vm.OnEnterAsync();
-        vm.SelectedFrame = OwnedLocalFrame();
-        Assert.False(vm.CanEditSelected);
-        vm.SelectedFrame = DbDefaultFrame();
-        Assert.False(vm.CanEditSelected);
-    }
-
-    [Fact]
-    public async Task AdvancedUser_Can_Edit_Own_Local_But_Not_Db_Default()
-    {
-        var (vm, _, _) = MakeVm(UserRole.AdvancedUser);
-        await vm.OnEnterAsync();
-
-        vm.SelectedFrame = OwnedLocalFrame();
-        Assert.True(vm.CanEditSelected);       // 본인 로컬 편집 가능
-
-        vm.SelectedFrame = DbDefaultFrame();
-        Assert.False(vm.CanEditSelected);      // DB 기본은 비power 편집 불가
-    }
-
-    [Fact]
-    public async Task AdvancedUser_Cannot_Edit_Other_Users_Local()
-    {
-        var (vm, _, _) = MakeVm(UserRole.AdvancedUser); // 세션 계정 = u1
-        await vm.OnEnterAsync();
-        vm.SelectedFrame = new FrameTemplate
-        {
-            Id = "local:u2_frame", Name = "남의것", UserId = "u2",
-            ImageSize = new ImageSize { Width = 100, Height = 100 }
-        };
-        Assert.False(vm.CanEditSelected);
-    }
-
-    /// <summary>it16 §8.2-17(E4): user·temp_user는 본인 로컬 프레임을 선택해도 "선택 편집" 버튼이 뜨지 않는다.</summary>
-    [Theory]
-    [InlineData(UserRole.User)]
-    [InlineData(UserRole.TempUser)]
-    public async Task NonWriter_CanEditSelected_False_Even_For_Own_Local(UserRole role)
-    {
-        var (vm, _, _) = MakeVm(role);
-        await vm.OnEnterAsync();
-        vm.SelectedFrame = OwnedLocalFrame();
-        Assert.False(vm.CanEditSelected);
-    }
-
     /// <summary>it16 §8.2-18(E4): 커맨드 직접 호출(키보드·자동화)도 정책 가드로 차단 — 확인 팝업이 열리지 않는다.</summary>
     [Theory]
     [InlineData(UserRole.User)]
@@ -388,36 +344,6 @@ public class FrameSelectViewModelTests
         Assert.Contains(vm.Frames, f => f.Id == "local:u1_myframe");
         Assert.False(vm.CanDeleteFrames);   // 노출은 유지하되 쓰기 UI만 사라진다
         Assert.False(vm.CanCreateFrame);
-    }
-
-    [Fact]
-    public async Task Power_Can_Edit_Db_Default_And_Own_Local()
-    {
-        var (vm, _, _) = MakeVm(UserRole.Admin); // 세션 계정 = u1
-        await vm.OnEnterAsync();
-
-        vm.SelectedFrame = DbDefaultFrame();
-        Assert.True(vm.CanEditSelected);       // power는 DB 기본 편집 가능
-
-        vm.SelectedFrame = new FrameTemplate
-        {
-            Id = "local:u1_myframe", Name = "myframe", UserId = "u1",
-            ImageSize = new ImageSize { Width = 100, Height = 100 }
-        };
-        Assert.True(vm.CanEditSelected);       // 본인 로컬도 가능
-    }
-
-    [Fact]
-    public async Task Bundle_And_Fallback_Not_Editable_By_Anyone()
-    {
-        var (vm, _, _) = MakeVm(UserRole.Admin);
-        await vm.OnEnterAsync();
-
-        vm.SelectedFrame = new FrameTemplate { Id = "bundle:classic", IsDefault = true };
-        Assert.False(vm.CanEditSelected);
-
-        vm.SelectedFrame = new FrameTemplate { Id = "fallback", IsDefault = true };
-        Assert.False(vm.CanEditSelected);
     }
 
     // ── it17: 자동 컷 수 엔드투엔드 배선(설정 → 프레임 선택 → 세션) ──
@@ -595,46 +521,6 @@ public class FrameSelectViewModelTests
         Assert.Equal(string.Empty, vm.LoadNotice);
 
         release.SetResult();
-    }
-
-    /// <summary>
-    /// T-37: Loading·Failed에서는 커맨드 직접 호출(키보드·자동화)도 막힌다 — scrim 뒤 요소로의 조작이
-    /// VM 층에서도 차단되어 §5.4 게이트 매트릭스와 코드가 1:1로 맞는다.
-    /// </summary>
-    [Theory]
-    [InlineData(FrameLoadPhase.Loading)]
-    [InlineData(FrameLoadPhase.Failed)]
-    public async Task Commands_Blocked_When_Not_Interactive(FrameLoadPhase phase)
-    {
-        var session = new SessionContext();
-        session.Login(new User { Id = "u1", Role = UserRole.Admin }); // 권한은 충분 — 국면만이 차단 이유다
-        var repo = new StubRepo();
-        var local = new StubLocalStore();
-        var shell = MakeShell(session);
-        var vm = new FrameSelectViewModel(shell, new FrameCatalogService(repo, local), local, repo);
-
-        if (phase == FrameLoadPhase.Failed)
-        {
-            local.ThrowOnLoadPublic = true;
-            await vm.OnEnterAsync();
-        }
-        Assert.Equal(phase, vm.Phase);           // Loading은 진입 전 초기 국면 그대로
-
-        var frame = OwnedLocalFrame();
-        vm.Frames.Add(frame);
-        vm.SelectedFrame = frame;
-        Assert.True(vm.CanEditSelected);         // 권한 판정은 통과 — 이후 차단은 국면 가드가 한 것이다
-        var before = shell.CurrentState;
-
-        await vm.NextCommand.ExecuteAsync(null);
-        await vm.CreateFrameCommand.ExecuteAsync(null);
-        await vm.EditFrameCommand.ExecuteAsync(null);
-        vm.RequestDeleteCommand.Execute(frame);
-
-        Assert.Equal(before, shell.CurrentState);        // 화면 전이 없음
-        Assert.Null(shell.Session.SelectedFrame);        // 촬영 세션도 시작되지 않았다
-        Assert.False(vm.IsDeleteConfirmVisible);
-        Assert.Null(vm.FrameToDelete);
     }
 
     /// <summary>

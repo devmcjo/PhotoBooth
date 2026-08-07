@@ -13,8 +13,20 @@ public interface IFrameRepository
     /// <summary>특정 계정 소유 커스텀 프레임 조회(최대 10).</summary>
     Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default);
 
-    /// <summary>프레임 저장(신규 생성, 이미지 업로드 포함). 계정당 10개 초과 시 예외.</summary>
+    /// <summary>
+    /// <b>공용 기본 프레임</b> 저장(신규 생성, 이미지 업로드 포함). power 전용(`POST /frames`).
+    /// 서버가 <c>userId=null · isDefault=true</c>를 강제한다.
+    /// </summary>
     Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default);
+
+    /// <summary>
+    /// <b>개인 프레임</b> 저장(신규 생성, 이미지 업로드 포함). advanced_user 이상(`POST /frames/mine`).
+    /// <para>
+    /// 서버가 <c>userId=principal.id · isDefault=false</c>를 강제하므로 클라가 소유자를 지정하지 않는다.
+    /// 개수 상한은 없고(설계 D-10), 같은 계정 안에서 <b>이름이 중복되면 409</b>다(S8).
+    /// </para>
+    /// </summary>
+    Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default);
 
     // it15 F1-D2: "기존 프레임 업데이트(PUT /frames/{id})" 계약은 클라이언트에서 폐지했다.
     // 프레임 편집은 해당 PC에서만 적용되며(로컬 전용), DB/번들 유래 편집은 fork 저장으로 처리한다

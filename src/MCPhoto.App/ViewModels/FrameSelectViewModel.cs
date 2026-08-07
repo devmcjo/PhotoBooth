@@ -53,7 +53,7 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
 
     /// <summary>로딩 결과 안내(Degraded·Failed에서만 비어 있지 않다). <c>FrameLoadPolicy.NoticeFor</c> 결과.</summary>
     [ObservableProperty] private string _loadNotice = string.Empty;
-    [ObservableProperty] private bool _canEditSelected;  // 선택 프레임 편집 가능(역할·프레임 종류에 따라)
+    // _canEditSelected 폐지(D-16): 편집 진입점이 사라져 노출 판정이 불필요하다.
 
     /// <summary>
     /// 프레임 만들기 버튼 노출 여부. it16 E4: **프레임 쓰기 권한**(AdvancedUser 이상)이 있는 로그인 계정만.
@@ -417,28 +417,8 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
         await _shell.OpenFrameEditor(null);
     }
 
-    /// <summary>선택한 기존 프레임을 편집기로 열기(본인 로컬 or 파워). (기능 요청)</summary>
-    [RelayCommand]
-    private async Task EditFrame()
-    {
-        if (!IsInteractive) return;      // it20 §5.4
-        if (SelectedFrame is null || !CanEdit(SelectedFrame)) return;
-        await _shell.OpenFrameEditor(SelectedFrame);
-    }
-
-    /// <summary>
-    /// 이 프레임을 현재 역할로 편집 가능한지. 권한 규칙은 순수 함수 <see cref="FrameEditPolicy.CanEdit"/>에 위임.
-    /// advanced_user=본인 로컬 생성분(UserId 검증)만, power=본인 로컬+DB 공용 기본,
-    /// user·temp_user(it16 E4)·번들/fallback·게스트=불가. (item2 §3, it16 §4)
-    /// </summary>
-    private bool CanEdit(FrameTemplate f)
-    {
-        var user = _shell.Session.CurrentUser;
-        return FrameEditPolicy.CanEdit(f, user?.Role, user?.Id);
-    }
-
-    partial void OnSelectedFrameChanged(FrameTemplate? value)
-        => CanEditSelected = value is not null && CanEdit(value);
+    // [선택 편집] 커맨드와 CanEdit 판정은 폐지됐다(설계 D-16 — 프레임 수정 기능 자체가 없다).
+    // 잘못 만든 프레임은 [프레임 만들기] → [기존 프레임 불러오기]로 새로 만들고 옛 것을 삭제한다.
 
     [RelayCommand]
     private void Cancel() => _shell.ReturnHome("프레임 선택 취소");

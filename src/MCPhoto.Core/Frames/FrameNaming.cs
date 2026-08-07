@@ -64,6 +64,36 @@ public static partial class FrameNaming
            && name!.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     /// <summary>
+    /// 저장 가능한 이름인가 — <b>본인에게 보이는 프레임과 이름이 겹치지 않아야 한다</b>(설계 D-17).
+    /// <para>
+    /// 판정 집합 = <b>공용 프레임 이름 ∪ 본인 개인 프레임 이름</b>. 다른 계정의 개인 프레임과는
+    /// 겹쳐도 된다 — 저장 폴더가 계정별로 나뉘어 있고 서로 보이지도 않는다.
+    /// </para>
+    /// <para>
+    /// 비교는 <b>대소문자 무시</b>다. Windows 파일시스템이 대소문자를 구분하지 않으므로
+    /// <c>"Abc"</c>와 <c>"abc"</c>를 허용하면 실제 파일이 서로 덮어써진다.
+    /// </para>
+    /// ⚠️ 이 검증은 <b>즉시 피드백</b>용이다. PC 두 대에서 동시에 같은 이름을 만드는 경우는 막지 못하므로
+    /// <b>서버가 계정 내 이름 중복을 최종 거부</b>해야 한다(설계 S8).
+    /// </summary>
+    /// <param name="name">저장하려는 이름.</param>
+    /// <param name="visibleNames">현재 사용자에게 보이는 프레임 이름 전부(공용 + 본인 개인).</param>
+    public static bool IsNameAvailable(string? name, IEnumerable<string>? visibleNames)
+    {
+        var candidate = (name ?? string.Empty).Trim();
+        if (candidate.Length == 0) return false;
+        if (visibleNames is null) return true;
+
+        foreach (var taken in visibleNames)
+        {
+            if (string.IsNullOrWhiteSpace(taken)) continue;
+            if (string.Equals(taken.Trim(), candidate, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// "{X} 사본" / "{X} 사본 N" 접미를 제거해 원형 이름을 얻는다(접미가 없으면 원문 그대로).
     /// 접미를 떼면 이름이 비게 되는 경우(예: "사본")도 원문을 그대로 반환한다 — 빈 이름을 만들지 않는다.
     /// </summary>

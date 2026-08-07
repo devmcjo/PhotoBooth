@@ -22,6 +22,8 @@ public class FrameCatalogServiceTests : IDisposable
         }
         public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
+        public Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+            => Task.FromResult(frame);
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
         public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default) => Task.FromResult(true);
@@ -61,7 +63,7 @@ public class FrameCatalogServiceTests : IDisposable
     public async Task Cache_Hit_Skips_Download()
     {
         // 로컬에 같은 이름 공용 프레임이 이미 있으면 그 이름은 다운로드 스킵(이름 dedup, 정정 §3.3).
-        _store.CacheFromDb(DbFrame("f1"), new byte[] { 9 }); // 미리 캐시(이름 f1)
+        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "f1"); // 미리 캐시(이름 f1)
 
         var repo = new CountingFrameRepository { DefaultFrames = new List<FrameTemplate> { DbFrame("f1") } };
         var svc = MakeService(repo);
@@ -257,7 +259,7 @@ public class FrameCatalogServiceTests : IDisposable
     [Fact]
     public async Task LocalOnly_Returns_Cached_Public_Frames()
     {
-        _store.CacheFromDb(DbFrame("f1"), new byte[] { 9 });
+        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "f1");
 
         var repo = new CountingFrameRepository { DefaultFrames = new List<FrameTemplate> { DbFrame("f1") } };
         var svc = MakeService(repo);
@@ -432,7 +434,7 @@ public class FrameCatalogServiceTests : IDisposable
     [Fact]
     public async Task Progress_Counter_Excludes_Cache_Hits()
     {
-        _store.CacheFromDb(DbFrame("f1"), new byte[] { 9 });   // f1은 로컬 캐시 히트
+        _store.SaveDefaultFrame(DbFrame("f1"), new byte[] { 9 }, dbId: "f1");   // f1은 로컬 캐시 히트
 
         var repo = new CountingFrameRepository
         {
@@ -507,10 +509,10 @@ public class FrameCatalogServiceTests : IDisposable
     [Fact]
     public async Task User_Frames_Loaded_From_Local_Not_Db()
     {
-        _store.SaveLocal(
+        _store.SaveUserFrame(
             new FrameTemplate { Name = "mine", ImageSize = new ImageSize { Width = 100, Height = 100 },
                                 Slots = { new Slot { Index = 0, X = 0, Y = 0, Width = 10, Height = 10 } } },
-            new byte[] { 1 }, ownerName: "alice");
+            new byte[] { 1 }, ownerEmail: "alice", dbId: null);
 
         var repo = new CountingFrameRepository();
         var svc = MakeService(repo);

@@ -3,37 +3,27 @@ using MCPhoto.Core.Models;
 namespace MCPhoto.Core.Frames;
 
 /// <summary>
-/// 프레임 편집·삭제 권한 규칙(역할×출처, 순수). (item2 §3, it16 §4)
-/// it16: 프레임 쓰기 권한(생성·편집·삭제)은 AdvancedUser 이상만 갖는다 —
-/// advanced_user=본인 로컬 생성분만, power(manager/admin)=본인 로컬 + DB 공용 기본,
+/// 프레임 <b>삭제</b> 권한 규칙(역할×출처, 순수). (item2 §3, it16 §4)
+/// <para>
+/// ⚠️ <b>편집(수정) 판정은 폐지됐다</b>(설계 D-16). 프레임 수정 기능 자체가 사라졌고 — 잘못 만들었으면
+/// [기존 프레임 불러오기]로 새로 만든다 — 쓰이지 않는 판정을 남겨두면 "편집 기능이 있나 보다"라는
+/// 오해와 잘못된 부활을 부른다. 종전 <c>CanEdit</c>·<c>RequiresFork</c>는 삭제했다.
+/// </para>
+/// 프레임 쓰기 권한(생성·삭제)은 AdvancedUser 이상만 갖는다 —
+/// advanced_user=본인 소유분만, power(manager/admin)=본인 소유 + DB 공용 기본,
 /// user·temp_user=**사용만**(읽기 전용, E4), 번들/fallback·게스트=불가.
 /// </summary>
 public static class FrameEditPolicy
 {
     /// <summary>
-    /// 이 프레임을 현재 역할·계정으로 편집할 수 있는지.
-    /// role=null이면 게스트(비로그인) → 항상 불가. userId=현재 계정 id(UserLocal 소유 판정용).
-    /// </summary>
-    public static bool CanEdit(FrameTemplate frame, UserRole? role, string? userId)
-    {
-        if (role is null) return false;                       // 게스트
-        if (!role.Value.CanWriteFrames()) return false;       // it16 E4: user·temp_user는 사용만(읽기 전용)
-
-        return FrameOrigin.Classify(frame) switch
-        {
-            FrameOriginKind.UserLocal => FrameOrigin.IsOwnedLocal(frame, userId), // 본인 것만
-            FrameOriginKind.DbDefault => role.Value.IsPower(),                    // power만
-            _ => false                                                            // 번들·fallback 불가
-        };
-    }
-
-    /// <summary>
-    /// 이 프레임을 현재 역할로 삭제(로컬 파일 제거)할 수 있는지. (it16 E4)
-    /// 게스트·쓰기 권한 없는 역할(user·temp_user) 불가. 로컬 저장분 = 가능, DB 공용 = power만,
-    /// 번들·fallback·빈 Id = 불가.
-    /// ⚠️ 소유자(userId)를 보지 않는다: power가 fork·저장한 **공용** 로컬 프레임은 UserId=null로 로드되므로
-    ///    (LocalFrameStore.cs:112-128) IsOwnedLocal로 판정하면 현행 삭제 능력이 회귀한다.
-    ///    타인 개인 프레임은 LoadUser의 `{계정}_` 접두 필터로 목록에 애초에 오르지 않는다.
+    /// 이 프레임을 현재 역할로 삭제할 수 있는지. (it16 E4)
+    /// <para>
+    /// 삭제는 <b>서버 정본 + 로컬 캐시를 모두</b> 지운다(설계 D-19: 서버 먼저 → 성공 시 로컬).
+    /// 즉 "영구 삭제"이며 다른 기기에서도 사라진다.
+    /// </para>
+    /// ⚠️ 소유자(이메일)를 여기서 보지 않는다: 목록에 오르는 개인 프레임은 이미
+    /// <see cref="FrameOwnership.CanShow"/>가 본인 것만 통과시켰다. power가 fork·저장한 <b>공용</b>
+    /// 로컬 프레임은 UserId가 없어 <see cref="FrameOriginKind.DbDefault"/>로 분류되므로 power 판정을 탄다.
     /// </summary>
     public static bool CanDelete(FrameTemplate frame, UserRole? role)
     {
@@ -41,17 +31,9 @@ public static class FrameEditPolicy
 
         return FrameOrigin.Classify(frame) switch
         {
-            FrameOriginKind.UserLocal => true,                 // 로컬 저장분(개인 `local:` / power 공용 fork)
-            FrameOriginKind.DbDefault => role.Value.IsPower(), // 공용 DB 프레임은 power만
+            FrameOriginKind.UserLocal => true,                 // 본인 소유(로컬 전용 또는 서버 동기)
+            FrameOriginKind.DbDefault => role.Value.IsPower(), // 공용 기본 프레임은 power만
             _ => false                                         // 번들·fallback·빈 Id
         };
     }
-
-    /// <summary>
-    /// 이 프레임을 편집·복사해 저장할 때 원본을 보존하고 새 이름으로 분기(fork)해야 하는지.
-    /// DbDefault·Bundle·Fallback(=카탈로그 유래) = true, UserLocal = false. (it15 F1-D4)
-    /// 역할과 무관한 규칙이므로 role 인자를 받지 않는다.
-    /// </summary>
-    public static bool RequiresFork(FrameTemplate frame)
-        => FrameOrigin.Classify(frame) != FrameOriginKind.UserLocal;
 }

@@ -217,7 +217,9 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
         _isEditing = true;
         EditorTitle = "프레임 편집";
 
-        if (FrameEditPolicy.RequiresFork(frame))
+        // 수정 폐지(D-16) 이후 이 경로는 "기존 프레임 불러오기"로 들어온 것뿐이며 항상 새로 만든다.
+        // 카탈로그 유래(DB·번들·fallback)는 원본을 보존해야 하므로 fork 이름을 제안한다.
+        if (FrameOrigin.Classify(frame) != FrameOriginKind.UserLocal)
         {
             // 카탈로그 유래(DB·번들·fallback): 원본 파일 불변 + 새 이름으로 분기 저장.
             _sessionSource = FrameSessionSource.ForkFromCatalog;
@@ -630,35 +632,46 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
                     return;
                 }
 
-                _localStore.SaveLocal(saved, png, ownerName: null);
-            }
-            else if (isPower)
-            {
-                // 파워 신규 생성(체크 off) / 파워 fork / 파워 자기 로컬 편집: 로컬 공용만.
-                // Id=""로 두면 #dbid를 기록하지 않아 서버 문서와 연결이 끊긴다(= 이 PC에만 적용). (§3.3)
-                var frame = new FrameTemplate
-                {
-                    Id = string.Empty,
-                    UserId = null,
-                    IsDefault = true,
-                    Name = FrameName,
-                    ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
-                    Slots = Slots.ToList()
-                };
-                _localStore.SaveLocal(frame, png, ownerName: null);
+                // 공용 캐시(#owner=default) + #dbid 기록 → 삭제 동기화 대조 키(설계 §10).
+                _localStore.SaveDefaultFrame(saved, png, dbId: saved.Id);
             }
             else
             {
-                // user 전 케이스(신규·fork·자기 로컬 편집): 개인 로컬 `{계정}_{이름}.png`. DB 미호출.
+                // 개인 프레임: 서버가 정본이다(설계 D-7). POST /frames/mine → 로컬은 캐시로 기록한다.
+                // 서버가 userId·isDefault를 강제하므로 클라가 소유자를 지정하지 않는다.
+                var ownerEmail = user.Email;
+                if (string.IsNullOrWhiteSpace(ownerEmail))
+                {
+                    // SSO 계정은 항상 이메일을 갖지만, 없으면 소유자를 특정할 수 없어 저장하지 않는다.
+                    StatusMessage = "계정 이메일을 확인할 수 없어 저장할 수 없습니다. 다시 로그인해 주세요.";
+                    return;
+                }
+
                 var frame = new FrameTemplate
                 {
-                    UserId = user.Id,
+                    Id = string.Empty,          // 서버가 새 문서 id 부여
+                    UserId = null,              // 서버가 principal로 강제
                     IsDefault = false,
                     Name = FrameName,
                     ImageSize = new ImageSize { Width = FrameWidth, Height = FrameHeight },
                     Slots = Slots.ToList()
                 };
-                _localStore.SaveLocal(frame, png, ownerName: user.Id);
+
+                FrameTemplate savedMine;
+                try
+                {
+                    savedMine = await _repository.SaveMineAsync(frame, png);
+                }
+                catch (Exception ex)
+                {
+                    // 원자성: 서버 저장이 실패하면 로컬에도 남기지 않는다(부분 성공 금지).
+                    // 로컬만 저장해두면 이름 충돌 가드가 자기 자신과 충돌해 재시도를 막는다.
+                    _logger?.LogError(ex, "개인 프레임 서버 저장 실패: {Name}", FrameName);
+                    StatusMessage = $"저장 실패: {ex.Message}";
+                    return;
+                }
+
+                _localStore.SaveUserFrame(savedMine, png, ownerEmail!, dbId: savedMine.Id);
             }
 
             // '_' 이름 경고는 저장 전에 SaveScopeNotice가 이미 안내한다 — 저장 직후 StatusMessage는

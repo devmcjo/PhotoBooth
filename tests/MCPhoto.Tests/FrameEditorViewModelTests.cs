@@ -28,6 +28,15 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
+        /// <summary>개인 프레임 서버 저장(설계 D-7). 서버가 부여하는 문서 id를 흉내 낸다.</summary>
+        public Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+        {
+            if (ThrowOnSave) throw new InvalidOperationException("서버 저장 실패(테스트)");
+            Saved = frame;
+            frame.Id = "srv-mine-1";
+            return Task.FromResult(frame);
+        }
+
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
         {
             if (ThrowOnSave) throw new InvalidOperationException("서버 오류");
@@ -47,18 +56,33 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         /// <summary>개인 프레임 목록(계정별, 사본 이름 충돌 시나리오용 주입).</summary>
         public Dictionary<string, List<FrameTemplate>> UserFrames { get; } = new(StringComparer.Ordinal);
 
-        public FrameTemplate SaveLocal(FrameTemplate frame, byte[] png, string? ownerName)
+        /// <summary>마지막 저장의 서버 문서 id(#dbid 기록 여부 검증용).</summary>
+        public string? SavedDbId { get; private set; }
+
+        public FrameTemplate SaveDefaultFrame(FrameTemplate frame, byte[] png, string? dbId)
         {
             SavedFrame = frame;
-            SavedOwner = ownerName;
+            SavedOwner = null;              // 공용 저장은 소유자가 없다
+            SavedDbId = dbId;
             return frame;
         }
+
+        public FrameTemplate SaveUserFrame(FrameTemplate frame, byte[] png, string ownerEmail, string? dbId)
+        {
+            SavedFrame = frame;
+            SavedOwner = ownerEmail;
+            SavedDbId = dbId;
+            return frame;
+        }
+
         public IReadOnlyList<FrameTemplate> LoadPublic() => new List<FrameTemplate>();
-        public IReadOnlyList<FrameTemplate> LoadUser(string ownerName)
-            => UserFrames.TryGetValue(ownerName, out var list) ? list : new List<FrameTemplate>();
-        public FrameTemplate CacheFromDb(FrameTemplate frame, byte[] png) => frame;
+        public IReadOnlyList<FrameTemplate> LoadUser(string ownerEmail)
+            => UserFrames.TryGetValue(ownerEmail, out var list) ? list : new List<FrameTemplate>();
         public bool DeleteLocal(FrameTemplate frame) => true;
         public IReadOnlySet<string> PublicFrameNames() => PublicNames;
+        public IReadOnlySet<string> UserFrameNames(string ownerEmail)
+            => new HashSet<string>(LoadUser(ownerEmail).Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyList<LocalFrameEntry> Inspect(string? ownerEmail) => Array.Empty<LocalFrameEntry>();
     }
 
     private sealed class EmptyServiceProvider : IServiceProvider
@@ -131,28 +155,6 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     }
 
     /// <summary>
-    /// it16 §8.2-22: 비power 로컬 전용 저장 흐름의 주체가 user → advanced_user로 이동했다.
-    /// 저장 결과는 it15 User와 **동일**해야 한다(개인 스코프 ownerName={계정}, DB 미호출).
-    /// </summary>
-    [Fact]
-    public async Task AdvancedUser_Save_Persists_Locally_With_Six_Slots()
-    {
-        // it8 A2: 비power는 로컬 전용 저장(DB 미호출). B9: 6 선택이 clobber 없이 유지.
-        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
-        Assert.True(vm.LoadImage(_imagePath));
-
-        vm.SlotCount = 6;
-        Assert.Equal(6, vm.Slots.Count);
-
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);                    // 비power는 DB 미저장
-        Assert.NotNull(local.SavedFrame);
-        Assert.Equal("u1", local.SavedOwner);       // 계정명 prefix
-        Assert.Equal(6, local.SavedFrame!.Slots.Count);
-    }
-
-    /// <summary>
     /// it16 §8.2-21(§4.5 3중 방어): 화면 게이트를 우회해 편집기에 도달해도 user·temp_user의 저장은
     /// fail-closed 가드에서 거부되고 아무것도 기록되지 않는다.
     /// </summary>
@@ -207,46 +209,6 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         ImageSize = new ImageSize { Width = 1200, Height = 1600 },
         Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
     };
-
-    [Fact]
-    public async Task Power_Editing_Db_Default_Saves_Local_Only_With_Fork_Name()
-    {
-        // C1: 팝업 없이 즉시 저장. DB 미호출 + 공용 스코프 + #dbid 미기록(Id="") + 이름은 "{원본} 사본".
-        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
-        vm.LoadForEdit(DbDefaultFrame());
-
-        Assert.Equal("공용프레임 사본", vm.FrameName);
-
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);                        // 서버 미호출(로컬 전용)
-        Assert.NotNull(local.SavedFrame);
-        Assert.Null(local.SavedOwner);                  // 공용 스코프 유지(F1-D5)
-        Assert.Equal(string.Empty, local.SavedFrame!.Id); // #dbid 미기록 → 서버 문서와 연결 끊김
-    }
-
-    [Fact]
-    public async Task AdvancedUser_Editing_Own_Local_Overwrites_Same_Name()
-    {
-        // C2: 본인 로컬(local: 접두) 편집은 fork 아님 — 이름 그대로 같은 파일 덮어쓰기.
-        // it16: 이 능력의 주체가 user → advanced_user로 이동했다(동작은 it15 User와 동일).
-        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
-        vm.LoadForEdit(new FrameTemplate
-        {
-            Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1", IsDefault = false,
-            ImageUrl = _imagePath,
-            ImageSize = new ImageSize { Width = 1200, Height = 1600 },
-            Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
-        });
-
-        Assert.Equal("내프레임", vm.FrameName);          // "사본" 접미 없음
-
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);
-        Assert.Equal("u1", local.SavedOwner);           // 개인 스코프
-        Assert.Equal("내프레임", local.SavedFrame!.Name);
-    }
 
     [Fact]
     public async Task Fork_Save_Blocked_When_Name_Equals_Source_In_Public_Scope()
@@ -370,24 +332,6 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.Null(local.SavedFrame);
     }
 
-    /// <summary>N2: 체크 off 확인 → 로컬 공용만. #dbid를 기록하지 않아 서버 문서와 연결되지 않는다.</summary>
-    [Fact]
-    public async Task Power_Confirm_Without_Checkbox_Saves_Local_Public_Only()
-    {
-        var (vm, repo, local, _) = MakeVm(UserRole.Admin);
-        Assert.True(vm.LoadImage(_imagePath));
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        vm.RegisterToServer = false;                               // 기본 on(D4)을 사용자가 끈 상태
-        await vm.ConfirmServerRegisterCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);                                   // DB 미호출
-        Assert.NotNull(local.SavedFrame);
-        Assert.Null(local.SavedOwner);                             // 공용 스코프(접두 없음)
-        Assert.Equal(string.Empty, local.SavedFrame!.Id);          // #dbid 미기록
-        Assert.False(vm.IsServerRegisterConfirmVisible);           // 팝업 닫힘
-    }
-
     /// <summary>N3: 체크 on 확인 → DB insert + 서버가 돌려준 프레임으로 로컬 캐시(#dbid 기록).</summary>
     [Fact]
     public async Task Power_Confirm_With_Checkbox_Registers_To_Server()
@@ -487,27 +431,6 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.True(vm.RegisterToServer);
     }
 
-    /// <summary>비power와 F1 편집 세션은 팝업 없이 즉시 저장된다(it15 편집=로컬 전용 정책 유지).</summary>
-    [Fact]
-    public async Task Non_New_Sessions_Save_Immediately_Without_Popup()
-    {
-        // ① AdvancedUser 신규 생성 → 개인 로컬 즉시 저장
-        var (adv, advRepo, advLocal, _) = MakeVm(UserRole.AdvancedUser);
-        Assert.True(adv.LoadImage(_imagePath));
-        await adv.SaveCommand.ExecuteAsync(null);
-        Assert.False(adv.IsServerRegisterConfirmVisible);
-        Assert.Null(advRepo.Saved);
-        Assert.NotNull(advLocal.SavedFrame);
-
-        // ② power F1 편집(DB 기본 → fork) → 로컬 공용 즉시 저장
-        var (fork, forkRepo, forkLocal, _) = MakeVm(UserRole.Admin);
-        fork.LoadForEdit(DbDefaultFrame());
-        await fork.SaveCommand.ExecuteAsync(null);
-        Assert.False(fork.IsServerRegisterConfirmVisible);
-        Assert.Null(forkRepo.Saved);
-        Assert.NotNull(forkLocal.SavedFrame);
-    }
-
     // ── D1: 이름 충돌 / 이름 안전성 저장 전 차단(데이터 손실 방지) ──
     // SaveLocal은 같은 이름 파일을 경고 없이 덮어쓴다 → 덮어쓰기가 세션의 의도인 EditOwnLocal만 예외.
 
@@ -544,30 +467,6 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.Null(repo.Saved);
         Assert.Null(local.SavedFrame);
         Assert.Contains("이미 같은 이름", vm.StatusMessage);
-    }
-
-    /// <summary>N9: EditOwnLocal 세션의 같은 이름 덮어쓰기는 세션의 의도 → 충돌 가드에서 명시적 예외.</summary>
-    [Fact]
-    public async Task EditOwnLocal_Same_Name_Is_Exempt_From_Collision_Guard()
-    {
-        var (vm, repo, local, _) = MakeVm(UserRole.AdvancedUser);
-        local.UserFrames["u1"] = new List<FrameTemplate>
-        {
-            new() { Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1" }
-        };
-        vm.LoadForEdit(new FrameTemplate
-        {
-            Id = "local:u1_내프레임", Name = "내프레임", UserId = "u1", IsDefault = false,
-            ImageUrl = _imagePath,
-            ImageSize = new ImageSize { Width = 1200, Height = 1600 },
-            Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
-        });
-
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Null(repo.Saved);
-        Assert.NotNull(local.SavedFrame);
-        Assert.Equal("내프레임", local.SavedFrame!.Name);   // 덮어쓰기 성공(차단되지 않음)
     }
 
     /// <summary>N11: 파일시스템 금지문자는 저장 전에 차단한다(서버에만 남는 반쪽 상태 방지).</summary>
@@ -861,4 +760,11 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.Same(image, vm.FrameImage);
         Assert.Equal("작업중", vm.FrameName);
     }
+
+    // ⚠️ 아래 테스트들은 삭제했다 — 저장 흐름이 **서버 정본**으로 바뀌고(설계 D-7)
+    //    프레임 **수정 기능이 폐지**되어(D-16) 시나리오 자체가 존재하지 않는다:
+    //      AdvancedUser_Save_Persists_Locally_With_Six_Slots (로컬 전용 저장 경로 소멸)
+    //      Power_Confirm_Without_Checkbox_Saves_Local_Public_Only (체크박스 → 라디오, 로컬 전용 소멸)
+    //      Non_New_Sessions_Save_Immediately_Without_Popup / EditOwnLocal_* / *_Editing_* (편집 세션 소멸)
+    //    새 저장 흐름 검증은 설계 §13 T16(서버 강제)·T23(스코프 라디오)으로 다시 작성한다.
 }

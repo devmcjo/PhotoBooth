@@ -231,7 +231,8 @@ public sealed class FrameCatalogService
             var bytes = await _downloadImage(f.ImageUrl, ct);
             if (bytes is { Length: > 0 })
             {
-                var cached = _localStore.CacheFromDb(f, bytes);
+                // 공용 캐시(#owner=default) + 서버 문서 id 기록 → 삭제 동기화 대조 키가 된다(설계 §10).
+                var cached = _localStore.SaveDefaultFrame(f, bytes, dbId: f.Id);
                 // it10 S3-3: 다운로드·캐시 성공 로그(기존은 실패 warning만) — QA가 캐시 건수를 로그로 확인.
                 _logger?.LogInformation("기본 프레임 캐시: {Name} ← DB({Id})", cached.Name, f.Id);
                 return cached;

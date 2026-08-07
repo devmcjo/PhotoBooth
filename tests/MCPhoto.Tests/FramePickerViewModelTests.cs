@@ -22,6 +22,8 @@ public class FramePickerViewModelTests : IDisposable
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
         public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
             => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
+        public Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+            => Task.FromResult(frame);
         public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
             => Task.FromResult(frame);
         public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default) => Task.FromResult(true);
@@ -31,12 +33,14 @@ public class FramePickerViewModelTests : IDisposable
     /// <summary>로컬 조회가 실패하는 저장소(카탈로그 예외 → 안내 문구 경로 검증용).</summary>
     private sealed class ThrowingLocalStore : ILocalFrameStore
     {
-        public FrameTemplate SaveLocal(FrameTemplate frame, byte[] png, string? ownerName) => frame;
+        public FrameTemplate SaveDefaultFrame(FrameTemplate frame, byte[] png, string? dbId) => frame;
+        public FrameTemplate SaveUserFrame(FrameTemplate frame, byte[] png, string ownerEmail, string? dbId) => frame;
         public IReadOnlyList<FrameTemplate> LoadPublic() => throw new IOException("로컬 프레임 폴더 접근 실패");
-        public IReadOnlyList<FrameTemplate> LoadUser(string ownerName) => new List<FrameTemplate>();
-        public FrameTemplate CacheFromDb(FrameTemplate frame, byte[] png) => frame;
+        public IReadOnlyList<FrameTemplate> LoadUser(string ownerEmail) => new List<FrameTemplate>();
         public bool DeleteLocal(FrameTemplate frame) => true;
         public IReadOnlySet<string> PublicFrameNames() => new HashSet<string>();
+        public IReadOnlySet<string> UserFrameNames(string ownerEmail) => new HashSet<string>();
+        public IReadOnlyList<LocalFrameEntry> Inspect(string? ownerEmail) => Array.Empty<LocalFrameEntry>();
     }
 
     private readonly string _root;
@@ -69,9 +73,9 @@ public class FramePickerViewModelTests : IDisposable
     public async Task LoadAsync_Includes_Public_And_Own_User_Frames()
     {
         // D1: 프레임 선택 화면과 동일한 소스(공용 + 로그인 계정 개인 로컬).
-        _store.SaveLocal(Frame("공용1"), Png, ownerName: null);
-        _store.SaveLocal(Frame("공용2"), Png, ownerName: null);
-        _store.SaveLocal(Frame("내것"), Png, ownerName: "u1");
+        _store.SaveDefaultFrame(Frame("공용1"), Png, dbId: null);
+        _store.SaveDefaultFrame(Frame("공용2"), Png, dbId: null);
+        _store.SaveUserFrame(Frame("내것"), Png, ownerEmail: "u1", dbId: null);
         var vm = MakeVm();
 
         await vm.LoadAsync("u1");
@@ -86,8 +90,8 @@ public class FramePickerViewModelTests : IDisposable
     public async Task LoadAsync_Without_UserId_Loads_Public_Only()
     {
         // D2: 게스트/미로그인 스코프 — 개인 프레임 미포함(타인 것도 LoadUser 접두로 자동 제외).
-        _store.SaveLocal(Frame("공용1"), Png, ownerName: null);
-        _store.SaveLocal(Frame("내것"), Png, ownerName: "u1");
+        _store.SaveDefaultFrame(Frame("공용1"), Png, dbId: null);
+        _store.SaveUserFrame(Frame("내것"), Png, ownerEmail: "u1", dbId: null);
         var vm = MakeVm();
 
         await vm.LoadAsync(userId: null);
@@ -100,7 +104,7 @@ public class FramePickerViewModelTests : IDisposable
     public async Task LoadAsync_Toggles_IsLoading()
     {
         // D3: 로딩 표시가 켜졌다 꺼진다(오버레이의 "불러오는 중" 안내 전제).
-        _store.SaveLocal(Frame("공용1"), Png, ownerName: null);
+        _store.SaveDefaultFrame(Frame("공용1"), Png, dbId: null);
         var vm = MakeVm();
         var seen = new List<bool>();
         void OnChanged(object? _, PropertyChangedEventArgs e)
@@ -162,7 +166,7 @@ public class FramePickerViewModelTests : IDisposable
     public async Task Reset_Clears_Selection_And_List()
     {
         // D6: 모달을 닫을 때 상태 초기화 — 재오픈 시 이전 선택이 남지 않는다.
-        _store.SaveLocal(Frame("공용1"), Png, ownerName: null);
+        _store.SaveDefaultFrame(Frame("공용1"), Png, dbId: null);
         var vm = MakeVm();
         await vm.LoadAsync("u1");
         vm.SelectedFrame = vm.Frames[0];
@@ -179,7 +183,7 @@ public class FramePickerViewModelTests : IDisposable
     public async Task LoadAsync_Honors_CancellationToken()
     {
         // D7: 취소는 예외를 전파하지 않고 조용히 종료하며 로딩 표시를 반드시 내린다.
-        _store.SaveLocal(Frame("공용1"), Png, ownerName: null);
+        _store.SaveDefaultFrame(Frame("공용1"), Png, dbId: null);
         var vm = MakeVm();
         using var cts = new CancellationTokenSource();
         cts.Cancel();

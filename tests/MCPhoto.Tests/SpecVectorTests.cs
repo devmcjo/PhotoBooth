@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Linq;
+using System.Text;
 using System.IO;
 using System.Text.Json;
 using MCPhoto.Core.Capture;
@@ -49,6 +51,15 @@ public class SpecVectorTests
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         // JsonDocument는 Dispose 후 접근할 수 없으므로 복제해 돌려준다.
         return doc.RootElement.GetProperty("cases").Clone();
+    }
+
+    /// <summary>벡터 파일의 <b>루트</b>를 돌려준다(`cases` 밖의 절도 읽어야 하는 벡터용).</summary>
+    private static JsonElement LoadVectorRoot(string name)
+    {
+        var path = Path.Combine(VectorDir, name + ".json");
+        Assert.True(File.Exists(path), $"벡터 파일 없음: {path}");
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.Clone();
     }
 
     private static Slot ReadSlot(JsonElement e) => new()
@@ -542,50 +553,63 @@ public class SpecVectorTests
     }
 
     /// <summary>
-    /// `.slots` 파서는 <see cref="LocalFrameStore"/> 내부에 있으므로(private) 임시 폴더에 실제 파일을
-    /// 써서 <c>LoadPublic</c>으로 관측한다. 리플렉션을 쓰지 않는 이유: 파일 레이아웃 규약(공용=접두 없음,
-    /// `#dbid`가 있으면 그 값이 Id)까지 함께 고정되기 때문이다.
+    /// `.slots` **v2** 포맷 벡터. 서명 키는 플랫폼 내장이라 벡터에 담을 수 없으므로,
+    /// 공유 계약은 <b>payload 텍스트 규격</b>이다 — 각 클라이언트가 이 형태로 payload를 만들고
+    /// 자기 키로 서명한다. 여기서는 ① Encode가 규격 payload를 만드는지 ② Decode 왕복이 보존되는지
+    /// ③ 거부 케이스가 지정된 상태를 내는지를 고정한다.
     /// </summary>
     [Fact]
     public void SlotsFile_Matches_Vector()
     {
-        foreach (var c in LoadCases("slots-file").EnumerateArray())
+        var root = LoadVectorRoot("slots-file");
+
+        foreach (var c in root.GetProperty("cases").EnumerateArray())
         {
-            var text = c.GetProperty("input").GetProperty("text").GetString()!;
-            var expected = c.GetProperty("expected");
+            var content = c.GetProperty("content");
+            var slots = content.GetProperty("slots").EnumerateArray()
+                .Select(s => new Slot
+                {
+                    Index = s.GetProperty("index").GetInt32(),
+                    X = s.GetProperty("x").GetInt32(),
+                    Y = s.GetProperty("y").GetInt32(),
+                    Width = s.GetProperty("width").GetInt32(),
+                    Height = s.GetProperty("height").GetInt32(),
+                }).ToList();
 
-            var root = Path.Combine(Path.GetTempPath(), "mcphoto-slots-vec-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(root);
-            try
-            {
-                // 공용 규약: 이름에 '_'가 없어야 LoadPublic이 집계한다.
-                File.WriteAllBytes(Path.Combine(root, "vec.png"), new byte[] { 1, 2, 3 });
-                File.WriteAllText(Path.Combine(root, "vec.slots"), text);
+            var sizeNode = content.GetProperty("imageSize");
+            var dbIdNode = content.GetProperty("dbId");
+            var input = new SlotsFileContent(
+                content.GetProperty("owner").GetString()!,
+                new ImageSize
+                {
+                    Width = sizeNode.GetProperty("width").GetInt32(),
+                    Height = sizeNode.GetProperty("height").GetInt32()
+                },
+                slots,
+                dbIdNode.ValueKind == JsonValueKind.Null ? null : dbIdNode.GetString());
 
-                var frames = new LocalFrameStore(root).LoadPublic();
-                Assert.Single(frames);
-                var frame = frames[0];
+            // ① payload 규격 — base64를 풀고 #sig 줄을 떼면 벡터의 expectedPayload와 정확히 같아야 한다.
+            var encoded = SlotsFileCodec.Encode(input);
+            var decodedText = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+            var payload = decodedText[..decodedText.LastIndexOf("\n#sig=", StringComparison.Ordinal)];
+            Assert.Equal(c.GetProperty("expectedPayload").GetString(), payload);
 
-                var size = expected.GetProperty("imageSize");
-                Assert.Equal(size.GetProperty("width").GetInt32(), frame.ImageSize.Width);
-                Assert.Equal(size.GetProperty("height").GetInt32(), frame.ImageSize.Height);
+            // ② 왕복 보존
+            Assert.Equal(SlotsDecodeStatus.Ok, SlotsFileCodec.Decode(encoded, out var back));
+            Assert.NotNull(back);
+            Assert.Equal(input.Owner, back!.Owner);
+            Assert.Equal(input.ImageSize.Width, back.ImageSize.Width);
+            Assert.Equal(input.ImageSize.Height, back.ImageSize.Height);
+            Assert.Equal(input.DbId, back.DbId);
+            Assert.Equal(input.Slots.Count, back.Slots.Count);
+        }
 
-                var slots = expected.GetProperty("slots");
-                Assert.Equal(slots.GetArrayLength(), frame.Slots.Count);
-                for (int k = 0; k < frame.Slots.Count; k++)
-                    AssertSlot(slots[k], frame.Slots[k], text);
-
-                // dbId: 있으면 Id가 그 값, 없으면 `local:{파일명}`.
-                var dbIdNode = expected.GetProperty("dbId");
-                var expectedId = dbIdNode.ValueKind == JsonValueKind.Null || dbIdNode.GetString()!.Length == 0
-                    ? "local:vec"
-                    : dbIdNode.GetString();
-                Assert.Equal(expectedId, frame.Id);
-            }
-            finally
-            {
-                try { Directory.Delete(root, recursive: true); } catch { /* 정리 실패는 무시 */ }
-            }
+        // ③ 거부 케이스
+        foreach (var c in root.GetProperty("rejectCases").EnumerateArray())
+        {
+            var expected = Enum.Parse<SlotsDecodeStatus>(c.GetProperty("expectedStatus").GetString()!);
+            var actual = SlotsFileCodec.Decode(c.GetProperty("fileText").GetString(), out _);
+            Assert.Equal(expected, actual);
         }
     }
 
