@@ -29,6 +29,22 @@ public sealed partial class LoginGuestViewModel : ViewModelBase
     public bool IsGoogleSignInAvailable =>
         !string.IsNullOrWhiteSpace(_shell.Settings.Current.GoogleClientId);
 
+    // ── it23 §B8.5: 테스트 계정 재로그인 ──
+    // 테스트 모드에서 로그아웃하면(로그아웃은 정상 동작해야 한다 — 게스트 상태도 테스트 대상이다) 다시
+    // 테스트 계정으로 돌아올 방법이 앱 재시작뿐이다. 역할별 UI를 비교하는 QA 작업에서 그것은 실용성을 해친다.
+
+    /// <summary>테스트 모드 여부(버튼 노출 게이트). 꺼져 있으면 버튼이 통째로 Collapsed다.</summary>
+    public bool IsTestMode => _shell.IsTestMode;
+
+    /// <summary>버튼 라벨 <c>테스트 계정으로 로그인 ({역할})</c>. 역할을 라벨에 넣어 오투입을 눈에 띄게 한다.</summary>
+    public string TestLoginLabel => _shell.TestLoginLabel;
+
+    /// <summary>
+    /// 재로그인 커맨드는 셸이 소유한다(세션 + 오버레이 복귀는 셸의 책임). 여기서는 노출만 위임해
+    /// 같은 동작이 두 곳에 복제되지 않게 한다.
+    /// </summary>
+    public IAsyncRelayCommand TestLoginCommand => _shell.LoginAsTestUserCommand;
+
     public LoginGuestViewModel(AppShellViewModel shell, IAccountService accounts,
         IGoogleSignInService googleSignIn, ILogger<LoginGuestViewModel>? logger = null)
     {

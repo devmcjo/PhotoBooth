@@ -4,6 +4,7 @@ using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Capture;
+using MCPhoto.Core.Devices;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -39,6 +40,7 @@ public class AppShellPinGateTests
     private sealed class FakeCameraTestDialog : ICameraTestDialogService
     {
         public Task ShowAsync(int deviceIndex) => Task.CompletedTask;
+        public Task ShowAsync(CameraTestTarget target) => Task.CompletedTask;   // it23 오버로드
     }
 
     private sealed class FakeDiagnosticsDialog : IDiagnosticsDialogService
@@ -94,7 +96,8 @@ public class AppShellPinGateTests
         // 설정 화면 진입 시 셸이 해석하는 VM들(셸 순환 → 지연 생성).
         services.AddFactory<SettingsViewModel>(() => new SettingsViewModel(
             shell, settings, new FakeCameraService(), new FakeCameraTestDialog(),
-            new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = true }));
+            new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = true },
+            new NullExternalCamera()));   // it23: 외부 카메라는 이 테스트의 관심사가 아니다(무해 기본값)
         services.AddFactory<HomeViewModel>(() => new HomeViewModel(shell));
 
         return new Harness(shell, accounts, pin);

@@ -45,7 +45,7 @@ public class FrameCatalogServiceTests : IDisposable
     }
 
     private int _downloadCalls;
-    private FrameCatalogService MakeService(CountingFrameRepository repo)
+    private FrameCatalogService MakeService(IFrameRepository repo)
         => new(repo, _store, logger: null,
             downloadImage: (_, _) => { _downloadCalls++; return Task.FromResult<byte[]?>(new byte[] { 1, 2, 3 }); });
 
@@ -539,6 +539,60 @@ public class FrameCatalogServiceTests : IDisposable
                 + string.Join(" → ", actual.Select(a => $"{a.Phase}({a.Index}/{a.Total})")));
             cursor++;
         }
+    }
+
+    /// <summary>
+    /// it23 B-T14: <b>토큰 없는 상태</b>에서 개인 프레임 조회는 로컬 캐시를 그대로 돌려주고
+    /// <b>로컬 파일을 삭제하지 않는다</b>(설계 §B7.5).
+    /// <para>
+    /// 왜 이 테스트가 필요한가: 서버 조회가 성공하면 <c>SyncUserCache</c> → <c>FrameSyncPlan.Build(serverReachable:true)</c>
+    /// 가 <b>로컬에만 있는 개인 프레임을 삭제</b>한다. 현재는 ① 서버 호출이 예외로 실패해 그 경로에 도달하지 않고
+    /// ② 도달해도 "빈 목록은 삭제 신호가 아니다" 안전장치가 막는다 — <b>2중 방어</b>다.
+    /// 누군가 저장소를 "인증 실패 시 빈 목록 반환"으로 바꾸면 ①이 무너지므로, 코드를 3중으로 방어하는 대신
+    /// (정상 동기화가 약해진다) 이 테스트로 고정한다. QA PC의 로컬 프레임이 지워지는 사고를 막는 게이트다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Token_Less_User_Frame_Load_Keeps_Local_Files()
+    {
+        _store.SaveUserFrame(
+            new FrameTemplate { Name = "mine", ImageSize = new ImageSize { Width = 100, Height = 100 },
+                                Slots = { new Slot { Index = 0, X = 0, Y = 0, Width = 10, Height = 10 } } },
+            new byte[] { 1 }, ownerEmail: "qa@example.com", dbId: null);
+
+        var filesBefore = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Length;
+        Assert.True(filesBefore > 0, "사전 조건: 로컬 개인 프레임 파일이 있어야 한다");
+
+        // 토큰 없는 저장소 상당 — HttpBackendClient가 HTTP 전에 던지는 것과 같은 예외 타입.
+        var repo = new ThrowingUserFrameRepository(
+            new MCPhoto.Core.Backend.BackendLoginRequiredException("로그인이 필요합니다.", expired: false));
+        var svc = MakeService(repo);
+
+        var frames = await svc.GetUserFramesAsync("qa", "qa@example.com");
+
+        Assert.Single(frames);
+        Assert.Equal("mine", frames[0].Name);
+        Assert.Equal(filesBefore, Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Length);
+    }
+
+    /// <summary>개인 프레임 조회만 예외를 던지는 저장소(공용 조회는 정상 — 실패 범위를 좁혀 원인을 특정한다).</summary>
+    private sealed class ThrowingUserFrameRepository : IFrameRepository
+    {
+        private readonly Exception _error;
+        public ThrowingUserFrameRepository(Exception error) => _error = error;
+
+        public Task<IReadOnlyList<FrameTemplate>> GetDefaultFramesAsync(CancellationToken ct = default)
+            => Task.FromResult((IReadOnlyList<FrameTemplate>)new List<FrameTemplate>());
+        public Task<IReadOnlyList<FrameTemplate>> GetUserFramesAsync(string userId, CancellationToken ct = default)
+            => Task.FromException<IReadOnlyList<FrameTemplate>>(_error);
+        public Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+            => Task.FromException<FrameTemplate>(_error);
+        public Task<FrameTemplate> SaveAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default)
+            => Task.FromException<FrameTemplate>(_error);
+        public Task<bool> DeleteAsync(string frameId, CancellationToken ct = default)
+            => Task.FromException<bool>(_error);
+        public Task DeleteAllByUserAsync(string userId, CancellationToken ct = default)
+            => Task.FromException(_error);
     }
 
     [Fact]

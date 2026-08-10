@@ -34,6 +34,15 @@
                            HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12"
                            Visibility="{Binding IsGoogleSignInAvailable, Converter={StaticResource InverseBoolToVis}}" />
 
+                <!-- it23 §B8.5: 테스트 계정 재로그인. 테스트 모드에서만 노출(꺼져 있으면 Collapsed).
+                     라벨에 역할을 실어 어떤 권한으로 들어가는지 누르기 전에 보이게 한다.
+                     ⚠️ 이 버튼이 릴리스 빌드에도 있는 것은 방침이다(설계 §B1.2 · D3 Q4) — 노출 위험은
+                        이미 상시 경고 배너가 지고 있으므로 중복이다. -->
+                <Button Content="{Binding TestLoginLabel}" Style="{StaticResource Button.Secondary}"
+                        Command="{Binding TestLoginCommand}"
+                        HorizontalAlignment="Stretch" Margin="0,0,0,12"
+                        Visibility="{Binding IsTestMode, Converter={StaticResource BoolToVis}}" />
+
                 <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource Brush.Danger}"
                            Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
                            HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12" />

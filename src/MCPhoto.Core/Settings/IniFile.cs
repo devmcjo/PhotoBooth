@@ -61,6 +61,34 @@ public sealed class IniFile
         _sections[section][key] = value;
     }
 
+    /// <summary>섹션이 파일에 존재했는지(키가 하나도 없어도 헤더가 있었다면 true).</summary>
+    public bool HasSection(string section) => _sections.ContainsKey(section);
+
+    /// <summary>
+    /// 이 딕셔너리가 갖지 <b>않은</b> 섹션을 <paramref name="source"/>에서 그대로 가져온다(외래 섹션 보존).
+    /// 이미 존재하는 섹션(예: <c>[MCPhoto]</c>)은 건드리지 않는다 — 소유자가 방금 채운 값이 정본이다.
+    /// <para>
+    /// 왜 필요한가: <see cref="IniSettingsService.Save"/>는 빈 <see cref="IniFile"/>에 자기 섹션만 채워
+    /// 파일을 통째로 덮어쓴다. 그래서 사람이 손으로 넣은 다른 섹션(<c>[Test]</c> 등)이 첫 저장에 사라졌다.
+    /// 저장 직전 대상 파일을 읽어 이 메서드로 실어 보내면 그 섹션이 살아남는다.
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>키 단위 병합은 하지 않는다.</b> <c>[MCPhoto]</c> 안의 미매핑 키를 되살리면 오탈자 키
+    /// (<c>Cutcount=8</c>)와 폐기된 키가 영구히 남는다 — 섹션 단위가 정확한 소유 경계다.
+    /// </para>
+    /// 이름이 <c>Merge</c>가 아닌 이유: 방향과 범위를 이름이 말해야 한다("없는 섹션만, source에서 이쪽으로").
+    /// </summary>
+    public void AdoptMissingSections(IniFile source)
+    {
+        if (source is null) return;
+        foreach (var (section, kvs) in source._sections)
+        {
+            // 기본(무명) 섹션도 대상 — 파일 선두에 섹션 없이 적힌 줄을 파서가 여기에 담는다.
+            if (_sections.ContainsKey(section)) continue;
+            _sections[section] = new Dictionary<string, string>(kvs, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     public string? Get(string section, string key)
         => _sections.TryGetValue(section, out var s) && s.TryGetValue(key, out var v) ? v : null;
 

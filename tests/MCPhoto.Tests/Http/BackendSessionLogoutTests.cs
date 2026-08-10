@@ -44,6 +44,7 @@ public class BackendSessionLogoutTests : IClassFixture<UploadFileFixture>
             StorageBucket = Bucket,
         };
 
+        public string IniPath => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MCPhoto.ini");
         public AppSettings Load() => Current;
         public bool Save() => true;
     }

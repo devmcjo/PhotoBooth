@@ -4,6 +4,7 @@ using MCPhoto.App;
 using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Capture;
+using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Build;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Frames;
@@ -60,8 +61,14 @@ public class DiagnosticsViewModelTests
     private sealed class StubSettingsService : ISettingsService
     {
         private readonly AppSettings _settings;
-        public StubSettingsService(AppSettings settings) => _settings = settings;
+        public StubSettingsService(AppSettings settings, string? iniPath = null)
+        {
+            _settings = settings;
+            IniPath = iniPath ?? Path.Combine(Path.GetTempPath(), "MCPhoto.ini");
+        }
         public AppSettings Current => _settings;
+        // it23 §B5.4: 활성 INI 경로는 진단 화면이 노출하는 값이다(스텁도 결정적 경로를 준다).
+        public string IniPath { get; }
         public AppSettings Load() => _settings;
         public bool Save() => true;
     }
@@ -95,17 +102,43 @@ public class DiagnosticsViewModelTests
         public void OpenLogFolder() => OpenCount++;
     }
 
-    private sealed class FakeLicenseFolderService : ILicenseFolderService
+    /// <summary>
+    /// 고지 열거·읽기 페이크(실제 파일 미접근). it23 §C8: 진단 화면은 <b>건수 상태</b>만 쓰고
+    /// 경로·본문은 쓰지 않는다 — 그래서 이 페이크는 문서 목록만 주입받는다.
+    /// </summary>
+    private sealed class FakeLicenseNoticeService : ILicenseNoticeService
     {
-        public FakeLicenseFolderService(string path, bool exists = true)
+        public FakeLicenseNoticeService(int documentCount, bool exists = true)
         {
-            LicenseFolderPath = path;
             Exists = exists;
+            Documents = Enumerable.Range(0, documentCount)
+                .Select(i => new LicenseDocument($"doc{i}.txt", $"C:\\licenses\\doc{i}.txt", 100))
+                .ToList();
         }
-        public string LicenseFolderPath { get; }
+        public string FolderPath { get; init; } = Path.Combine(Path.GetTempPath(), "licenses");
         public bool Exists { get; }
-        public int OpenCount { get; private set; }
-        public void OpenLicenseFolder() => OpenCount++;
+        public IReadOnlyList<LicenseDocument> Documents { get; }
+        public int ListCalls { get; private set; }
+        public IReadOnlyList<LicenseDocument> ListDocuments() { ListCalls++; return Documents; }
+        public LicenseTextResult ReadText(LicenseDocument document) => LicenseTextResult.Ok("body");
+    }
+
+    /// <summary>테스트 모드 상태만 주입하는 페이크(진단 화면은 IsEnabled·Options.Role만 읽는다).</summary>
+    private sealed class FakeTestModeService : ITestModeService
+    {
+        public FakeTestModeService(bool enabled, UserRole role = UserRole.AdvancedUser)
+        {
+            IsEnabled = enabled;
+            Options = enabled
+                ? new TestModeOptions(true, "testuser", "test@email.com", role, null, false, QrGateReason.Count,
+                    Array.Empty<string>())
+                : TestModeOptions.Disabled;
+        }
+        public bool IsEnabled { get; }
+        public TestModeOptions Options { get; }
+        public string SourcePath => Path.Combine(Path.GetTempPath(), "MCPhoto.ini");
+        public User? TestUser => null;
+        public bool IsTestUser(User? user) => false;
     }
 
     private static DiagnosticsViewModel MakeVm(
@@ -118,7 +151,9 @@ public class DiagnosticsViewModelTests
         IBuildInfoService? buildInfo = null,
         IServerDeployInfoService? serverDeploy = null,
         IClipboardService? clipboard = null,
-        ILicenseFolderService? licenseFolder = null)
+        ILicenseNoticeService? licenseNotice = null,
+        ITestModeService? testMode = null,
+        string? iniPath = null)
     {
         camera ??= new FakeCameraService();
         // 존재하지 않는 경로를 명시 주입 → FfmpegAvailable=false로 결정적(실제 번들 유무와 무관).
@@ -129,13 +164,14 @@ public class DiagnosticsViewModelTests
         buildInfo ??= new StubBuildInfoService();
         serverDeploy ??= new FakeServerDeployInfoService();
         clipboard ??= new FakeClipboardService();
-        licenseFolder ??= new FakeLicenseFolderService(Path.Combine(Path.GetTempPath(), "licenses"));
+        licenseNotice ??= new FakeLicenseNoticeService(documentCount: 3);
         var session = new SessionContext();
         if (loginUser is not null) session.Login(loginUser);
         // 프레임 검사 도구용 저장소(테스트는 임시 폴더 — 실제 파일이 없으면 빈 결과).
         var frameStore = new LocalFrameStore(Path.Combine(Path.GetTempPath(), $"diagframes_{Guid.NewGuid():N}"));
-        return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder, new StubSettingsService(settings), session,
-            buildInfo, serverDeploy, clipboard, licenseFolder, frameStore);
+        return new DiagnosticsViewModel(camera, ffmpeg, firebase, logFolder,
+            new StubSettingsService(settings, iniPath), session,
+            buildInfo, serverDeploy, clipboard, licenseNotice, frameStore, logger: null, testMode: testMode);
     }
 
     [Fact]
@@ -365,42 +401,88 @@ public class DiagnosticsViewModelTests
         Assert.Equal("복사에 실패했습니다. 위 주소를 직접 선택해 복사하세요.", vm.CopyNotice);
     }
 
-    // ── 오픈소스 라이선스 고지 (설계 §5.1 1-6) ──
+    // ── 오픈소스 라이선스 고지 (설계 §5.1 1-6 → it23 §C8: 카드 → 1줄 상태 행) ──
+    // 경로 노출·[폴더 열기] 커맨드는 폐지됐다(요구: 진단에서 열지 않는다). 남는 것은 누락 감지 그물뿐이다.
 
-    [Fact]
-    public void LicenseFolder_Path_Is_Exposed_For_Manual_Navigation()
+    /// <summary>
+    /// C-T15: 고지 상태 행. 정상이면 건수, 없으면 누락 문구.
+    /// 폴더가 있어도 <c>.txt</c>가 0건이면 고지가 없는 것이므로 **누락**으로 읽어야 한다
+    /// (조용히 "정상"으로 넘어가면 라이선스 위반을 아무도 모른다).
+    /// </summary>
+    [Theory]
+    [InlineData(3, true, "정상(3개)")]
+    [InlineData(0, true, "누락 — 배포 산출물에 고지가 없습니다")]
+    [InlineData(0, false, "누락 — 배포 산출물에 고지가 없습니다")]
+    public void License_Notice_State_Reports_Count_Or_Missing(int count, bool exists, string expected)
     {
-        var path = Path.Combine(Path.GetTempPath(), "licenses-x");
-        var vm = MakeVm(licenseFolder: new FakeLicenseFolderService(path));
+        var vm = MakeVm(licenseNotice: new FakeLicenseNoticeService(count, exists));
 
-        Assert.Equal(path, vm.LicenseFolderPath);
-    }
-
-    [Fact]
-    public void OpenLicenseFolder_Delegates_To_Service()
-    {
-        var fake = new FakeLicenseFolderService(Path.Combine(Path.GetTempPath(), "licenses-y"));
-        var vm = MakeVm(licenseFolder: fake);
-
-        vm.OpenLicenseFolderCommand.Execute(null);
-
-        Assert.Equal(1, fake.OpenCount);
+        Assert.Equal(expected, vm.LicenseNoticeState);
+        Assert.Equal(count > 0, vm.HasLicenseNotice);
     }
 
     /// <summary>
-    /// 고지 폴더가 없으면 = 라이선스 위반 상태로 배포된 것. 화면이 경고를 띄워야 하므로
-    /// 반전 플래그가 정확해야 한다(조용히 넘어가면 위반을 아무도 모른다).
+    /// 상태 행은 진단 모달 진입 시 **1회** 평가된다(버튼이 없으므로 재평가 트리거도 없다).
+    /// 바인딩이 여러 번 읽어도 폴더를 반복 열거하지 않는다.
     /// </summary>
-    [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void License_Missing_Flag_Is_Inverse_Of_Exists(bool exists, bool expectedMissing)
+    [Fact]
+    public void License_Notice_Is_Enumerated_Once_Per_Modal()
     {
-        var vm = MakeVm(licenseFolder: new FakeLicenseFolderService(
-            Path.Combine(Path.GetTempPath(), "licenses-z"), exists));
+        var fake = new FakeLicenseNoticeService(documentCount: 2);
+        var vm = MakeVm(licenseNotice: fake);
 
-        Assert.Equal(exists, vm.HasLicenseFolder);
-        Assert.Equal(expectedMissing, vm.IsLicenseFolderMissing);
+        _ = vm.LicenseNoticeState;
+        _ = vm.HasLicenseNotice;
+        _ = vm.LicenseNoticeState;
+
+        Assert.Equal(1, fake.ListCalls);
+    }
+
+    /// <summary>진단 화면은 고지 **폴더 경로를 노출하지 않는다**(요구: 경로를 적어주지 말 것).</summary>
+    [Fact]
+    public void License_Folder_Path_Is_Not_Exposed_Anymore()
+    {
+        var t = typeof(DiagnosticsViewModel);
+
+        Assert.Null(t.GetProperty("LicenseFolderPath"));
+        Assert.Null(t.GetProperty("OpenLicenseFolderCommand"));
+        Assert.Null(t.GetProperty("HasLicenseFolder"));
+        Assert.Null(t.GetProperty("IsLicenseFolderMissing"));
+    }
+
+    // ── it23 §B5.4: 설정 파일 경로 · 테스트 모드 상태 ──
+
+    /// <summary>
+    /// 활성 INI 절대 경로가 노출된다. 후보 중 "쓰기 가능한 첫 곳"이 선택되므로 QA가 편집한 파일이
+    /// 앱이 읽는 파일과 다를 수 있고, 이 행이 유일한 확인 창구다.
+    /// </summary>
+    [Fact]
+    public void Settings_File_Path_Is_Exposed()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "some", "MCPhoto.ini");
+        var vm = MakeVm(iniPath: path);
+
+        Assert.Equal(path, vm.SettingsFilePath);
+    }
+
+    /// <summary>테스트 모드 미주입(=OFF) 또는 꺼짐이면 "꺼짐"이고 색 분기도 꺼진다.</summary>
+    [Fact]
+    public void TestMode_State_Is_Off_By_Default()
+    {
+        var vm = MakeVm();
+
+        Assert.False(vm.IsTestModeOn);
+        Assert.Equal("꺼짐", vm.TestModeState);
+    }
+
+    /// <summary>켜짐이면 역할과 함께 **인증 우회 중**이라는 사실을 명시한다(§B13 동결 문구).</summary>
+    [Fact]
+    public void TestMode_State_Shows_Role_And_Bypass()
+    {
+        var vm = MakeVm(testMode: new FakeTestModeService(enabled: true, role: UserRole.Admin));
+
+        Assert.True(vm.IsTestModeOn);
+        Assert.Equal("켜짐(관리자) — 인증 우회 중", vm.TestModeState);
     }
 }
 

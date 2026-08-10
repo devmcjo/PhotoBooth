@@ -12,21 +12,62 @@
         <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource Brush.OnAccent}" FontSize="22"
                    HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
 
-        <!-- 컷 진행 표시 -->
-        <Border Background="{StaticResource Brush.Scrim}" CornerRadius="6" Padding="14,8"
-                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding CurrentCut}" Foreground="{StaticResource Brush.OnAccent}" FontSize="20" FontWeight="Bold" />
-                <TextBlock Text=" / " Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.7" />
-                <TextBlock Text="{Binding TotalCuts}" Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.7" />
-            </StackPanel>
-        </Border>
+        <!-- it23 §6.5 W8: 프리뷰 부재 안내(외부 카메라 소스 + 웹캠 없음). 프리뷰 Image 위에만 덮는다 —
+             카운트다운·셔터·플래시는 정상 동작하므로 상호작용을 막지 않는다(IsHitTestVisible=False). -->
+        <TextBlock Text="프리뷰 없음 — 외부 카메라로 촬영됩니다"
+                   Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.85"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                   IsHitTestVisible="False"
+                   Visibility="{Binding PreviewAbsent, Converter={StaticResource BoolToVis}}" />
 
-        <!-- 카운트다운(펄스 애니메이션) -->
-        <Viewbox VerticalAlignment="Center" HorizontalAlignment="Center" Height="220" RenderTransformOrigin="0.5,0.5">
+        <!-- 컷 진행 표시 + it23 배지·배너(좌상단 세로 스택 — 서로 가리지 않는다) -->
+        <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20">
+            <Border Background="{StaticResource Brush.Scrim}" CornerRadius="6" Padding="14,8"
+                    HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding CurrentCut}" Foreground="{StaticResource Brush.OnAccent}" FontSize="20" FontWeight="Bold" />
+                    <TextBlock Text=" / " Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.7" />
+                    <TextBlock Text="{Binding TotalCuts}" Foreground="{StaticResource Brush.OnAccent}" FontSize="20" Opacity="0.7" />
+                </StackPanel>
+            </Border>
+
+            <!-- W4 상시 배지: 프리뷰(웹캠)와 결과물(DSLR)이 다른 광학계라는 사실은 세션 내내 참이다.
+                 촬영 순간마다 안내하면 카운트다운 UX를 방해하므로 상시 배지가 정직하다(설계 §5.4 고지 ②).
+                 게스트(손님)에게도 보인다 — 결과물이 프리뷰와 다르게 나오는 것을 겪는 당사자다. -->
+            <Border Background="{StaticResource Brush.Scrim}" CornerRadius="6" Padding="12,6"
+                    HorizontalAlignment="Left" Margin="0,8,0,0"
+                    Visibility="{Binding IsExternalSource, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="외부 카메라 촬영 중 — 프리뷰는 참고용입니다"
+                           Foreground="{StaticResource Brush.OnAccent}" FontSize="14" />
+            </Border>
+
+            <!-- W6 강등 배너: 세션 잔여 기간 내내 유지된다(앞 컷과 뒤 컷의 화질이 달라진 사실의 고지). -->
+            <Border Background="{StaticResource Brush.Warning.Surface}" CornerRadius="6" Padding="12,6"
+                    HorizontalAlignment="Left" Margin="0,8,0,0" MaxWidth="420"
+                    Visibility="{Binding HasDegradeBanner, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding DegradeBanner}" Foreground="{StaticResource Brush.Warning}"
+                           FontSize="14" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+
+        <!-- 카운트다운(펄스 애니메이션). it23: 수신 대기 중에는 숨긴다 — 이전 컷의 남은 숫자가
+             "사진 전송 중" 오버레이 뒤로 겹쳐 보이면 다음 컷이 시작된 것처럼 오해된다(설계 §6.3). -->
+        <Viewbox VerticalAlignment="Center" HorizontalAlignment="Center" Height="220" RenderTransformOrigin="0.5,0.5"
+                 Visibility="{Binding IsReceiving, Converter={StaticResource InverseBoolToVis}}">
             <TextBlock x:Name="CountdownText" Text="{Binding RemainingSeconds}"
                        Foreground="{StaticResource Brush.OnAccent}" FontWeight="Bold" Opacity="0.9" />
         </Viewbox>
+
+        <!-- it23 W5: DSLR 셔터 후 이미지 수신 대기(최대 CaptureTimeout). 카운트다운 숫자 대신 표시된다.
+             수신은 수 초가 걸릴 수 있어(설계 A7) 아무 표시가 없으면 손님이 촬영 실패로 오해한다.
+             신규 리소스 키를 만들지 않고 it20의 공유 스피너(Spinner.Ring)를 재사용한다(§12.3). -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+                    Visibility="{Binding IsReceiving, Converter={StaticResource BoolToVis}}">
+            <Control Template="{StaticResource Spinner.Ring}" Width="56" Height="56"
+                     HorizontalAlignment="Center" Focusable="False" IsTabStop="False" />
+            <TextBlock Text="사진 전송 중…" Foreground="{StaticResource Brush.OnAccent}"
+                       FontSize="20" HorizontalAlignment="Center" Margin="0,20,0,0" />
+        </StackPanel>
 
         <!-- 바로 촬영 셔터 버튼 + 라벨(U5, it3 §8) -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,40">

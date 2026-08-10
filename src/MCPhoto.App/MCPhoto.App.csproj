@@ -31,6 +31,9 @@
     <ProjectReference Include="..\MCPhoto.Capture\MCPhoto.Capture.csproj" />
     <!-- 백엔드 프록시 HTTP 계층(방향 B). it15부터 레거시 직결 경로가 폐지되어 유일한 서버 경로다. -->
     <ProjectReference Include="..\MCPhoto.Http\MCPhoto.Http.csproj" />
+    <!-- it23: 외부 카메라(DSLR) 어댑터. SDK 참조는 이 프로젝트 안에만 생기므로, 라이선스 문제로
+         동봉이 불가해지면 이 줄과 DI 등록 한 줄을 되돌려 NullExternalCamera로 복귀한다(설계 §13). -->
+    <ProjectReference Include="..\MCPhoto.Devices.Nikon\MCPhoto.Devices.Nikon.csproj" />
   </ItemGroup>
 
   <ItemGroup>

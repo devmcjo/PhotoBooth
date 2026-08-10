@@ -11,6 +11,7 @@ using MCPhoto.Core.LocalSave;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
+using MCPhoto.Devices.Nikon;
 using MCPhoto.Http;
 using MCPhoto.Http.Session;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,8 +49,9 @@ internal static class ServiceRegistration
 
         // it11 #14: 진단·상태 모달(관리자 트러블슈팅). 로그 폴더 서비스 + 다이얼로그 서비스.
         services.AddSingleton<ILogFolderService, LogFolderService>();
-        // 오픈소스 라이선스 고지 폴더(설치 폴더의 licenses/). GPLv3 재배포 의무 이행용. (it22 §5.1)
-        services.AddSingleton<ILicenseFolderService, LicenseFolderService>();
+        // 오픈소스 라이선스 고지(설치 폴더의 licenses/). GPLv3 재배포 의무 이행용. (it22 §5.1 → it23 §C7)
+        // it23: 폴더 열기·경로 표시를 폐지하고 **전문을 설정 화면에서 직접 렌더링**한다(열거 + 읽기).
+        services.AddSingleton<ILicenseNoticeService, LicenseNoticeService>();
         services.AddSingleton<IDiagnosticsDialogService, DiagnosticsDialogService>();
         // 진단 카드의 개발자 메일 주소 복사(best-effort — 실패해도 예외 없음).
         services.AddSingleton<IClipboardService, ClipboardService>();
@@ -59,12 +61,36 @@ internal static class ServiceRegistration
             sp.GetService<ILogger<IniSettingsService>>(),
             embeddedApiKeyDefault: EmbeddedBackendApiKey()));
 
+        // it23 B부: [Test] 섹션 기반 테스트 로그인 모드. 최초 접근 시 1회 판정하고 앱 수명 동안 불변.
+        // ⚠️ 릴리스 빌드에도 포함된다(#if DEBUG 격리 없음) — 배포 exe에서 ini 한 줄로 QA를 돌리는 것이 목적이며,
+        //    그 대가로 MainWindow에 지울 수 없는 경고 배너가 상시 노출된다(설계 §B1.2·§B9).
+        //    토큰은 만들지 않으므로 서버 권한은 0이다(불변식 TM1 — 설계 §B10.2).
+        services.AddSingleton<ITestModeService>(sp => new TestModeService(
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetService<ILogger<TestModeService>>()));
+
         // Step 3: 캡처 파이프라인(카메라)
         services.AddSingleton<ICameraService, OpenCvCameraService>();
 
-        // item3 스캐폴드: 외부 장치(DSLR·프린터) 추상화. 현재는 미지원(no-op) Null 구현 등록.
-        // ⚠️ 실제 하드웨어 연동은 장비 확정 후 이 등록을 실 구현으로 교체한다(SDK/드라이버).
-        services.AddSingleton<IExternalCamera, NullExternalCamera>();
+        // it23: DSLR 수신 스틸을 웹캠과 동일 규칙(거울→슬롯 크롭→축소 상한)으로 정규화하는 디코더.
+        // 상태가 없어 Singleton으로 충분하다. 외부 카메라를 쓰지 않는 세션은 이 인스턴스를 호출하지 않는다.
+        services.AddSingleton<ExternalStillDecoder>(sp =>
+            new ExternalStillDecoder(sp.GetService<ILogger<ExternalStillDecoder>>()));
+
+        // it23: 외부 카메라 = Nikon 어댑터(오케스트레이션) + SDK shim 2계층.
+        // shim은 현재 MissingNikonSdkShim(항상 "모듈 없음") — SDK 실물이 도착하면 이 한 줄을
+        // NikonSdkShim으로 교체하는 것이 전부다(설계 it23 §15-C4). Core·App 파일은 손대지 않는다.
+        services.AddSingleton<INikonSdkShim, MissingNikonSdkShim>();
+        // ⚠️ Singleton인 이유: 물리 장치는 1대이고 SDK 모듈 수명(Shutdown 필요)이 앱 수명과 일치해야 한다.
+        //    웹캠 ICameraService Singleton 제약(UVC 단일 점유)과 동형이다.
+        // ⚠️ 사용 여부 게이트(ExternalCameraEnabled)는 여기가 아니라 소비 지점이다 — 설정은 앱 재시작 없이
+        //    바뀌므로 등록 시점에 ini를 읽으면 토글이 다음 세션에 반영되지 않는다.
+        services.AddSingleton<IExternalCamera>(sp => new NikonExternalCamera(
+            sp.GetRequiredService<INikonSdkShim>(),
+            sp.GetRequiredService<ISettingsService>(),   // 모델 Id → 레지스트리 → md3 경로, 저장 노출값 재적용
+            sp.GetService<ILogger<NikonExternalCamera>>()));
+        // NullExternalCamera는 등록에서 빠지지만 삭제하지 않는다 — 라이선스 문제로
+        // MCPhoto.Devices.Nikon을 제외해야 할 때(설계 §13 L1~L3) 이 줄만 되돌리면 앱이 산다.
         services.AddSingleton<IPhotoPrinter, NullPhotoPrinter>();
 
         // Step 4: 셸 상태머신·유휴 감시
@@ -90,6 +116,18 @@ internal static class ServiceRegistration
         RegisterBackendServices(services);
         services.AddSingleton<IUploadService, UploadService>();
         services.AddSingleton<IQrService, QrService>();
+
+        // it23 §B7.4: 테스트 모드에서만 QR 사용량 조회를 데코레이트한다(마지막 등록이 이긴다).
+        // ⚠️ 테스트 모드 OFF면 데코레이터를 **아예 만들지 않고** HTTP 구현을 그대로 돌려준다 —
+        //    평시 경로에 테스트 모드 코드가 한 줄도 끼지 않게 하는 것이 요점이다.
+        services.AddSingleton<IQrUsageService>(sp =>
+        {
+            var inner = sp.GetRequiredService<HttpQrUsageService>();
+            var testMode = sp.GetRequiredService<ITestModeService>();
+            return testMode.IsEnabled
+                ? new TestModeQrUsageService(testMode, sp.GetRequiredService<SessionContext>(), inner)
+                : inner;
+        });
 
         // it8 A2(정정): 로컬 프레임 저장소 = 실행 폴더 Frame\ (번들과 동일 폴더, 번들+파워캐시+user 공존).
         services.AddSingleton<ILocalFrameStore>(_ =>
@@ -169,7 +207,9 @@ internal static class ServiceRegistration
         });
 
         // it13: TempUser QR 사용량·전역 한도. 서버가 진실원(계정별 강제).
-        services.AddSingleton<IQrUsageService>(sp =>
+        // 구현 타입으로도 등록하는 이유: it23 §B7.4의 테스트 모드 데코레이터가 이 인스턴스를 inner로 감싼다
+        // (데코레이터 등록이 IQrUsageService를 덮어써도 실제 HTTP 구현을 그대로 재사용할 수 있게).
+        services.AddSingleton<HttpQrUsageService>(sp =>
         {
             var s = sp.GetRequiredService<ISettingsService>().Current;
             return new HttpQrUsageService(
@@ -178,6 +218,7 @@ internal static class ServiceRegistration
                 s.BackendApiKey,
                 sp.GetService<ILogger<HttpQrUsageService>>());
         });
+        services.AddSingleton<IQrUsageService>(sp => sp.GetRequiredService<HttpQrUsageService>());
 
         services.AddSingleton<ITempUserLimitsService>(sp =>
         {

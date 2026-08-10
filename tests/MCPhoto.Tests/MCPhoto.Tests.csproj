@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\src\MCPhoto.Core\MCPhoto.Core.csproj" />
     <ProjectReference Include="..\..\src\MCPhoto.Capture\MCPhoto.Capture.csproj" />
     <ProjectReference Include="..\..\src\MCPhoto.Http\MCPhoto.Http.csproj" />
+    <!-- it23: Nikon 어댑터 오케스트레이션(상태머신·타임아웃·강등)을 FakeShim으로 검증 -->
+    <ProjectReference Include="..\..\src\MCPhoto.Devices.Nikon\MCPhoto.Devices.Nikon.csproj" />
     <!-- XAML 리소스 해석 회귀 테스트(테마 딕셔너리·View 인스턴스화)를 위해 App 참조 -->
     <ProjectReference Include="..\..\src\MCPhoto.App\MCPhoto.App.csproj" />
   </ItemGroup>

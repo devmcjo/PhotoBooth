@@ -205,6 +205,17 @@ public sealed partial class AccountViewModel : ViewModelBase
             _logger?.LogWarning(ex, "PIN 설정/변경 실패(서버 도달 불가)");
             SetPinMessage(BackendFailureMessage.Describe(ex), isError: true);
         }
+        catch (BackendLoginRequiredException ex)
+        {
+            // ⚠️ 순서가 규격이다: 이 예외는 UnauthorizedAccessException 파생이라 아래 절 **뒤에 두면 절대
+            //    도달하지 않는다**(it23 §B7.2 ④).
+            // 이 라우트에서 이 예외는 **클라이언트 측 무토큰 가드에서만** 발생한다 — 서버 401은 PIN 불일치와
+            // 만료를 구분할 수 없어 의도적으로 일반 UnauthorizedAccessException으로 올린다
+            // (HttpAccountService.SetOwnPinAsync). 즉 원인이 모호하지 않으므로 "현재 PIN이 올바르지 않습니다"라는
+            // **사실과 다른 안내**를 하지 않는다(사용자는 아무것도 틀리지 않았다).
+            _logger?.LogWarning(ex, "PIN 설정/변경 실패(로그인 필요)");
+            SetPinMessage(BackendFailureMessage.Describe(ex), isError: true);
+        }
         catch (UnauthorizedAccessException)
         {
             // 이 라우트의 401은 현재 PIN 불일치이거나 토큰 만료다 — 서버가 둘 다 code="unauthorized"로 주므로

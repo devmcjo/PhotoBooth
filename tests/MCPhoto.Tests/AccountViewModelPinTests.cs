@@ -20,6 +20,7 @@ public class AccountViewModelPinTests
         private readonly AppSettings _settings;
         public StubSettingsService(AppSettings settings) => _settings = settings;
         public AppSettings Current => _settings;
+        public string IniPath => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MCPhoto.ini");
         public AppSettings Load() => _settings;
         public bool Save() => true;
     }
@@ -243,5 +244,55 @@ public class AccountViewModelPinTests
         await vm.ChangePinCommand.ExecuteAsync(null);
 
         Assert.True(vm.PinMessageIsError);
+    }
+
+    // ── it23 §B7.2 ④ / B-T26: 무토큰 실패의 "사실과 다른 안내" 교정 ──
+
+    /// <summary>
+    /// B-T26: 토큰이 없어 실패했을 때 안내가 <c>로그인이 필요합니다.</c>여야 한다.
+    /// <para>
+    /// 종전에는 <c>catch (UnauthorizedAccessException)</c>이 잡아 "<b>현재 PIN이 올바르지 않습니다</b>…"라고
+    /// 안내했다 — <c>BackendLoginRequiredException</c>이 그 파생이기 때문이다. 사용자는 아무것도 틀리지 않았는데
+    /// 자기 PIN을 의심하게 되는, 커밋 d31c12c가 없애려 한 결함 유형이 같은 화면에 한 건 더 남아 있었다.
+    /// </para>
+    /// 이 라우트에서 이 예외는 <b>클라이언트 측 무토큰 가드에서만</b> 발생하므로 원인이 모호하지 않다.
+    /// </summary>
+    [Fact]
+    public async Task T26_Token_Less_Failure_Says_Login_Required()
+    {
+        var (vm, accounts, _, _) = MakeVm(Google(hasPin: true));
+        await vm.OnEnterAsync();
+        accounts.SetOwnPinThrows = new MCPhoto.Core.Backend.BackendLoginRequiredException(
+            "로그인이 필요합니다.", expired: false);
+        vm.CurrentPin = "0000";
+        vm.NewPin = "2222";
+        vm.ConfirmPin = "2222";
+
+        await vm.ChangePinCommand.ExecuteAsync(null);
+
+        Assert.True(vm.PinMessageIsError);
+        Assert.Equal("로그인이 필요합니다.", vm.PinMessage);
+        Assert.DoesNotContain("현재 PIN", vm.PinMessage);
+    }
+
+    /// <summary>
+    /// B-T26 대칭: <b>서버 401</b>(일반 <see cref="UnauthorizedAccessException"/>)은 <b>종전 문구가 그대로</b> 나온다.
+    /// 그 경로는 PIN 불일치와 토큰 만료를 서버가 구분해 주지 않아 원인이 여전히 모호하므로 단정하지 않는다 —
+    /// 새 catch가 이 문구까지 삼키면 실제 PIN 오입력 안내가 사라진다.
+    /// </summary>
+    [Fact]
+    public async Task T26_Server_401_Keeps_Ambiguous_Message()
+    {
+        var (vm, accounts, _, _) = MakeVm(Google(hasPin: true));
+        await vm.OnEnterAsync();
+        accounts.SetOwnPinThrows = new UnauthorizedAccessException("unauthorized");
+        vm.CurrentPin = "0000";
+        vm.NewPin = "2222";
+        vm.ConfirmPin = "2222";
+
+        await vm.ChangePinCommand.ExecuteAsync(null);
+
+        Assert.True(vm.PinMessageIsError);
+        Assert.Contains("현재 PIN이 올바르지 않습니다", vm.PinMessage);
     }
 }
