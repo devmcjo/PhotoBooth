@@ -3,8 +3,8 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 12-exe-app-settings-and-config.md |
-| 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성, 브랜딩(branding.ini), 빌드 정보(어셈블리 버전 리소스 + exe 타임스탬프), 표시 모드 즉시 적용, 창 위치 저장 |
-| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — 백엔드/SSO 설정 키 추가, 브랜딩 기본값·샘플 정정) |
+| 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성/외래 섹션 보존, `[Test]` 섹션(역할별 테스트 모드), 브랜딩(branding.ini), 빌드 정보(어셈블리 버전 리소스 + exe 타임스탬프), 표시 모드 즉시 적용, 창 위치 저장 |
+| 최종 업데이트 | 2026-08-10 (it23 반영 — 외부 카메라 키 5종 실배선, `[Test]` 섹션 §7 신설, 외래 섹션 보존 §2.7 신설) · 이전 2026-07-29 (it15·it16) |
 | 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.Core/Build/**`, `src/MCPhoto.App/branding.ini.sample`, `Directory.Build.props`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
 | 갱신 규칙 | `AppSettings` 필드 추가/기본값/Clamp 변경, INI 매핑(`IniSettingsService`) 변경, 폴백 경로(`SettingsPathResolver`) 변경, 브랜딩 로직/기본값 변경 시 이 문서를 갱신한다. |
 
@@ -46,8 +46,12 @@
 | `CameraDevice` | int | **0** | 음수면 0 | `CameraDevice` | 사용할 웹캠 장치 인덱스 |
 | `HostingBaseUrl` | string | **`https://mcphoto-955fb.web.app`**(운영 기본값 내장) | 트레일링 `/` 제거 | `HostingBaseUrl` | 다운로드 페이지 URL 조립 base |
 | `StorageBucket` | string | **`mcphoto-955fb.firebasestorage.app`**(운영 기본값 내장) | — | `StorageBucket` | 토큰 URL 조립용 버킷명. 실제 값은 업로드 prepare 응답의 `bucket`으로 갱신된다([30 §5.3](./30-backend-firebase-integration.md)) |
-| `ExternalCameraEnabled` | bool | **false** | — | `ExternalCameraEnabled` | 외부 카메라(DSLR) — **미지원 스캐폴드**(INI 저장만, 실기능 미배선) |
-| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 — **미지원 스캐폴드**(동상) |
+| `ExternalCameraEnabled` | bool | **false** | — | `ExternalCameraEnabled` | 외부 카메라(DSLR) **실배선**(it23). on이면 촬영 세션이 DSLR 스틸을 시도하고, SDK·장비가 없으면 웹캠 단독으로 강등 + 사유 토스트. 프리뷰·타임랩스는 **항상 웹캠 전담** |
+| `ExternalCameraModel` | string | **`NikonD5300`** | 미지 Id는 기본 모델로 보정 | `ExternalCameraModel` | 모델 레지스트리 Id(`ExternalCameraModels`). SDK 모듈 파일명(`Type0011.md3`)은 이 Id에서 유도된다 |
+| `ExternalShutterSpeed` | string | **""**(미지정) | 트림만 — 도메인 검증은 적용 시점 | `ExternalShutterSpeed` | 셔터 속도 표시 문자열(예 `1/125`). 빈 값 = 카메라 현재값 유지. **인덱스가 아니라 문자열**(카메라 목록은 모드·SDK 버전에 따라 달라진다) |
+| `ExternalAperture` | string | **""**(미지정) | 트림만 | `ExternalAperture` | 조리개(예 `f/5.6`) |
+| `ExternalIso` | string | **""**(미지정) | 트림만 | `ExternalIso` | ISO(예 `400`) |
+| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 — **미지원 스캐폴드**(it23 범위 밖) |
 | `BackendBaseUrl` | string | **`https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api`**(운영 기본값 내장) | 트림 + 트레일링 `/` **부여**(`NormalizeBackend`) | `BackendBaseUrl` | 백엔드 API 주소. 빈 값이면 백엔드 미구성(업로드·로그인 불가) |
 | `BackendApiKey` | string | **""** — 실제 기본값은 **exe 내장 키**(`AssemblyMetadata "MCPhoto.BackendApiKey"`)를 로드 시 주입 | 트림 | `BackendApiKey` | 배포 게이트 키(`X-MCPhoto-Client`). ⚠️ INI에 평문 — 유출 시 서버에서 해당 키만 폐기 |
 | `GoogleClientId` | string | 운영 프로젝트 Desktop 클라이언트 ID 내장 | 트림 | `GoogleClientId` | Google SSO authorize URL 조립. **빈 값이면 로그인 화면의 "Google로 로그인" 버튼을 숨김**(SSO opt-out) |
@@ -57,6 +61,10 @@
 자동 컷 수 상수(`CutCountPolicy.cs`, it17): `AutoCutCount=0`(sentinel), `AutoMinimum=6`, `AutoMargin=2`. ⚠️ `AutoCutCount`는 **`AllowedCutCounts`에 넣지 않는다** — 넣으면 `CutCount=3` 같은 오입력이 6이 아니라 0(자동)으로 보정된다(|3-0|=|3-6| 동률 → 첫 값 승리).
 
 > **it12 R1 — 로그인 전용 편집(게이트)**: 게스트(비로그인) 설정 화면에서 `MirrorMode`·`RetakeEnabled`·`RetakeLimit`·`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`·`EnableQrDelivery`(+`SendPhoto`/`SendTimelapse`)·`HostingBaseUrl`·`StorageBucket`는 OFF 표시·컨트롤 비활성 + "로그인 필요" 인라인 노티 상시 표시(R3, hover 툴팁에서 개정)이며 저장 시 미기록(ini 원값 보존=클로버 금지). 게이트는 `SettingsViewModel`(VM)에만 존재 — `AppSettings` 모델은 전 필드 항상 직렬화되고, 촬영/필터 런타임은 `Settings.Current`(ini=관리자값)대로 동작한다(편집 권한만 제한, 기능은 불변).
+
+> **it23 — 외부 카메라 편집 게이트(`CanConfigureExternalCamera`)**: `ExternalCameraEnabled`·`ExternalCameraModel`·`ExternalShutterSpeed`/`ExternalAperture`/`ExternalIso` 5키는 **User 이상**(TempUser 제외)만 편집·저장한다. 역할 판정은 서수 부등식이 아니라 **명시 열거**다(`UserRoleExtensions.CanConfigureExternalCamera` — 역할이 추가될 때 권한이 조용히 따라 움직이는 것을 막는다).
+> - ⚠️ 다른 게이트와 **다른 점**: 편집 불가 세션에서도 로드 시 **강제 off 하지 않는다**. 게스트는 섹션 자체가 안 보이지만 TempUser에게는 **보이되 읽기 전용**이라, off로 표시하면 운영 상태를 오해하게 된다. 저장 시 미기록으로 원값을 보존한다.
+> - ⚠️ **편집 게이트이지 동작 게이트가 아니다**: 촬영 세션이 DSLR을 쓰는지는 ini의 `ExternalCameraEnabled` 기준이며 **게스트(손님) 세션에도 적용**된다 — 손님이 장비 구성을 바꿀 수는 없지만 그 장비로 찍히는 것은 당연하다는 키오스크 모델이다.
 
 ### 1.1 코드에 내장된 기본값(운영자 INI 입력 불요)
 
@@ -144,6 +152,15 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
 
 - 자체 경량 파서(`IniFile.cs`, 외부 의존 없음): 섹션(`[X]`)→키→값 딕셔너리, 키 **대소문자 무시**(`OrdinalIgnoreCase`), `;`/`#` 주석·빈 줄·손상 줄(‘=’ 없음) 무시(예외 없음). 타입별 안전 파서(`GetInt/Double/Bool/Enum`)는 실패 시 fallback 반환. bool은 `true/1/on/yes`·`false/0/off/no` 인식. 직렬화(`ToString`)는 기본(무명) 섹션 먼저.
 
+### 2.7 외래 섹션 보존 (it23)
+
+- **소유 경계**: `[MCPhoto]` 섹션은 `IniSettingsService`가 **전적으로 소유**한다 — 매핑되지 않은 키는 저장 시 사라진다(오탈자 키·폐기 키가 영구히 남는 것을 막는다). 그 밖의 **모든 섹션은 외래(foreign)** 이며 저장 시 원문 그대로 실려 나간다(`IniFile.AdoptMissingSections`).
+- **없으면 생기는 결함**: 종전 `Save()`는 빈 `IniFile`에 자기 섹션만 채워 파일을 통째로 덮어썼다. `MainWindow.OnClosing`이 **앱 종료마다 무조건** `Save()`를 부르므로, 사람이 손으로 넣은 `[Test]`(§7)·`[Branding]` 류 섹션이 **첫 종료에 사라졌다**. 원인 추적이 매우 어려운 결함이라 회귀 테스트로 못 박혀 있다.
+- **왜 로드 시점 스냅샷이 아닌가**: 저장은 폴백 체인(§2.3)으로 **다른 경로**에 쓸 수 있고 그 파일에는 다른 외래 섹션이 있다. 또 앱 실행 중 INI를 손으로 고치는 것이 테스트 모드의 정상 사용 패턴인데, 스냅샷은 그 편집을 되돌린다. → **쓰려는 그 경로의 현재 파일**을 읽어 채취한다.
+- ⚠️ **폴백 경로마다 다시 조립한다.** 한 번 만든 문자열을 재사용하면 1순위 파일의 외래 섹션이 2순위 파일로 **이식**된다(엉뚱한 위치에 `[Test]`가 복제된다).
+- 대상 파일 읽기 실패(없음·잠김·손상)는 **무시하고 저장을 계속**한다 — 외래 섹션 보존은 부가 기능이고 설정 저장을 막을 이유가 못 된다(크래시 금지 원칙 승계). 이때 외래 섹션만 유실되고 Warning 로그가 남는다.
+- **키 단위 병합은 하지 않는다**(섹션 단위가 경계). `[MCPhoto]` 안의 미매핑 키를 되살리면 위 소유 경계가 무의미해진다.
+
 ---
 
 ## 3. 브랜딩(앱 이름)
@@ -193,7 +210,48 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
 
 ---
 
-## 7. 참고
+## 7. `[Test]` 섹션 — 로그인 없는 역할별 테스트 모드 (it23)
+
+QA·개발이 **로그인 없이** 특정 역할의 화면을 그대로 띄우기 위한 설정이다. `TestMode=1`이면 앱이 부팅 시 가짜 계정을 세션에 태우고, 그 시점부터 **모든 역할 게이트가 실제 로그인과 동일하게 동작**한다.
+
+- **파일·섹션**: `MCPhoto.ini`(§2.1의 같은 파일), 섹션 `[Test]`. 앱이 이 섹션을 **쓰지는 않는다** — 사람이 손으로 적고, 앱은 읽기만 하며 저장 시 원문을 보존한다(§2.7).
+- **키 이름·값 모두 대소문자를 무시한다.** `role=admin`·`Role=Admin` 둘 다 유효하다(값은 트림 + 소문자 정규화 후 대조).
+- ⚠️ **주석은 보존되지 않는다.** 앱이 INI를 다시 쓸 때 `;`/`#` 줄은 사라진다(§2.6 파서 규약) — 설명은 이 문서에 두고 INI에는 값만 적는다.
+
+| 키 | 타입 | 기본값 | 잘못된 값의 처리 | 의미 |
+|----|------|--------|------------------|------|
+| `TestMode` | bool | **0**(false) | 인식 불가 → **false**(안전측) | 마스터 스위치. 1이면 **무조건 로그인된 것으로 판단** |
+| `Id` | string | `testuser` | 공백 → 기본값 | `User.Id`. 상단바 툴팁·아바타 이니셜·진단 계정 요약·사용자 관리 `IsSelf` 판정에 쓰이는 **화면에 보이는 값** |
+| `Email` | string | `test@email.com` | `@` 없음·공백 → 기본값 + Warning | ⚠️ **표시용이 아니다.** 개인 프레임 로컬 저장 경로·`.slots` `#owner` 서명 값이라, 형식이 어긋나면 프레임 저장·소유 판정이 조용히 틀어진다 |
+| `Role` | enum | `advanced_user` | 목록 밖 → 기본값 + Warning + **배너에 실제 역할 표시** | `temp_user` \| `user` \| `advanced_user` \| `manager` \| `admin` |
+| `Pin` | string | (없음) | 4자리 숫자 아님 → 없음 취급 + Warning | **없으면 PIN 게이트 생략, 있으면 게이트를 띄우고 로컬 대조**(서버 호출 없음). 게이트 UI 자체(입력 검증·5회 실패 자동 닫힘·쿨다운)를 테스트할 수단 |
+| `QrBlocked` | bool | **0** | 인식 불가 → false | TempUser 역할의 가장 특징적인 UI(QR 편집 차단 + 사유 문구)를 재현한다. `Role=temp_user`와 함께 쓸 때만 의미 |
+| `QrBlockReason` | enum | `count` | 목록 밖 → `count` + Warning | `time` \| `count`. 설정 화면 문구가 사유별로 다르다 |
+
+작성 예시:
+
+```ini
+[Test]
+TestMode=1
+Id=testadmin
+Email=test@email.com
+Role=admin
+Pin=1234
+```
+
+**동작 규약**
+
+- **역할 게이트는 자동으로 따라온다.** 계정 진실 소스(`SessionContext`) 한 곳에 태우므로 `IsPower`·`CanWriteFrames`·`CanConfigureExternalCamera`·`HierarchyRank` 판정이 실제 로그인과 동일하게 적용된다.
+- **서버 권한은 0이다.** 테스트 모드에는 JWT가 없다(가짜 토큰을 **의도적으로 만들지 않는다** — 넣으면 모든 서버 호출이 401을 받고 "로그인이 만료되었습니다"라는 **거짓 원인**이 표시된다). 사용자 관리·프레임 서버 동기화·QR 업로드 등 서버 의존 화면은 크래시 없이 "로그인이 필요합니다" 계열 안내로 떨어진다.
+- **경고 배너가 상시 노출된다.** 이 기능은 릴리스 빌드에도 포함되므로(`#if DEBUG` 격리 없음), `TestMode=1`이면 화면 최상단에 닫을 수 없는 배너가 뜬다. 실운영 오투입을 즉시 드러내기 위한 것이며 유휴 경고 스크림에도 가려지지 않는다.
+- **실계정으로 새지 않는다.** 테스트 계정 판정은 값 비교가 아니라 **참조 동일성**(`ITestModeService.IsTestUser`)이다. 즉 `TestMode=1`을 켠 채 실제 Google SSO로 로그인하면 — 이메일·Id·역할이 우연히 전부 같아도 — 그 계정은 **정상 PIN 게이트·정상 서버 경로**를 탄다. 테스트 모드 INI를 켜둔 채 실계정으로 작업할 수 있다(배너는 계속 표시).
+- 로그아웃은 정상 동작하며(게스트 상태도 테스트 대상), 테스트 모드에서는 로그인 화면에 **[테스트 계정으로 로그인]** 버튼이 노출되어 앱 재시작 없이 되돌아올 수 있다.
+
+⚠️ **보안**: INI를 쓸 수 있는 사람은 인증 없이 관리자 역할의 **화면**에 도달할 수 있다. 단 게스트도 원래 설정 화면에 무가드로 진입하며, 서버 권위 영역(계정 DB·프레임 정본·업로드 정원)은 토큰이 없어 **건드릴 수 없다**.
+
+---
+
+## 8. 참고
 
 - 설정 화면 UI 구성·항목별 편집 동작은 [11 기능 상세](./11-exe-app-features.md) §11(설정 화면), QR 토글 연동 규칙은 §8.3.
 - 데이터 폴더·로그·세션 임시 폴더는 [10 아키텍처](./10-exe-app-architecture.md) §5.2. (설정 INI는 실행 경로 우선, 로그는 항상 `%ProgramData%\MCPhoto\logs`.)

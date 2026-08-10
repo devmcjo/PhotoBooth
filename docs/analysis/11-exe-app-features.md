@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 11-exe-app-features.md |
 | 범위 | MCPhoto Exe 앱의 전 사용자 기능(홈·로그인·프레임·촬영·재촬영·컷선택·결과·필터·타임랩스·QR·완료·유휴·설정·카메라테스트·진단·브랜딩·표시모드·버전표기) |
-| 최종 업데이트 | 2026-07-29 (it16 — §3·§4·§11·§13·§16) |
+| 최종 업데이트 | 2026-08-10 (it23 — §5.3 외부 카메라 스틸 소스, §11 고급 그룹, §17 라이선스 UI 이관, §19 라이선스 열람·§20 테스트 모드 신설) · 이전 2026-07-29 (it16 — §3·§4·§11·§13·§16) |
 | 관련 소스 경로 | `src/MCPhoto.App/ViewModels/**`, `src/MCPhoto.App/Views/**`, `src/MCPhoto.App/Services/**`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.Core/Capture/**`, `src/MCPhoto.Core/Frames/**`, `src/MCPhoto.Core/LocalSave/**`, `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Upload/**` |
 | 갱신 규칙 | 기능(화면·플로우·옵션)을 추가/변경할 때 해당 절을 갱신한다. 특히 컷수/필터/QR 토글/**프레임 생성·편집·삭제 권한**/유휴 시간/**표시 모드 적용 규칙**이 바뀌면 반드시 반영. |
 
@@ -140,8 +140,25 @@
   - **플래시**: `Settings.FlashMode` on이면 셔터 직전 화면 하양 오버레이 120ms(`:147-153`, 오버레이 `CaptureView.xaml:45-47`, `Brush.OnAccent` 흰 화면).
   - **거울모드**: `Settings.MirrorMode`를 `StartAsync`에 전달(프리뷰=저장 동일, 기본 on).
   - **시퀀스**(`RunCaptureSequenceAsync`, `:128-176`): 녹화 시작 → 컷별(카운트다운 → 플래시 → `CaptureStillAsync` → `Capture.AddCut` → 300ms 간격) → 녹화 종료 → CutSelect 전이. 취소/오류는 로그 후 홈.
-  - **이탈**: `OnLeaveAsync`(`:207-213`)에서 세션/카운트다운 취소 + 녹화·카메라 정지.
+  - **이탈**: `OnLeaveAsync`에서 세션/카운트다운 취소 + 녹화·카메라 정지. 외부 카메라는 끊지 않는다(다음 세션 재연결 비용 회피).
 - **근거**: `CaptureViewModel.cs`, `CaptureView.xaml`, `CaptureSession.cs`, `PreviewReadiness.cs`.
+
+### 5.3 외부 카메라(DSLR) 스틸 소스 (it23)
+
+- **역할 분리**: 웹캠 = **프리뷰 + 타임랩스**(현행 유지), 외부 카메라 = **스틸 촬영**. 두 카메라가 독립 동작한다.
+- **소스 확정**: `OnEnterAsync`에서 세션당 **1회** 결정하고 세션 내내 유지한다. 컷마다 재판정하지 않는다 — 컷 간 화질·화각이 뒤섞이는 것이 기본 동작이 되고 재촬영의 "같은 조건" 의미가 무너진다.
+  - `ExternalCameraEnabled=false`(기본): **외부 카메라를 단 한 번도 접촉하지 않는다**(회귀 0 — 테스트가 호출 0회를 고정한다).
+  - `=true`: `ConnectAsync` 성공 + `capability.StillCapture == Supported`일 때만 소스 = External. 실패·미지원이면 **웹캠 단독 강등 + 사유 토스트**(세션은 계속된다).
+- **WYSIWYG 계약**: "프리뷰와 결과물이 같은 픽셀"은 포기하되(다른 광학계라 불가능), **프리뷰에 적용된 모든 소프트웨어 규칙이 결과물에도 동일 적용**된다. 수신 JPEG를 `ExternalStillDecoder`가 웹캠 캡처 스레드와 **같은 함수·같은 순서**로 정규화한다: 거울반전(`MirrorMode`) → 대표 슬롯 종횡비 중앙 크롭(`CropCalculator.CenterCrop`) → 긴 변 2400px 상한 축소 → BGR24 `CapturedStill`.
+  - 축소 상한이 필요한 이유: 24MP 원시 BGR24는 컷당 ~72MB로 10컷이면 720MB — 세션 내내 전 컷을 들고 있는 구조에서 감당 불가.
+  - 하류(컷 선택·필터·합성·재촬영)는 **무변경**이다. 컷의 출처를 알 필요가 없다.
+  - 제거 불가능한 불일치(화각·색감)는 촬영 화면 **상시 배지**로 고지한다("외부 카메라 촬영 중 — 프리뷰는 참고용입니다"). 게스트에게도 보인다.
+- **컷 루프**: 컷당 **순차 대기**(카운트다운 → 플래시 → 셔터 → 수신 대기 오버레이 "사진 전송 중…" → 다음 컷). 파이프라이닝은 명시적 비목표.
+- **실패 강등**(키오스크 UX — 세션을 죽이지 않는다): 캡처 실패 → **1회 재시도**(재연결 포함) → 실패 시 웹캠이 있으면 **이 컷부터 끝까지 웹캠** + 세션 잔여 기간 배너("외부 카메라 연결이 끊겨 웹캠으로 촬영합니다"). 이미 확보한 컷은 유지한다. 웹캠도 없으면 세션 중단 + 홈 복귀.
+- **웹캠 부재 모드**: 소스 External + 웹캠 없음 → 프리뷰 자리에 "프리뷰 없음 — 외부 카메라로 촬영됩니다", **세션 녹화 미시작**(`SessionVideoPath=null` → 기존 "타임랩스 없는 세션" 경로), 촬영·컷 선택·합성·QR은 정상.
+- **물리 플래시**: 현재 활성 경로는 **화면 플래시 단독**이다. capability가 `Supported`로 확인되면 셔터 직전에 물리 플래시 발광 모드도 함께 시도한다(현 프로덕션에서는 SDK 부재로 게이트가 항상 닫혀 있다).
+- **⚠️ 현재 상태**: Nikon SDK 실물이 없어 shim이 `MissingNikonSdkShim`이다 — 토글을 켜도 촬영은 웹캠 단독으로 강등되고 사유가 표시된다. 설계: `docs/design/wpf-it23-external-camera-nikon-design.md`.
+- **근거**: `CaptureViewModel.cs`, `CaptureView.xaml`, `src/MCPhoto.Devices.Nikon/`, `ExternalStillDecoder.cs`, `ExternalStillNormalizePlan.cs`.
 
 ## 6. 세션 녹화 → 컷 선택 → 결과 합성
 
@@ -253,7 +270,13 @@
   - 장치·표시: 카메라 장치(ComboBox+↻재검색+테스트, **실제 장치명 표시** it11 #15), 표시 모드(전체화면/창모드).
   - 출력·전송: 출력 포맷(JPG/PNG), **QR 전송(+하위 사진/타임랩스 토글·보관 시간 1~72h)**, **로컬 저장**, 로컬 저장 경로. (it12 R2: QR 전송·로컬 저장을 장치·표시 → 출력·전송으로 이동. 보관 시간은 QR 다운로드 페이지의 유효 기간이라 QR 전송 하위로 이동)
   - 필터: 원본(고정 on·Disable), 흑백/밝게/뷰티 노출 토글.
-  - 고급: 다운로드 페이지 Base URL, Storage 버킷, **서버 연결 상태**(it10, 읽기전용), **[진단·상태] 버튼**(로그인 전용 → §17, it11 #14).
+  - **외부 장치(로그인 전용 섹션, it23)**: 외부 카메라 사용 토글 → on일 때 모델 ComboBox(레지스트리 값 기반) + 노출 3요소(**슬라이더 + 직접 입력 병행**). "(추후 지원)" 딱지는 외부 카메라에서 제거됐다(프린터는 여전히 placeholder·Disable).
+    - 캡션 3종: "타임랩스 기능은 웹캠으로만 동작됩니다."(토글 on일 때), 화각 불일치 고지, "노출 목록은 카메라 연결 시 확인됩니다."(도메인 미확보 시).
+    - **편집 게이트는 `CanEditExternalCamera`(User 이상 · TempUser 제외)**다. 다른 게이트와 달리 편집 불가 세션에서도 **값을 강제 off 하지 않는다** — TempUser에게는 섹션이 보이므로 ini 원값을 그대로 보여 주는 것이 정직하다. 저장 시에는 미기록(원값 보존).
+    - **설정 진입은 DSLR을 연결하지 않는다**(설정은 열람 빈도가 높다). 노출 목록은 촬영 세션·테스트 모달에서 연결된 뒤 어댑터 세션 캐시에서 읽는다 → 미연결이면 슬라이더 잠김 + 자유 입력(운영자가 장비 없이 값을 미리 준비하는 워크플로 허용, 적용 시점 검증이 안전망).
+    - 직접 입력은 **정확 일치만** 통과한다. 근사 매칭(`1/100`→`1/125`)은 금지 — 운영자 몰래 노출을 바꾸는 동작이다. 불일치는 적용하지 않고 힌트만 띄운다.
+  - 고급: **서버 연결 상태**(it10, 읽기전용), **[오픈소스 라이선스] 버튼**(it23 — **로그인 무관 · 전원 접근** → §19), **[진단·상태] 버튼**(로그인 전용 → §17, it11 #14). (다운로드 페이지 Base URL·Storage 버킷은 W-5에서 편집 UI가 제거되어 ini 전용이다.)
+    - ⚠️ 라이선스 버튼에는 **`IsEnabled` 바인딩을 붙이지 않는다.** GPLv3 §4는 전문을 수령자에게 전달할 것을 요구하므로 고지 접근이 로그인·역할에 걸리면 안 된다. 접근 범위가 넓은 항목을 진단 버튼 **위**에 둔다.
   - **로그인 전용 편집(it12 R1)**: 거울모드·재촬영(횟수 포함)·필터(흑백/밝게/뷰티)·QR 전송·다운로드 URL·Storage 버킷은 게스트에겐 OFF 표시·컨트롤 비활성 + 옆에 "로그인 필요" **인라인 노티 상시 표시**(it12 R3, hover 툴팁에서 개정 — 시인성). 런타임 동작은 ini(관리자값)대로 — 편집 권한만 제한.
 - **설정 진입 시 상단 설정(⚙) 버튼 숨김**(자기 화면 재진입 방지, `IsSettings`). 취소/닫기 등 공용 버튼은 아웃라인 스타일(`Button.Ghost`)로 CTA와 정렬.
 - **핵심 규칙**:
@@ -268,14 +291,18 @@
 ## 12. 카메라 테스트 모달
 
 - **목적**: 선택 카메라로 **실촬영과 동일**한 프리뷰·플래시·셔터를 재현하되 **저장하지 않음**.
-- **흐름**: 설정 → [테스트] → 모달(로딩→프리뷰) → [테스트 촬영]/[닫기].
+- **흐름**: 설정 → [테스트] → 모달(장치 목록 + 로딩→프리뷰) → [테스트 촬영]/[닫기].
 - **화면·VM·서비스**: `CameraTestWindow` · `CameraTestViewModel` · `CameraTestDialogService`(Singleton).
 - **핵심 규칙**:
-  - 오픈(`CameraTestDialogService.ShowAsync`, `CameraTestDialogService.cs:28-44`): 창 먼저 표시(로딩 오버레이) → `Loaded`에서 `vm.StartAsync()` → `ShowDialog()`(모달) → 닫힌 뒤 `StopAsync()`(스레드 join 확실 해제).
-  - 시작(`StartAsync`, `CameraTestViewModel.cs:45-75`): **`StopAsync→StartAsync(선택 인덱스)`**(StartAsync는 running이면 무시하므로 Stop 선행) + `WaitForStablePreviewAsync`(8초, 실촬영 동일 규칙).
-  - 셔터(`ShootTest`, `:78-104`): 플래시 옵션 재현 + `CaptureStillAsync` **결과 폐기**(저장/합성 없음) + "저장되지 않았습니다" 안내.
-  - VM은 Window/Application 미참조(`RequestClose` 이벤트로 창 닫기, `:34/106-107`).
-- **근거**: `CameraTestViewModel.cs`, `CameraTestDialogService.cs`.
+  - 오픈(`CameraTestDialogService.ShowAsync`): 창 먼저 표시(로딩 오버레이) → `Loaded`에서 `vm.StartAsync()` → `ShowDialog()`(모달) → 닫힌 뒤 `StopAsync()`(웹캠 스레드 join + 외부 카메라 연결 해제).
+  - **장치 목록(it23)**: 모달 상단 ComboBox = 웹캠 열거 결과 + (`ExternalCameraEnabled=on`일 때만) 외부 카메라 1항목(`CameraTestTarget`). 항목별 확인 목적이 다르다 — 웹캠 = "타임랩스·프리뷰 확인", 외부 = "카메라 세팅 확인 · 셔터 동작 테스트". **설정이 off면 외부 항목이 목록에 없고 외부 카메라를 접촉하지 않는다.**
+    - ⚠️ 값 기반 선택(`SelectedItem`)이다. `SelectedIndex` 바인딩은 목록이 채워지는 순간 초기 선택을 0으로 덮는다(it7 B9 이력).
+  - 웹캠 항목: **`StopAsync→StartAsync(선택 인덱스)`**(StartAsync는 running이면 무시하므로 Stop 선행) + `WaitForStablePreviewAsync`(8초, 실촬영 동일 규칙).
+  - 외부 항목(it23): **웹캠 `StopAsync` → `ConnectAsync` 순서**(Singleton 반납 후 연결 — 순서가 뒤바뀌면 두 장치 동시 open 시도가 되어 실패 원인을 특정할 수 없다) → 정보 패널(모델·배터리·capability 요약 + 미연결 사유 + [다시 연결]) + 노출 3요소 슬라이더/직접 입력 + [노출 적용].
+  - 셔터(`ShootTest`): 플래시 옵션 재현(외부 항목이면 물리 플래시 이중 발광 경로도 동일하게 재현) + **결과 폐기**(저장/합성 없음). 외부 항목은 수신 이미지를 **정규화 없이 원본 비율로** 3초 표시 후 폐기한다 — 이 화면의 목적은 카메라 자체 확인이지 합성 미리보기가 아니다.
+  - 전환은 외부 연결을 **끊지 않는다**(재연결 비용 회피). 끊는 것은 모달 닫기뿐이다.
+  - VM은 Window/Application 미참조(`RequestClose` 이벤트로 창 닫기).
+- **근거**: `CameraTestViewModel.cs`, `CameraTestDialogService.cs`, `CameraTestTarget.cs`. 설계: `docs/design/wpf-it23-external-camera-nikon-design.md` §9.3.
 
 ## 13. 계정 · 관리자 도구 · 사용자 관리
 
@@ -334,6 +361,7 @@
 - **화면·VM·서비스**: `DiagnosticsWindow` · `DiagnosticsViewModel`(Transient — 진입마다 최신 상태) · `IDiagnosticsDialogService`(`CameraTestDialogService` 모달 패턴 재사용) · `ILogFolderService`.
 - **표시 4섹션**: 카메라(연결 수·목록, `EnumerateDevices`), ffmpeg(`IsAvailable`·경로), **서버 연결**(백엔드 구성 여부 `IsBackendConfigured`·버킷·base URL·게이트 키 **설정됨/미설정**(값은 절대 미표시)·로그인 계정), 로그(경로 상시 표시 + 폴더 열기). 정상=성공색/이상=danger색 트리거. (it15 §6.6 — 종전 "Firebase(서비스 계정 키 경로)" 섹션을 대체)
 - **로그 열기**: `explorer.exe`로 `%ProgramData%\MCPhoto\logs` 열기, 실패해도 크래시 없음(로깅). 경로 텍스트 상시 노출(수동 탐색 대체).
+- **it23 — 라이선스 UI 이관**: 종전 이 화면에 있던 "라이선스 폴더 열기 + 경로 표시"는 **폐지**되고 전문 열람이 설정 → 고급 → [오픈소스 라이선스](§19)로 옮겨졌다. 진단 화면에는 **고지 파일 존재 여부 표시만** 남는다 — 파일이 누락된 배포물은 라이선스 위반 상태이므로 그 사실을 감추지 않기 위한 것이며, 관리자 트러블슈팅이라는 이 화면의 목적에도 부합한다.
 - **근거**: `DiagnosticsViewModel.cs`, `DiagnosticsWindow.xaml`, `DiagnosticsDialogService.cs`, `LogFolderService.cs`. 로그 위치 상세 [70](./70-logging-and-troubleshooting.md).
 
 ## 18. 앱 버전 표기 (it11 → it18 개정)
@@ -342,3 +370,24 @@
 - **규칙**: 시작 시 실행 파일 자신에서 버전을 읽어(`IBuildInfoService` / `AssemblyBuildInfoService`) `DisplayText`(예 `v1.1.6`)를 **앱 하단 우측에 로그인 여부 무관 상시** 노출(흐린 캡션, 클릭 비간섭). 확인 불가 시 `v0.0.0` 폴백.
 - **it18 변경**: 외부 파일 `bldinfo.ini`를 폐기하고 **어셈블리 버전 리소스**(`Directory.Build.props`의 `<Version>`)를 유일한 출처로 삼았다. 이전에는 ini의 표기 버전과 exe 리소스 버전(1.0.0.0)이 따로 관리돼 어긋났다. **배포 채널(종전 `· Beta`) 표기도 제거** — 개발·알파 서버를 운영하지 않아 값이 고정된 무의미한 표기였다. (it12 R4의 "BuildDate는 하단 표기에서 제외"는 그대로 유지되며, 빌드 시각은 진단 화면에서만 보여준다 — §17)
 - **근거**: `MainWindow.xaml`, `AppShellViewModel.cs`(`VersionText`), `AssemblyBuildInfoService.cs`, `Directory.Build.props`. 출처·폴백·배포 상세 [12](./12-exe-app-settings-and-config.md) §6.
+
+## 19. 오픈소스 라이선스 열람 (it23)
+
+- **목적**: GPLv3 §4·§6 고지 의무 이행 — 재배포하는 ffmpeg(GPLv3)의 **라이선스 전문을 앱 안에서 직접 읽을 수 있게** 한다. MC포토 본체(MIT) 전문도 함께 실린다.
+- **흐름**: 설정 → 고급 → [오픈소스 라이선스] → **같은 화면 위 오버레이**(별도 AppState·별도 Window 없음) → 좌측 문서 목록 + 우측 본문 → [닫기].
+- **접근 범위**: **로그인·역할과 무관하게 전원 접근**(게스트 포함, 테스트 모드 포함). 게스트는 원래 설정 화면에 무가드로 진입하므로(§13·[60 §3.4](./60-auth-accounts-and-roles.md)) 경로가 끝까지 열려 있다. 버튼에 `IsEnabled` 게이트를 붙이지 않는 것이 규격이다.
+- **폴더를 열거나 경로를 보여주지 않는다**(요구). `FolderPath`는 로그·진단 전용이며 **UI에 노출하지 않는다** — 사용자가 탐색기를 거치지 않고 앱 안에서 내용을 읽는 것이 이 기능의 요점이다.
+- **문서 열거**: `licenses/**/*.txt` **재귀 열거**(하드코딩 목록 금지 — csproj가 폴더 전체를 배포물에 복사하므로 파일이 늘면 목록도 따라와야 한다). 확장자는 `.txt`만 — 폴더에 실수로 들어간 바이너리를 텍스트로 읽어 깨진 문자를 보여주는 것을 막는다. 정렬은 **`README.txt`(색인) 최상단 고정** + 나머지 이름 오름차순.
+- **읽기**: `StreamReader`(UTF-8 + **BOM 자동 감지**). 실패(폴더 없음·파일 없음·읽기 오류)는 예외가 아니라 `LicenseTextResult.ErrorMessage`로 돌려 화면에 사유를 띄운다(크래시 금지 관례).
+- **누락을 감추지 않는다**: 고지 폴더가 없으면 **폴더를 만들지 않고** 빈 목록 + 경고를 남긴다. 폴더 부재는 "배포 산출물에서 고지가 누락됐다" = 라이선스 위반 상태라는 뜻이므로, 빈 폴더를 만들어 정상처럼 보이게 하면 그 사실이 숨는다. 진단 화면(§17)에 존재 여부 표시가 남아 있는 것도 같은 이유다.
+- **근거**: `ILicenseNoticeService.cs`, `LicenseNoticeService.cs`, `SettingsView.xaml`(고급 그룹 + 오버레이), `SettingsViewModel.cs`. 배포물 동봉 규칙은 `src/MCPhoto.App/MCPhoto.App.csproj`(`CopyLicensesToPublish`), 배경은 [ffmpeg 라이선스·배포 설계](../design/wpf-ffmpeg-licensing-and-distribution-design.md).
+
+## 20. 역할별 테스트 모드 (it23)
+
+- **목적**: QA·개발이 **로그인 없이** 특정 역할(admin/manager/advanced_user/user/temp_user)의 화면을 그대로 확인한다.
+- **설정**: `MCPhoto.ini` `[Test]` 섹션. 키 전수·기본값·검증은 [12 §7](./12-exe-app-settings-and-config.md). `TestMode=1`이면 **무조건 로그인된 것으로 판단**한다.
+- **배선**: 부팅 시 가짜 `User`를 계정 단일 소스(`SessionContext.Login`)에 태운다 → 역할 게이트(`IsPower`·`CanWriteFrames`·`CanConfigureExternalCamera`·`HierarchyRank`)가 실제 로그인과 **동일하게** 적용된다.
+- **경고 배너**: 화면 최상단(`MainWindow` row 0)에 **닫을 수 없는** 배너 상시 노출. 이 기능은 **릴리스 빌드에도 포함**되므로(`#if DEBUG` 격리 없음) 실운영 오투입을 즉시 드러내는 장치다. 꺼져 있으면 `Collapsed`(0px)이라 기존 레이아웃과 픽셀 단위로 동일하고, 유휴 경고 스크림에도 가려지지 않는다.
+- **서버 권한은 0**: JWT를 발급하지 않는다(가짜 토큰을 **의도적으로 만들지 않는다** — 넣으면 서버가 401을 주고 "로그인이 만료되었습니다"라는 **거짓 원인**이 표시된다). 서버 의존 화면은 크래시 없이 "로그인이 필요합니다" 계열 안내로 강등된다.
+- **실계정으로 새지 않는다**: 테스트 계정 판정은 값 비교가 아니라 **참조 동일성**(`ITestModeService.IsTestUser`)이다 → `TestMode=1` 상태에서 실제 SSO 로그인한 계정은 이메일·역할이 전부 같아도 **정상 PIN 게이트·정상 서버 경로**를 탄다. PIN 게이트 처리는 [60 §3.4](./60-auth-accounts-and-roles.md).
+- **근거**: `ITestModeService.cs`, `TestModeService.cs`, `TestModeOptions.cs`, `TestModeQrUsageService.cs`, `AppShellViewModel.cs`, `MainWindow.xaml`.

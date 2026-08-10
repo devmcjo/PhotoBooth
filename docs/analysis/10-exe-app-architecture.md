@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 10-exe-app-architecture.md |
 | 범위 | MCPhoto Exe 앱(WPF/.NET 8)의 솔루션 구성·계층·MVVM/DI·상태머신·캡처 파이프라인·전역 예외/데이터 폴더 |
-| 최종 업데이트 | 2026-07-29 (it15·it16 반영 — `MCPhoto.Firebase` → `MCPhoto.Http`, DI 등록·부트스트랩·계정 모드 갱신) |
+| 최종 업데이트 | 2026-08-10 (it23 반영 — `MCPhoto.Devices.Nikon` 프로젝트 신설, 외부 카메라·테스트 모드·라이선스 고지 DI 등록) · 이전 2026-07-29 (it15·it16 — `MCPhoto.Firebase` → `MCPhoto.Http`) |
 | 관련 소스 경로 | `src/MCPhoto.App/**`, `src/MCPhoto.Core/Navigation/**`, `src/MCPhoto.Core/Capture/**`, `src/MCPhoto.Capture/**`, `MCPhoto.sln` |
 | 갱신 규칙 | 프로젝트 참조 관계, DI 등록(`ServiceRegistration.cs`), 상태 enum/전이표(`SessionStateMachine.cs`), View↔VM 매핑(`App.xaml`), 캡처 스레딩 모델(`OpenCvCameraService`)이 바뀌면 이 문서를 갱신한다. |
 
@@ -18,27 +18,29 @@
 
 ## 1. 솔루션·프로젝트 구성과 의존 방향
 
-`MCPhoto.sln`에는 5개 프로젝트가 있고, `src` 솔루션 폴더 아래 4개 + `tests`가 있다(`MCPhoto.sln:6-17`).
+`MCPhoto.sln`에는 6개 프로젝트가 있고, `src` 솔루션 폴더 아래 5개 + `tests`가 있다(`MCPhoto.sln`).
 
 | 프로젝트 | TFM | 종류 | 주요 의존(PackageReference) | 역할 |
 | --- | --- | --- | --- | --- |
 | `MCPhoto.Core` | `net8.0` | 도메인 라이브러리(순수, WPF 비의존) | `Microsoft.Extensions.Logging.Abstractions`, `QRCoder` | 모델·상태머신·설정·프레임·업로드 계약·QR 등 플랫폼 무관 로직 |
 | `MCPhoto.Capture` | `net8.0-windows` (`UseWPF`) | 캡처/합성 구현 | `OpenCvSharp4.Windows`, `OpenCvSharp4.WpfExtensions` | 카메라(OpenCV)·ffmpeg 녹화·타임랩스·합성·필터·폴백 프레임 |
 | `MCPhoto.Http` | `net8.0` | 백엔드 API 클라이언트 | `Microsoft.Extensions.Http`, `Microsoft.Extensions.Logging.Abstractions` | 업로드/계정/프레임/한도의 HTTP 구상 + JWT 세션 홀더. **it15에서 `MCPhoto.Firebase`(Admin SDK 직결)를 대체** |
+| `MCPhoto.Devices.Nikon` | `net8.0-windows` (UI 비의존) | 외부 카메라(DSLR) 어댑터 | `Microsoft.Extensions.Logging.Abstractions` | Nikon MAID 어댑터. **SDK 참조를 이 어셈블리에 격리**한다(it23) — 상태머신·타임아웃·강등은 여기, SDK 원시 호출은 `INikonSdkShim` 구현 1파일뿐. OpenCvSharp·WPF·SDK를 참조하지 않는다(테스트가 csproj로 고정) |
 | `MCPhoto.App` | `net8.0-windows` (`WinExe`, `UseWPF`) | WPF 실행 파일(`AssemblyName=MCPhoto`) | `CommunityToolkit.Mvvm`, `Microsoft.Extensions.Hosting/DI/Logging`, `Serilog(.File)` | UI·ViewModel·셸·DI 부트스트랩·이미징 |
 | `MCPhoto.Tests` | (tests) | 테스트 | — | 순수 로직·headless XAML 회귀 테스트 |
 
 의존 방향(단방향, 도메인이 최하위):
 
 ```
-MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
-     │                                     ▲
-     ├───────────▶  MCPhoto.Http  ─────────┘
-     └───────────────────────────────────▶ (Core)
+MCPhoto.App  ──▶  MCPhoto.Capture         ──▶  MCPhoto.Core
+     │                                            ▲
+     ├───────────▶  MCPhoto.Http  ────────────────┤
+     ├───────────▶  MCPhoto.Devices.Nikon  ───────┤
+     └────────────────────────────────────────────┘
 ```
 
-- `MCPhoto.App.csproj` — App은 Core/Capture/Http를 모두 참조.
-- `MCPhoto.Capture.csproj:17`, `MCPhoto.Http.csproj` — 둘 다 Core만 참조.
+- `MCPhoto.App.csproj` — App은 Core/Capture/Http/Devices.Nikon을 모두 참조.
+- `MCPhoto.Capture.csproj`, `MCPhoto.Http.csproj`, `MCPhoto.Devices.Nikon.csproj` — 셋 다 Core만 참조.
 - Core는 어떤 프로젝트도 참조하지 않음(도메인 순수성). App·Capture·Http는 Core의 인터페이스(`ICameraService`, `ICompositionService`, `IFrameRepository`, `IUploadService`, `IFirebaseClient`, `IAccountService`, `ISettingsService`, `IBrandingService` 등)에만 의존하고, 구상은 DI로 조립된다.
 
 계층 요약: **도메인(Core)** = 모델·상태 규칙·순수 로직(`SessionStateMachine`, `SlotLayout`, `EditorTransform`, `CropCalculator`, `PreviewReadiness`, `IdleCountdown`, `QrDeliveryPolicy`, `UploadContract`) + 서비스 인터페이스 + **백엔드 비의존 오케스트레이션**(`UploadService`·`QrService`는 it15에서 Core로 이관). **앱(App)** = MVVM·셸·DI·이미징·다이얼로그 서비스. **인프라(Capture/Http)** = 인터페이스 구상. 백엔드 계약 상세는 [30](./30-backend-firebase-integration.md).
@@ -88,7 +90,9 @@ MCPhoto.App  ──▶  MCPhoto.Capture  ──▶  MCPhoto.Core
 | `IGoogleSignInService`→`GoogleSignInService` | Singleton | Google SSO(시스템 브라우저 + loopback + PKCE, `:46`) |
 | `ISettingsService`→`IniSettingsService` | Singleton | 설정 단일 소스. **백엔드 게이트 키 기본값은 exe 내장값 주입**(`:53-55`) |
 | `ICameraService`→`OpenCvCameraService` | **Singleton** | 카메라 하드웨어·스레드 단일 소유(§4, `:58`) |
-| `IExternalCamera`→`NullExternalCamera`, `IPhotoPrinter`→`NullPhotoPrinter` | Singleton | 외부 장치 스캐폴드(현재 no-op, `:62-63`) |
+| `INikonSdkShim`→`MissingNikonSdkShim`, `IExternalCamera`→`NikonExternalCamera` | **Singleton** | 외부 카메라(DSLR). 물리 장치 1대 + SDK 모듈 수명(Shutdown) 때문에 Singleton. **SDK 실물이 없어 shim이 항상 "모듈 없음"** → 촬영은 웹캠 단독으로 강등된다. SDK 도착 시 shim 등록 한 줄만 교체(it23) |
+| `ExternalStillDecoder` | Singleton | DSLR 수신 JPEG를 웹캠과 동일 규칙(거울→슬롯 크롭→긴 변 2400 상한)으로 `CapturedStill`로 정규화(it23) |
+| `IPhotoPrinter`→`NullPhotoPrinter` | Singleton | 프린터 스캐폴드(현재 no-op — it23 범위 밖) |
 | `IIdleWatchdog`→`IdleWatchdog`, `AppShellViewModel` | Singleton | 유휴 감시·셸 상태머신(`:66-67`) |
 | `ILocalSaveService`, `FfmpegRunner`, `ITimelapseService`, `ICompositionService` | Singleton | 상태 없는(또는 공유) 서비스(`:70`, `:73-74`, `:77`) |
 | **백엔드 서비스 묶음** — `BackendSessionSynchronizer`/`IBackendSession`, `IFirebaseClient`→`HttpFirebaseClient`, `IFrameRepository`→`HttpFrameRepository`, `IAccountService`→`HttpAccountService`, `IQrUsageService`, `ITempUserLimitsService` | Singleton | `RegisterBackendServices`(`:81`, `:100-169`) + 명명 HttpClient `"backend"`(`:103-109`) |

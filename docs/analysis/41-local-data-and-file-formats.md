@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | 클라이언트가 기기에 저장하는 모든 것 — 설정 키·로컬 프레임 파일 포맷·세션 작업 공간·결과물 보관·브랜딩/버전 정보 |
 | 범위 | 설정 항목 전수와 유효 범위, 프레임 `.slots` 텍스트 포맷, 공용/개인 프레임 구분 규칙, 세션 임시 폴더 수명, 로컬 결과물 폴더 규약, 플랫폼별 저장 위치 대응 |
-| 최종 업데이트 | 2026-07-30 (신규 — [12](./12-exe-app-settings-and-config.md)의 INI 종속 서술을 플랫폼 중립 규격으로 재정리) |
+| 최종 업데이트 | 2026-08-10 (it23 반영 — 외부 카메라 설정 키 추가) · 이전 2026-07-30 (신규 — [12](./12-exe-app-settings-and-config.md)의 INI 종속 서술을 플랫폼 중립 규격으로 재정리) |
 | 관련 문서 | 진입 [05](./05-cross-platform-client-guide.md) · 화면 동작 [13](./13-client-behavior-spec.md) · 미디어 [14](./14-media-pipeline-spec.md) · Windows 구현 [12](./12-exe-app-settings-and-config.md) |
 | 갱신 규칙 | 설정 키 추가·기본값·범위 변경, 프레임 파일 포맷 변경, 세션 폴더 규약 변경 시 이 문서를 갱신한다. 프레임 파일 포맷은 **기존 사용자 데이터 호환성**에 직결되므로 변경 시 마이그레이션 계획을 함께 남긴다 |
 
@@ -57,7 +57,9 @@
 | `BackendBaseUrl` | string | `https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api` | 트림 + 트레일링 `/` **부여** | 백엔드 API 주소. 빈 값이면 미구성(업로드·로그인 불가) |
 | `BackendApiKey` | string | **""**(빌드 시 주입) | 트림 | 배포 게이트 키. §2.5 |
 | `GoogleClientId` | string | 플랫폼별 OAuth 클라이언트 ID | 트림 | **빈 값이면 로그인 버튼을 숨긴다**(SSO opt-out) |
-| `ExternalCameraEnabled` | bool | **false** | — | 외부 카메라(DSLR) — **미지원 스캐폴드**(저장만) |
+| `ExternalCameraEnabled` | bool | **false** | — | 외부 카메라(DSLR) **실배선**(it23). SDK·장비 부재 시 웹캠 단독 강등 |
+| `ExternalCameraModel` | string | `NikonD5300` | 미지 Id → 기본 모델 | 모델 레지스트리 Id. md3 파일명은 여기서 유도 |
+| `ExternalShutterSpeed` / `ExternalAperture` / `ExternalIso` | string | **""**(미지정) | 트림만 | 노출 3요소 표시 문자열(`1/125`·`f/5.6`·`400`). 빈 값 = 카메라 현재값 유지 |
 | `PhotoPrinterEnabled` | bool | **false** | — | 사진 프린터 — **미지원 스캐폴드** |
 
 **보조 상수**: 허용 컷수 {6,8,10} · 허용 카운트다운 {3,6,8,10} · 허용 재촬영 상한 {1,2,3} · 보관시간 1~72 · 슬롯 1~6 · 자동 컷수(sentinel **0**, 최소 **6**, 슬롯 여유분 **+2**).
