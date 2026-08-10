@@ -51,7 +51,8 @@
 | `ExternalShutterSpeed` | string | **""**(미지정) | 트림만 — 도메인 검증은 적용 시점 | `ExternalShutterSpeed` | 셔터 속도 표시 문자열(예 `1/125`). 빈 값 = 카메라 현재값 유지. **인덱스가 아니라 문자열**(카메라 목록은 모드·SDK 버전에 따라 달라진다) |
 | `ExternalAperture` | string | **""**(미지정) | 트림만 | `ExternalAperture` | 조리개(예 `f/5.6`) |
 | `ExternalIso` | string | **""**(미지정) | 트림만 | `ExternalIso` | ISO(예 `400`) |
-| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 — **미지원 스캐폴드**(it23 범위 밖) |
+| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 **준비 플래그**(it24 — placeholder에서 편집 가능으로 승격). 의미는 "인쇄 기능이 도입되면 이 프린터 구성을 사용한다"이고, 현재 런타임 효과는 **설정 화면의 프린터 하위 패널 노출뿐**이다(실제 인쇄는 비목표 — 화면이 상시 고지한다) |
+| `PhotoPrinterName` | string | **""**(미선택) | 트림만 — **목록 대조 없음** | `PhotoPrinterName` | 선택된 설치 프린터 이름(Windows 프린터명, 연결 프린터는 `\\서버\이름`). ⚠️ 열거 목록에 없어도 **값을 지우지 않는다** — 프린터가 잠시 꺼진 상태에서 관리자 설정을 파괴하지 않기 위함이고, 검증은 사용 시점(인쇄 구현)의 몫이다 |
 | `BackendBaseUrl` | string | **`https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api`**(운영 기본값 내장) | 트림 + 트레일링 `/` **부여**(`NormalizeBackend`) | `BackendBaseUrl` | 백엔드 API 주소. 빈 값이면 백엔드 미구성(업로드·로그인 불가) |
 | `BackendApiKey` | string | **""** — 실제 기본값은 **exe 내장 키**(`AssemblyMetadata "MCPhoto.BackendApiKey"`)를 로드 시 주입 | 트림 | `BackendApiKey` | 배포 게이트 키(`X-MCPhoto-Client`). ⚠️ INI에 평문 — 유출 시 서버에서 해당 키만 폐기 |
 | `GoogleClientId` | string | 운영 프로젝트 Desktop 클라이언트 ID 내장 | 트림 | `GoogleClientId` | Google SSO authorize URL 조립. **빈 값이면 로그인 화면의 "Google로 로그인" 버튼을 숨김**(SSO opt-out) |
@@ -62,9 +63,11 @@
 
 > **it12 R1 — 로그인 전용 편집(게이트)**: 게스트(비로그인) 설정 화면에서 `MirrorMode`·`RetakeEnabled`·`RetakeLimit`·`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`·`EnableQrDelivery`(+`SendPhoto`/`SendTimelapse`)·`HostingBaseUrl`·`StorageBucket`는 OFF 표시·컨트롤 비활성 + "로그인 필요" 인라인 노티 상시 표시(R3, hover 툴팁에서 개정)이며 저장 시 미기록(ini 원값 보존=클로버 금지). 게이트는 `SettingsViewModel`(VM)에만 존재 — `AppSettings` 모델은 전 필드 항상 직렬화되고, 촬영/필터 런타임은 `Settings.Current`(ini=관리자값)대로 동작한다(편집 권한만 제한, 기능은 불변).
 
-> **it23 — 외부 카메라 편집 게이트(`CanConfigureExternalCamera`)**: `ExternalCameraEnabled`·`ExternalCameraModel`·`ExternalShutterSpeed`/`ExternalAperture`/`ExternalIso` 5키는 **User 이상**(TempUser 제외)만 편집·저장한다. 역할 판정은 서수 부등식이 아니라 **명시 열거**다(`UserRoleExtensions.CanConfigureExternalCamera` — 역할이 추가될 때 권한이 조용히 따라 움직이는 것을 막는다).
-> - ⚠️ 다른 게이트와 **다른 점**: 편집 불가 세션에서도 로드 시 **강제 off 하지 않는다**. 게스트는 섹션 자체가 안 보이지만 TempUser에게는 **보이되 읽기 전용**이라, off로 표시하면 운영 상태를 오해하게 된다. 저장 시 미기록으로 원값을 보존한다.
-> - ⚠️ **편집 게이트이지 동작 게이트가 아니다**: 촬영 세션이 DSLR을 쓰는지는 ini의 `ExternalCameraEnabled` 기준이며 **게스트(손님) 세션에도 적용**된다 — 손님이 장비 구성을 바꿀 수는 없지만 그 장비로 찍히는 것은 당연하다는 키오스크 모델이다.
+> **it23 → it24 — 외부 장치 편집 게이트(`CanConfigureExternalCamera`)**: `ExternalCameraEnabled`·`ExternalCameraModel`·`ExternalShutterSpeed`/`ExternalAperture`/`ExternalIso` **+ it24에서 편입된 `PhotoPrinterEnabled`·`PhotoPrinterName`** = **7키**는 **User 이상**(TempUser 제외)만 편집·저장한다. 역할 판정은 서수 부등식이 아니라 **명시 열거**다(`UserRoleExtensions.CanConfigureExternalCamera` — 역할이 추가될 때 권한이 조용히 따라 움직이는 것을 막는다).
+> - it24 게이트 통일 근거: 종전 프린터 2키는 `!IsGuest` 블록에 있었으나 UI가 `IsEnabled="False"`라 TempUser도 값을 바꿀 수단이 없었다(기록값은 항상 Load 원값) — 게이트를 좁혀도 **관측 가능한 행동 차이가 없다**.
+> - ⚠️ 다른 게이트와 **다른 점**: 편집 불가 세션에서도 로드 시 **강제 off 하지 않는다**. it24부터 섹션은 게스트에게도 **보이되 읽기 전용**이므로(§11 설정 화면), off로 표시하면 운영 상태를 오해하게 된다 — ini 원값을 그대로 보여 주고 저장 시 미기록으로 원값을 보존한다.
+> - ⚠️ **편집 게이트이지 동작 게이트가 아니다**: 촬영 세션이 DSLR을 쓰는지는 ini의 `ExternalCameraEnabled` 기준이며 **게스트(손님) 세션에도 적용**된다 — 손님이 장비 구성을 바꿀 수는 없지만 그 장비로 찍히는 것은 당연하다는 키오스크 모델이다. 이것이 게스트에게도 원값을 보여 주는 이유다.
+> - ⚠️ **[장치 검색]·[프린터 다시 검색]은 이 게이트가 아니라 `IsLoggedIn`**이다(TempUser 포함, 게스트 제외) — 검색은 상태를 바꾸지 않는 진단이라 진단·상태 모달과 같은 눈높이다.
 
 ### 1.1 코드에 내장된 기본값(운영자 INI 입력 불요)
 

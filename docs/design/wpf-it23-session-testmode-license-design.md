@@ -1132,6 +1132,22 @@ public string TestModeBannerText { get; }   // CurrentUserChanged에서 OnProper
 
 # C부 · 오픈소스 라이선스 전문을 설정 안에서 직접 노출
 
+> ## ⚠️ 이 부의 화면·문구·파일 규격은 **it24로 대체됐다**
+>
+> 후속 문서: [it24 — 프로젝트 라이선스 고지 화면 재설계 · 고지 문서 상용화](./wpf-it24-license-notice-redesign-design.md)
+>
+> | 이 문서의 절 | it24에서 |
+> |---|---|
+> | §C3.1 레이아웃(좌 파일명 목록 + 우 전문 덤프) | **폐기** → 요약 카드(Level 1) + 전문(Level 2) 2단 구조 |
+> | §C5.1 문서 목록·선택 규격 | **폐기** → 카드가 기본, 파일 목록은 강등·미참조 문서 전용 |
+> | §C7.2 VM 멤버(`LicenseSelectionSummary` 등) | **재작성** → `LicensePage`·`LicenseSelfComponents`·`LicenseBundledComponents`·`LicenseFullTextCaption` 등 |
+> | §C10 동결 문구(`오픈소스 라이선스`) | **대체** → 버튼·제목 모두 `프로젝트 라이선스 고지` |
+> | 고지 파일명 `README.txt` · `FFmpeg-README.txt` | **개명** → `NOTICE.txt` · `FFmpeg-NOTICE.txt` + `notice-manifest.json` 신설 |
+>
+> **유지되는 것**: 법적 판정(§C1.2 — 이 변경이 GPLv3 의무를 강화한다), 수락 기준 **AC-C1**(로그인·역할 무관 전원 접근)·**AC-C2**(뷰어 구역이 계정을 참조하지 않는다), 전문 렌더링 규격(선택·복사 가능 · `NoWrap` · `ScrollViewer` 미포장), 실패 문구 F1~F6, "누락을 감추지 않는다" 원칙.
+>
+> 아래 서술은 **이력으로 보존**한다(절을 삭제하지 않는다) — 어떤 판정이 왜 뒤집혔는지 추적할 수 있어야 다음 사람이 되돌리지 않는다.
+
 ## C1 요구와 법적 제약
 
 ### C1.1 요구 원문
@@ -1146,7 +1162,7 @@ public string TestModeBannerText { get; }   // CurrentUserChanged에서 OnProper
 |------|--------|----------------|
 | **O1** 라이선스 전문 전달(GPLv3 §4) | `licenses/FFmpeg-COPYING.GPLv3.txt` **배포물 동봉** | **불변.** csproj 동봉·`CopyLicensesToPublish` 타겟을 **건드리지 않는다** |
 | **O2** 저작권 고지 유지 + GPL 적용 사실 명시(§4) | `licenses/README.txt` + **앱 내 고지**(§5.1 Step 1-6) | **강화.** 종전은 "경로 표시 + 폴더 열기"였고 게스트는 접근조차 못 했다(VF-13) → 이제 **전문을 앱 안에서 읽을 수 있고 로그인 불요** |
-| **O3** 대응 소스 접근 제공(§6) | `FFmpeg-README.txt`의 URL 2곳 + 3년 서면 오퍼 | **불변.** 그 파일이 뷰어 목록에 그대로 나온다 → 오히려 **발견성이 올라간다** |
+| **O3** 대응 소스 접근 제공(§6) | `FFmpeg-README.txt`(→ it24에서 `FFmpeg-NOTICE.txt`로 개명)의 URL 2곳 + 3년 서면 오퍼 | **불변.** 그 파일이 뷰어 목록에 그대로 나온다 → 오히려 **발견성이 올라간다**. ※ it24에서는 목록이 아니라 카드의 [소스 코드 제공 안내] 버튼이 이 파일을 연다 |
 | **O4** 수정 사실 표시 | 해당 없음(무수정 재배포) | 불변 |
 | **O5** 추가 제약 부과 금지 | — | 불변 |
 
@@ -1160,8 +1176,8 @@ public string TestModeBannerText { get; }   // CurrentUserChanged에서 OnProper
 
 | # | 사실 | 근거 |
 |---|------|------|
-| 1 | `licenses/`에 배포 시 **4파일**: `README.txt`(색인) · `FFmpeg-README.txt`(고지·소스 안내) · `FFmpeg-COPYING.GPLv3.txt`(전문 35,149 B / 674줄) · `MCPhoto-LICENSE-MIT.txt`(빌드 시 루트 `LICENSE` 링크 복사) | VF-14 · `MCPhoto.App.csproj:86-96` |
-| 2 | 전부 **UTF-8 no BOM · CRLF**. `README.txt`·`FFmpeg-README.txt`는 **한글 포함** | VF-14 |
+| 1 | `licenses/`에 배포 시 **4파일**: `README.txt`(색인) · `FFmpeg-README.txt`(고지·소스 안내) · `FFmpeg-COPYING.GPLv3.txt`(전문 35,149 B / 674줄) · `MCPhoto-LICENSE-MIT.txt`(빌드 시 루트 `LICENSE` 링크 복사) — **→ it24에서 앞 두 파일이 `NOTICE.txt`·`FFmpeg-NOTICE.txt`로 개명되고 `notice-manifest.json`이 추가되어 5파일이 됐다** | VF-14 · `MCPhoto.App.csproj:86-96` |
+| 2 | 전부 **UTF-8 no BOM · CRLF**. `README.txt`·`FFmpeg-README.txt`(**→ it24에서 개명**)는 **한글 포함** | VF-14 |
 | 3 | csproj가 `licenses\**\*.*`를 `%(RecursiveDir)` 보존으로 복사 → **하위 폴더가 가능한 구조** | `:87-89,100-111` |
 | 4 | 현행 UI = 진단 모달의 카드: 안내 문구 + **경로 TextBox** + [라이선스 폴더 열기] + 누락 경고 | `DiagnosticsWindow.xaml:262-290` |
 | 5 | 그 진단 모달은 **게스트가 열 수 없다**(`IsEnabled="{Binding IsLoggedIn}"`) | VF-13 |
@@ -1260,7 +1276,7 @@ TestMode(B부)가 켜지면 `SessionContext.CurrentUser`가 non-null이 되므�
 | 검색 패턴 | `*.txt` **재귀**(`SearchOption.AllDirectories`) | csproj가 `%(RecursiveDir)`을 보존하므로 하위 폴더가 성립한다(C2-3) |
 | 확장자 제한 | `.txt`만 | 폴더에 실수로 들어간 바이너리(PNG·zip)를 텍스트로 읽어 깨진 문자를 보여주는 것을 막는다. ⚠️ **비-txt 고지 파일이 생기면 이 목록을 넓혀야 한다** → 배포 체크리스트 항목(§C9) |
 | 표시 이름 | **파일명 그대로**(하위 폴더는 `하위폴더/파일명.txt`) | `README.txt`가 다른 파일을 **파일명으로 상호 참조**한다("전문은 FFmpeg-COPYING.GPLv3.txt에 있습니다"). 친절한 별칭을 붙이면 그 상호 참조가 목록과 어긋난다 |
-| 정렬 | ① `README.txt`(색인) **최상단 고정** ② 나머지는 파일명 `OrdinalIgnoreCase` 오름차순 | 색인을 먼저 읽게 하는 것이 `licenses/README.txt`를 만든 의도다. 나머지를 이름순으로 두면 `FFmpeg-*` 2개가 인접한다 |
+| 정렬 | ① `README.txt`(색인, **→ it24에서 `NOTICE.txt`로 개명**) **최상단 고정** ② 나머지는 파일명 `OrdinalIgnoreCase` 오름차순 | 색인을 먼저 읽게 하는 것이 그 파일을 만든 의도다. 나머지를 이름순으로 두면 `FFmpeg-*` 2개가 인접한다. ※ it24에서 색인의 UI 역할은 요약 카드가 가져갔고, 이 목록은 강등·미참조 문서 전용이 됐다 |
 | 초기 선택 | 목록 첫 항목(=`README.txt`) 자동 선택 + 본문 즉시 표시 | 열자마자 빈 화면을 보여주지 않는다 |
 | 크기 상한 | 파일당 **2 MB** | 현행 최대 35 KB. 2 MB는 오작동·오배치 방어선이며 정상 파일을 절대 막지 않는다 |
 | 개수 상한 | **없다** | 고지 파일을 임의로 잘라내지 않는다. 목록이 길어지면 스크롤될 뿐이다 |

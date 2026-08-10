@@ -149,7 +149,7 @@ GPL의 전염은 **파생저작물(derivative work)** 에 미친다. 판단 기�
 | # | 의무 | 근거 조항 | 구체적 산출물 |
 |---|------|-----------|---------------|
 | **O1** | 라이선스 전문 전달 | §4 | `licenses/FFmpeg-COPYING.GPLv3.txt` |
-| **O2** | 저작권 고지 유지 + GPL 적용 사실 명시 | §4 | 설치 폴더 `licenses/README.txt` + 앱 내 고지(§5.1) |
+| **O2** | 저작권 고지 유지 + GPL 적용 사실 명시 | §4 | 설치 폴더 `licenses/NOTICE.txt`(→ it24에서 `README.txt`에서 개명) + 앱 내 고지(§5.1) |
 | **O3** | **대응 소스(Corresponding Source) 접근 제공** | §6 | §2.5 참조 — 가장 실수하기 쉬운 항목 |
 | **O4** | 수정했다면 수정 사실 표시 | §5(a) | 해당 없음(바이너리 무수정 재배포) |
 | **O5** | 추가 제약 부과 금지 | §10 | EULA에 ffmpeg 리버스엔지니어링 금지 등을 걸지 말 것 |
@@ -258,11 +258,11 @@ A는 1·2·3 어느 경로와도 **조합 가능한 부가 옵션**이다(3을 �
 | Step | 작업 | 대상 |
 |------|------|------|
 | 1-1 | `licenses/FFmpeg-COPYING.GPLv3.txt` 추가(GPLv3 전문) | 신규 |
-| 1-2 | `licenses/FFmpeg-README.txt` 추가 — 버전(8.1.2-essentials, gyan.dev), **`ffmpeg -version`의 configuration 문자열 전문**, 소스 URL, 3년 오퍼 문구 | 신규 |
+| 1-2 | `licenses/FFmpeg-NOTICE.txt` 추가(착수 시 파일명은 `FFmpeg-README.txt`, → it24에서 개명) — 버전(8.1.2-essentials, gyan.dev), **`ffmpeg -version`의 configuration 문자열 전문**, 소스 URL, 3년 오퍼 문구 | 신규 |
 | 1-3 | 자사 서버(또는 사내 저장소)에 해당 릴리스 **소스 사본 미러링** + 그 URL을 1-2에 기재 | 인프라 |
 | 1-4 | 인스톨러가 `licenses/`를 설치하도록 `[Files]` 항목 추가 | `installer/MCPhoto.iss` |
 | 1-5 | csproj가 `licenses/`를 출력에 복사 | `MCPhoto.App.csproj` |
-| 1-6 | 앱 내 고지 — 진단 창(`DiagnosticsWindow`)에 "오픈소스 라이선스" 표기 + 라이선스 폴더 열기 버튼. `ILogFolderService`의 폴더 열기 패턴을 재사용 | `Views/DiagnosticsWindow.xaml`, `ViewModels/DiagnosticsViewModel.cs` |
+| 1-6 | 앱 내 고지 — 진단 창(`DiagnosticsWindow`)에 "오픈소스 라이선스" 표기 + 라이선스 폴더 열기 버튼. ⚠️ **이 형태는 it23에서 폐지**되고 설정 → 고급의 인앱 열람으로, it24에서 다시 요약 카드 + 전문 2단 구조로 대체됐다. `ILogFolderService`의 폴더 열기 패턴을 재사용 | `Views/DiagnosticsWindow.xaml`, `ViewModels/DiagnosticsViewModel.cs` |
 
 > 1-6의 위치는 [analysis/90 §6](../analysis/90-roadmap-and-future-work.md)의 "개발자 문의 공간"(설정 → 버전 확인 모달) 구상과 **같은 모달에 함께 넣는 것이 자연스럽다.** 그 항목을 착수할 때 묶으면 UI 작업이 한 번으로 끝난다.
 
@@ -372,8 +372,9 @@ IVideoTranscoder   ← FfmpegTranscoder    | MediaFoundationTranscoder
 | 파일 | 내용 | 의무 |
 |------|------|------|
 | `licenses/FFmpeg-COPYING.GPLv3.txt` | GPLv3 전문(gnu.org 원문 674줄, 무가공) | O1 |
-| `licenses/FFmpeg-README.txt` | 버전·**저작권 표시**·**configuration 문자열 전문(실측)**·소스 URL 2곳·**3년 서면 오퍼**·무수정 재배포 명시·추가제약 없음 명시·상표 고지 | O2·O3·O4·O5 |
-| `licenses/README.txt` | 고지 인덱스. MC포토 본체는 MIT임을 명시, 재배포 대상과 아닌 것을 구분 | O2 |
+| `licenses/FFmpeg-NOTICE.txt`(→ it24에서 `FFmpeg-README.txt`에서 개명) | 버전·**저작권 표시**·**configuration 문자열 전문(실측)**·소스 URL 2곳·**3년 서면 오퍼**·무수정 재배포 명시·추가제약 없음 명시·상표 고지 | O2·O3·O4·O5 |
+| `licenses/NOTICE.txt`(→ it24에서 `README.txt`에서 개명) | 고지 인덱스. MC포토 본체는 MIT임을 명시, 재배포 대상과 아닌 것을 구분 | O2 |
+| `licenses/notice-manifest.json` | **it24 신규.** 앱 고지 화면이 읽는 요약 메타데이터(구성 요소별 라이선스 이름·SPDX 식별자·저작권·버전·전문 파일 지목). 법적 산출물은 위 txt이며 이 파일은 그 색인이다 | O2·O3 가시성 |
 | `licenses/MCPhoto-LICENSE-MIT.txt` | MC포토 본체 MIT 전문. **물리 사본이 아니라 리포 루트 `LICENSE`를 csproj가 링크 복사**한다(단일 소스 유지) | — |
 
 configuration 문자열은 문서 작성 시점의 §1.3 발췌가 아니라 **번들 바이너리에서 직접 뽑았다**(`ffmpeg -version`). 실측 결과 §1.3에 없던 항목이 다수 있었다(`--disable-w32threads`, `--enable-cairo`, `--enable-libvmaf`, `--enable-libzimg`, `--enable-libopenmpt` 등) — 대응 소스 범위를 좁게 적으면 O3 이행이 불완전해지므로 전문을 그대로 실었다.
@@ -388,6 +389,8 @@ configuration 문자열은 문서 작성 시점의 §1.3 발췌가 아니라 **�
 **실측 검증**: `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true` 실행 결과 `licenses/` 3개 파일과 `tools/ffmpeg/ffmpeg.exe`가 모두 산출물에 존재함을 확인했다.
 
 ### 10.3 앱 내 고지 (Step 1-6)
+
+> ⚠️ **이 절의 UI는 두 번 대체됐다.** it23이 "폴더 열기 + 경로 표시"를 폐지하고 설정 → 고급의 **인앱 전문 열람**으로 옮겼고, it24가 그것을 **요약 카드 + 전문 2단 구조**로 재설계했다(현행 규격: [it24 라이선스 고지 재설계](./wpf-it24-license-notice-redesign-design.md) · [analysis/11 §19](../analysis/11-exe-app-features.md)). 아래 서술은 **2026-08-06 시점의 이력**으로 보존한다 — O1~O5 의무 판정(§2.4)은 여전히 유효하다.
 
 진단·상태 창(설정 → 고급)에 **"오픈소스 라이선스" 카드**를 신설했다. 로그 카드와 개발자 문의 카드 사이에 둔다.
 
@@ -433,14 +436,14 @@ $ ffmpeg -hide_banner -encoders | grep h264
 
 | # | 결함 | 조치 |
 |---|------|------|
-| D-1 | `licenses/README.txt`가 "설치 폴더의 LICENSE 파일 참조"라고 안내하는데 **MIT 전문이 배포물에 없었다**(csproj에 복사 규칙 부재). 안내가 거짓이었다 | 루트 `LICENSE`를 `licenses/MCPhoto-LICENSE-MIT.txt`로 링크 복사(빌드·publish 양쪽) + 인덱스 문안 정정 + 테스트 추가 |
+| D-1 | `licenses/README.txt`(→ it24에서 `NOTICE.txt`로 개명)가 "설치 폴더의 LICENSE 파일 참조"라고 안내하는데 **MIT 전문이 배포물에 없었다**(csproj에 복사 규칙 부재). 안내가 거짓이었다 | 루트 `LICENSE`를 `licenses/MCPhoto-LICENSE-MIT.txt`로 링크 복사(빌드·publish 양쪽) + 인덱스 문안 정정 + 테스트 추가 |
 | D-2 | **FFmpeg 저작권 표시가 없었다.** 버전·라이선스만 적었는데 GPLv3 §4는 저작권 고지 **유지**를 요구한다 | `Copyright (c) 2000-2026 the FFmpeg developers` + 정적 링크 라이브러리들의 저작권 소재 문단 추가 + 테스트로 고정 |
 
 ### 10.6 남은 작업 (사용자 액션 필요)
 
 | # | 항목 | 왜 코드로 못 하나 |
 |---|------|-------------------|
-| **U-1** | §5.1 Step 1-3 **소스 미러링** — 자사 서버에 ffmpeg 8.1.2 소스 사본을 올리고 그 URL을 `FFmpeg-README.txt` 3항에 추가 | 인프라 결정·호스팅 필요(UV-7). 현재는 제3자(gyan.dev·ffmpeg.org)를 가리키고 있고 이는 §6(d)로 허용되지만, **바이너리를 배포하는 동안 그 링크가 살아 있어야 한다**는 조건이 제3자에 걸려 있다 |
+| **U-1** | §5.1 Step 1-3 **소스 미러링** — 자사 서버에 ffmpeg 8.1.2 소스 사본을 올리고 그 URL을 `FFmpeg-NOTICE.txt` 3항에 추가(줄 추가만, 테스트 무영향) | 인프라 결정·호스팅 필요(UV-7). 현재는 제3자(gyan.dev·ffmpeg.org)를 가리키고 있고 이는 §6(d)로 허용되지만, **바이너리를 배포하는 동안 그 링크가 살아 있어야 한다**는 조건이 제3자에 걸려 있다 |
 | **U-2** | UV-6 확인 — **USB·현장 설치 동선이 있는지** | 운영 사실 확인. 있으면 §6(a)/(b)가 적용되는데, 서면 오퍼(4항)를 이미 넣어 두어 **현재 문안으로도 충족**된다 |
 | **U-3** | 실기 확인 — 인스톨러로 클린 PC 설치 후 `licenses/` 존재 및 진단 창 카드 동작 | 실제 설치 환경 필요 |
 

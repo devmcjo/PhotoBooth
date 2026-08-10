@@ -92,7 +92,8 @@ MCPhoto.App  ──▶  MCPhoto.Capture         ──▶  MCPhoto.Core
 | `ICameraService`→`OpenCvCameraService` | **Singleton** | 카메라 하드웨어·스레드 단일 소유(§4, `:58`) |
 | `INikonSdkShim`→`MissingNikonSdkShim`, `IExternalCamera`→`NikonExternalCamera` | **Singleton** | 외부 카메라(DSLR). 물리 장치 1대 + SDK 모듈 수명(Shutdown) 때문에 Singleton. **SDK 실물이 없어 shim이 항상 "모듈 없음"** → 촬영은 웹캠 단독으로 강등된다. SDK 도착 시 shim 등록 한 줄만 교체(it23) |
 | `ExternalStillDecoder` | Singleton | DSLR 수신 JPEG를 웹캠과 동일 규칙(거울→슬롯 크롭→긴 변 2400 상한)으로 `CapturedStill`로 정규화(it23) |
-| `IPhotoPrinter`→`NullPhotoPrinter` | Singleton | 프린터 스캐폴드(현재 no-op — it23 범위 밖) |
+| `IPhotoPrinter`→`NullPhotoPrinter` | Singleton | 프린터 **인쇄** 스캐폴드(현재 no-op — 실제 인쇄는 it24에서도 명시적 비목표). ⚠️ **열거는 별도 계약**(`IPrinterEnumerator`)이다 — "출력"과 "목록"을 한 인터페이스에 묶으면 "선택했으니 인쇄되겠지"라는 오해가 계약 수준으로 굳는다 |
+| `IPrinterEnumerator`→`SystemPrinterEnumerator` | Singleton | 설치 프린터 **열거**(it24 — `System.Printing`/`LocalPrintServer`, Local+Connections). 상태가 없어 Singleton 무해하고, 호출이 없으면 스풀러를 접촉하지 않는다. 관리자 권한 불요이며 실패는 예외가 아니라 `Succeeded=false`("확인 불가")로 — 빈 목록("설치된 프린터 없음")과 구조적으로 구분된다 |
 | `IIdleWatchdog`→`IdleWatchdog`, `AppShellViewModel` | Singleton | 유휴 감시·셸 상태머신(`:66-67`) |
 | `ILocalSaveService`, `FfmpegRunner`, `ITimelapseService`, `ICompositionService` | Singleton | 상태 없는(또는 공유) 서비스(`:70`, `:73-74`, `:77`) |
 | **백엔드 서비스 묶음** — `BackendSessionSynchronizer`/`IBackendSession`, `IFirebaseClient`→`HttpFirebaseClient`, `IFrameRepository`→`HttpFrameRepository`, `IAccountService`→`HttpAccountService`, `IQrUsageService`, `ITempUserLimitsService` | Singleton | `RegisterBackendServices`(`:81`, `:100-169`) + 명명 HttpClient `"backend"`(`:103-109`) |
