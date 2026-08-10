@@ -14,3 +14,7 @@
 - [합성 루트 테스트법](composition-root-testable.md) — 배선 결함은 ServiceRegistration을 조립해야 재현. IHttpClientFactory는 마지막 등록으로 덮어쓴다
 - [ImWrite 원자 교체 확장자](imwrite-atomic-replace-extension.md) — 임시파일도 .png 유지 필수. `경로+".tmp"`는 writer 없음 예외 → 최초 실행이 조용히 전부 실패
 - [it20 프레임 국면 불변식](it20-frame-load-phase-invariant.md) — Finalize가 Loading을 반환하면 전면 오버레이 영구 고착. quiet 갈래도 Loading→Ready로 닫는다
+- [ComboBox SelectedValue 클로버](combobox-selectedvalue-clobber.md) — 항목 없으면 TwoWay가 저장값을 null로 되쓴다(Disable도 무효). 합성 행으로 선택을 해석 가능하게
+- [System.Printing 무의존 참조](system-printing-available.md) — net8.0-windows+UseWPF에서 csproj 수정 0(실측). 큐 객체는 즉시 Dispose·POCO 복사, 관리 권한 요청 금지
+- [it24 검색 관측 이음새](it24-discovery-observation-seam.md) — 검색 VM 테스트는 probePortableDevices 주입 필수(미주입=실 WMI로 flaky). S1은 ManualResetEventSlim으로 관측
+- [publish 스테이징은 재사용된다](publish-staging-is-reused.md) — dotnet publish는 사라진 파일을 안 지운다. 배포 파일 개명 시 구·신이 함께 실림(bin\Release·publish\ 잔재 확인 필수)
