@@ -16,6 +16,12 @@ public sealed class FakeNikonSdkShim : INikonSdkShim
 {
     // ── 주입 스크립트 ──
 
+    /// <summary>
+    /// it24: shim 실구현 여부(준비도 판정 ⓐ). 기본 true — 이 페이크는 "SDK가 도착한 뒤"를 모사하므로
+    /// 부재 shim 경로는 <c>MissingNikonSdkShim</c> 또는 이 값을 false로 주입해 검증한다.
+    /// </summary>
+    public bool IsOperational { get; set; } = true;
+
     /// <summary>OpenAsync 결과. 기본 성공.</summary>
     public bool OpenResult { get; set; } = true;
 

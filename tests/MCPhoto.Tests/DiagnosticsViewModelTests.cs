@@ -121,6 +121,12 @@ public class DiagnosticsViewModelTests
         public int ListCalls { get; private set; }
         public IReadOnlyList<LicenseDocument> ListDocuments() { ListCalls++; return Documents; }
         public LicenseTextResult ReadText(LicenseDocument document) => LicenseTextResult.Ok("body");
+
+        // it24: 진단 화면은 요약(매니페스트)을 쓰지 않는다 — 고지 문서 **개수** 상태만 본다.
+        // 이 두 멤버가 여기서 비어 있다는 사실이 §7-3 판정("진단 행은 매니페스트에 의존하지 않는다")의 증거다.
+        public LicenseSummary ReadSummary()
+            => new(Array.Empty<LicenseComponent>(), Documents, null, "요약 미사용(진단 페이크)");
+        public LicenseTextResult ReadText(string fileName) => LicenseTextResult.Ok("body");
     }
 
     /// <summary>테스트 모드 상태만 주입하는 페이크(진단 화면은 IsEnabled·Options.Role만 읽는다).</summary>

@@ -32,6 +32,20 @@ namespace MCPhoto.Devices.Nikon;
 public interface INikonSdkShim : IAsyncDisposable
 {
     /// <summary>
+    /// 이 shim이 <b>실제로 SDK를 호출할 수 있는 구현</b>인지. (it24 §5.1 ⓐ)
+    /// <para>
+    /// <see cref="MissingNikonSdkShim"/>=false, 실구현=true. 왜 필요한가: SDK 런타임 파일이 수동 배치돼
+    /// 있어도 shim이 부재 구현이면 <see cref="OpenAsync"/>는 항상 실패한다. 그 실패를 "장치가 없다"로 읽으면
+    /// 거짓이므로(it24 R1), 준비도 판정은 파일 존재 <b>이전에</b> 이 플래그를 본다.
+    /// </para>
+    /// <para>
+    /// ⚠️ 이 멤버는 SDK 이름이 아니라 <b>구현 상태</b>를 묻는다 — 계약에 SDK 이름을 넣지 않는다는
+    /// it23 §3.4 규약을 위반하지 않는다.
+    /// </para>
+    /// </summary>
+    bool IsOperational { get; }
+
+    /// <summary>
     /// 모듈 로드 + 장치 대기. md3 <b>절대 경로</b>를 받는다(경로 규약은 호출측이 결정 — shim은 파일 배치를 모른다).
     /// 실패 시 <c>(false, 사용자 노출용 사유)</c>.
     /// </summary>

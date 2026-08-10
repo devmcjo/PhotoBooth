@@ -36,6 +36,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// 기존 테스트 호출부를 그대로 두기 위해 생성자 마지막 선택 파라미터로 받는다.
     /// </summary>
     private readonly ILicenseNoticeService? _licenseNotice;
+    /// <summary>
+    /// 설치 프린터 열거(it24 §7.3). 미주입(null)이면 열거가 "확인할 수 없습니다"(P4)로 축퇴한다 —
+    /// "설치된 프린터가 없습니다"(P2)로 뭉개지 않는다(R4: 서비스 부재는 부재의 근거가 아니다).
+    /// </summary>
+    private readonly IPrinterEnumerator? _printers;
+    /// <summary>
+    /// PnP 휴대용 장치 이름 조회 이음새(it24 §5.1 ③). 기본값은 실제 WMI 프로브다.
+    /// <para>
+    /// ⚠️ 왜 델리게이트인가: WMI는 이 머신에 실제로 꽂힌 장치를 돌려주므로, 주입 지점이 없으면
+    /// 검색 상태 전수표 테스트가 머신 구성에 따라 다른 결과를 본다(참고 라인 유무·매칭 여부).
+    /// 판정은 순수 함수 뒤에 있지만, <b>관측을 테스트가 지정할 수 있어야</b> 표 전체가 headless로 고정된다.
+    /// </para>
+    /// </summary>
+    private readonly Func<IReadOnlyList<string>> _probePortableDevices;
     private readonly ILogger<SettingsViewModel>? _logger;
 
     private DispatcherTimer? _noticeTimer;
@@ -60,7 +74,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _localSavePath = string.Empty;
     [ObservableProperty] private string _hostingBaseUrl = string.Empty;
     [ObservableProperty] private int _cameraDevice;
-    // it23: 외부 카메라는 실배선(촬영 세션이 이 값을 읽는다). 프린터는 여전히 placeholder(범위 밖).
+    // it23: 외부 카메라는 실배선(촬영 세션이 이 값을 읽는다).
+    // it24: 프린터도 placeholder를 벗었다 — 열거·선택·저장은 실배선이고 실제 인쇄만 비목표다
+    //       (프린터 관련 신규 멤버는 [external-discovery] 구역에 모여 있다).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasExposureDomain), nameof(CanOpenCameraTest))]
     private bool _externalCameraEnabled;
@@ -113,6 +129,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     public bool CanEditExternalCamera
         => IsLoggedIn && (_shell.CurrentUser?.Role.CanConfigureExternalCamera() ?? false);
+
+    /// <summary>
+    /// "권한 없음" 캡션 표시 조건(it24 §4.3): <b>로그인했으나 편집 불가</b>(= TempUser)일 때만.
+    /// 설정 진입 중 불변이라 INPC 불요.
+    /// <para>
+    /// 게스트에게는 이 캡션 대신 <c>GuestGateNote</c>("로그인 필요")가 뜬다. 게스트에게 "권한 없음"을 보여 주면
+    /// "로그인하면 되는가?"라는 질문에 답하지 못하는 문구가 된다 — 두 상태의 조치가 다르므로 문구도 갈라야 한다.
+    /// </para>
+    /// </summary>
+    public bool IsExternalEditDenied => IsLoggedIn && !CanEditExternalCamera;
 
     /// <summary>연동 가능 모델 목록(콤보 바인딩). 모델 추가는 Core 레지스트리 표 한 줄이다(§3.3).</summary>
     public IReadOnlyList<ExternalCameraModel> ExternalCameraModelOptions { get; } = ExternalCameraModels.All;
@@ -179,7 +205,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IDiagnosticsDialogService diagnostics,
         IFirebaseClient firebase, IExternalCamera external,
         ILogger<SettingsViewModel>? logger = null,
-        ILicenseNoticeService? licenseNotice = null)
+        ILicenseNoticeService? licenseNotice = null,
+        IPrinterEnumerator? printers = null,
+        Func<IReadOnlyList<string>>? probePortableDevices = null)
     {
         _shell = shell;
         _settings = settings;
@@ -190,6 +218,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _external = external;
         _logger = logger;
         _licenseNotice = licenseNotice;
+        _printers = printers;
+        // 네임스페이스를 들이지 않고 정규화 이름으로 호출한다(MCPhoto.Capture와 MCPhoto.Core.Capture 혼동 회피).
+        _probePortableDevices = probePortableDevices
+            ?? (() => MCPhoto.Capture.PortableDeviceProbe.TryGetPortableDeviceNames(_logger));
 
         ExposureParameters = new[] { _shutterSpeed, _aperture, _iso };
         foreach (var p in ExposureParameters)
@@ -220,6 +252,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         LoadSettings();
         await RefreshExposureDomainAsync();
         await RefreshCamerasAsync();
+        // it24 §8.3: 프린터 하위 패널이 열린 상태로 진입할 때만 열거한다(off면 패널이 없으니 열거도 없다).
+        //            스풀러 조회는 USB 세션을 만들지 않아 자동 수행이 §5.4 결정과 충돌하지 않는다.
+        // ⚠️ 여기서는 CanRefreshPrinters(IsLoggedIn) 게이트를 의도적으로 지나친다: 게스트에게도 섹션이
+        //    보이므로(§4.1) 목록이 비어 있으면 콤보가 근거 없이 비활성으로만 남는다. 프린터명은 비밀이 아니고
+        //    편집은 별도 게이트가 막는다 — [다시 검색] 버튼만 로그인 게이트를 쓴다(반복 조회는 명시 행위다).
+        if (PhotoPrinterEnabled) await RefreshPrintersAsync();
     }
 
     public override Task OnLeaveAsync()
@@ -330,11 +368,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
             CameraDevice = s.CameraDevice;
             // it23 §8.3-1: 외부 카메라는 편집 불가 세션(TempUser)에서도 **강제 off 하지 않는다** —
             //   섹션이 읽기 전용으로 보이므로 ini 원값을 그대로 표시해야 운영 상태가 정직하게 드러난다.
-            //   (게스트는 섹션 자체가 Collapsed라 표시 문제가 없다.)
+            // it24 §4.2: 게스트도 같다(섹션이 이제 보인다). 외부 장치 토글은 **편집 게이트이지 동작 게이트가 아니므로**
+            //   관리자가 켜 둔 DSLR은 게스트 세션에서도 동작한다 — off로 보여 주는 것이 오히려 거짓 표시다.
+            //   그래서 아래 게스트 강제 off 블록에 외부 장치 필드를 넣지 않는다.
             ExternalCameraEnabled = s.ExternalCameraEnabled;
             ExternalCameraModel = s.ExternalCameraModel;
             ApplySavedExposureText(s);
             PhotoPrinterEnabled = s.PhotoPrinterEnabled;
+            PhotoPrinterName = s.PhotoPrinterName;
             OutputFormat = s.OutputFormat;
             DisplayMode = s.DisplayMode;
             StorageBucket = s.StorageBucket;
@@ -452,6 +493,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // it23 §8.3-2: 외부 카메라 4필드는 **편집 권한이 있을 때만** 기록한다.
         // ⚠️ TempUser·게스트 세션이 이 값을 기록하면 관리자가 맞춰 둔 장비 구성·노출이 클로버된다
         //    (읽기 전용으로 보여 준 값을 저장해 버리는 형태). 미기록 = ini 원값 보존.
+        // it24 §9.2: 프린터 2키를 이 블록으로 편입해 외부 장치 섹션 7필드가 **단일 게이트**를 쓴다.
+        // ⚠️ 행동 회귀 없음: 종전 프린터 토글은 UI가 IsEnabled="False"라 TempUser도 값을 바꿀 수단이 없었다
+        //    (기록값은 항상 Load 원값) — 게이트를 좁혀도 관측 가능한 차이가 없다.
         if (CanEditExternalCamera)
         {
             s.ExternalCameraEnabled = ExternalCameraEnabled;
@@ -459,10 +503,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             s.ExternalShutterSpeed = _shutterSpeed.Text;
             s.ExternalAperture = _aperture.Text;
             s.ExternalIso = _iso.Text;
-        }
-        // 프린터는 여전히 placeholder(범위 밖) — 기존 게스트 게이트를 그대로 유지한다.
-        if (!IsGuest)
             s.PhotoPrinterEnabled = PhotoPrinterEnabled;
+            s.PhotoPrinterName = PhotoPrinterName ?? string.Empty;
+        }
         s.OutputFormat = OutputFormat;
         s.DisplayMode = DisplayMode;
         if (!IsGuest) s.StorageBucket = StorageBucket;     // Firebase 관련: 게스트 미저장 (보완#1)
@@ -489,14 +532,379 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private async Task Close() => await _shell.ReturnFromOverlay();
 
     // ══════════════════════════════════════════════════════════════════════════════════
-    // [license-viewer:begin] it23 C부 — 오픈소스 라이선스 전문 열람 (설계 §C5·§C7.2)
+    // [external-discovery:begin] it24 — 외부 장치 검색 · 프린터 열거 (설계 §5 · §7)
     //
-    // ⚠️ 이 구역은 **계정·역할·테스트 모드를 읽지 않는다**(수락 기준 AC-C2, 정적 검사 C-T14b가 고정).
-    //    고지 접근은 로그인 여부와 무관해야 하며(GPLv3 §4 — 게스트도 전문을 볼 수 있어야 한다),
-    //    뷰어가 세션을 전혀 읽지 않으면 "어떤 로그인 상태에서 못 보이나"라는 질문이 구조적으로 성립하지 않는다.
-    //    도달성은 전부 상위 진입 게이트(설정 화면 진입)가 결정한다.
-    // ⚠️ UI 어디에도 폴더 경로를 노출하지 않는다(요구: "경로를 적어주지 말고") — 경로는 로그에만 남는다.
+    // ⚠️ 이 구역의 전 문구는 **두 명제를 섞지 않는다**(설계 §3):
+    //    "연결 가능한 장치를 찾지 못했습니다"(부재 단정)는 SDK 제어 스택이 갖춰졌을 때만 말할 수 있고,
+    //    스택이 없으면 "장치 연결 여부를 확인할 수 없습니다"(판정 불가) + 사유만 말한다.
+    //    합치면 SDK 미탑재 배포본에서 화면이 부재를 단정하고, 운영자는 케이블·전원을 헛되이 점검한다.
+    // ⚠️ USB 관측(WMI)은 **양성 신호 전용**이다: "감지되었습니다"는 말해도 미감지를 "없음"의 근거로 쓰지 않는다.
     // ══════════════════════════════════════════════════════════════════════════════════
+
+    // ── 동결 문구(설계 §8.2 W16~W30). 상수로 모으는 이유는 NikonCameraReasons와 같다 —
+    //    같은 상태가 화면·테스트·운영 문서에서 다르게 설명되는 것을 막는다. ──
+
+    /// <summary>W16 — S0(검색 전).</summary>
+    public const string DiscoveryNotSearchedText = "장치를 검색하지 않았습니다. [장치 검색]으로 연결 상태를 확인하세요.";
+    /// <summary>W17 — S1(검색 중).</summary>
+    public const string DiscoverySearchingText = "장치 검색 중…";
+    /// <summary>W18 — S2 헤드라인. ★ "없습니다"가 아니다(판정 불가).</summary>
+    public const string DiscoveryUndeterminedText = "장치 연결 여부를 확인할 수 없습니다";
+    /// <summary>W19 — S4 헤드라인. 부재 단정도 완화형으로 쓴다("찾지 못했다"는 어느 경우에도 참이다).</summary>
+    public const string DiscoveryNotFoundText = "연결 가능한 장치를 찾지 못했습니다 (USB·전원·PTP 모드 확인)";
+    /// <summary>W20a — S3 부연(스택 미비인데 USB 후보가 보이는 상태).</summary>
+    public const string DiscoveryUncontrollableText = "SDK 모듈이 없어 제어할 수 없습니다";
+    /// <summary>W20b — S5 부연(스택 정상인데 연결 실패 + USB 후보 있음).</summary>
+    public const string DiscoveryConnectFailedText =
+        "SDK 연결에 실패했습니다 — 다른 프로그램의 점유(웹캠 유틸리티 등)·케이블을 확인하세요";
+    /// <summary>W21a — S6 부연.</summary>
+    public const string DiscoveryTestHintText = "세부 확인·셔터 테스트는 [카메라 테스트]에서 할 수 있습니다";
+    /// <summary>W22 — S7(검색 시퀀스 예외).</summary>
+    public const string DiscoveryFailedText = "장치 검색에 실패했습니다. 다시 시도해 주세요.";
+    /// <summary>W26 — P2(열거 성공·0대). 스풀러 DB 기준 명제로 한정한다(장치 전원·연결 상태가 아니다).</summary>
+    public const string PrinterNoneText = "설치된 프린터가 없습니다";
+    /// <summary>W27 — P4(열거 실패). ★ P2와 구조적으로 다른 상태다(조치가 다르다).</summary>
+    public const string PrinterUndeterminedText = "프린터 목록을 확인할 수 없습니다 (인쇄 스풀러 상태 확인)";
+    /// <summary>W28 — P1(열거 중).</summary>
+    public const string PrinterEnumeratingText = "프린터 확인 중…";
+
+    /// <summary>W20 — S3·S5 감지 라인. 관측된 이름 원문을 그대로 노출한다(운영자가 육안으로 대조한다).</summary>
+    public static string DiscoveryDetectedText(string names) => $"USB에서 장치가 감지되었습니다: {names}";
+    /// <summary>W21 — S6 헤드라인. "연결됨"이 아니라 "확인됨"인 이유: 표시 시점엔 이미 해제되어 있다(§5.5).</summary>
+    public static string DiscoveryConnectedText(string model) => $"{model} — 연결 확인됨";
+    /// <summary>W21b — S6 배터리(조회 성공 시에만).</summary>
+    public static string DiscoveryBatteryText(int percent) => $"배터리 {percent}%";
+    /// <summary>W23 — 비매칭 휴대용 장치 참고 라인(제네릭 이름으로 뜬 카메라를 운영자가 알아볼 유일한 단서).</summary>
+    public static string DiscoveryOtherDevicesText(string names)
+        => $"참고: 감지된 휴대용 장치(카메라가 아닐 수 있음): {names}";
+    /// <summary>W29 — P5 합성 행 표시명(저장값이 목록에 없을 때).</summary>
+    public static string PrinterUnverifiedDisplay(string name) => $"{name} (설치 확인 필요)";
+    /// <summary>W30 — P3 기본 프린터 접미.</summary>
+    public static string PrinterDefaultDisplay(string name) => $"{name} (기본)";
+
+    /// <summary>W23 참고 라인에 나열할 최대 개수(그 이상은 화면을 덮는다).</summary>
+    private const int OtherDeviceNoteLimit = 4;
+
+    // ── 카메라 검색 상태 ──
+
+    /// <summary>
+    /// 검색 진행 중(S1). 단일 비행 플래그 겸 버튼 비활성 조건이다.
+    /// ⚠️ 해제는 항상 <c>finally</c>에서 한다 — 예외 경로에서 true로 남으면 버튼이 영구 잠긴다(it20 교훈).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(DiscoverExternalCameraCommand))]
+    private bool _isDiscovering;
+
+    /// <summary>검색 결과 헤드라인(S0~S7). 초기값은 W16 — 검색하지 않은 상태를 정직하게 말한다.</summary>
+    [ObservableProperty] private string _discoveryHeadline = DiscoveryNotSearchedText;
+
+    /// <summary>
+    /// 상세 라인(사유 원문·감지·배터리·참고). 사유는 <c>NikonCameraReasons</c> 원문을 그대로 흘린다 —
+    /// 여기서 다시 문장을 만들면 같은 원인이 화면마다 다르게 설명된다.
+    /// </summary>
+    public ObservableCollection<string> DiscoveryDetailLines { get; } = new();
+
+    /// <summary>
+    /// [장치 검색]. 게이트는 <see cref="IsLoggedIn"/>(진단·상태 모달과 같은 눈높이 — TempUser 포함,
+    /// 게스트 제외)이며 검색은 상태를 바꾸지 않는 진단 액션이다(§4.3).
+    /// </summary>
+    private bool CanDiscoverExternalCamera() => IsLoggedIn && !IsDiscovering;
+
+    /// <summary>
+    /// 장치 검색 1회(§5.2). 관측 3원 → Core 순수 판정 → 문구.
+    /// <list type="bullet">
+    /// <item>① 전제 검사 + ③ WMI 관측은 <c>Task.Run</c>에서 — 둘 다 UI 스레드를 막을 수 있는 로컬 I/O다.</item>
+    /// <item>② SDK 연결은 <b>①이 참일 때만</b> 시도한다. 판정할 수 없는 상태의 연결 실패는 아무것도 증명하지 않으므로,
+    ///       그 시도를 아예 하지 않는 편이 상태표를 단순하게 유지한다(USB도 건드리지 않는다).</item>
+    /// <item>성공 시 스냅샷(모델명·배터리)만 채취하고 <b>즉시 해제</b>한다 — 설정 화면이 USB를 점유한 채
+    ///       방치되면 화면 이탈·예외 경로마다 해제 설계를 새로 해야 한다(§5.5).</item>
+    /// </list>
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanDiscoverExternalCamera))]
+    private async Task DiscoverExternalCameraAsync()
+    {
+        if (IsDiscovering) return;   // CanExecute와 이중 방어(커맨드 밖 호출·연타)
+        IsDiscovering = true;
+        DiscoveryHeadline = DiscoverySearchingText;
+        DiscoveryDetailLines.Clear();
+
+        try
+        {
+            var keywords = ModelKeywords();
+
+            var probed = await Task.Run(() => (
+                Readiness: _external.CheckReadiness(),
+                Names: _probePortableDevices()));
+
+            var candidates = MCPhoto.Capture.PortableDeviceProbe.MatchCandidates(probed.Names, keywords);
+
+            bool connected = false;
+            string? modelName = null;
+            int? battery = null;
+
+            if (probed.Readiness.CanControl)
+            {
+                connected = await _external.ConnectAsync();   // ConnectTimeout 5s 내장(어댑터)
+                if (connected)
+                {
+                    modelName = _external.ModelName;
+                    try
+                    {
+                        var caps = await _external.GetCapabilitiesAsync();
+                        battery = caps?.BatteryLevelPercent;
+                    }
+                    catch (Exception ex)
+                    {
+                        // E15: 배터리·capability 조회 실패는 검색 성공 판정을 바꾸지 않는다(라인만 생략).
+                        _logger?.LogWarning(ex, "검색 중 capability 조회 실패(배터리 표시 생략)");
+                    }
+
+                    await _external.DisconnectAsync();   // §5.5 연결 잔류 금지(어댑터가 예외를 삼킨다 — E16)
+                }
+            }
+
+            var state = ExternalDiscoveryJudge.Judge(probed.Readiness, candidates.Count > 0, connected);
+            ApplyDiscoveryResult(state, probed.Readiness, candidates, probed.Names, modelName, battery);
+        }
+        catch (Exception ex)
+        {
+            // E13: 예상 밖 예외도 크래시가 아니라 S7 문구로 끝난다(키오스크에서 설정 화면이 죽으면 홈으로 튕긴다).
+            _logger?.LogWarning(ex, "외부 카메라 검색 실패");
+            DiscoveryDetailLines.Clear();
+            DiscoveryHeadline = DiscoveryFailedText;
+        }
+        finally { IsDiscovering = false; }
+    }
+
+    /// <summary>
+    /// 모델 표시명에서 USB 관측 키워드를 유도한다(예 <c>"Nikon D5300"</c> → <c>["Nikon","D5300"]</c>).
+    /// 레지스트리 스키마를 늘리지 않는 것이 요점 — 모델 추가는 여전히 Core 표 한 줄이다(it23 §3.3).
+    /// </summary>
+    private IReadOnlyList<string> ModelKeywords()
+        => ExternalCameraModels.Resolve(ExternalCameraModel).DisplayName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// 판정 결과 → 화면 문구(§5.3 표 그대로). 문구 조립이 이 한 곳에만 있어야 상태별 명제가 어긋나지 않는다.
+    /// </summary>
+    private void ApplyDiscoveryResult(
+        ExternalCameraDiscoveryState state,
+        ExternalCameraReadiness readiness,
+        IReadOnlyList<string> candidates,
+        IReadOnlyList<string> allNames,
+        string? modelName,
+        int? battery)
+    {
+        DiscoveryDetailLines.Clear();
+
+        switch (state)
+        {
+            case ExternalCameraDiscoveryState.UndeterminedStackMissing:      // S2
+                DiscoveryHeadline = DiscoveryUndeterminedText;
+                AddDetailLine(readiness.Reason);
+                AddOtherDeviceNote(allNames, candidates);
+                break;
+
+            case ExternalCameraDiscoveryState.DetectedUncontrollable:        // S3
+                DiscoveryHeadline = DiscoveryDetectedText(string.Join(", ", candidates));
+                DiscoveryDetailLines.Add(DiscoveryUncontrollableText);
+                AddDetailLine(readiness.Reason);
+                break;
+
+            case ExternalCameraDiscoveryState.NotFound:                      // S4
+                DiscoveryHeadline = DiscoveryNotFoundText;
+                AddDetailLine(_external.UnavailableReason);
+                AddOtherDeviceNote(allNames, candidates);
+                break;
+
+            case ExternalCameraDiscoveryState.DetectedConnectFailed:         // S5
+                DiscoveryHeadline = DiscoveryDetectedText(string.Join(", ", candidates));
+                DiscoveryDetailLines.Add(DiscoveryConnectFailedText);
+                AddDetailLine(_external.UnavailableReason);
+                break;
+
+            case ExternalCameraDiscoveryState.Connected:                     // S6
+                DiscoveryHeadline = DiscoveryConnectedText(
+                    string.IsNullOrWhiteSpace(modelName)
+                        ? ExternalCameraModels.Resolve(ExternalCameraModel).DisplayName
+                        : modelName!);
+                if (battery is int percent) DiscoveryDetailLines.Add(DiscoveryBatteryText(percent));
+                DiscoveryDetailLines.Add(DiscoveryTestHintText);
+                break;
+
+            default:
+                // Judge는 S0·S1·S7을 반환하지 않는다. 여기 오면 판정 분기가 늘어난 것이므로 검색 전 상태로 되돌린다.
+                DiscoveryHeadline = DiscoveryNotSearchedText;
+                break;
+        }
+    }
+
+    private void AddDetailLine(string? line)
+    {
+        if (!string.IsNullOrWhiteSpace(line)) DiscoveryDetailLines.Add(line!);
+    }
+
+    /// <summary>
+    /// W23 참고 라인: 키워드에 걸리지 않은 휴대용 장치 이름을 원문으로 나열한다(최대 4개).
+    /// <para>
+    /// 왜 필요한가: Nikon 바디가 제네릭 "MTP Portable Device"로 뜨면 키워드 매칭은 miss난다(U2).
+    /// 그때 이 라인이 없으면 화면은 "확인할 수 없다"만 말하고, 운영자는 카메라가 PC에 보이는지조차 알 수 없다.
+    /// </para>
+    /// 매칭이 하나라도 있으면 감지 라인(W20)이 이미 그 역할을 하므로 붙이지 않는다.
+    /// </summary>
+    private void AddOtherDeviceNote(IReadOnlyList<string> allNames, IReadOnlyList<string> candidates)
+    {
+        if (candidates.Count > 0 || allNames.Count == 0) return;
+        var listed = allNames.Take(OtherDeviceNoteLimit);
+        DiscoveryDetailLines.Add(DiscoveryOtherDevicesText(string.Join(", ", listed)));
+    }
+
+    // ── 프린터 열거 ──
+
+    /// <summary>선택된 설치 프린터 이름(콤보 SelectedValue ↔ ini). 빈 값 = 미선택.</summary>
+    [ObservableProperty] private string _photoPrinterName = string.Empty;
+
+    /// <summary>열거 진행 중(P1). 단일 비행 + [다시 검색] 비활성 조건.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RefreshPrintersCommand))]
+    private bool _isEnumeratingPrinters;
+
+    /// <summary>
+    /// 프린터 목록 상태 문구(P1/P2/P4). P3·P5(정상 목록)에서는 빈 문자열 — 표시할 이상이 없다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPrinterStateText))]
+    private string _printerStateText = string.Empty;
+
+    /// <summary>상태 문구 표시 여부(문구가 있을 때만 — <see cref="HasSavedNotice"/>와 동형).</summary>
+    public bool HasPrinterStateText => !string.IsNullOrEmpty(PrinterStateText);
+
+    /// <summary>
+    /// 실제로 설치된 프린터가 있는지(콤보 IsEnabled). P2·P4에서 false다.
+    /// <para>
+    /// ⚠️ <c>PrinterOptions.Count &gt; 0</c>으로 파생시키지 않는다 — 저장값 보존용 합성 행(P5)이
+    /// 목록에 들어갈 수 있어, 개수만 보면 "선택할 수 있는 프린터가 있다"를 잘못 말하게 된다.
+    /// </para>
+    /// </summary>
+    [ObservableProperty] private bool _hasPrinters;
+
+    /// <summary>콤보 목록. 표시 가공(W29/W30)은 <see cref="PrinterOptionItem.Display"/>에만 하고 저장 키는 원문이다.</summary>
+    public ObservableCollection<PrinterOptionItem> PrinterOptions { get; } = new();
+
+    /// <summary>
+    /// 진행 중인 열거(테스트가 결정적으로 대기하는 이음새 — <see cref="LicenseLoadTask"/> 선례).
+    /// 토글 전환 훅은 동기 메서드라 <c>async void</c>를 쓸 수 없어 Task를 여기에 남긴다.
+    /// </summary>
+    public Task? PrinterEnumerationTask { get; private set; }
+
+    private bool CanRefreshPrinters() => IsLoggedIn && !IsEnumeratingPrinters;
+
+    /// <summary>
+    /// 설치 프린터 열거(P1~P5). 스풀러 조회는 서비스 내부에서 <c>Task.Run</c>으로 격리된다.
+    /// <para>
+    /// 프린터 열거는 USB 장치 세션을 만들지 않으므로(스풀러 DB 조회) "설정 진입만으로 USB를 건드리지 않는다"는
+    /// it23 결정과 충돌하지 않는다 — 그래서 카메라 검색과 달리 자동 수행이 허용된다.
+    /// </para>
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRefreshPrinters))]
+    private async Task RefreshPrintersAsync()
+    {
+        if (IsEnumeratingPrinters) return;
+        IsEnumeratingPrinters = true;
+        PrinterStateText = PrinterEnumeratingText;   // P1
+        try
+        {
+            // 서비스 미주입은 "프린터가 없다"가 아니라 "확인할 수 없다"다(R4).
+            var result = _printers is null
+                ? PrinterEnumerationResult.Failed
+                : await _printers.EnumerateAsync();
+            ApplyPrinterEnumeration(result);
+        }
+        catch (Exception ex)
+        {
+            // E17: 계약상 예외를 던지지 않지만, 다른 구현이 던져도 화면은 P4로 끝난다.
+            _logger?.LogWarning(ex, "프린터 열거 실패(확인 불가로 표시)");
+            ApplyPrinterEnumeration(PrinterEnumerationResult.Failed);
+        }
+        finally { IsEnumeratingPrinters = false; }
+    }
+
+    /// <summary>
+    /// 열거 결과 → 콤보·상태 문구(§7.3 P2~P5).
+    /// <para>
+    /// ⚠️ <b>저장값을 절대 지우지 않는다</b>(P5·E18). 목록에 없으면 합성 행을 첫 항목으로 넣어 선택을 유지한다 —
+    /// 항목이 없는 상태로 두면 WPF ComboBox가 매칭 실패한 <c>SelectedValue</c>를 null로 되써서
+    /// 관리자가 맞춰 둔 프린터 이름이 저장 한 번에 사라진다(목록 부재는 프린터가 잠시 꺼진 것일 수 있다).
+    /// </para>
+    /// </summary>
+    private void ApplyPrinterEnumeration(PrinterEnumerationResult result)
+    {
+        var saved = (PhotoPrinterName ?? string.Empty).Trim();
+
+        PrinterOptions.Clear();
+        foreach (var printer in result.Printers)
+        {
+            PrinterOptions.Add(new PrinterOptionItem(
+                printer.Name,
+                printer.IsDefault ? PrinterDefaultDisplay(printer.Name) : printer.Name));
+        }
+
+        bool savedIsInstalled = saved.Length > 0
+            && result.Printers.Any(p => string.Equals(p.Name, saved, StringComparison.OrdinalIgnoreCase));
+        if (saved.Length > 0 && !savedIsInstalled)
+            PrinterOptions.Insert(0, new PrinterOptionItem(saved, PrinterUnverifiedDisplay(saved)));
+
+        // 목록 교체 과정에서 콤보가 선택을 비웠을 수 있으므로 스냅샷으로 복원한다.
+        if (!string.Equals(PhotoPrinterName, saved, StringComparison.Ordinal)) PhotoPrinterName = saved;
+
+        HasPrinters = result.Succeeded && result.Printers.Count > 0;
+        PrinterStateText = result.Succeeded
+            ? (result.Printers.Count == 0 ? PrinterNoneText : string.Empty)
+            : PrinterUndeterminedText;
+    }
+
+    /// <summary>
+    /// 프린터 토글 off→on 전환 시 열거 1회(§8.3). 이미 목록이 있으면 재열거하지 않는다 —
+    /// 토글을 껐다 켜는 동안 스풀러를 반복 조회할 이유가 없다([다시 검색]이 명시 경로다).
+    /// <para>
+    /// <c>_normalizing</c> 가드: <see cref="LoadSettings"/>가 ini 값을 심는 동안에도 이 훅이 발화한다.
+    /// 진입 시점의 열거는 <see cref="OnEnterAsync"/>가 한 번만 수행하므로 여기서는 억제해야 중복이 없다.
+    /// </para>
+    /// </summary>
+    partial void OnPhotoPrinterEnabledChanged(bool value)
+    {
+        if (_normalizing || !value) return;
+        if (PrinterOptions.Count > 0) return;
+        PrinterEnumerationTask = RefreshPrintersAsync();
+    }
+
+    // [external-discovery:end]
+
+    // ══════════════════════════════════════════════════════════════════════════════════
+    // [license-viewer:begin] it24 — 프로젝트 라이선스 고지 (설계 §2·§3, it23 C부 재설계)
+    //
+    // ⚠️ 이 구역은 **계정·권한·시험 세션 종류를 읽지 않는다**(수락 기준 AC-C2, 정적 검사 C-T14b가 고정).
+    //    고지 접근은 로그인 여부와 무관해야 하며(GPLv3 §4 — 손님 세션도 전문을 볼 수 있어야 한다),
+    //    이 구역이 세션을 전혀 읽지 않으면 "어떤 상태에서 못 보이나"라는 질문이 구조적으로 성립하지 않는다.
+    //    도달성은 전부 상위 진입 게이트(설정 화면 진입)가 결정한다.
+    // ⚠️ UI 어디에도 폴더 경로·파일명을 노출하지 않는다 — 경로는 로그에만 남는다. 파일명 노출이 허용되는
+    //    유일한 지점은 강등 폴백 목록과 미참조 문서 섹션이며(우리가 아는 정보가 파일명뿐이다),
+    //    정상 배포물에서는 둘 다 렌더링되지 않는다(설계 §2.6).
+    // ⚠️ 화면은 2단이다: Level 1 = 요약 카드(기본), Level 2 = 전문/상세 1건. 같은 오버레이 안에서
+    //    Visibility로 전환하며, 새 창·새 화면 상태를 만들지 않는다.
+    // ══════════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 고지 화면의 2단 구조. 새 <c>AppState</c>·새 <c>Window</c>를 만들지 않는 이유는 촬영 상태 기계를
+    /// 라이선스 표시 때문에 건드리지 않기 위해서다.
+    /// </summary>
+    public enum LicenseViewerPage
+    {
+        /// <summary>Level 1 — 컴포넌트 요약 카드.</summary>
+        Summary,
+        /// <summary>Level 2 — 라이선스 전문 또는 상세 고지 1건.</summary>
+        FullText,
+    }
 
     /// <summary>고지 폴더 자체가 없을 때(F1). 배포 산출물 누락이므로 감추지 않고 알린다.</summary>
     public const string LicenseFolderMissingMessage =
@@ -510,19 +918,64 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public const string LicenseUnavailableMessage =
         "라이선스 고지를 불러올 수 없습니다. 개발자에게 알려주세요.";
 
-    /// <summary>오버레이 표시 여부. [오픈소스 라이선스] 버튼으로만 열리고 [닫기]로만 닫힌다(자동 닫힘 없음).</summary>
+    /// <summary>Level 2 부제 — 라이선스 전문을 보고 있을 때.</summary>
+    public const string LicenseFullTextSubtitleText = "라이선스 전문";
+
+    /// <summary>Level 2 부제 — 상세 고지(소스 코드 제공 안내)를 보고 있을 때.</summary>
+    public const string LicenseNoticeSubtitleText = "소스 코드 제공 안내";
+
+    /// <summary>오버레이 표시 여부. [프로젝트 라이선스 고지] 버튼으로만 열리고 [닫기]·Esc로만 닫힌다.</summary>
     [ObservableProperty] private bool _isLicenseViewerOpen;
 
-    /// <summary>고지 문서 목록(열 때마다 재열거 — 파일 교체·삭제를 반영한다. 비용은 디렉터리 열거 1회).</summary>
+    /// <summary>현재 단계. XAML은 아래 두 bool만 보고 <c>BoolToVis</c>로 전환한다(신규 컨버터 0개).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLicenseSummaryPage))]
+    [NotifyPropertyChangedFor(nameof(IsLicenseFullTextPage))]
+    private LicenseViewerPage _licensePage = LicenseViewerPage.Summary;
+
+    public bool IsLicenseSummaryPage => LicensePage == LicenseViewerPage.Summary;
+    public bool IsLicenseFullTextPage => LicensePage == LicenseViewerPage.FullText;
+
+    /// <summary>
+    /// 요약 카드 — 이 소프트웨어 본체. 카드 소스를 종류별 2개 컬렉션으로 나눈 이유: 섹션 머리를
+    /// "항목이 있을 때만" 띄우려면 그룹별 존재 여부가 필요하고, <c>CollectionViewSource</c> 그룹 헤더에서
+    /// 그룹 키(bool)를 문구로 바꾸려면 신규 컨버터나 <c>object</c> 대상 DataTrigger가 필요해진다
+    /// (설계 §3.6의 "신규 컨버터 0개" 제약과 충돌).
+    /// </summary>
+    public ObservableCollection<LicenseComponent> LicenseSelfComponents { get; } = new();
+
+    /// <summary>요약 카드 — 동봉된 오픈소스.</summary>
+    public ObservableCollection<LicenseComponent> LicenseBundledComponents { get; } = new();
+
+    public bool HasLicenseSelfComponents => LicenseSelfComponents.Count > 0;
+    public bool HasLicenseBundledComponents => LicenseBundledComponents.Count > 0;
+
+    /// <summary>카드가 하나라도 있는지. 0개면 카드 영역 전체를 접고 배너만 남긴다.</summary>
+    public bool HasLicenseComponents => HasLicenseSelfComponents || HasLicenseBundledComponents;
+
+    /// <summary>
+    /// 미참조 고지 문서(정상 배포물에서는 0건) + 강등 시의 폴백 목록.
+    /// ⚠️ it24에서 <b>의미가 바뀌었다</b> — 더 이상 화면의 기본 목록이 아니다.
+    /// </summary>
     public ObservableCollection<LicenseDocument> LicenseDocuments { get; } = new();
 
-    /// <summary>선택된 문서. 변경되면 본문을 다시 읽는다(캐시하지 않는다 — 파일 교체 반영 + 메모리 상주 회피).</summary>
+    /// <summary>폴백·미참조 목록 섹션 표시 여부.</summary>
+    public bool HasLicenseDocuments => LicenseDocuments.Count > 0;
+
+    /// <summary>폴백·미참조 목록의 선택. 선택되면 그 문서의 본문으로 Level 2에 진입한다.</summary>
     [ObservableProperty] private LicenseDocument? _selectedLicenseDocument;
 
     /// <summary>본문 전문. 개행(CRLF)·탭을 변환하지 않은 원문이다("그대로 노출" 요구).</summary>
     [ObservableProperty] private string _licenseText = string.Empty;
 
-    /// <summary>실패 안내(§C6). 빈 문자열이면 미노출.</summary>
+    /// <summary>강등 배너(D1·D2). 닫을 수 없다 — 배포 사고를 현장에서 드러낸다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLicenseDegraded))]
+    private string _licenseDegradedMessage = string.Empty;
+
+    public bool HasLicenseDegraded => !string.IsNullOrEmpty(LicenseDegradedMessage);
+
+    /// <summary>실패 안내(F1~F6). 빈 문자열이면 미노출.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasLicenseError))]
     private string _licenseErrorMessage = string.Empty;
@@ -533,8 +986,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>본문 읽는 중(`불러오는 중…` 표시). 파일이 느린 저장소에 있을 수 있다.</summary>
     [ObservableProperty] private bool _isLicenseLoading;
 
-    /// <summary>하단 요약 <c>{파일명} · {크기}</c> — 전문 여부를 사용자가 가늠할 수 있게 한다.</summary>
-    [ObservableProperty] private string _licenseSelectionSummary = string.Empty;
+    /// <summary>
+    /// Level 2 헤더. 정상 경로는 <c>{구성 요소} · {SPDX}</c>이며 <b>파일명이 들어가지 않는다</b>.
+    /// 폴백 문서에서 진입한 경우에만 <c>{파일명} · {크기}</c>가 된다(그 목록은 파일명이 유일한 정보다).
+    /// </summary>
+    [ObservableProperty] private string _licenseFullTextCaption = string.Empty;
+
+    /// <summary>Level 2 부제(전문인지 상세 고지인지).</summary>
+    [ObservableProperty] private string _licenseFullTextSubtitle = string.Empty;
+
+    /// <summary>Level 1 푸터 우측의 고지 기준일 표기. 값이 없으면 빈 문자열(미표시).</summary>
+    [ObservableProperty] private string _licenseNoticeAsOfText = string.Empty;
 
     /// <summary>
     /// 진행 중인 본문 읽기(테스트가 결정적으로 대기하는 이음새 — <c>UserMgmtViewModel.FrameCountLoadTask</c> 선례).
@@ -542,83 +1004,159 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public Task? LicenseLoadTask { get; private set; }
 
     /// <summary>
-    /// 뷰어 열기: 재열거 → 첫 항목(색인) 자동 선택 → 본문 표시. 열자마자 빈 화면을 보여주지 않는다.
+    /// 단조 증가 요청 ID. 본문 요청 출처가 3개(카드 전문·카드 상세 고지·폴백 문서 선택)로 늘어나
+    /// "선택 객체 비교"만으로는 stale 판정이 불가능해졌다 — 도착 시 ID가 최신인 결과만 반영한다.
+    /// </summary>
+    private int _licenseRequestId;
+
+    /// <summary>
+    /// 고지 열기: 요약 재구성 → Level 1. <b>전문을 읽지 않는다</b>(종전에는 열자마자 색인 본문을 읽었다).
     /// 실패는 예외가 아니라 안내 문구로 끝난다 — 여기서 예외가 새면 설정 화면이 통째로 닫힌다(홈 복귀 사고).
     /// </summary>
     [RelayCommand]
     private async Task OpenLicenseViewer()
     {
         IsLicenseViewerOpen = true;
-        LicenseDocuments.Clear();
-        LicenseText = string.Empty;
-        LicenseSelectionSummary = string.Empty;
-        LicenseErrorMessage = string.Empty;
-        SelectedLicenseDocument = null;
+        ResetLicenseViewerState();
 
-        IReadOnlyList<LicenseDocument> docs;
-        if (_licenseNotice is null)
+        var service = _licenseNotice;
+        if (service is null)
         {
             LicenseErrorMessage = LicenseUnavailableMessage;
             return;
         }
 
-        try { docs = _licenseNotice.ListDocuments(); }
+        LicenseSummary summary;
+        try
+        {
+            // 매니페스트 읽기 + 파일 존재 검사 N회 = 디스크 접근. 느린·네트워크 저장소에서 UI를 멈추지 않는다.
+            // ConfigureAwait(true): 아래 대입(PropertyChanged)이 UI 스레드에서 일어나야 한다.
+            summary = await Task.Run(service.ReadSummary).ConfigureAwait(true);
+        }
         catch (Exception ex)
         {
             // 서비스 계약상 예외를 던지지 않지만, 다른 구현이 던져도 화면은 열려 있어야 한다.
-            _logger?.LogWarning(ex, "라이선스 고지 열거 실패");
+            _logger?.LogWarning(ex, "라이선스 고지 요약 산출 실패");
             LicenseErrorMessage = LicenseUnavailableMessage;
             return;
         }
 
-        if (docs.Count == 0)
+        foreach (var component in summary.Components)
         {
-            // 폴더 부재(F1)와 파일 0건(F2)을 구분한다 — 조치가 다르고, 뭉개면 배포 사고의 형태를 알 수 없다.
-            LicenseErrorMessage = _licenseNotice.Exists ? LicenseFilesMissingMessage : LicenseFolderMissingMessage;
-            return;
+            if (component.IsSelf) LicenseSelfComponents.Add(component);
+            else LicenseBundledComponents.Add(component);
         }
+        foreach (var document in summary.UnlistedDocuments) LicenseDocuments.Add(document);
+        NotifyLicenseCollectionsChanged();
 
-        foreach (var doc in docs) LicenseDocuments.Add(doc);
-        SelectedLicenseDocument = LicenseDocuments[0];   // 변경 콜백이 본문 로드를 시작한다
-        if (LicenseLoadTask is { } load) await load;     // 첫 로드는 기다린다(열자마자 본문이 보여야 한다)
+        LicenseNoticeAsOfText = string.IsNullOrEmpty(summary.UpdatedOn)
+            ? string.Empty
+            : $"{summary.UpdatedOn} 기준";
+
+        if (!string.IsNullOrEmpty(summary.DegradedMessage))
+        {
+            // 강등이어도 폴더에 문서가 있으면 그것을 그대로 보여준다(전문 도달 경로 유지 = GPLv3 §4의 마지막 그물).
+            // 문서조차 없으면 강등이 아니라 배포 누락이므로 폴더 부재(F1)와 파일 0건(F2)을 구분해 알린다.
+            if (HasLicenseDocuments) LicenseDegradedMessage = summary.DegradedMessage!;
+            else LicenseErrorMessage = service.Exists ? LicenseFilesMissingMessage : LicenseFolderMissingMessage;
+        }
+        else if (!HasLicenseComponents)
+        {
+            // 서비스는 항목 0개를 강등으로 판정하므로 여기까지 오지 않는다. 다른 구현 대비 방어.
+            LicenseErrorMessage = service.Exists ? LicenseFilesMissingMessage : LicenseFolderMissingMessage;
+        }
     }
 
-    /// <summary>뷰어 닫기: 본문(최대 수십 KB)과 목록을 놓아준다. 오버레이가 닫히면 설정 편집이 다시 가능해진다.</summary>
+    /// <summary>고지 닫기: 본문(최대 수십 KB)과 컬렉션을 놓아준다. 닫히면 설정 편집이 다시 가능해진다.</summary>
     [RelayCommand]
     private void CloseLicenseViewer()
     {
         IsLicenseViewerOpen = false;
-        SelectedLicenseDocument = null;   // 진행 중 로드 결과는 stale 판정으로 버려진다
-        LicenseDocuments.Clear();
+        ResetLicenseViewerState();
+    }
+
+    /// <summary>[라이선스 전문 보기] — 해당 구성 요소의 전문 파일로 Level 2 진입.</summary>
+    [RelayCommand]
+    private async Task ShowLicenseFullText(LicenseComponent? component)
+    {
+        if (component is null) return;
+        LicenseLoadTask = LoadLicenseBodyAsync(
+            CaptionFor(component), LicenseFullTextSubtitleText,
+            service => service.ReadText(component.FullTextFile));
+        await LicenseLoadTask;
+    }
+
+    /// <summary>[소스 코드 제공 안내] — 해당 구성 요소의 상세 고지 파일로 Level 2 진입.</summary>
+    [RelayCommand]
+    private async Task ShowLicenseNotice(LicenseComponent? component)
+    {
+        if (component?.NoticeFile is not { Length: > 0 } noticeFile) return;
+        LicenseLoadTask = LoadLicenseBodyAsync(
+            CaptionFor(component), LicenseNoticeSubtitleText,
+            service => service.ReadText(noticeFile));
+        await LicenseLoadTask;
+    }
+
+    /// <summary>[← 뒤로] — Level 2 → Level 1. 본문(수십 KB)을 즉시 놓아준다.</summary>
+    [RelayCommand]
+    private void BackToLicenseSummary()
+    {
+        unchecked { _licenseRequestId++; }   // 진행 중 로드 결과를 stale로 만든다
+        LicensePage = LicenseViewerPage.Summary;
+        SelectedLicenseDocument = null;
         LicenseText = string.Empty;
-        LicenseSelectionSummary = string.Empty;
+        LicenseFullTextCaption = string.Empty;
+        LicenseFullTextSubtitle = string.Empty;
         LicenseErrorMessage = string.Empty;
         IsLicenseLoading = false;
     }
 
-    /// <summary>목록 선택 변경 → 본문 재로드(선택마다 파일을 다시 읽는다).</summary>
-    partial void OnSelectedLicenseDocumentChanged(LicenseDocument? value)
-        => LicenseLoadTask = LoadLicenseTextAsync(value);
+    /// <summary>
+    /// Esc 1키의 3분기: Level 2 → Level 1 / Level 1 → 닫기 / 닫힌 상태 → <b>아무 것도 하지 않는다</b>.
+    /// <c>KeyBinding</c>이 커맨드 하나만 지목할 수 있어 분기를 VM에 두었다 — 덕분에 3분기를 단위 테스트로 검증한다
+    /// (설정 화면을 Esc로 닫는 동작을 새로 만들지 않는다).
+    /// </summary>
+    [RelayCommand]
+    private void EscapeLicenseViewer()
+    {
+        if (!IsLicenseViewerOpen) return;
+        if (LicensePage == LicenseViewerPage.FullText) BackToLicenseSummary();
+        else CloseLicenseViewer();
+    }
 
     /// <summary>
-    /// 본문 읽기. <c>Task.Run</c>으로 오프로드하는 이유: 파일이 네트워크 드라이브·느린 디스크에 있을 수 있고
-    /// UI 스레드 동기 읽기는 키오스크를 멈춘다(리포 규약 — 로컬 I/O는 <c>Task.Run</c>).
-    /// 선택 스냅샷을 비교해 <b>stale 결과를 버린다</b>(다른 파일을 고르거나 오버레이를 닫은 뒤 도착한 결과).
+    /// 폴백·미참조 목록의 선택 변경 → 그 문서 본문으로 Level 2 진입.
+    /// ⚠️ <c>null</c>은 초기화 경로(컬렉션 비움·뒤로)이므로 페이지를 전환하지 않는다 — 하지 않으면
+    /// 닫기·뒤로가 곧바로 Level 2를 다시 열어 버린다.
     /// </summary>
-    private async Task LoadLicenseTextAsync(LicenseDocument? document)
+    partial void OnSelectedLicenseDocumentChanged(LicenseDocument? value)
     {
-        if (document is null)
-        {
-            LicenseText = string.Empty;
-            LicenseSelectionSummary = string.Empty;
-            IsLicenseLoading = false;
-            return;
-        }
+        if (value is null) return;
+        LicenseLoadTask = LoadLicenseBodyAsync(
+            $"{value.DisplayName} · {value.SizeText}", LicenseFullTextSubtitleText,
+            service => service.ReadText(value));
+    }
 
-        IsLicenseLoading = true;
-        LicenseErrorMessage = string.Empty;
+    /// <summary>Level 2 헤더 문구. 파일명을 쓰지 않는다(요구 R1).</summary>
+    private static string CaptionFor(LicenseComponent component) => $"{component.Name} · {component.SpdxId}";
+
+    /// <summary>
+    /// 본문 읽기(3경로 공용). <c>Task.Run</c>으로 오프로드하는 이유: 파일이 네트워크 드라이브·느린 디스크에
+    /// 있을 수 있고 UI 스레드 동기 읽기는 키오스크를 멈춘다(리포 규약 — 로컬 I/O는 <c>Task.Run</c>).
+    /// 요청 ID를 비교해 <b>stale 결과를 버린다</b>(다른 항목을 누르거나 닫은 뒤 도착한 결과).
+    /// </summary>
+    private async Task LoadLicenseBodyAsync(
+        string caption, string subtitle, Func<ILicenseNoticeService, LicenseTextResult> read)
+    {
+        int id;
+        unchecked { id = ++_licenseRequestId; }
+
+        LicensePage = LicenseViewerPage.FullText;
+        LicenseFullTextCaption = caption;
+        LicenseFullTextSubtitle = subtitle;
         LicenseText = string.Empty;
-        LicenseSelectionSummary = $"{document.DisplayName} · {document.SizeText}";
+        LicenseErrorMessage = string.Empty;
+        IsLicenseLoading = true;
         try
         {
             var service = _licenseNotice;
@@ -628,9 +1166,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 return;
             }
 
-            // ConfigureAwait(true): 아래 대입(PropertyChanged)이 UI 스레드에서 일어나야 한다.
-            var result = await Task.Run(() => service.ReadText(document)).ConfigureAwait(true);
-            if (!ReferenceEquals(document, SelectedLicenseDocument)) return;   // stale 폐기
+            var result = await Task.Run(() => read(service)).ConfigureAwait(true);
+            if (id != _licenseRequestId) return;   // stale 폐기
 
             if (result.IsSuccess) LicenseText = result.Text!;
             else LicenseErrorMessage = result.ErrorMessage ?? LicenseUnavailableMessage;
@@ -638,13 +1175,40 @@ public sealed partial class SettingsViewModel : ViewModelBase
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "라이선스 고지 본문 읽기 실패");
-            if (ReferenceEquals(document, SelectedLicenseDocument))
-                LicenseErrorMessage = LicenseUnavailableMessage;
+            if (id == _licenseRequestId) LicenseErrorMessage = LicenseUnavailableMessage;
         }
         finally
         {
-            if (ReferenceEquals(document, SelectedLicenseDocument)) IsLicenseLoading = false;
+            if (id == _licenseRequestId) IsLicenseLoading = false;
         }
+    }
+
+    /// <summary>열기·닫기 공용 초기화. 열 때마다 재구성하는 이유는 파일 교체·삭제를 반영하기 위해서다.</summary>
+    private void ResetLicenseViewerState()
+    {
+        unchecked { _licenseRequestId++; }   // 진행 중 로드 결과 폐기
+        LicensePage = LicenseViewerPage.Summary;
+        LicenseSelfComponents.Clear();
+        LicenseBundledComponents.Clear();
+        LicenseDocuments.Clear();
+        NotifyLicenseCollectionsChanged();
+        SelectedLicenseDocument = null;
+        LicenseText = string.Empty;
+        LicenseFullTextCaption = string.Empty;
+        LicenseFullTextSubtitle = string.Empty;
+        LicenseErrorMessage = string.Empty;
+        LicenseDegradedMessage = string.Empty;
+        LicenseNoticeAsOfText = string.Empty;
+        IsLicenseLoading = false;
+    }
+
+    /// <summary>컬렉션 개수 기반 <c>Has*</c>는 소스 생성기가 알림을 만들어 주지 않으므로 직접 올린다.</summary>
+    private void NotifyLicenseCollectionsChanged()
+    {
+        OnPropertyChanged(nameof(HasLicenseSelfComponents));
+        OnPropertyChanged(nameof(HasLicenseBundledComponents));
+        OnPropertyChanged(nameof(HasLicenseComponents));
+        OnPropertyChanged(nameof(HasLicenseDocuments));
     }
 
     // [license-viewer:end]
@@ -663,6 +1227,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         };
         _noticeTimer.Start();
     }
+}
+
+/// <summary>
+/// 프린터 콤보 항목(it24 §8.3). <paramref name="Name"/>이 저장 키(Windows 프린터명)이고
+/// <paramref name="Display"/>는 표시 전용 가공(W29 "(설치 확인 필요)" · W30 "(기본)")이다.
+/// <para>
+/// ⚠️ 두 값을 분리하는 이유: 가공 문자열을 저장하면 다음 실행에서 그 이름의 프린터를 찾지 못한다.
+/// 콤보는 <c>SelectedValuePath="Name"</c>으로 값 기반 선택을 쓴다(it7 B9 — 인덱스 바인딩 금지).
+/// </para>
+/// </summary>
+public sealed record PrinterOptionItem(string Name, string Display)
+{
+    public override string ToString() => Display;
 }
 
 /// <summary>표시 모드 콤보 항목(값 + 한글 라벨). ToString=라벨(닫힌 박스 폴백 대비). (it9 후속)</summary>

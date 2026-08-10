@@ -68,6 +68,20 @@ public interface IExternalCamera
     Task<bool> TrySetPhysicalFlashAsync(bool enabled, CancellationToken ct = default);
 
     /// <summary>
+    /// SDK 제어 스택(shim 실구현 + 런타임 파일)이 갖춰졌는지 검사. (it24 §5.1)
+    /// <para>
+    /// <b>USB·장치를 접촉하지 않는다</b> — 로컬 파일 존재 검사 수준이므로 동기다. 설정 화면의 [장치 검색]이
+    /// 이 결과를 먼저 보고, false면 <see cref="ConnectAsync"/>를 <b>부르지 않는다</b>(§5.2 ②):
+    /// 판정할 수 없는 상태에서 연결을 시도해 봐야 그 실패가 무엇의 증거인지 말할 수 없다.
+    /// </para>
+    /// <para>
+    /// 왜 "파일이 있다"만으로 판정하지 않는가: SDK 런타임 파일을 수동 배치해도 shim이 미구현이면 연결은
+    /// 항상 실패한다 — 그 실패를 "장치 없음"으로 읽으면 거짓이다(it24 R1).
+    /// </para>
+    /// </summary>
+    ExternalCameraReadiness CheckReadiness();
+
+    /// <summary>
     /// 연결 상태 변화(USB 뽑힘·전원 꺼짐 등).
     /// ⚠️ <b>임의 스레드에서 발생한다</b>(SDK 콜백 스레드 모델 미검증) — UI를 만지는 구독자가
     /// Dispatcher로 마샬링할 책임이 있다(§12.1). 구독자는 반드시 해제 경로를 갖는다(§12.2).

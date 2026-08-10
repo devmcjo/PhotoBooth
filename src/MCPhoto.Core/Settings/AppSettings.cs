@@ -151,8 +151,25 @@ public sealed class AppSettings
     /// <summary>ISO(예 <c>400</c>). 빈 값 = 미지정. 저장 규약은 <see cref="ExternalShutterSpeed"/>와 동일.</summary>
     public string ExternalIso { get; set; } = string.Empty;
 
-    /// <summary>사진 프린터(BT/WiFi) 사용. 기본 false(미지원 스캐폴드 — it23 범위 밖).</summary>
+    /// <summary>
+    /// 사진 프린터 사용. 기본 false.
+    /// <para>
+    /// it24: "추후 지원" placeholder에서 <b>준비 플래그</b>로 승격됐다 — 의미는 "인쇄 기능이 도입되면 이
+    /// 프린터 구성을 사용한다"이고, 이번 이터레이션의 런타임 효과는 설정 화면의 프린터 하위 패널 노출뿐이다
+    /// (실제 인쇄는 명시적 비목표 — 설정 화면이 그 사실을 상시 고지한다).
+    /// </para>
+    /// </summary>
     public bool PhotoPrinterEnabled { get; set; }
+
+    /// <summary>
+    /// 선택된 설치 프린터 이름(Windows 프린터명 — 시스템 내 유일 식별자). <b>빈 값 = 미선택.</b>
+    /// <para>
+    /// it24 §7.3 P5: 열거 목록에 없더라도 <b>값을 지우지 않는다</b>. 프린터가 일시적으로 꺼져 있거나
+    /// 스풀러가 멈춘 상태에서 관리자가 맞춰 둔 이름을 삭제해 버리면, 복구 뒤에도 설정이 사라져 있다.
+    /// 유효성 검증은 사용 시점(인쇄 구현)의 몫이다 — 노출값 문자열의 "적용 시 검증" 철학과 동일하다.
+    /// </para>
+    /// </summary>
+    public string PhotoPrinterName { get; set; } = string.Empty;
 
     // ── 웹 연동 (firebase-contract §3.5) ──
     /// <summary>다운로드 페이지 Hosting base URL(트레일링 슬래시 제외). downloadPageUrl 조립 기준. 개발 기본값 박음(it9 후속).</summary>
@@ -217,6 +234,10 @@ public sealed class AppSettings
         NormalizeQr();
 
         NormalizeExternalCamera();
+
+        // it24: 프린터 이름은 Trim만 한다. 목록 대조는 여기서 하지 않는다 — ini에는 설치 프린터 목록이
+        //       없고(열거는 스풀러 조회다), 목록 부재를 이유로 값을 지우면 관리자 설정이 파괴된다(§7.3 P5).
+        PhotoPrinterName = (PhotoPrinterName ?? string.Empty).Trim();
     }
 
     /// <summary>
@@ -318,6 +339,8 @@ public sealed class AppSettings
         ExternalAperture = ExternalAperture,
         ExternalIso = ExternalIso,
         PhotoPrinterEnabled = PhotoPrinterEnabled,
+        // ⚠️ it24 신설 1필드도 여기서 빠지면 설정 편집 취소 시 값이 조용히 유실된다(T-S4가 회귀 잠금).
+        PhotoPrinterName = PhotoPrinterName,
         HostingBaseUrl = HostingBaseUrl,
         StorageBucket = StorageBucket,
         BackendBaseUrl = BackendBaseUrl,

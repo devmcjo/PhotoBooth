@@ -1,0 +1,43 @@
+// MC포토 라이선스 고지 요약(앱 화면이 읽는 메타데이터).
+//
+// 이 파일은 사람이 손으로 편집한다. 주석과 후행 콤마가 허용되며, 배열 순서가
+// 곧 화면 표시 순서다(kind:"self" 항목이 첫 번째여야 한다).
+//
+// ⚠️ 법적 산출물은 여전히 같은 폴더의 txt 파일들이다 — 이 파일은 그 txt를
+//    가리키는 색인이며, 여기 적힌 version·copyright 문자열은 해당 항목의
+//    noticeFile 본문에 그대로 존재해야 한다(정합 테스트가 잠근다).
+// ⚠️ fullTextFile·noticeFile은 파일명만 쓴다(경로 구분자·상위 경로·드라이브
+//    문자 금지). 위반 항목은 앱이 참조 무효로 처리한다.
+{
+  "schemaVersion": 1,
+  "updatedOn": "2026-08-11",
+  "components": [
+    {
+      "kind": "self",
+      "name": "MC포토 (MCPhoto)",
+      // 본체 버전은 어셈블리 버전 리소스가 단일 소스다 — 여기 적으면 릴리스마다 어긋난다.
+      "version": null,
+      "licenseName": "MIT License",
+      "spdxId": "MIT",
+      "copyright": "Copyright (c) 2025 devmcjo",
+      "purpose": "포토부스 촬영·편집 애플리케이션",
+      "distribution": "이 소프트웨어 본체",
+      "sourceOffer": null,
+      "fullTextFile": "MCPhoto-LICENSE-MIT.txt",
+      "noticeFile": null,
+    },
+    {
+      "kind": "redistributed",
+      "name": "FFmpeg",
+      "version": "8.1.2-essentials_build-www.gyan.dev",
+      "licenseName": "GNU General Public License v3.0 or later",
+      "spdxId": "GPL-3.0-or-later",
+      "copyright": "Copyright (c) 2000-2026 the FFmpeg developers",
+      "purpose": "동영상 녹화 · 타임랩스 인코딩",
+      "distribution": "별도 실행 파일로 동봉 · 수정하지 않고 재배포 · 서브프로세스로 호출",
+      "sourceOffer": "GPLv3 제6조에 따라 대응 소스 코드를 제공합니다(내려받기 주소 · 3년 서면 오퍼 포함).",
+      "fullTextFile": "FFmpeg-COPYING.GPLv3.txt",
+      "noticeFile": "FFmpeg-NOTICE.txt",
+    },
+  ],
+}

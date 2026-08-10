@@ -22,6 +22,12 @@ namespace MCPhoto.Devices.Nikon;
 /// </remarks>
 public sealed class MissingNikonSdkShim : INikonSdkShim, IDisposable
 {
+    /// <summary>
+    /// it24: 항상 false — 이 shim으로는 SDK를 호출할 수 없다. 이 값이 준비도 판정의 첫 관문이라,
+    /// SDK 런타임 파일을 수동 배치해도 검색은 "확인할 수 없습니다"(S2)로 정직하게 남는다(it24 R1).
+    /// </summary>
+    public bool IsOperational => false;
+
     public Task<(bool ok, string? reason)> OpenAsync(string md3Path, CancellationToken ct)
         => Task.FromResult<(bool, string?)>((false, NikonCameraReasons.SdkMissing));
 

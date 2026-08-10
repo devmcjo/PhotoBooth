@@ -89,6 +89,29 @@ public sealed class NikonExternalCamera : IExternalCamera, IAsyncDisposable, IDi
 
     public event EventHandler<ExternalCameraConnectionChange>? ConnectionChanged;
 
+    /// <summary>
+    /// 로컬 전제 검사(it24 §5.1 ⓐⓑⓒ). <b>USB·SDK를 접촉하지 않는다</b> — shim 플래그 조회 + 파일 존재 검사뿐이다.
+    /// <list type="number">
+    /// <item>ⓐ shim이 부재 구현이면 <c>(false, W10)</c> — <b>파일이 있어도</b> false다. 부재 shim으로는
+    ///       모듈을 열 수 없으니, 그 실패를 장치 부재의 근거로 쓸 수 없다(it24 R1).</item>
+    /// <item>ⓑ 런타임 파일이 없으면 <c>(false, W11)</c> — 사유에 파일 경로가 들어가 그것이 곧 조치 안내다.</item>
+    /// <item>ⓒ 둘 다 통과하면 <c>(true, null)</c> — 이때부터 연결 실패를 "찾지 못했다"로 말할 자격이 생긴다.</item>
+    /// </list>
+    /// 사유 문구는 <see cref="NikonCameraReasons"/> 상수만 쓴다(같은 원인이 화면마다 다르게 설명되는 것을 막는다).
+    /// </summary>
+    public ExternalCameraReadiness CheckReadiness()
+    {
+        if (!_shim.IsOperational)
+            return new ExternalCameraReadiness(false, NikonCameraReasons.SdkMissing);
+
+        var model = ExternalCameraModels.Resolve(_settings.Current.ExternalCameraModel);
+        var (fileOk, fileReason) = _probe.Probe(model);   // 예외를 던지지 않는다(부재 취급 — it24 E20)
+        if (!fileOk)
+            return new ExternalCameraReadiness(false, fileReason ?? NikonCameraReasons.SdkMissing);
+
+        return new ExternalCameraReadiness(true, null);
+    }
+
     // ── 연결 ──
 
     /// <summary>

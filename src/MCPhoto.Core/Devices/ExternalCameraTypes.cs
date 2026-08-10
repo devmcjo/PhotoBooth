@@ -115,6 +115,19 @@ public sealed record ExposureDomain(
 }
 
 /// <summary>
+/// 장치 접촉 없는 <b>로컬 전제 검사</b> 결과. (it24 §5.1)
+/// <para>
+/// <see cref="CanControl"/>=false는 "장치가 없다"가 아니라 <b>"장치 유무를 판정할 능력이 없다"</b>는 뜻이다(it24 R1).
+/// 제어 스택(SDK shim 실구현 + 런타임 파일)이 갖춰지지 않은 상태에서 연결 실패는 장치 부재의 증거가 아니다 —
+/// 카메라가 꽂혀 있어도 결과는 똑같이 실패한다. 이 구분을 타입으로 강제하지 않으면 화면이
+/// "연결 가능한 장치가 없습니다"라고 단정해, 운영자가 케이블·전원을 헛되이 점검한다.
+/// </para>
+/// </summary>
+/// <param name="CanControl">SDK 제어 스택이 갖춰졌는지(= 연결 시도의 성패를 장치 유무의 근거로 쓸 수 있는지).</param>
+/// <param name="Reason">불가 사유(사용자 노출용 짧은 한국어 문구). <paramref name="CanControl"/>=true면 null.</param>
+public sealed record ExternalCameraReadiness(bool CanControl, string? Reason);
+
+/// <summary>
 /// 연결 상태 변화 통지(USB 뽑힘·전원 꺼짐 등). (it23 §3.2)
 /// ⚠️ <see cref="IExternalCamera.ConnectionChanged"/>는 **임의 스레드**에서 발생한다 —
 /// UI를 만지는 구독자가 Dispatcher로 마샬링할 책임이 있다(§12.1).

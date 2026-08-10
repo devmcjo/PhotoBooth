@@ -40,6 +40,15 @@ public sealed class FakeExternalCamera : IExternalCamera
     /// <summary>CaptureAsync 직전에 실행되는 훅(수신 대기 중 UI 상태를 관측하는 데 쓴다).</summary>
     public Action? OnCapture { get; set; }
 
+    /// <summary>
+    /// it24: <see cref="CheckReadiness"/>의 CanControl. 기본 true(제어 스택 정상).
+    /// false로 두면 검색 시퀀스가 <see cref="ConnectAsync"/>를 <b>한 번도</b> 부르지 않아야 한다(T-D4).
+    /// </summary>
+    public bool CanControl { get; set; } = true;
+
+    /// <summary>it24: <see cref="CheckReadiness"/>가 반환할 불가 사유(CanControl=false일 때 화면 상세 라인).</summary>
+    public string? ReadinessReason { get; set; }
+
     // ── 관측 ──
 
     public int ConnectCalls { get; private set; }
@@ -48,10 +57,12 @@ public sealed class FakeExternalCamera : IExternalCamera
     public int DisconnectCalls { get; private set; }
     public int PhysicalFlashCalls { get; private set; }
     public List<bool> FlashValues { get; } = new();
+    /// <summary>it24: CheckReadiness 호출 횟수(검색 시퀀스가 준비도를 먼저 보는지 관측).</summary>
+    public int ReadinessCalls { get; private set; }
 
     /// <summary>모든 멤버를 통틀어 한 번이라도 접촉됐는지 — 회귀 0(T-C1) 판정에 쓴다.</summary>
     public bool Touched => ConnectCalls > 0 || CaptureCalls > 0 || CapabilityCalls > 0
-                           || DisconnectCalls > 0 || PhysicalFlashCalls > 0;
+                           || DisconnectCalls > 0 || PhysicalFlashCalls > 0 || ReadinessCalls > 0;
 
     public bool IsAvailable { get; private set; }
 
@@ -115,6 +126,12 @@ public sealed class FakeExternalCamera : IExternalCamera
         PhysicalFlashCalls++;
         FlashValues.Add(enabled);
         return Task.FromResult(true);
+    }
+
+    public ExternalCameraReadiness CheckReadiness()
+    {
+        ReadinessCalls++;
+        return new ExternalCameraReadiness(CanControl, CanControl ? null : ReadinessReason);
     }
 
     public event EventHandler<ExternalCameraConnectionChange>? ConnectionChanged;

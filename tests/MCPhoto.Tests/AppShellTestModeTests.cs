@@ -388,8 +388,12 @@ public class AppShellTestModeTests
 
     /// <summary>
     /// B-T27: 테스트 모드 ON(<c>Pin</c> 없음)에서 설정 화면에 진입하고, 그 화면의
-    /// <c>OpenLicenseViewerCommand</c>가 동작해 본문이 채워진다.
+    /// <c>OpenLicenseViewerCommand</c>로 요약 카드가 채워지며 전문까지 도달한다.
     /// 즉 B부가 PIN 게이트를 바꿔도 C부의 "로그인 무관 접근"이 깨지지 않는다.
+    /// <para>
+    /// it24: 열기만으로는 본문을 읽지 않으므로(요약 2단 구조) 전문 도달은 카드 커맨드로 확인한다.
+    /// 실제 서비스 + 빌드 출력의 <c>licenses/</c>를 쓰는 통합 경로라 매니페스트 배포 누락도 함께 잡힌다.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task T27_License_Viewer_Is_Reachable_Under_Test_Mode()
@@ -404,10 +408,16 @@ public class AppShellTestModeTests
         await settingsVm.OpenLicenseViewerCommand.ExecuteAsync(null);
 
         Assert.True(settingsVm.IsLicenseViewerOpen);
-        // 빌드 출력에 licenses/가 복사되므로(csproj) 목록·본문이 실제로 채워진다.
-        Assert.NotEmpty(settingsVm.LicenseDocuments);
+        // 빌드 출력에 licenses/(고지 txt + 요약 매니페스트)가 복사되므로 카드가 실제로 채워진다.
         Assert.False(settingsVm.HasLicenseError);
-        Assert.NotEqual(string.Empty, settingsVm.LicenseText);
+        Assert.False(settingsVm.HasLicenseDegraded);
+        Assert.NotEmpty(settingsVm.LicenseSelfComponents);
+        Assert.NotEmpty(settingsVm.LicenseBundledComponents);
+
+        // GPLv3 §4 이행의 실체: 전문에 실제로 도달한다.
+        await settingsVm.ShowLicenseFullTextCommand.ExecuteAsync(settingsVm.LicenseBundledComponents[0]);
+        Assert.False(settingsVm.HasLicenseError);
+        Assert.Contains("GNU GENERAL PUBLIC LICENSE", settingsVm.LicenseText);
     }
 
     // ── B-T28: 우회 누출 금지 정적 검사 ──

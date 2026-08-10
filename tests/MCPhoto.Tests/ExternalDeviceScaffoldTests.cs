@@ -97,4 +97,69 @@ public class ExternalDeviceScaffoldTests
         Assert.True(c.ExternalCameraEnabled);
         Assert.True(c.PhotoPrinterEnabled);
     }
+
+    // ══════════ it24 Step 4: PhotoPrinterName(설계 §9.1 · §12.1 T-S4) ══════════
+
+    [Fact]
+    public void PrinterName_Default_Is_Empty_Meaning_Unselected()
+    {
+        Assert.Equal(string.Empty, new AppSettings().PhotoPrinterName);
+    }
+
+    [Fact]
+    public void PrinterName_Clamp_Trims_Only()
+    {
+        // 목록 대조·기본값 보정을 하지 않는다 — 목록 부재를 이유로 값을 지우면 관리자 설정이 파괴된다(P5).
+        var s = new AppSettings { PhotoPrinterName = "  Canon SELPHY CP1500  " };
+        s.Clamp();
+        Assert.Equal("Canon SELPHY CP1500", s.PhotoPrinterName);
+    }
+
+    [Fact]
+    public void PrinterName_RoundTrips_Through_Ini()
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"mcphoto_prname_{Guid.NewGuid():N}.ini");
+        try
+        {
+            var svc = new IniSettingsService(iniPath: path);
+            var s = svc.Load();
+            s.PhotoPrinterEnabled = true;
+            s.PhotoPrinterName = @"\\print01\Photo-Lab";   // 연결 프린터(UNC 표기)도 그대로 보존돼야 한다
+            Assert.True(svc.Save());
+
+            var s2 = new IniSettingsService(iniPath: path).Load();
+            Assert.True(s2.PhotoPrinterEnabled);
+            Assert.Equal(@"\\print01\Photo-Lab", s2.PhotoPrinterName);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// ★ Clone 누락 회귀 잠금: 편집 취소(설정 화면 이탈) 경로가 Clone을 지나므로,
+    /// 여기서 빠지면 프린터 선택이 조용히 유실된다(it23 T-S3와 같은 형태의 사고).
+    /// </summary>
+    [Fact]
+    public void PrinterName_Is_Copied_By_Clone()
+    {
+        var s = new AppSettings { PhotoPrinterName = "Canon SELPHY CP1500" };
+        Assert.Equal("Canon SELPHY CP1500", s.Clone().PhotoPrinterName);
+    }
+
+    // ── it24 §7.3: 열거 결과 계약 — "확인 불가"와 "0대"는 다른 명제다(R4) ──
+
+    [Fact]
+    public void PrinterEnumerationResult_Failed_Is_Distinct_From_Empty_Success()
+    {
+        var failed = PrinterEnumerationResult.Failed;
+        var emptySuccess = new PrinterEnumerationResult(true, Array.Empty<InstalledPrinter>());
+
+        Assert.False(failed.Succeeded);
+        Assert.Empty(failed.Printers);
+        Assert.True(emptySuccess.Succeeded);
+        // 목록만 보면 두 상태는 구분되지 않는다 — Succeeded가 그 구분을 담는 유일한 자리다.
+        Assert.NotEqual(failed, emptySuccess);
+    }
 }

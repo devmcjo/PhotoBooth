@@ -92,6 +92,10 @@ internal static class ServiceRegistration
         // NullExternalCamera는 등록에서 빠지지만 삭제하지 않는다 — 라이선스 문제로
         // MCPhoto.Devices.Nikon을 제외해야 할 때(설계 §13 L1~L3) 이 줄만 되돌리면 앱이 산다.
         services.AddSingleton<IPhotoPrinter, NullPhotoPrinter>();
+        // it24: 설치 프린터 **열거**(선택·저장까지). IPhotoPrinter(인쇄)와 별개 계약이다 —
+        // 이번 이터레이션은 목록을 정직하게 보여 주는 것까지이고 실제 인쇄는 비목표다.
+        // 상태가 없어 Singleton이 무해하며, 호출이 없으면 스풀러를 접촉하지 않는다.
+        services.AddSingleton<IPrinterEnumerator, SystemPrinterEnumerator>();
 
         // Step 4: 셸 상태머신·유휴 감시
         services.AddSingleton<IIdleWatchdog, IdleWatchdog>();

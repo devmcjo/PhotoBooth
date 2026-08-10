@@ -591,4 +591,72 @@ public class NikonExternalCameraTests : IDisposable
         Assert.Equal("Nikon D5300", cam.ModelName);
         Assert.EndsWith(ExternalCameraModels.Default.Md3FileName, shim.LastMd3Path);
     }
+
+    // ══════════ it24 Step 2: 준비도 검사(설계 §5.1 ⓐⓑⓒ · §12.2 T-R2·T-R3·T-R5) ══════════
+
+    /// <summary>
+    /// ★ T-R2 — R1의 코드 실체: shim이 부재 구현이면 <b>md3 파일이 있어도</b> CanControl=false다.
+    /// 이 한 줄이 무너지면 "파일을 넣었으니 이제 장치가 없다는 뜻이겠지"라는 거짓 판정이 화면에 뜬다.
+    /// </summary>
+    [Fact]
+    public void CheckReadiness_Shim_Not_Operational_Is_False_Even_With_Module_File()
+    {
+        CreateMd3();
+        var shim = new FakeNikonSdkShim { IsOperational = false };
+        using var cam = MakeCamera(shim);
+
+        var readiness = cam.CheckReadiness();
+
+        Assert.False(readiness.CanControl);
+        Assert.Equal(NikonCameraReasons.SdkMissing, readiness.Reason);
+        Assert.Equal(0, shim.OpenCalls);   // 준비도 검사는 SDK를 호출하지 않는다
+    }
+
+    /// <summary>T-R3 — shim 정상 + md3 부재는 파일 경로가 담긴 사유(W11)로 강등된다(그 경로가 곧 조치 안내다).</summary>
+    [Fact]
+    public void CheckReadiness_Operational_Shim_Without_Module_File_Reports_Missing_Path()
+    {
+        var shim = new FakeNikonSdkShim { IsOperational = true };
+        using var cam = MakeCamera(shim);
+
+        var readiness = cam.CheckReadiness();
+
+        Assert.False(readiness.CanControl);
+        Assert.Equal(@"카메라 모듈 파일이 없습니다 (NikonSdk\Type0011.md3)", readiness.Reason);
+    }
+
+    /// <summary>T-R3 — shim 정상 + md3 존재면 비로소 "부재를 판정할 자격"이 생긴다.</summary>
+    [Fact]
+    public void CheckReadiness_Operational_Shim_With_Module_File_Is_Controllable()
+    {
+        CreateMd3();
+        var shim = new FakeNikonSdkShim { IsOperational = true };
+        using var cam = MakeCamera(shim);
+
+        var readiness = cam.CheckReadiness();
+
+        Assert.True(readiness.CanControl);
+        Assert.Null(readiness.Reason);
+        Assert.Equal(0, shim.OpenCalls);   // 여전히 USB·SDK 미접촉(파일 검사만)
+    }
+
+    /// <summary>T-R5 — 프로덕션 기본 shim은 항상 미구현이다(상수 회귀 잠금).</summary>
+    [Fact]
+    public void MissingShim_Is_Never_Operational()
+    {
+        INikonSdkShim shim = new MissingNikonSdkShim();
+        Assert.False(shim.IsOperational);
+    }
+
+    /// <summary>
+    /// 프로덕션 조합(부재 shim + 파일 없음)의 도달점은 S2다 — 현 배포본이 정직하게 말할 수 있는 전부.
+    /// </summary>
+    [Fact]
+    public void Production_Default_Combination_Judges_As_Undetermined()
+    {
+        using var cam = MakeCamera(new FakeNikonSdkShim { IsOperational = false });
+
+        var state = ExternalDiscoveryJudge.Judge(cam.CheckReadiness(), usbCandidateSeen: false, connected: false);
+        Assert.Equal(ExternalCameraDiscoveryState.UndeterminedStackMissing, state);
+    }
 }

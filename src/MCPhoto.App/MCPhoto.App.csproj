@@ -90,8 +90,10 @@
     <None Include="$(LicensesSource)\**\*.*"
           Link="licenses\%(RecursiveDir)%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
-    <!-- MC포토 본체(MIT) 전문도 함께 실어야 licenses/README.txt의 안내가 참이 된다.
-         원본은 리포 루트 LICENSE 하나 — 사본을 만들지 않고 링크 복사로 단일 소스를 유지한다. -->
+    <!-- MC포토 본체(MIT) 전문도 함께 실어야 licenses/NOTICE.txt의 안내가 참이 된다.
+         원본은 리포 루트 LICENSE 하나 — 사본을 만들지 않고 링크 복사로 단일 소스를 유지한다.
+         ⚠️ 위 와일드카드(**\*.*)가 notice-manifest.json(요약 메타데이터)까지 복사한다 —
+            그 파일이 빠지면 고지 화면이 항상 강등 상태로 보인다. -->
     <None Include="$(McPhotoLicenseFile)"
           Condition="Exists('$(McPhotoLicenseFile)')"
           Link="licenses\MCPhoto-LICENSE-MIT.txt"

@@ -207,8 +207,10 @@ public sealed class IniSettingsService : ISettingsService
         s.ExternalShutterSpeed = ini.GetString(Section, nameof(s.ExternalShutterSpeed), s.ExternalShutterSpeed);
         s.ExternalAperture = ini.GetString(Section, nameof(s.ExternalAperture), s.ExternalAperture);
         s.ExternalIso = ini.GetString(Section, nameof(s.ExternalIso), s.ExternalIso);
-        // 프린터는 여전히 placeholder(저장/복원만, 실기능 미배선 — it23 범위 밖).
+        // it24: 프린터 2키(준비 플래그 + 선택된 설치 프린터 이름). 실제 인쇄는 아직 비목표지만
+        //       열거·선택·저장은 실배선이다. 키가 없으면 기본값 폴백 → 마이그레이션 불요.
         s.PhotoPrinterEnabled = ini.GetBool(Section, nameof(s.PhotoPrinterEnabled), s.PhotoPrinterEnabled);
+        s.PhotoPrinterName = ini.GetString(Section, nameof(s.PhotoPrinterName), s.PhotoPrinterName);
         s.HostingBaseUrl = ini.GetString(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         s.StorageBucket = ini.GetString(Section, nameof(s.StorageBucket), s.StorageBucket);
         s.BackendBaseUrl = ini.GetString(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);
@@ -250,8 +252,9 @@ public sealed class IniSettingsService : ISettingsService
         ini.Set(Section, nameof(s.ExternalShutterSpeed), s.ExternalShutterSpeed);
         ini.Set(Section, nameof(s.ExternalAperture), s.ExternalAperture);
         ini.Set(Section, nameof(s.ExternalIso), s.ExternalIso);
-        // 프린터는 여전히 placeholder(저장/복원만, 실기능 미배선 — it23 범위 밖).
+        // it24: 프린터 2키. 이름은 빈 값도 기록한다(빈 값 = "미선택"이라는 의미가 있다).
         ini.SetBool(Section, nameof(s.PhotoPrinterEnabled), s.PhotoPrinterEnabled);
+        ini.Set(Section, nameof(s.PhotoPrinterName), s.PhotoPrinterName);
         ini.Set(Section, nameof(s.HostingBaseUrl), s.HostingBaseUrl);
         ini.Set(Section, nameof(s.StorageBucket), s.StorageBucket);
         ini.Set(Section, nameof(s.BackendBaseUrl), s.BackendBaseUrl);

@@ -42,6 +42,12 @@ public sealed class NullExternalCamera : IExternalCamera
         => Task.FromResult(false);
 
     /// <summary>
+    /// it24: 제어 스택 없음 고정. 사유는 <see cref="UnavailableReason"/>과 같은 문구를 쓴다 —
+    /// 같은 원인이 화면마다 다르게 설명되지 않게 하는 것이 문구 집약의 목적이다.
+    /// </summary>
+    public ExternalCameraReadiness CheckReadiness() => new(false, UnavailableReason);
+
+    /// <summary>
     /// 이벤트는 정의만 하고 발행하지 않는다(상태가 변하지 않는 구현이므로).
     /// ⚠️ <c>add { } remove { }</c> 빈 접근자로 두는 이유: 자동 구현 이벤트로 두면 구독자를 실제로
     /// 붙잡아 두는데, 발행이 없으므로 그 참조는 순수한 누수 위험일 뿐이다.

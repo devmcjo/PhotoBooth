@@ -295,7 +295,8 @@ public class SettingsViewModelTests
     [Fact]
     public async Task Guest_Save_Preserves_Ini_External_Device_Placeholders()
     {
-        // 게스트는 외부 장치 섹션 미노출 → 저장 시 ini 원값 보존(클로버 방지). QR/필터 게이트와 동형.
+        // it24 §4.1: 게스트에게 섹션은 **보이되 읽기 전용**이다(구 "미노출" 정책 폐지).
+        // 그래서 이 테스트의 본질은 그대로다 — 저장 시 ini 원값 보존(클로버 방지). QR/필터 게이트와 동형.
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         var s = settings.Load();
         s.ExternalCameraEnabled = true;   // 관리자가 켜둔 값
