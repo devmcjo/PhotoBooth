@@ -338,7 +338,7 @@ public class FrameCatalogServiceTests : IDisposable
         var cacheDir = Path.GetDirectoryName(finalPath)!;
         Directory.CreateDirectory(cacheDir);
         // 생성 경로를 강제한다(이미 있으면 lock은 경합하지 않는다).
-        try { if (File.Exists(finalPath)) File.Delete(finalPath); } catch { /* 다른 테스트가 쓰는 중 — 무해 */ }
+        TryDeleteWithRetry(finalPath);
 
         var callA = svcA.GetLocalDefaultFramesAsync();
         var callB = svcB.GetLocalDefaultFramesAsync();
@@ -359,6 +359,41 @@ public class FrameCatalogServiceTests : IDisposable
         Assert.False(mat.Empty(), "최종 fallback PNG가 디코드되지 않는다(반쯤 쓰인 파일)");
         Assert.Equal(MCPhoto.Core.Frames.DefaultFrameProvider.FallbackWidth, mat.Width);
         Assert.Equal(MCPhoto.Core.Frames.DefaultFrameProvider.FallbackHeight, mat.Height);
+    }
+
+    /// <summary>
+    /// 머신 전역 fallback 캐시 파일 삭제(재시도 포함).
+    /// <para>
+    /// ⚠️ 종전에는 <c>try { File.Delete } catch { }</c> 한 줄이었고 실패를 "무해"로 봤지만 무해하지 않다:
+    /// 삭제가 공유 위반으로 실패하면 파일이 <b>열린 상태로 남고</b>, 직후
+    /// <c>EnsureFallbackFrame</c>의 <c>File.Move(..., overwrite: true)</c>가 그 열린 대상 파일을
+    /// 덮어쓰려다 IOException("used by another process")으로 터진다 — 테스트가 간헐 실패했다.
+    /// </para>
+    /// 핸들의 주인은 이 프로세스 안의 지연 해제 자원(파일을 열어 두는 이미지 디코더 등)이므로
+    /// 세대 수집 + 종료자 대기로 대개 풀린다. 그래도 못 지우면 기존 파일을 그대로 두고 진행한다 —
+    /// 이 테스트의 단정(최종 경로·임시 잔재 0·디코드 가능)은 파일이 새로 만들어졌는지에 의존하지 않는다.
+    /// </summary>
+    private static void TryDeleteWithRetry(string path, int attempts = 5)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            try
+            {
+                if (!File.Exists(path)) return;
+                File.Delete(path);
+                return;
+            }
+            catch (IOException)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(20 * (i + 1));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;   // 권한 문제라면 재시도해도 같다
+            }
+        }
     }
 
     // ── it20 Step 3: 진행 중계와 replay ──

@@ -538,11 +538,39 @@ public sealed class FrameCatalogService
             var tempPath = Path.ChangeExtension(FallbackImagePath, ".tmp.png");
             var template = FallbackFrameRenderer.Create(tempPath);
             Directory.CreateDirectory(Path.GetDirectoryName(FallbackImagePath)!);
-            File.Move(tempPath, FallbackImagePath, overwrite: true);
+            MoveWithRetry(tempPath, FallbackImagePath);
             // 렌더러가 인자 경로를 ImageUrl에 심으므로 최종 경로로 정정한다 —
             // 빠뜨리면 카드 이미지가 사라진 임시 파일을 가리켜 placeholder가 뜬다.
             template.ImageUrl = FallbackImagePath;
             return template;
+        }
+    }
+
+    /// <summary>
+    /// 원자 교체(Move) — 일시적 공유 위반은 짧게 재시도한다.
+    /// <para>
+    /// ⚠️ 재시도가 필요한 이유: 방금 <c>ImWrite</c>로 만든 임시 파일은 백신·검색 인덱서가 곧바로 열어 볼 수 있고,
+    /// 그 순간 <see cref="File.Move(string, string, bool)"/>가 IOException(사용 중)으로 <b>실패한다</b>.
+    /// 재시도가 없으면 그 한 번의 실패가 예외로 올라가 최초 실행이 "프레임 0개 → 실패 카드"로 떨어진다
+    /// (전량 실패로 보이지만 실제로는 수십 ms만 기다리면 되는 일시 상태다).
+    /// 이 저장소의 테스트에서도 같은 원인으로 간헐 실패가 관측됐다(it23 구현 중 발견).
+    /// </para>
+    /// 호출은 항상 <c>Task.Run</c> 경계 안(전용 lock 안)이라 짧은 <c>Thread.Sleep</c>이 UI를 막지 않는다.
+    /// 마지막 시도까지 실패하면 그대로 던진다 — 진짜 실패(권한·디스크)는 숨기지 않는다.
+    /// </summary>
+    private static void MoveWithRetry(string sourcePath, string destinationPath, int attempts = 5)
+    {
+        for (int i = 1; ; i++)
+        {
+            try
+            {
+                File.Move(sourcePath, destinationPath, overwrite: true);
+                return;
+            }
+            catch (IOException) when (i < attempts)
+            {
+                System.Threading.Thread.Sleep(30 * i);
+            }
         }
     }
 
