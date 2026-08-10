@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | 과금 도입으로 **추가·변경되는 HTTP 와이어 계약과 Firestore 스키마 전수**. 새 클라이언트는 이 문서만 보고 구현할 수 있어야 한다 |
 | 범위 | 엔드포인트(경로·게이트·요청/응답·상태코드), 에러 코드, 컬렉션·필드·인덱스·보안 규칙, 마이그레이션 |
-| 최종 업데이트 | 2026-08-06 (신규) |
+| 최종 업데이트 | **2026-08-10** — 단일 세션 강제([06](./06-single-session-enforcement.md)) 폐기에 따라 세션 관련 계약 전부 제거 |
 | 진실원 관계 | 현행 계약은 [`analysis/31`](../analysis/31-backend-api-reference.md)·[`analysis/40`](../analysis/40-database-firestore-and-storage-schema.md)이 정본이다. **이 문서는 그 위에 얹는 델타**이며, 구현이 끝나면 31·40번에 흡수한다 |
 
 ---
@@ -17,15 +17,16 @@
 | 헤더 | `X-MCPhoto-Client`(게이트 키) · `Authorization: Bearer {JWT}` — 둘 다 현행 규약 |
 | 본문 | JSON, 상한 256KB |
 | 에러 봉투 | `{ "error": { "code": "...", "message": "..." } }` — **불변**. 과금 코드도 같은 봉투를 쓴다 |
-| 신규 라우터 | `/wallet` · `/items` · `/payments` · `/sessions` · `/admin` (5개 추가 → 총 11개) |
-| 기존 라우터 변경 | `/auth`(로그인 세션) · `/accounts`(qr-usage 확장) · `/frames`(개인 생성) · `/uploads`(정원 게이트) · `/config`(billing 설정) |
+| 신규 라우터 | `/wallet` · `/items` · `/payments` · `/admin` (4개 추가 → 총 10개). ~~`/sessions`~~ **❌ 폐기(2026-08-10)** |
+| 기존 라우터 변경 | `/accounts`(qr-usage 확장) · `/frames`(개인 생성) · `/uploads`(정원 게이트) · `/config`(billing 설정). ~~`/auth`(로그인 세션)~~ **❌ 폐기 — 로그인 라우트는 변경 없음** |
+
+> ❌ **2026-08-10 폐기**: 단일 세션 강제([06](./06-single-session-enforcement.md))가 폐기되어 이 문서에서 **세션 레지스트리 관련 계약 전부**가 사라졌다 — `/sessions` 라우터 3개 · `POST /admin/sessions/{userId}/revoke-all` · `requireActiveSession` 게이트 · `SESSION_SUPERSEDED`/`SESSION_ACTIVE_ELSEWHERE` 에러 코드 · JWT `sid` 클레임 · `sessions/{uid}` 컬렉션·규칙 · `singleSessionEnabled`/`heartbeatSeconds` 설정 키. **JWT는 `{sub, role, iat, exp}` 그대로 유지되며 인증 미들웨어는 stateless다.** 사유: 사용량(QR 전송 세션 1건) 과금이므로 동시 사용을 차단할 과금상 이유가 없다.
 
 ### 1.1 게이트 추가
 
 | 게이트 | 통과 조건 | 실패 | 비고 |
 |--------|-----------|------|------|
 | `requireFrameWrite` | `role ∈ {advanced_user, manager, admin}` | 403 `forbidden` "프레임 저작 권한이 필요합니다." | `CanWriteFrames`의 서버 대칭. **신규**(현재 서버에는 이 축이 없다 — [`analysis/60 §1.2`](../analysis/60-auth-accounts-and-roles.md)) |
-| `requireActiveSession` | JWT `sid`가 `sessions/{uid}`의 활성 항목에 존재 | **401** `SESSION_SUPERSEDED` | `requireBearer` 뒤. `sid` 없는 구토큰은 전환 기간 통과 → [06 §4.2](./06-single-session-enforcement.md) |
 | `requireBillingEnabled` | `config/billing.enabled == true` | 503 `service_unavailable` "과금 기능이 일시 중지되었습니다." | 구매 라우트에만. 소비 라우트는 킬스위치 시 무료 티어로 폴백(B12) |
 
 ---
@@ -45,8 +46,6 @@
 | `IDEMPOTENCY_KEY_REUSE` | **400** | 같은 키·다른 본문 | 개발 오류(정상 흐름에 없어야 한다) |
 | `TOO_MANY_GRANTS` | **409** | 활성 권리 20개 초과 | "보유 플랜이 너무 많습니다" |
 | `WALLET_FROZEN` | **403** | 지갑 동결 | "고객센터에 문의해 주세요"(사유 비노출) |
-| `SESSION_SUPERSEDED` | **401** | 세션이 다른 기기로 교체됨. `detail: {revokeReason, byDeviceLabel?}` | **강제 로그아웃 팝업**([06 §5.1](./06-single-session-enforcement.md)) |
-| `SESSION_ACTIVE_ELSEWHERE` | **409** | 다른 기기 활성. `detail: {deviceLabel, platform, lastSeenAtMs}` | 확인 모달 → `force:true` |
 | `RATE_LIMITED` | **429** | 요청 과다(프레임 이미지 교체·prepare 등) | "잠시 후 다시 시도" |
 | `PAYMENT_VERIFY_FAILED` | **400** | 영수증 검증 실패 | "결제를 확인할 수 없습니다" |
 | `PAYMENT_ALREADY_PROCESSED` | **200**(성공 취급) | 이미 지급된 결제 | 정상 완료로 처리(멱등) |
@@ -62,31 +61,29 @@
 | 메서드·경로 | 게이트 | 성공 | 신규/변경 |
 |-------------|--------|------|:---:|
 | `GET /catalog` | apiKey | 200 | 신규 |
-| `GET /wallet` | Bearer(+세션) | 200 | 신규 |
-| `GET /wallet/entries` | Bearer(+세션) | 200 | 신규 |
-| `GET /entitlements` | Bearer(+세션) | 200 | 신규 |
-| `POST /items/purchase` | Bearer + 세션 + billingEnabled | **201** | 신규 |
-| `POST /payments/orders` | Bearer + 세션 + billingEnabled | **201** | 신규 |
-| `GET /payments/{paymentId}` | Bearer + 세션 | 200 | 신규 |
-| `POST /payments/iap/verify` | Bearer + 세션 + billingEnabled | 200 | 신규 |
+| `GET /wallet` | Bearer | 200 | 신규 |
+| `GET /wallet/entries` | Bearer | 200 | 신규 |
+| `GET /entitlements` | Bearer | 200 | 신규 |
+| `POST /items/purchase` | Bearer + billingEnabled | **201** | 신규 |
+| `POST /payments/orders` | Bearer + billingEnabled | **201** | 신규 |
+| `GET /payments/{paymentId}` | Bearer | 200 | 신규 |
+| `POST /payments/iap/verify` | Bearer + billingEnabled | 200 | 신규 |
 | `POST /payments/webhook/{provider}` | **서명 검증**(Bearer 없음) | 200 | 신규 |
-| `POST /sessions/heartbeat` | Bearer + 세션 | 200 | 신규 |
-| `POST /sessions/logout` | Bearer | **204** | 신규 |
-| `GET /sessions` | Bearer | 200 | 신규 |
-| `POST /frames/mine` | Bearer + frameWrite + 세션 | **201** | 신규 |
-| `DELETE /frames/mine/{id}` | Bearer + frameWrite + 세션 | 200 | 신규 |
+| `POST /frames/mine` | Bearer + frameWrite | **201** | 신규 |
+| `DELETE /frames/mine/{id}` | Bearer + frameWrite | 200 | 신규 |
 | `GET /accounts/me/qr-usage` | Bearer | 200 | **확장**(필드 추가) |
-| `POST /auth/google` | apiKey | 200 / **409** | **확장**(세션) |
-| `POST /uploads/prepare` | apiKey + optionalBearer(+세션) | 200 / 403 | **변경**(정원) |
-| `POST /uploads/commit` | apiKey + optionalBearer(+세션) | 201 / 403 | **변경**(정원·차감) |
+| `POST /auth/google` | apiKey | 200 | **변경 없음** *(종전 "세션 확장 + 409" 폐기 → 2026-08-10)* |
+| `POST /uploads/prepare` | apiKey + optionalBearer | 200 / 403 | **변경**(정원) |
+| `POST /uploads/commit` | apiKey + optionalBearer | 201 / 403 | **변경**(정원·차감) |
 | `GET /config/billing` | Bearer | 200 | 신규 |
 | `PATCH /config/billing` | Bearer + admin | 200 | 신규 |
 | `GET /admin/wallets/{userId}` | Bearer + admin | 200 | 신규 |
 | `POST /admin/wallets/{userId}/grant` | Bearer + admin | 201 | 신규 |
 | `POST /admin/wallets/{userId}/adjust` | Bearer + admin | 201 | 신규 |
 | `POST /admin/wallets/{userId}/freeze` | Bearer + admin | 204 | 신규 |
-| `POST /admin/sessions/{userId}/revoke-all` | Bearer + admin | 204 | 신규 |
 | `POST /admin/payments/{paymentId}/refund` | Bearer + admin | 200 | 신규 |
+
+> ❌ **이 표에서 폐기된 행(2026-08-10)**: `POST /sessions/heartbeat` · `POST /sessions/logout` · `GET /sessions` · `POST /admin/sessions/{userId}/revoke-all`. ⚠️ 마지막 항목은 **계정 탈취 시 즉시 차단 수단**이었다 → 대체안은 `users.disabled` 플래그([09 T15](./09-security-abuse-and-compliance.md) · [11 D-27](./11-open-decisions.md)).
 
 ---
 
@@ -180,7 +177,7 @@
 
 #### `POST /payments/orders` — PG 주문 생성
 
-**게이트**: Bearer + 세션 + billingEnabled
+**게이트**: Bearer + billingEnabled
 
 **요청**
 ```json
@@ -238,7 +235,7 @@
 
 ### 3.4 `POST /items/purchase` — 아이템(MC 소비) 구매
 
-**게이트**: Bearer + 세션 + billingEnabled
+**게이트**: Bearer + billingEnabled
 
 **요청**
 ```json
@@ -274,7 +271,7 @@
 
 ### 3.5 `POST /frames/mine` — 개인 프레임 생성(과금)
 
-**게이트**: Bearer + `requireFrameWrite` + 세션 + billingEnabled
+**게이트**: Bearer + `requireFrameWrite` + billingEnabled
 
 **요청**
 ```json
@@ -330,7 +327,7 @@
 | `POST /admin/wallets/{userId}/grant` | admin | `{mcAmount, reason, memo, idempotencyKey}` | 1회 5,000MC 상한 |
 | `POST /admin/wallets/{userId}/adjust` | admin | `{deltaMc, reason, memo, idempotencyKey}` | 음수 허용(회수). 잔액 음수 불가 |
 | `POST /admin/wallets/{userId}/freeze` | admin | `{frozen: bool, reason}` | |
-| `POST /admin/sessions/{userId}/revoke-all` | admin | — | 계정 탈취 대응 |
+| ~~`POST /admin/sessions/{userId}/revoke-all`~~ | ~~admin~~ | — | **❌ 폐기(2026-08-10)** — 세션 레지스트리가 없다. **계정 탈취 즉시 차단 수단이 사라졌다**(JWT 8시간 만료를 기다려야 한다) → 대체안 `users.disabled` 플래그: [09 T15](./09-security-abuse-and-compliance.md) · [11 D-27](./11-open-decisions.md) |
 | `POST /admin/payments/{paymentId}/refund` | admin | `{amountKrw?, reason, idempotencyKey}` | 부분 환불 지원. PG API 호출 + 원장 `refund` |
 | `GET /admin/wallets/{userId}/entries` | admin | `?limit=100&cursor=` | 원장 페이지네이션 |
 
@@ -348,7 +345,7 @@
 
 | 항목 | 변경 |
 |------|------|
-| 게이트 | `requireApiKey` + `optionalBearer` + **(토큰 있으면) `requireActiveSession`** |
+| 게이트 | `requireApiKey` + `optionalBearer` *(변경 없음 — 종전 `requireActiveSession` 추가는 2026-08-10 폐기)* |
 | 판정 | TempUser 전용 → **로그인 전원**(admin 예외). `evaluateQrQuota` |
 | 오류 | 403 `QUOTA_EXHAUSTED`/`NO_ENTITLEMENT`/`HARD_CAP`/`KILL_SWITCH` **또는** 기존 `TEMP_USER_*`(무료 사유) |
 | 게스트 | 통과(불변) |
@@ -381,7 +378,6 @@
 | `usage` | `{userId}_{yyyy-MM-dd}` | 계정×일수 | **90일** | 전면 차단 |
 | `usage` (전역 샤드) | `_global_{yyyy-MM-dd}_{0..9}` | 일 10개 | 90일 | 전면 차단 |
 | `payments` | `pay_{yyyyMMdd}_{uuid8}` | 결제 수 | × (보존 5년) | 전면 차단 |
-| `sessions` | `{userId}` | 계정 수 | × | 전면 차단 |
 | `idempotency` | `{scope}_{key}` | 요청 수(단기) | **24시간** | 전면 차단 |
 | `catalog/packs`, `catalog/items` | id | ≤ 50 | × | 전면 차단(서버 경유 노출) |
 | `config/billing` | 고정 1개 | 1 | × | 전면 차단 |
@@ -397,7 +393,6 @@ match /entitlements/{uid}  { allow read, write: if false; }
 match /entitlements/{uid}/grants/{g} { allow read, write: if false; }
 match /usage/{doc}         { allow read, write: if false; }
 match /payments/{p}        { allow read, write: if false; }
-match /sessions/{uid}      { allow read, write: if false; }
 match /idempotency/{k}     { allow read, write: if false; }
 match /catalog/{doc=**}    { allow read, write: if false; }
 match /config/{doc}        { allow read, write: if false; }   // 기존 tempUserLimits와 동일
@@ -433,14 +428,10 @@ match /frameEvents/{uid}/{e} { allow read, write: if false; }
 | `overageDefaultEnabled` | bool | false | 오버리지 기본값 |
 | `overageMcPerSession` | int | 2 | 오버리지 단가 |
 | `frameCreatePriceMc` | int | 5 | 프레임 생성 MC(카탈로그와 이중화 — 카탈로그가 정본, 이 값은 폴백) |
-| `singleSessionEnabled` | bool | false | 단일 세션 강제 |
-| `sessionGraceSeconds` | int | 180 | 유예 |
-| `heartbeatSeconds` | int | 90 | 클라 하트비트 주기(서버가 지시) |
-| `purgeLocalUserFramesOnBoot` | bool | false | 부팅 purge 활성 |
 | `migrationDeadlineMs` | int? | null | 레거시 프레임 이관 유예 종료 |
 | `updatedAt`, `updatedBy` | | | 감사 |
 
-> ✅ **하트비트 주기를 서버가 지시**하는 이유: 비용·부하에 따라 클라 재배포 없이 조절할 수 있다. 클라는 `heartbeatSeconds`를 `GET /config/billing` 또는 하트비트 응답에서 받아 반영한다(하한 30초·상한 600초로 클램프).
+> ❌ **폐기된 설정 키(2026-08-10)**: `singleSessionEnabled` · `sessionGraceSeconds` · `heartbeatSeconds` — [06](./06-single-session-enforcement.md) 폐기와 함께 사라졌다. `purgeLocalUserFramesOnBoot`도 [04 §5](./04-custom-frames-billing-and-lifecycle.md) 폐기(2026-08-07)로 무효다. **네 키 모두 신설하지 않는다.**
 
 ---
 
@@ -452,7 +443,7 @@ match /frameEvents/{uid}/{e} { allow read, write: if false; }
 | M2 | 기존 계정 지갑 | 생성하지 않는다(lazy). 첫 접근 시 생성 | 자동 |
 | M3 | 기존 `user`+ 계정의 QR 무제한 | **이행 지급**: `qr_d30_30d` 상당 grant 1건 무상 부여(스크립트) | 시행일 전 |
 | M4 | 기존 로컬 전용 개인 프레임 | 이관 유도 30일([04 §7](./04-custom-frames-billing-and-lifecycle.md)) | 시행 전 |
-| M5 | 구버전 클라(`sid` 없는 토큰) | 세션 검증 스킵 → 전환 종료 후 강제 | 2개월 |
+| ~~M5~~ | ~~구버전 클라(`sid` 없는 토큰)~~ | **❌ 폐기(2026-08-10)** — JWT를 변경하지 않으므로 토큰 마이그레이션이 없다([06](./06-single-session-enforcement.md) 폐기). 번호는 재사용하지 않는다 | — |
 | M6 | `config/tempUserLimits` | **유지**(무료 티어 전역 한도). `config/billing`과 별 문서 | — |
 | M7 | 카탈로그 초기 데이터 | 시드 스크립트(`web/functions/scripts/seed-catalog.mjs`) | 배포 시 |
 | M8 | 기존 `POST /frames` 호출자(power 공용) | **무변경**. 개인 경로는 신설이라 회귀 없음 | — |
@@ -463,10 +454,9 @@ match /frameEvents/{uid}/{e} { allow read, write: if false; }
 |------|-----------|
 | 정원 강제 | `config/billing.enforceQuota = false` → 즉시 무제한(과금 전 상태) |
 | 구매 | `enabled = false` → 구매 UI 숨김. 이미 산 권리는 유효 |
-| 단일 세션 | `singleSessionEnabled = false` → 세션 대조 스킵 |
 | 프레임 서버 저장 | ⚠️ **되돌리기 어렵다**(문서·Storage가 생성됨). 롤백은 "새 생성만 로컬로" 형태이며 이미 서버에 있는 프레임은 유지 |
-| purge | `purgeLocalUserFramesOnBoot = false` |
-| JWT `sid` | 무해(클레임 추가). 검증만 끄면 된다 |
+
+> ❌ **이 표에서 사라진 행**: ~~단일 세션~~·~~JWT `sid`~~(2026-08-10 폐기) · ~~purge~~([04 §5](./04-custom-frames-billing-and-lifecycle.md) 2026-08-07 폐기). 애초에 도입하지 않으므로 되돌릴 것이 없다.
 
 > ✅ **플래그 기반 롤백이 가능한 설계**가 이 문서의 요구사항이다. 코드 배포 없이 되돌릴 수 있어야 상용 서비스에서 사고를 수습할 수 있다.
 

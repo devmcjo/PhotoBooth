@@ -1,6 +1,6 @@
 # MC포토 과금 제도 설계 (docs/billing)
 
-MC포토의 **유료화(monetization) 전체 설계** 문서 세트입니다. 화폐(MC) · 지갑/원장 · QR 일일 정원 · 커스텀 프레임 과금 · 결제(PG·IAP) · 단일 세션 강제 · API/데이터 계약 · UI 문구 · 법규/회계 · 롤아웃 · 검증까지를 다룹니다.
+MC포토의 **유료화(monetization) 전체 설계** 문서 세트입니다. 화폐(MC) · 지갑/원장 · QR 일일 정원 · 커스텀 프레임 과금 · 결제(PG·IAP) · ~~단일 세션 강제~~(❌ 폐기) · API/데이터 계약 · UI 문구 · 법규/회계 · 롤아웃 · 검증까지를 다룹니다.
 
 | 항목 | 값 |
 |------|-----|
@@ -11,9 +11,11 @@ MC포토의 **유료화(monetization) 전체 설계** 문서 세트입니다. �
 | 진실원 우선순위 | 실제 소스 > [`docs/analysis`](../analysis/README.md) > 이 세트 > [`docs/design`](../design/README.md)의 개별 이터레이션 문서 |
 | 미결정 | **[11 · 미결정 사항](./11-open-decisions.md)이 단일 집합소**다. 이 세트의 가격·기간·정책 수치는 **전부 초안**이며 11번에서 확정 상태를 관리한다 |
 
-> ⚠️ **이 문서 세트는 기존 동작을 바꾸는 제안을 포함한다.** 특히 ① 개인 커스텀 프레임의 **로컬 전용 → 서버 저장** 전환([04](./04-custom-frames-billing-and-lifecycle.md)), ② **로그아웃 시 로컬 프레임 삭제**(같은 문서), ③ **단일 세션 강제**([06](./06-single-session-enforcement.md))는 현행 계약([`analysis/40 §2.2`](../analysis/40-database-firestore-and-storage-schema.md)·[`analysis/60 §3.5`](../analysis/60-auth-accounts-and-roles.md))과 **정면으로 다르다**. 각 문서가 "현행 → 변경" 대조표로 그 경계를 명시한다.
+> ⚠️ **이 문서 세트는 기존 동작을 바꾸는 제안을 포함한다.** 특히 ① 개인 커스텀 프레임의 **로컬 전용 → 서버 저장** 전환([04](./04-custom-frames-billing-and-lifecycle.md))은 현행 계약([`analysis/40 §2.2`](../analysis/40-database-firestore-and-storage-schema.md))과 **정면으로 다르다**. 각 문서가 "현행 → 변경" 대조표로 그 경계를 명시한다.
 
-> ✅ **이미 있는 것을 다시 만들지 않는다.** it13이 만든 **TempUser 무료 한도 엔진**(서버 권위 · prepare 선검사 + commit 트랜잭션 · effective 정책 단일 지점)이 유료 과금의 **구조적 원형**이다([`design/wpf-it13-temp-user-role-design.md`](../design/wpf-it13-temp-user-role-design.md)). 이 세트는 그 골격을 **확장**하며, 새 개념(지갑·원장·정원·세션)만 신설한다.
+> ✅ **종전에 이 경고에 함께 실려 있던 두 항목은 폐기되어 더 이상 현행 계약과 충돌하지 않는다.** ② ~~로그아웃 시 로컬 프레임 삭제~~ → [04 §5](./04-custom-frames-billing-and-lifecycle.md) **2026-08-07 폐기**(소유권 서명 `.slots #owner`으로 대체). ③ ~~단일 세션 강제~~ → [06](./06-single-session-enforcement.md) **2026-08-10 폐기**(사용량 과금이므로 세션 통제 불요). 따라서 [`analysis/60 §3.5`](../analysis/60-auth-accounts-and-roles.md)의 **로그아웃·세션 유지 규칙은 그대로 유효하다.**
+
+> ✅ **이미 있는 것을 다시 만들지 않는다.** it13이 만든 **TempUser 무료 한도 엔진**(서버 권위 · prepare 선검사 + commit 트랜잭션 · effective 정책 단일 지점)이 유료 과금의 **구조적 원형**이다([`design/wpf-it13-temp-user-role-design.md`](../design/wpf-it13-temp-user-role-design.md)). 이 세트는 그 골격을 **확장**하며, 새 개념(지갑·원장·정원)만 신설한다.
 
 ---
 
@@ -27,12 +29,12 @@ MC포토의 **유료화(monetization) 전체 설계** 문서 세트입니다. �
 | 4 | [03 · QR 일일 정원](./03-qr-daily-quota.md) | 하루 N개 · 00시(KST) 리셋 · **첫날 일할 계산** · 무제한 금지 · 서버 강제 지점 |
 | 5 | [04 · 커스텀 프레임 과금 · 수명](./04-custom-frames-billing-and-lifecycle.md) | 프레임 생성 과금, 서버 DB 저장 전환, 로그아웃 시 로컬 삭제, 기본 프레임 보존 |
 | 6 | [05 · 결제 · 플랫폼 정책](./05-payments-and-platform-policies.md) | PG(웹·Windows) vs IAP(iOS·Android) 강제, 영수증 검증, 환불·취소, 크로스플랫폼 지갑 |
-| 7 | [06 · 단일 세션 강제](./06-single-session-enforcement.md) | 같은 계정 동시 로그인 차단, 강제 로그아웃 팝업, 하트비트, **키오스크 다중 PC 함정** |
+| 7 | [06 · ~~단일 세션 강제~~](./06-single-session-enforcement.md) **❌ 폐기(2026-08-10)** | 구현하지 않는다. 문서는 **이력·운영 지식**(정책 3안 비교, 키오스크 다중 PC 함정)으로만 남는다 → [06 §0](./06-single-session-enforcement.md) |
 | 8 | [07 · API · 데이터 계약](./07-api-and-data-contract.md) | 신규·변경 엔드포인트 전수, Firestore 스키마·인덱스·규칙, 에러 코드 |
 | 9 | [08 · UI/UX · 문구](./08-ui-ux-and-copy.md) | 화면별 명세와 **동결 문구 전수**(플랫폼 공통), 결제 흐름 UI, 잔량 표시 |
 | 10 | [09 · 보안 · 어뷰징 · 법규 · 회계](./09-security-abuse-and-compliance.md) | 위협 모델 14종, 다중계정 남용, 전자상거래법·전금법·세무·약관 |
 | 11 | [10 · 롤아웃 · 검증 · WBS](./10-rollout-testing-and-wbs.md) | 6단계 롤아웃(dry-run 포함), 테스트 전략, 수락 기준, 작업 분해 |
-| 12 | [11 · 미결정 사항](./11-open-decisions.md) | **결정해야 착수 가능한 항목 24건**과 각각이 막고 있는 작업 |
+| 12 | [11 · 미결정 사항](./11-open-decisions.md) | **결정해야 착수 가능한 항목 26건**과 각각이 막고 있는 작업 *(2026-08-10: D-09 폐기 −1, D-25·D-26·D-27 신설 +3)* |
 | — | [12 · 용어집 · 계산 부록](./12-glossary-and-appendix.md) | 용어 정의, 프로레이션 전수표, 원가 계산 근거, 참조 링크 |
 
 ---
@@ -46,8 +48,7 @@ IAP(iOS·Android)─┼─ 검증 ────────>├─ wallets/{uid}.
 프로모·관리자지급 ┘                ├─ wallets/{uid}/entries/*  (원장·append-only)
                                   │
                                   ├─ entitlements/{uid}       (QR 일일 정원 플랜)
-                                  ├─ usage/{uid}_{KST일자}    (오늘 사용량, lazy reset)
-                                  └─ sessions 단일 세션(sid)  ─── 401 session_superseded
+                                  └─ usage/{uid}_{KST일자}    (오늘 사용량, lazy reset)
                                         │
         소비 지점(서버가 거부해야 실효)  │
         ① POST /uploads/prepare   ──────┤ 정원 선검사 → 403
@@ -82,8 +83,8 @@ IAP(iOS·Android)─┼─ 검증 ────────>├─ wallets/{uid}.
 | 10/30/50/100/200개 ↔ 20/35/85/160/320MC | [01 §4](./01-currency-catalog-and-pricing.md) | ⚠️ **단가 역전 2건 발견**(30개=1.17MC/개 vs 50개=1.70MC/개) — 재설계표 제시, 확정 [11 D-04](./11-open-decisions.md) |
 | 17:30 구매 → **17시로 계산, 첫날 ((24-17)/24)×N** | [03 §5](./03-qr-daily-quota.md) + [12 §2](./12-glossary-and-appendix.md) 전수표 | 설계됨(내림·올림 규칙까지 확정 초안) |
 | **무제한 QR 금지**(DB 과금 우려) | [03 §7](./03-qr-daily-quota.md) 3중 상한(플랜 상한·계정 하드캡·전역 킬스위치) | 설계됨 |
-| **같은 계정 다른 세션 로그인 차단** + 강제 로그아웃 **팝업 필수** | [06](./06-single-session-enforcement.md) 전체 | 설계됨(정책 3안 중 권장안 제시, 확정 [11 D-09](./11-open-decisions.md)) |
-| "또는 여러 대의 Windows PC에서 같은 계정 로그인 차단" | [06 §3](./06-single-session-enforcement.md) 정책 S1/S2/S3(좌석제) 비교 | ⚠️ **현행 키오스크 운영과 충돌 가능**(한 계정으로 여러 부스) — [06 §3.4](./06-single-session-enforcement.md) |
+| ~~**같은 계정 다른 세션 로그인 차단** + 강제 로그아웃 **팝업 필수**~~ | [06](./06-single-session-enforcement.md) 전체(이력) | **❌ 폐기(2026-08-10) — 사용량 과금이므로 불요(사용자 결정).** 사용량(QR 전송 세션 1건) 과금이므로 동시 사용을 차단할 과금상 이유가 없다 → [06 §0](./06-single-session-enforcement.md) |
+| ~~"또는 여러 대의 Windows PC에서 같은 계정 로그인 차단"~~ | [06 §3](./06-single-session-enforcement.md) 정책 S1/S2/S3 비교(이력) | **❌ 폐기(2026-08-10).** 여러 PC 동시 로그인을 **허용**한다. 프레임은 다운로드 1회만 과금하므로 여러 PC에 설치되어도 과다 청구가 없다 |
 | 다른 플랫폼(웹·iOS·Android) 개발 시 제대로 구현 가능하게 | 전 문서가 **플랫폼 중립 규격 + 플랫폼 차이 절** 구조. 특히 [05 §2](./05-payments-and-platform-policies.md)(IAP 강제)·[07](./07-api-and-data-contract.md)(와이어 계약) | 설계됨 |
 
 ---
@@ -95,10 +96,9 @@ IAP(iOS·Android)─┼─ 검증 ────────>├─ wallets/{uid}.
 | `POST /frames` | Bearer + **power** · `userId=null`·`isDefault=true` **강제**(`web/functions/src/routes/frames.ts:58-80`) | 개인 프레임 생성 경로 신설(`CanWriteFrames` + 과금 + `userId=principal.id`) | [04 §4](./04-custom-frames-billing-and-lifecycle.md)·[07 §4](./07-api-and-data-contract.md) |
 | 개인 커스텀 프레임 저장소 | **로컬 파일 전용**(`LocalFrameStore`, DB 미저장 — [`analysis/40 §2.2`](../analysis/40-database-firestore-and-storage-schema.md) 하이브리드 it8 A2) | **서버 DB 정본 + 로컬 캐시** | [04 §2](./04-custom-frames-billing-and-lifecycle.md) |
 | 로그아웃 시 로컬 데이터 | 삭제하지 않음(파일 잔존) | `{계정}_` 접두 파일 purge | [04 §5](./04-custom-frames-billing-and-lifecycle.md) |
-| JWT | `{sub, role, iat, exp}` · 8시간 · 세션 레지스트리 없음([`analysis/31 §2.2`](../analysis/31-backend-api-reference.md)) | **`sid` 클레임 추가** + 서버 활성 세션 대조 | [06 §4](./06-single-session-enforcement.md) |
 | QR 게이트 | TempUser 전용(계정 `createdAt` + `qrUsedCount`) | **역할 무관 정원 엔진**으로 일반화(무료 티어는 그 위의 한 플랜) | [03 §3](./03-qr-daily-quota.md) |
 | `GET /accounts/me/qr-usage` | TempUser 판정 결과(`blocked/reason/remainingMs/remainingCount`) | **응답 확장**(하위 호환 유지 — 필드 추가만) | [07 §3.2](./07-api-and-data-contract.md) |
-| 에러 코드 | `TEMP_USER_TIME_EXCEEDED`·`TEMP_USER_COUNT_EXCEEDED` | `QUOTA_EXHAUSTED`·`INSUFFICIENT_MC`·`SESSION_SUPERSEDED` 등 추가(기존 코드 **유지**) | [07 §2](./07-api-and-data-contract.md) |
+| 에러 코드 | `TEMP_USER_TIME_EXCEEDED`·`TEMP_USER_COUNT_EXCEEDED` | `QUOTA_EXHAUSTED`·`INSUFFICIENT_MC` 등 추가(기존 코드 **유지**) | [07 §2](./07-api-and-data-contract.md) |
 | `users` 문서 | `qrUsedCount` 누적 카운터 | 누적 → **일자별 usage 문서**로 이관(기존 필드는 읽기 폴백으로 남김) | [07 §6](./07-api-and-data-contract.md) |
 
 ---
@@ -123,13 +123,13 @@ IAP(iOS·Android)─┼─ 검증 ────────>├─ wallets/{uid}.
 `docs/design/README.md` §0 표에 추가(**아래 블록의 상대 경로는 `docs/design/README.md` 기준**이다):
 
 ```markdown
-| **과금·결제 제도를 만든다 / 바꾼다** | **[`docs/billing/`](../billing/README.md)** — 전용 문서 세트 13개(화폐·지갑/원장·QR 일일 정원·프레임 과금·PG/IAP·단일 세션·API 계약·UI 문구·법규·롤아웃). ⚠️ 개인 프레임 **로컬 전용 정책**([it15 프레임 UX](./wpf-it15-frame-ux-design.md))과 **로그아웃 세션 유지 규칙**([`analysis/60 §3.5`](../analysis/60-auth-accounts-and-roles.md))을 바꾸는 제안을 포함한다 |
+| **과금·결제 제도를 만든다 / 바꾼다** | **[`docs/billing/`](../billing/README.md)** — 전용 문서 세트 13개(화폐·지갑/원장·QR 일일 정원·프레임 과금·PG/IAP·API 계약·UI 문구·법규·롤아웃). ⚠️ 개인 프레임 **로컬 전용 정책**([it15 프레임 UX](./wpf-it15-frame-ux-design.md))을 바꾸는 제안을 포함한다. ~~단일 세션 강제~~는 **2026-08-10 폐기**([`billing/06`](../billing/06-single-session-enforcement.md))이므로 [`analysis/60 §3.5`](../analysis/60-auth-accounts-and-roles.md)의 로그아웃·세션 유지 규칙은 그대로 유효하다 |
 ```
 
 `docs/analysis/90-roadmap-and-future-work.md` §2 큐에 추가:
 
 ```markdown
 ### #17 과금 제도(유료화) — 설계 완료 · 구현 대기
-- 설계: `docs/billing/` 13문서(2026-08-06). 착수 전 **[11 · 미결정](../billing/11-open-decisions.md) 24건 중 차단 8건** 확정 필요.
+- 설계: `docs/billing/` 13문서(2026-08-06, 2026-08-10 단일 세션 강제 폐기 반영). 착수 전 **[11 · 미결정](../billing/11-open-decisions.md) 26건 중 차단(🔴) 8건** 확정 필요.
 - 1단계는 과금 없는 **지갑·원장 골격 + dry-run 계측**(가격을 실사용 데이터로 확정하기 위함, `docs/billing/10 §2`).
 ```

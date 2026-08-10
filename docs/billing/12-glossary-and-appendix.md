@@ -30,8 +30,7 @@
 | 이행 지급 | 과금 시행 시 기존 계정에 주는 무상 플랜 | [10 §3](./10-rollout-testing-and-wbs.md) |
 | 접두 규약 | 로컬 프레임 파일명 규칙(`{계정}_{이름}` = 개인, 접두 없음 = 공용) | [04 §1](./04-custom-frames-billing-and-lifecycle.md) |
 | purge | 로그아웃 시 로컬 개인 프레임 삭제 | [04 §5](./04-custom-frames-billing-and-lifecycle.md) |
-| `sid` | JWT의 세션 id 클레임. 활성 세션 대조 근거 | [06 §4.2](./06-single-session-enforcement.md) |
-| 좌석(seat) | 계정당 허용 동시 세션 수(상품화 여지) | [06 §3.3](./06-single-session-enforcement.md) |
+| 좌석(seat) | **다점포 운영자용 상품 축(정의 미확정).** 종전 "계정당 허용 동시 세션 수" 정의는 [06](./06-single-session-enforcement.md) 폐기와 함께 **무효**다 — 동시 세션을 셀 수 없다. 관찰된 다점포 사용 패턴은 유효하며 축 재설계가 필요하다 | [11 D-26](./11-open-decisions.md) |
 | B2B-부스 / B2C-개인 | 결제 주체가 운영자인지 본인인지 구분하는 사용자 프로파일 | [00 §4](./00-scope-principles-and-model.md) |
 | FIFO 소비 가정 | 환불 계산을 위해 "충전 순서대로 사용"으로 본다는 약관 규약 | [05 §6](./05-payments-and-platform-policies.md) |
 | shortfall | 환불 시 회수하려는 MC가 잔액보다 많아 생기는 부족분 | [02 §5.3](./02-wallet-ledger-and-entitlements.md) |
@@ -256,7 +255,7 @@ assertMonotonicPricing(items):
 | 하루 제한·리셋·첫날 계산 | [03](./03-qr-daily-quota.md) |
 | 프레임 과금·DB 저장·로그아웃 삭제 | [04](./04-custom-frames-billing-and-lifecycle.md) |
 | 결제·환불·스토어 정책 | [05](./05-payments-and-platform-policies.md) |
-| 동시 로그인 차단 | [06](./06-single-session-enforcement.md) |
+| 동시 로그인 차단 → **❌ 폐기(2026-08-10)**: 차단하지 않는다 | [06](./06-single-session-enforcement.md)(이력·폐기 근거) |
 | API·스키마 | [07](./07-api-and-data-contract.md) |
 | 화면·문구 | [08](./08-ui-ux-and-copy.md) |
 | 위협·법규·회계 | [09](./09-security-abuse-and-compliance.md) |
