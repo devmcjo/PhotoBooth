@@ -57,7 +57,145 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- ══════════ it24: 프로젝트 라이선스 고지 — 로컬 스타일 4종 (설계 §3.6) ══════════
+             ⚠️ Themes/ 에 키를 추가하지 않는다: 병합 딕셔너리 간 StaticResource 교차 참조로 창이
+                안 뜬 사고 이력이 있다. 로컬 x:Key는 테마 키 검증 테스트가 제외하므로 안전하다. -->
+
+        <!-- 섹션 머리("이 소프트웨어" / "동봉된 오픈소스" / "그 외 동봉 고지 문서") -->
+        <Style x:Key="LicenseSectionHead" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <!-- SPDX 배지: 전문을 쏟지 않고 라이선스를 지목하는 표준 식별자를 카드 우측 상단에 강조 -->
+        <Style x:Key="LicenseBadge" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Brush.Accent.Soft}" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Pill}" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="12,0,0,0" />
+        </Style>
+        <!-- 메타 행 라벨(고정 96 컬럼). 최장 라벨이 "배포 형태"(5자)이고 14px 기준 96px로 충분하다. -->
+        <Style x:Key="LicenseMetaLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="TextTrimming" Value="None" />
+        </Style>
+        <!-- 메타 행 값(Wrap — 고정폭 잘림 이력 대비: 값 컬럼은 * 이고 접힌다) -->
+        <Style x:Key="LicenseMetaValue" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+
+        <!-- 요약 카드 1장 = 구성 요소 1개. 자체/제3자 두 ItemsControl이 이 템플릿을 공유한다.
+             ⛔ 카드 어디에도 파일명·확장자·경로·파일 크기를 쓰지 않는다(요구 R1). 전문 파일은
+                버튼의 대상일 뿐이며 화면에 이름이 드러나지 않는다. -->
+        <DataTemplate x:Key="LicenseCard">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16"
+                    AutomationProperties.Name="{Binding Name}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" Style="{StaticResource Text.Title}"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <!-- 낭독은 SPDX 약칭이 어색하므로 자동화 이름에 정식 라이선스 이름을 준다. -->
+                        <Border Grid.Column="1" Style="{StaticResource LicenseBadge}"
+                                AutomationProperties.Name="{Binding LicenseName}">
+                            <TextBlock Text="{Binding SpdxId}" Style="{StaticResource Text.Caption}"
+                                       Foreground="{StaticResource Brush.Accent.Text}" />
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Text="{Binding Purpose}" Style="{StaticResource Text.Body}" Margin="0,4,0,0"
+                               Visibility="{Binding HasPurpose, Converter={StaticResource BoolToVis}}" />
+
+                    <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,16,0,16" />
+
+                    <!-- 메타 행: 라이선스 · 버전 · 저작권 · 배포 형태 · 소스 제공 (순서 고정) -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="라이선스" Style="{StaticResource LicenseMetaLabel}" />
+                        <TextBlock Grid.Column="1" Text="{Binding LicenseName}"
+                                   Style="{StaticResource LicenseMetaValue}" />
+                    </Grid>
+                    <Grid Margin="0,0,0,8"
+                          Visibility="{Binding HasVersion, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="버전" Style="{StaticResource LicenseMetaLabel}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Version}"
+                                   Style="{StaticResource LicenseMetaValue}" />
+                    </Grid>
+                    <Grid Margin="0,0,0,8"
+                          Visibility="{Binding HasCopyright, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="저작권" Style="{StaticResource LicenseMetaLabel}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Copyright}"
+                                   Style="{StaticResource LicenseMetaValue}" />
+                    </Grid>
+                    <Grid Margin="0,0,0,8"
+                          Visibility="{Binding HasDistribution, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="배포 형태" Style="{StaticResource LicenseMetaLabel}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Distribution}"
+                                   Style="{StaticResource LicenseMetaValue}" />
+                    </Grid>
+                    <Grid Visibility="{Binding HasSourceOffer, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="소스 제공" Style="{StaticResource LicenseMetaLabel}" />
+                        <TextBlock Grid.Column="1" Text="{Binding SourceOffer}"
+                                   Style="{StaticResource LicenseMetaValue}" />
+                    </Grid>
+
+                    <!-- F7: 선언된 고지 파일이 배포물에 없다. 카드를 숨기지 않는다 — 누락을 감추지 않는다. -->
+                    <Border Background="{StaticResource Brush.Warning.Surface}"
+                            CornerRadius="{StaticResource Radius.S}" Padding="12,10" Margin="0,12,0,0"
+                            Visibility="{Binding IsAnyFileMissing, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="이 항목의 고지 파일이 배포물에 없습니다. 개발자에게 알려주세요."
+                                   Style="{StaticResource Text.Caption}"
+                                   Foreground="{StaticResource Brush.Warning}" TextWrapping="Wrap" />
+                    </Border>
+
+                    <!-- ⚠️ 항목 템플릿 안에서 {Binding ShowLicense…}로 쓰면 항목(LicenseComponent)에서
+                         커맨드를 찾아 조용히 아무 일도 하지 않는다 → UserControl 조상 경유가 필수다.
+                         ⚠️ IsEnabled를 붙이지 않는다: 고지 접근은 로그인·권한과 무관해야 한다(GPLv3 §4). -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                        <Button Content="소스 코드 제공 안내" Style="{StaticResource Button.Ghost}"
+                                MinWidth="0" Padding="20,0" Margin="0,0,8,0"
+                                Visibility="{Binding HasNoticeFile, Converter={StaticResource BoolToVis}}"
+                                Command="{Binding DataContext.ShowLicenseNoticeCommand,
+                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}" />
+                        <Button Content="라이선스 전문 보기" Style="{StaticResource Button.Secondary}"
+                                MinWidth="0" Padding="20,0"
+                                Command="{Binding DataContext.ShowLicenseFullTextCommand,
+                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
+
+    <!-- Esc 1키가 상태로 분기한다: Level 2 → Level 1 / Level 1 → 닫기 / 닫힌 상태 → 무동작.
+         KeyBinding은 커맨드 하나만 지목할 수 있으므로 분기를 VM에 두었다(코드비하인드를 만들지 않는다). -->
+    <UserControl.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding EscapeLicenseViewerCommand}" />
+    </UserControl.InputBindings>
 
     <Grid Background="{StaticResource Brush.Bg}">
         <Grid.RowDefinitions>
@@ -202,10 +340,12 @@
                                                 Style="{StaticResource Button.Secondary}" MinWidth="0" Width="44" Padding="0"
                                                 Margin="8,0,0,0" Command="{Binding RefreshCamerasCommand}"
                                                 IsEnabled="{Binding IsEnumeratingCameras, Converter={StaticResource InverseBool}}" />
+                                        <!-- it23: 웹캠이 0대여도 외부 카메라가 켜져 있으면 테스트할 대상이 있다
+                                             (모달 목록에 외부 항목이 오른다) → HasCamera 단독 게이트를 확장. -->
                                         <Button Grid.Column="2" Content="테스트"
                                                 Style="{StaticResource Button.Secondary}" MinWidth="0" Padding="16,0"
                                                 Margin="8,0,0,0" Command="{Binding OpenCameraTestCommand}"
-                                                IsEnabled="{Binding HasCamera}" />
+                                                IsEnabled="{Binding CanOpenCameraTest}" />
                                     </Grid>
                                 </Grid>
                                 <!-- 카메라 없음 안내. 고정 높이를 항상 예약해 열거 전/후 레이아웃 점프(재배치) 방지. (it9 후속)
@@ -365,14 +505,26 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- item3 스캐폴드: 외부 장치(추후 지원). 로그인 전용 노출(게스트는 섹션 자체 Collapsed).
-                             ⚠️ 현재 미지원 — 토글은 항상 Disable + "추후 지원 예정" 안내. 값은 저장만, 실기능 미배선. -->
-                        <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVis}}">
+                        <!-- 외부 장치. it24 §4.1: **게스트 Collapsed 폐지 — 항상 표시 + 읽기 전용**.
+                             종전에는 이 StackPanel 전체가 IsLoggedIn 게이트로 숨겨져 있었고, 그것이
+                             "외부 장치 연결 탭이 사라졌다"는 사용자 혼란의 직접 원인이었다. 같은 화면의 다른
+                             로그인 전용 항목(거울모드·재촬영·QR·필터)은 전부 "보이되 Disable + 로그인 필요 노티"이며,
+                             섹션째 숨김은 이 섹션만의 예외였다.
+                             ⚠️ 편집 게이트는 CanEditExternalCamera(User 이상 · TempUser 제외)다 — 보인다고 바뀌는 것은
+                                없다(Load 원값 표시 / Save 미기록 / IsEnabled 3중 게이트).
+                             ⚠️ 게이트 노티는 두 갈래다: 게스트=GuestGateNote("로그인 필요"),
+                                로그인했으나 편집 불가(TempUser)=IsExternalEditDenied("권한 없음").
+                                게스트에게 "권한 없음"을 보여 주면 "로그인하면 되는가"에 답하지 못하는 문구가 된다. -->
+                        <StackPanel>
                             <Border Style="{StaticResource GroupDivider}" />
-                            <TextBlock Text="외부 장치 (추후 지원)" Style="{StaticResource GroupTitle}" />
-                            <TextBlock Text="외부 카메라(DSLR)·프린터 연동은 추후 지원 예정입니다."
+                            <TextBlock Text="외부 장치" Style="{StaticResource GroupTitle}" />
+
+                            <!-- W1: 역할 분리 고지(외부 카메라 on일 때만). 타임랩스는 항상 웹캠 전담이다. -->
+                            <TextBlock Text="타임랩스 기능은 웹캠으로만 동작됩니다."
                                        Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
-                                       TextWrapping="Wrap" Margin="0,0,0,8" />
+                                       TextWrapping="Wrap" Margin="0,0,0,8"
+                                       Visibility="{Binding ExternalCameraEnabled, Converter={StaticResource BoolToVis}}" />
+
                             <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -380,13 +532,175 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="외부 카메라 사용" Style="{StaticResource RowLabel}" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <TextBlock Text="추후 지원 예정" Style="{StaticResource Text.Caption}"
+                                    <!-- W35: 지원 카메라 목록 진입.
+                                         ⚠️ 이 버튼은 **토글 행에 있고 하위 패널 밖에 있다**(팀리드 확정 — 설계 §7.4의
+                                            "하위 패널 안" 배치를 뒤집었다). 이 목록이 답하는 질문은 "내 카메라가
+                                            지원되나?"이고, 사용자는 그 답을 **외부 카메라를 켤지 결정하기 전에** 알고
+                                            싶어 한다. 토글 on일 때만 보이면 지원 여부를 몰라 아직 켜지 않은 사람이
+                                            목록에 도달할 수 없다 — 순서가 거꾸로다.
+                                         ⚠️ 이 프로젝트는 "상태 뒤에 UI를 숨겼다가" 두 번 지적받았다(게스트에게 섹션
+                                            Collapsed → "탭이 사라졌어", 프린터 토글 강제 Disable → "강제로 비활성화").
+                                            같은 실패를 세 번째로 재생산하지 않기 위해 Visibility 바인딩 밖에 둔다.
+                                         권한 게이트 없음 — 열람은 편집이 아니고 지원 모델은 비밀이 아니다.
+                                         ⚠️ **텍스트 링크**다(사용자 요구 — 텍스트 버튼도, 44px 아이콘 버튼도 정보 조회
+                                            치고 과하게 컸다("버그 같아")). 조작 비중이 낮은 열람 진입이라 버튼의
+                                            시각 무게가 이 행의 주역(토글)을 눌렀다.
+                                         ⚠️ 이 앱 **최초의 Hyperlink**다. 규약: ① 색은 `Brush.Accent.Text`(#D6376A —
+                                            팔레트가 흰 배경 텍스트용으로 따로 둔 값이다. `Brush.Accent`는 텍스트로는
+                                            연해서 쓰지 않는다) ② 밑줄은 상시(Hyperlink 기본) — 링크임을 알리는 유일한
+                                            시각 신호다 ③ hover 색 변경 없음(더 연한 색으로 바꾸면 대비가 떨어진다.
+                                            Hyperlink가 기본 제공하는 손가락 커서가 hover 피드백을 담당한다).
+                                         ⚠️ 신규 리소스 키 0개 — 인라인 속성만 쓴다(병합 딕셔너리 교차 참조 함정 회피).
+                                         ⚠️ 접근성: 링크 글자 자체가 이름이므로 AutomationProperties가 불요하다(아이콘
+                                            버튼일 때는 필요했다). Hyperlink는 Tab 포커스·Enter 활성이 기본이다. -->
+                                    <TextBlock Style="{StaticResource Text.Caption}"
+                                               VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Hyperlink Foreground="{StaticResource Brush.Accent.Text}"
+                                                   Command="{Binding OpenSupportedCameraListCommand}">지원하는 제품 목록</Hyperlink>
+                                    </TextBlock>
+                                    <!-- 게스트: "로그인 필요"(IsGuest 트리거 내장 — 신규 키 없음). -->
+                                    <TextBlock Style="{StaticResource GuestGateNote}" />
+                                    <!-- 로그인했으나 편집 불가(TempUser)에게만 "권한 없음"(it24 §4.3).
+                                         ⚠️ 종전 CanEditExternalCamera 역바인딩을 쓰면 게스트에게도 이 문구가 떠
+                                            "로그인 필요"와 중복 표출된다. -->
+                                    <TextBlock Text="권한 없음" Style="{StaticResource Text.Caption}"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                                               VerticalAlignment="Center" Margin="0,0,10,0"
+                                               Visibility="{Binding IsExternalEditDenied, Converter={StaticResource BoolToVis}}" />
                                     <ToggleButton Style="{StaticResource Toggle}"
-                                                  IsChecked="{Binding ExternalCameraEnabled}" IsEnabled="False" />
+                                                  IsChecked="{Binding ExternalCameraEnabled}"
+                                                  IsEnabled="{Binding CanEditExternalCamera}" />
                                 </StackPanel>
                             </Grid>
+
+                            <!-- 하위 설정(모델·노출)은 토글 on일 때만 노출 -->
+                            <StackPanel Visibility="{Binding ExternalCameraEnabled, Converter={StaticResource BoolToVis}}">
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- it25 §6: 라벨을 "인식된 카메라"로 — 콤보의 의미가 "지원 모델"에서
+                                         "연결이 인식된 카메라"로 바뀌었다. 지원 목록은 아래 [지원 카메라 목록]이 맡는다. -->
+                                    <TextBlock Grid.Column="0" Text="인식된 카메라" Style="{StaticResource RowLabel}" />
+                                    <!-- ⚠️ SelectedIndex 금지, 값 기반 SelectedValue(it7 B9 사고 이력):
+                                         인덱스 바인딩은 목록이 채워지는 순간 저장값을 0으로 덮어쓴다.
+                                         ⚠️ SelectedValue는 ini 미러(ExternalCameraModel)가 **아니다**(it25 §6.3):
+                                            직접 바인딩하면 인식 목록이 비는 순간 WPF가 매칭 실패한 값을 null로
+                                            되써서 운영자가 맞춰 둔 저장값이 소멸한다.
+                                         ⚠️ IsEnabled는 편집 게이트만 본다 — 인식이 0이어도 **열 수 있어야** 한다
+                                            (사용자 요구: "열어도 선택안함만 존재하면"). 빈 목록 Disable을 쓰지 않는다. -->
+                                    <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="220"
+                                              ItemsSource="{Binding RecognizedCameraOptions}"
+                                              DisplayMemberPath="Display" SelectedValuePath="Value"
+                                              SelectedValue="{Binding RecognizedCameraSelection}"
+                                              IsEnabled="{Binding CanEditExternalCamera}" />
+                                </Grid>
+
+                                <!-- W33: 콤보의 의미를 고지한다(it24 W24를 대체 — 콤보가 지원 목록이 아니게 되어
+                                     "연결된 장치 목록이 아닙니다"가 거짓이 됐다). 두 개념의 도착지를 함께 안내한다. -->
+                                <!-- W33 개정: 화면에 실제로 보이는 링크 글자를 지목한다. 없는 라벨을 안내하면
+                                     그 문구가 거짓이 된다(아이콘 버튼 시절의 "[?] 버튼" 표기도 같은 이유로 폐기). -->
+                                <TextBlock Text="연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원하는 제품 목록]에서 확인하세요."
+                                           Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                                <!-- W2: 제거 불가능한 광학 불일치 고지. 숨기면 WYSIWYG 사기가 된다(§5.4). -->
+                                <TextBlock Text="프리뷰는 웹캠 영상입니다. 실제 사진은 외부 카메라로 촬영되어 구도·화각이 프리뷰와 다를 수 있습니다."
+                                           Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                                <!-- ══════════ it24 §8.1: 장치 확인(명시 검색) ══════════
+                                     ⚠️ 이 진입점은 외부 카메라 토글 **on일 때만** 노출되는 하위 패널 안에 있다 —
+                                        off 상태에서는 검색 버튼 자체가 없어 설정 화면이 USB를 건드릴 경로가 0이다
+                                        (it23 "설정 진입만으로 USB를 건드리지 않는다"를 확장).
+                                     ⚠️ 결과 문구는 고정폭을 주지 않고 Wrap한다(고정폭 컬럼 잘림 이력). -->
+                                <Grid Style="{StaticResource SettingRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="장치 확인" Style="{StaticResource RowLabel}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <!-- 검색 중 스피너: it20 공유 리소스 재사용(신규 리소스 키 0).
+                                             ⚠️ 크기를 더 줄이지 않는다 — 템플릿의 StrokeThickness가 5라
+                                                20px 이하에서는 링 내부가 거의 남지 않아 원판처럼 보인다. -->
+                                        <Control Template="{StaticResource Spinner.Ring}" Width="28" Height="28"
+                                                 VerticalAlignment="Center" Margin="0,0,10,0"
+                                                 Focusable="False" IsTabStop="False"
+                                                 Visibility="{Binding IsDiscovering, Converter={StaticResource BoolToVis}}" />
+                                        <!-- 게스트: "로그인 필요"(검색은 IsLoggedIn 게이트 — TempUser 포함). -->
+                                        <TextBlock Style="{StaticResource GuestGateNote}" />
+                                        <!-- W15 -->
+                                        <Button Content="장치 검색" Style="{StaticResource Button.Secondary}"
+                                                MinWidth="0" Padding="20,0"
+                                                Command="{Binding DiscoverExternalCameraCommand}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- 검색 결과: 헤드라인(S0~S7) + 상세 라인들(사유 원문·감지·배터리·참고). -->
+                                <TextBlock Text="{Binding DiscoveryHeadline}" Style="{StaticResource Text.Body}"
+                                           TextWrapping="Wrap" Margin="0,0,0,4" />
+                                <ItemsControl ItemsSource="{Binding DiscoveryDetailLines}" Margin="0,0,0,8">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Style="{StaticResource Text.Caption}"
+                                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                                       TextWrapping="Wrap" Margin="0,0,0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- 노출 3요소: 슬라이더(도메인 인덱스) + 직접 입력 병행(요구 5).
+                                     ⚠️ 편집 게이트를 ItemsControl에 건다(§8.3-3): 행 내부 컨트롤의 DataContext는
+                                        ExposureParameterViewModel이라 CanEditExternalCamera가 해석되지 않는다.
+                                        부모가 Disable이면 자식은 어떤 값이어도 활성화될 수 없으므로 이 한 지점으로
+                                        3행 전체가 읽기 전용이 된다.
+                                     ⚠️ 이 게이트가 없으면 TempUser가 값을 고쳐 [저장]을 누를 수 있고, 저장은
+                                        미기록(원값 보존)이므로 "저장되었습니다" 직후 입력이 조용히 되돌아간다
+                                        — 성공 오인이다. -->
+                                <ItemsControl ItemsSource="{Binding ExposureParameters}"
+                                              IsEnabled="{Binding CanEditExternalCamera}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <!-- 라벨은 고정폭을 주지 않는다(잘림 방지 관례 — RowLabel과 동일 규칙). -->
+                                                    <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                               Style="{StaticResource RowLabel}" />
+                                                    <!-- 값 = 도메인 인덱스. 눈금 스냅으로 목록 밖 값이 만들어지지 않는다.
+                                                         도메인 미확보(미연결)면 Disable — 조작할 목록이 없다(§10.3). -->
+                                                    <Slider Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                            Minimum="0" Maximum="{Binding MaxIndex}"
+                                                            TickFrequency="1" IsSnapToTickEnabled="True"
+                                                            Value="{Binding SelectedIndex}"
+                                                            IsEnabled="{Binding IsDomainAvailable}" />
+                                                    <!-- 직접 입력은 도메인 미확보 상태에서도 활성(운영자가 장비 없이 미리 준비). -->
+                                                    <TextBox Grid.Column="2" Width="120" VerticalAlignment="Center"
+                                                             Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+                                                </Grid>
+                                                <TextBlock Text="{Binding Hint}" Style="{StaticResource Text.Caption}"
+                                                           Foreground="{StaticResource Brush.Warning}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Visibility="{Binding HasHint, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- W3: 도메인 미확보 안내. 설정 진입은 USB 장치를 건드리지 않으므로(§9.1)
+                                     목록은 촬영 세션·테스트 모달에서 연결된 뒤에 채워진다. -->
+                                <TextBlock Text="노출 목록은 카메라 연결 시 확인됩니다."
+                                           Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,8"
+                                           Visibility="{Binding HasExposureDomain, Converter={StaticResource InverseBoolToVis}}" />
+                            </StackPanel>
+
                             <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -394,11 +708,18 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="프린터 사용" Style="{StaticResource RowLabel}" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <!-- it25 §4.1: 프린터 표면 환원. 지원되는 항목이 하나도 없으므로 토글을
+                                         **하드코딩 Disable**로 되돌리고 W32 캡션이 그 이유를 말한다.
+                                         ⚠️ 게이트 노티(GuestGateNote·"권한 없음")를 붙이지 않는다 — 아무도 편집할 수
+                                            없는 컨트롤에 "로그인하면 되는가"를 암시하는 문구는 거짓 안내다.
+                                         ⚠️ 표시값은 ini 원값 그대로다(강제 off 표시 금지 원칙). 저장은 미기록이라
+                                            운영자가 ini에 켜 둔 값이 이 화면을 지나며 사라지지 않는다. -->
                                     <TextBlock Text="추후 지원 예정" Style="{StaticResource Text.Caption}"
                                                Foreground="{StaticResource Brush.Text.Muted}"
                                                VerticalAlignment="Center" Margin="0,0,10,0" />
                                     <ToggleButton Style="{StaticResource Toggle}"
-                                                  IsChecked="{Binding PhotoPrinterEnabled}" IsEnabled="False" />
+                                                  IsChecked="{Binding PhotoPrinterEnabled}"
+                                                  IsEnabled="False" />
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
@@ -433,6 +754,16 @@
                             </TextBlock>
                         </Grid>
 
+                        <!-- it24: 프로젝트 라이선스 고지(같은 화면 위 오버레이).
+                             진입점 라벨과 도착 화면 제목을 같은 문자열로 통일한다 — 다르면 어디로 가는지 알 수 없다.
+                             ⚠️ IsEnabled 바인딩을 **붙이지 않는다** — GPLv3 §4는 전문을 수령자에게 전달할 것을
+                                요구하므로 고지 접근은 로그인·역할과 무관해야 한다(게스트 포함, 수락 기준 AC-C1).
+                             [진단·상태] **위**에 두는 이유: 진단은 로그인 전용이고 라이선스는 전원 접근이므로
+                             접근 범위가 넓은 항목을 먼저 둔다. -->
+                        <Button Content="프로젝트 라이선스 고지" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Left" MinWidth="0" Padding="20,0" Margin="0,4,0,0"
+                                Command="{Binding OpenLicenseViewerCommand}" />
+
                         <!-- it11 #14: 진단·상태 모달 진입. 로그인 상태에서만 활성(게스트 Disable). 관리자 트러블슈팅용. -->
                         <Button Content="진단·상태" Style="{StaticResource Button.Secondary}"
                                 HorizontalAlignment="Left" MinWidth="0" Padding="20,0" Margin="0,4,0,0"
@@ -465,5 +796,268 @@
             <TextBlock Text="{Binding SavedNotice}" Style="{StaticResource Text.Body}"
                        Foreground="{Binding SavedNoticeIsError, Converter={StaticResource BoolToNoticeBrush}}" />
         </Border>
+
+        <!-- ══════════ 프로젝트 라이선스 고지 오버레이 (it24, 설계 §3) ══════════
+             왜 오버레이인가: 35 KB 전문을 설정 화면의 ScrollViewer 안에 인라인으로 넣으면 **중첩 스크롤**이
+             되어 조작이 불가능해진다(내부 TextBox가 무한 높이를 요구). 새 Window로 만들지 않는 이유는
+             headless 테스트에서 Window를 인스턴스화할 수 없어 XAML 회귀를 잡을 수 없기 때문이다.
+             ⚠️ Grid.RowSpan="2" — sticky 저장/닫기 바까지 덮어야 모달이 된다(저장 토스트와 같은 기법).
+             ⚠️ 이 화면 배경은 흰색(Brush.Bg)이다. 스크림 위에 **불투명 Card + 기본 글자색**을 쓴다 —
+                CaptureView의 스크림+흰 글자 조합을 복사하면 글자가 읽히지 않는다.
+             ⚠️ 신규 테마 리소스 키 0개(병합 딕셔너리 교차 참조 함정 회피).
+             ⚠️ Level 1(요약)과 Level 2(전문)는 **형제 Grid**다. Level 2의 전문 TextBox를 Level 1의
+                ScrollViewer 안에 넣으면 자체 스크롤이 죽으므로 절대 중첩시키지 않는다. -->
+        <Grid Grid.RowSpan="2" Background="{StaticResource Brush.Scrim}"
+              AutomationProperties.Name="프로젝트 라이선스 고지"
+              Visibility="{Binding IsLicenseViewerOpen, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Background="{StaticResource Brush.Bg}"
+                    Effect="{StaticResource Shadow.Pop}" MaxWidth="1000" Margin="40">
+                <Grid>
+                    <!-- ══════ Level 1 — 구성 요소 요약(기본 상태) ══════ -->
+                    <Grid Visibility="{Binding IsLicenseSummaryPage, Converter={StaticResource BoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 헤더는 제목·설명만 둔다. 닫기는 하단 액션 바로 내렸다 —
+                             이 앱의 모달·오버레이 관례가 "하단 sticky 바 + 중앙 정렬"이다
+                             (설정 저장/닫기 바·진단 모달 닫기 바와 동일). -->
+                        <StackPanel Grid.Row="0">
+                            <TextBlock Text="프로젝트 라이선스 고지" Style="{StaticResource Text.H2}" />
+                            <TextBlock Text="이 소프트웨어가 사용·동봉하는 오픈소스 구성 요소와 라이선스입니다."
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <Border Grid.Row="1" Height="1" Background="{StaticResource Brush.Divider}"
+                                Margin="0,16,0,16" />
+
+                        <!-- 강등 배너(D1·D2): 요약 정보를 못 읽어 폴백 목록으로 축퇴했다.
+                             닫을 수 없다 — 배포 사고를 현장에서 드러내는 것이 목적이다. -->
+                        <Border Grid.Row="2" Background="{StaticResource Brush.Warning.Surface}"
+                                CornerRadius="{StaticResource Radius.S}" Padding="16,14" Margin="0,0,0,16"
+                                Visibility="{Binding HasLicenseDegraded, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding LicenseDegradedMessage}" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Warning}" TextWrapping="Wrap" />
+                        </Border>
+
+                        <!-- 오류 배너(F1·F2·F6): 볼 것이 아예 없는 상태. 문구에 경로가 없다 — 경로는 로그에만. -->
+                        <Border Grid.Row="3" Background="{StaticResource Brush.Warning.Surface}"
+                                CornerRadius="{StaticResource Radius.S}" Padding="16,14" Margin="0,0,0,16"
+                                Visibility="{Binding HasLicenseError, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding LicenseErrorMessage}" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Warning}" TextWrapping="Wrap" />
+                        </Border>
+
+                        <!-- 창모드 하한 800×600에서는 카드 영역 가용 높이가 ~350px이므로 세로 스크롤이 필수다. -->
+                        <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <StackPanel Visibility="{Binding HasLicenseSelfComponents,
+                                                                 Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="이 소프트웨어" Style="{StaticResource LicenseSectionHead}" />
+                                    <ItemsControl ItemsSource="{Binding LicenseSelfComponents}"
+                                                  ItemTemplate="{StaticResource LicenseCard}" />
+                                </StackPanel>
+
+                                <StackPanel Visibility="{Binding HasLicenseBundledComponents,
+                                                                 Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="동봉된 오픈소스" Style="{StaticResource LicenseSectionHead}" />
+                                    <ItemsControl ItemsSource="{Binding LicenseBundledComponents}"
+                                                  ItemTemplate="{StaticResource LicenseCard}" />
+                                </StackPanel>
+
+                                <!-- 파일명 노출이 허용되는 유일한 지점(§2.6). 요약이 선언하지 않은 문서에 대해
+                                     우리가 아는 정보는 파일명뿐이고, 이름을 감추면 "실려서는 안 될 파일이 실렸다"를
+                                     아무도 알 수 없다. 정상 배포물에서는 항목 0건이라 렌더링되지 않는다. -->
+                                <StackPanel Visibility="{Binding HasLicenseDocuments,
+                                                                 Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="그 외 동봉 고지 문서"
+                                               Style="{StaticResource LicenseSectionHead}" Margin="0,8,0,8" />
+                                    <!-- ⚠️ SelectedItem(값 기반) — SelectedIndex 바인딩은 목록 채움이 초기 선택을 덮는다(it7 B9). -->
+                                    <ListBox ItemsSource="{Binding LicenseDocuments}"
+                                             SelectedItem="{Binding SelectedLicenseDocument}"
+                                             MaxHeight="240"
+                                             Background="{StaticResource Brush.Surface.Alt}"
+                                             BorderBrush="{StaticResource Brush.Divider}" BorderThickness="1"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           Style="{StaticResource Text.Body}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding DisplayName}" />
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <Grid Grid.Row="5" Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="고지 문서는 설치 폴더에 함께 배포됩니다."
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="{Binding LicenseNoticeAsOfText}"
+                                       Style="{StaticResource Text.Caption}" Margin="16,0,0,0" />
+                        </Grid>
+
+                        <!-- 하단 액션 바(설정·진단과 동일 패턴): 구분선 + 중앙 정렬 + 버튼 간 Margin 8,0.
+                             스타일 그대로 쓰고 Padding·MinWidth·VerticalAlignment를 개별로 덮지 않는다. -->
+                        <StackPanel Grid.Row="6" Margin="0,20,0,0">
+                            <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,0,0,16" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                                        Command="{Binding CloseLicenseViewerCommand}" Margin="8,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ══════ Level 2 — 라이선스 전문 / 상세 고지 1건 ══════ -->
+                    <Grid Visibility="{Binding IsLicenseFullTextPage, Converter={StaticResource BoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 헤더는 제목·설명만. 뒤로·닫기는 하단 액션 바로 내렸다(Level 1과 동일 패턴). -->
+                        <StackPanel Grid.Row="0">
+                            <!-- 정상 경로에서는 {구성 요소} · {SPDX} — 파일명이 들어가지 않는다. -->
+                            <TextBlock Text="{Binding LicenseFullTextCaption}"
+                                       Style="{StaticResource Text.H2}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding LicenseFullTextSubtitle}"
+                                       Style="{StaticResource Text.Caption}" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <Border Grid.Row="1" Height="1" Background="{StaticResource Brush.Divider}"
+                                Margin="0,16,0,16" />
+
+                        <!-- 본문. ⚠️ ScrollViewer로 감싸지 않는다 — 감싸면 TextBox가 무한 높이를 요구해
+                             자체 스크롤이 죽는다. TextWrapping="NoWrap"인 이유: 원문이 이미 ~70열로 정렬돼 있어
+                             Wrap을 걸면 창 폭에 따라 문단이 재배치되고 "그대로"가 깨진다 → 수평 스크롤을 제공한다.
+                             TextBox(TextBlock 아님)인 이유: 전문을 인용할 상황이 있으므로 **선택·복사**가 가능해야 한다.
+                             등폭 폰트가 원문 정렬(구분선·들여쓰기)을 보존한다(한글은 Malgun Gothic으로 폴백). -->
+                        <TextBox Grid.Row="2" Text="{Binding LicenseText, Mode=OneWay}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="True" AcceptsReturn="True"
+                                 TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas, D2Coding, Malgun Gothic" FontSize="13"
+                                 Padding="12"
+                                 Background="{StaticResource Brush.Surface.Alt}"
+                                 BorderBrush="{StaticResource Brush.Divider}" BorderThickness="1"
+                                 Visibility="{Binding HasLicenseError, Converter={StaticResource InverseBoolToVis}}" />
+
+                        <!-- 읽기 실패(F3·F4·F5). 문구에 경로가 없다(요구) — 경로는 로그에만 남는다. -->
+                        <Border Grid.Row="2" VerticalAlignment="Top"
+                                Background="{StaticResource Brush.Warning.Surface}"
+                                CornerRadius="{StaticResource Radius.S}" Padding="16,14"
+                                Visibility="{Binding HasLicenseError, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding LicenseErrorMessage}" Style="{StaticResource Text.Body}"
+                                       Foreground="{StaticResource Brush.Warning}" TextWrapping="Wrap" />
+                        </Border>
+
+                        <!-- 읽는 동안(느린 저장소 대비). 클릭 비간섭이라 본문 조작을 막지 않는다. -->
+                        <TextBlock Grid.Row="2" Text="불러오는 중…" Style="{StaticResource Text.Body}"
+                                   Foreground="{StaticResource Brush.Text.Muted}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+                                   Visibility="{Binding IsLicenseLoading, Converter={StaticResource BoolToVis}}" />
+
+                        <!-- 하단 액션 바(Level 1과 동일): 구분선 + 중앙 정렬 + Margin 8,0.
+                             복귀는 Button.Secondary(이동 액션 — 장치 검색·진단·상태와 같은 급),
+                             닫기는 Button.Ghost. 라벨에 화살표 글리프를 넣지 않는다 —
+                             이 앱의 버튼 라벨은 전부 평범한 한글이고 글리프는 아이콘 전용 버튼(↻)에만 쓴다. -->
+                        <StackPanel Grid.Row="3" Margin="0,20,0,0">
+                            <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,0,0,16" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="목록으로" Style="{StaticResource Button.Secondary}"
+                                        Command="{Binding BackToLicenseSummaryCommand}" Margin="8,0" />
+                                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                                        Command="{Binding CloseLicenseViewerCommand}" Margin="8,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ══════════ 지원 카메라 목록 오버레이 (it25 §7) ══════════
+             왜 별도 Window가 아닌가: headless 테스트가 Window를 인스턴스화할 수 없어 XAML 회귀(바인딩
+             오타·리소스 키)를 잡을 수 없다 — 라이선스 고지 오버레이와 같은 논거이며 컨테이너 구조도 같다.
+             ⚠️ Grid.RowSpan="2" — sticky 저장/닫기 바까지 덮어야 모달이 된다.
+             ⚠️ 신규 테마 리소스 키 0개(병합 딕셔너리 교차 참조 함정 회피). 그룹 헤더 굵기는 인라인
+                FontWeight로 준다 — 스타일 키를 새로 만들지 않는다.
+             ⚠️ 이 목록은 "지원"이고 콤보는 "인식"이다. 두 개념의 경계를 W37이 화면에서 직접 말한다. -->
+        <Grid Grid.RowSpan="2" Background="{StaticResource Brush.Scrim}"
+              AutomationProperties.Name="지원 카메라"
+              Visibility="{Binding IsSupportedCameraListOpen, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Background="{StaticResource Brush.Bg}"
+                    Effect="{StaticResource Shadow.Pop}" MaxWidth="640" Margin="40">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <!-- W36 -->
+                        <TextBlock Text="지원 카메라" Style="{StaticResource Text.H2}" />
+                        <!-- W37 -->
+                        <TextBlock Text="이 앱이 SDK 연동을 지원하는 카메라 목록입니다. 연결 인식 여부와는 무관합니다 — 연결 확인은 [장치 검색]."
+                                   Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Height="1" Background="{StaticResource Brush.Divider}"
+                            Margin="0,16,0,16" />
+
+                    <!-- 모델 수가 늘어도 카드가 화면을 넘지 않게 세로 스크롤을 준다(창모드 하한 800×600 대비). -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding SupportedCameraGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="{Binding Manufacturer}" Style="{StaticResource Text.Body}"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Models}" Margin="16,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding}" Style="{StaticResource Text.Body}"
+                                                               TextWrapping="Wrap" Margin="0,0,0,2" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- 하단 액션 바(설정·진단·라이선스와 동일 패턴): 구분선 + 중앙 정렬 + 버튼 간 Margin 8,0.
+                         스타일 그대로 쓰고 Padding·MinWidth를 개별로 덮지 않는다. 라벨에 글리프 금지. -->
+                    <StackPanel Grid.Row="3" Margin="0,20,0,0">
+                        <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,0,0,16" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <!-- W39 -->
+                            <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                                    Command="{Binding CloseSupportedCameraListCommand}" Margin="8,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

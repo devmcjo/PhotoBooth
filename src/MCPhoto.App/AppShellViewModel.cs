@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Build;
+using MCPhoto.Core.Devices;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -25,6 +26,13 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private readonly ILogger<AppShellViewModel>? _logger;
     private readonly Dispatcher _dispatcher;
     private readonly IBuildInfoService? _buildInfo;
+
+    /// <summary>
+    /// 테스트 로그인 모드(it23 B부). 미주입(테스트 다수)이면 기능 전체가 비활성이다.
+    /// ⚠️ 이 필드로 분기할 때는 <see cref="ITestModeService.IsTestUser"/>만 쓴다 — <c>IsEnabled</c>로 분기하면
+    ///    실계정 세션에도 우회가 적용된다(불변식 TM3). 예외는 배너 표시(<see cref="IsTestMode"/>) 하나다.
+    /// </summary>
+    private readonly ITestModeService? _testMode;
 
     /// <summary>무동작 후 경고 팝업까지(초). 2분. (it8 §2 A1)</summary>
     public int IdleWarningSeconds { get; set; } = 120;
@@ -150,13 +158,15 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         ISettingsService settings,
         IServiceProvider services,
         SessionContext session,
-        ILogger<AppShellViewModel>? logger = null)
+        ILogger<AppShellViewModel>? logger = null,
+        ITestModeService? testMode = null)
     {
         _idle = idle;
         _settings = settings;
         _services = services;
         _session = session;
         _logger = logger;
+        _testMode = testMode;
         _dispatcher = Dispatcher.CurrentDispatcher;
         // 빌드 정보는 선택적(미등록/테스트 시 null → 표기 비노출). 앱에선 DI로 항상 주입(it18: 어셈블리 출처).
         _buildInfo = services.GetService<IBuildInfoService>();
@@ -174,6 +184,8 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsPower));
         OnPropertyChanged(nameof(AccountLabel));
         OnPropertyChanged(nameof(AccountInitial));   // it21 §6.2: 계정 버튼 아바타
+        // ⚠️ it23 §B9.3: 이 통지가 없으면 로그아웃 후에도 배너가 "관리자 권한으로 실행 중"이라는 거짓을 말한다.
+        OnPropertyChanged(nameof(TestModeBannerText));
 
         // it13: 계정 변경마다 TempUser 사용량 상태를 재평가(§7.5). 로그아웃·비TempUser는 즉시 클리어,
         //        TempUser 로그인은 서버 상태를 1회 조회(fire-and-forget, 완료 시 파생 프로퍼티 통지).
@@ -210,8 +222,122 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>앱 시작 시 홈 화면 진입.</summary>
-    public void Startup() => _ = NavigateAsync(AppState.Home);
+    // ── it23 B부: 테스트 로그인 모드 배너 · 재로그인 ──
+
+    /// <summary>
+    /// 테스트 모드 경고 배너 노출 여부. ⚠️ 판정이 <see cref="ITestModeService.IsEnabled"/> <b>단독</b>인 유일한
+    /// 지점이다 — 배너는 세션 상태와 무관하게 항상 떠 있어야 한다(불변식 TM4). 릴리스 빌드에도 이 기능이
+    /// 포함되므로 실운영 오투입이 즉시 발각되게 하는 대가다.
+    /// </summary>
+    public bool IsTestMode => _testMode?.IsEnabled == true;
+
+    /// <summary>배너 문구(로그아웃 상태). 테스트 모드는 세션이 아니라 <b>설정</b>이므로 로그아웃해도 위험은 남는다.</summary>
+    public const string TestModeBannerLoggedOut =
+        "⚠ 테스트 모드가 켜져 있습니다(현재 로그아웃). 실제 운영에 사용하지 마세요.";
+
+    /// <summary>배너 문구(실제 계정 병행 로그인). 우회는 비활성이지만 ini가 켜져 있다는 사실은 알려야 한다.</summary>
+    public const string TestModeBannerRealAccount =
+        "⚠ 테스트 모드 설정이 켜져 있습니다(현재는 실제 계정으로 로그인). 실제 운영에 사용하지 마세요.";
+
+    /// <summary>
+    /// 배너 문구(테스트 계정 로그인 중). <b>역할 라벨을 반드시 표시</b>한다 — <c>Role</c> 오타로 다른 역할이
+    /// 섰을 때 즉시 발각되게 하는 안전망이며, 그것이 "잘못된 값 → 기본값 폴백"을 안전하게 만든다.
+    /// 이메일도 표시한다(개인 프레임 소유 키라 프레임이 안 보일 때 첫 확인 대상이다).
+    /// </summary>
+    public static string FormatTestModeBanner(string roleLabel, string email) =>
+        $"⚠ 테스트 모드 — 인증 없이 {roleLabel} 권한으로 실행 중입니다. 실제 운영에 사용하지 마세요. ({email})";
+
+    /// <summary>
+    /// 배너 접미 — 외부 카메라 표시 시뮬레이션이 <b>실제로 적용되는 세션</b>일 때만 붙는다(it25).
+    /// <para>
+    /// 왜 필요한가: 시뮬레이션이 켜지면 설정 화면은 "연결 확인됨"인데 촬영은 SDK 부재로 웹캠 강등한다.
+    /// 그 <b>의도된 간극</b>을 설정 화면 밖(촬영·결과 화면)에서도 설명해 줄 표식이 필요하다.
+    /// </para>
+    /// </summary>
+    public static string FormatExternalCameraSimulationSuffix(string modelLabel) =>
+        $" · 외부 카메라 시뮬레이션({modelLabel})";
+
+    /// <summary>
+    /// 시뮬레이션이 켜졌으나 인식된 모델이 없을 때의 라벨(<c>ExternalCameraType=-1</c>).
+    /// 빈 괄호를 남기지 않는다 — "시뮬레이션()"은 무엇이 켜졌는지 말하지 못한다.
+    /// </summary>
+    public const string ExternalCameraSimulationNoneLabel = "인식된 장치 없음";
+
+    /// <summary>현재 상태에 맞는 배너 문구. 테스트 모드가 꺼져 있으면 빈 문자열(배너 자체가 Collapsed).</summary>
+    public string TestModeBannerText
+    {
+        get
+        {
+            if (_testMode?.IsEnabled != true) return string.Empty;
+            var user = CurrentUser;
+            if (user is null) return TestModeBannerLoggedOut;
+            if (!_testMode.IsTestUser(user)) return TestModeBannerRealAccount;
+            // ⚠️ 접미는 **이 갈래에만** 붙는다(테스트 계정 세션). 위 두 갈래(로그아웃·실계정)에 붙이면
+            //    시뮬레이션이 적용되지 않는 상태에서 "시뮬레이션 중"이라고 말하는 **거짓 배너**가 된다 —
+            //    시뮬레이션 게이트가 IsTestUser(참조 동일성)이므로 배너 조건도 같아야 한다(TS2).
+            return FormatTestModeBanner(user.Role.ToLabel(), user.Email ?? string.Empty)
+                 + ExternalCameraSimulationSuffix();
+        }
+    }
+
+    /// <summary>
+    /// 시뮬레이션 접미 계산. 판정을 <see cref="ExternalCameraSimulation.Plan"/>(순수 함수)에 위임하는 이유:
+    /// 여기서 <c>Options.ExternalCamera</c>를 직접 읽으면 "시뮬레이션이 켜졌는가"의 판정이 **두 곳**이 되고,
+    /// 배너가 "시뮬레이션 중"이라고 말하는데 설정 화면은 실관측을 하는 어긋남이 생길 수 있다.
+    /// <para>
+    /// ⚠️ 이 메서드는 <b>표시 전용</b>이다 — 관측을 대체하지 않고 어떤 장치 경로에도 계획을 넘기지 않는다
+    /// (불변식 TS1은 "관측 대체 분기"에 대한 제약이며, 이 호출은 문자열 하나를 만든다).
+    /// </para>
+    /// </summary>
+    private string ExternalCameraSimulationSuffix()
+    {
+        var plan = ExternalCameraSimulation.Plan(_testMode?.Options ?? TestModeOptions.Disabled);
+        if (plan is null) return string.Empty;
+        return FormatExternalCameraSimulationSuffix(
+            plan.Model?.DisplayName ?? ExternalCameraSimulationNoneLabel);
+    }
+
+    /// <summary>로그인 화면의 [테스트 계정으로 로그인 ({역할})] 라벨. 테스트 모드가 꺼져 있으면 빈 문자열.</summary>
+    public string TestLoginLabel => _testMode?.IsEnabled == true
+        ? $"테스트 계정으로 로그인 ({_testMode.Options.Role.ToLabel()})"
+        : string.Empty;
+
+    /// <summary>
+    /// 로그아웃한 뒤 다시 테스트 계정으로 돌아오는 경로(§B8.5). 유일한 대안이 앱 재시작인데, 역할별 UI를
+    /// 비교하는 QA 작업에서 매번 재시작은 실용성을 해친다.
+    /// <para>
+    /// <b>같은 인스턴스</b>를 다시 태우므로 <c>IsTestUser</c>가 계속 참이다(PIN 생략·QR 주입 유지).
+    /// 후처리는 <c>LoginWithGoogle</c>과 동일(오버레이 복귀).
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task LoginAsTestUser()
+    {
+        if (_testMode?.TestUser is not { } user) return;
+        _logger?.LogWarning("테스트 계정 재로그인: id={Id} role={Role}", user.Id, user.Role.ToFirestoreValue());
+        _session.Login(user);
+        await ReturnFromOverlay();
+    }
+
+    /// <summary>
+    /// 앱 시작 시 홈 화면 진입. 테스트 모드가 켜져 있으면 <b>홈 진입 직전</b>에 가짜 계정을 세션에 태운다.
+    /// <para>
+    /// 왜 여기인가(§B5.3): 셸이 이미 <c>CurrentUserChanged</c>를 구독한 뒤이므로 로그인 통지가 유실되지 않는다
+    /// (그 통지가 하는 일 중 하나가 TempUser QR 상태 조회 시작이다 — <c>App.OnStartup</c>에서 로그인하면
+    /// <c>QrBlocked</c> 주입이 절대 반영되지 않는다). 또 홈 화면 VM이 처음부터 올바른 역할을 본다.
+    /// </para>
+    /// 로그 레벨이 Warning인 이유: "이 실행은 인증을 우회했다"는 사실은 사후 조사에서 눈에 띄어야 한다.
+    /// </summary>
+    public void Startup()
+    {
+        if (_testMode?.TestUser is { } testUser)
+        {
+            _logger?.LogWarning("테스트 모드 로그인: id={Id} role={Role} ini={Path}",
+                testUser.Id, testUser.Role.ToFirestoreValue(), _testMode.SourcePath);
+            _session.Login(testUser);   // ⚠️ IBackendSession은 건드리지 않는다(토큰 없음 — 불변식 TM1)
+        }
+        _ = NavigateAsync(AppState.Home);
+    }
 
     /// <summary>상태 전이 + 화면 VM 스왑. 불법 전이는 거부. </summary>
     public Task<bool> NavigateAsync(AppState target) => NavigateInternalAsync(target, bypassValidation: false);
@@ -451,6 +577,27 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// </remarks>
     public Task<bool> EnsurePinGateAsync(MCPhoto.Core.Models.User user)
     {
+        // ── 테스트 계정 전용 경로(it23 §B8.4): 서버를 한 번도 호출하지 않는다. ──
+        // 왜 필요한가: 이 게이트는 IAccountService(Bearer 필수)를 호출하는데 테스트 모드에는 토큰이 없다 →
+        //   예외 → PinPromptWindow가 "확인할 수 없습니다"로 끝나 게이트가 열리지 않는다(fail-closed).
+        //   그러면 설정·계정 관리·사용자 관리에 도달할 수 없어 테스트 모드가 "역할 배지만 바뀌는 기능"이 된다.
+        // ⚠️ 조건이 IsTestUser(참조 동일성) **한 줄**뿐인 것이 규격이다(불변식 TM3). IsEnabled로 분기하면
+        //   테스트 모드가 켜진 채 실제 SSO 로그인한 계정의 PIN 게이트까지 우회되어 인증 우회 취약점이 된다.
+        if (_testMode?.IsTestUser(user) == true)
+        {
+            var testPin = _testMode.Options.Pin;
+            // Pin 미설정 → 게이트 생략. 목적이 "빠르게 역할 UI를 본다"이므로 기본 흐름을 막지 않는다.
+            if (testPin is null) return Task.FromResult(true);
+
+            var dialog = _services.GetService<Services.IPinPromptDialogService>();
+            if (dialog is null) return Task.FromResult(false);   // fail-closed 규약 승계(예외를 만들지 않는다)
+
+            // Pin 설정 → 게이트를 띄우고 **로컬 대조**. PIN 게이트 UI 자체(입력 형식 검증·5회 실패 자동 닫힘·
+            // 쿨다운)를 서버 없이 검증할 수 있다. Setup 분기는 쓰지 않는다 — Pin 존재 = HasPin이라 도달 경로가 없다.
+            return Task.FromResult(dialog.PromptVerify(p =>
+                Task.FromResult(string.Equals(p, testPin, StringComparison.Ordinal))));
+        }
+
         var account = _services.GetService<MCPhoto.Core.Accounts.IAccountService>();
         var pin = _services.GetService<Services.IPinPromptDialogService>();
         if (account is null || pin is null) return Task.FromResult(false); // fail-closed

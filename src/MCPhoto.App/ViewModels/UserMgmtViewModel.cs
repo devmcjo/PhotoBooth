@@ -196,7 +196,11 @@ public sealed partial class UserMgmtViewModel : ViewModelBase
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "사용자 목록 조회 실패");
-            SetStatus("사용자 목록을 불러올 수 없습니다.", isError: true);
+            // 원인을 결합한다(it23 §B7.3): 종전 문구는 "불러올 수 없습니다."로 끝나 **원인을 말하지 않았다** —
+            // 오프라인·서버 주소 미설정·토큰 만료·토큰 부재를 구분하지 못해 관리자가 여기서 막힌다.
+            // ⚠️ 테스트 모드 전용 분기를 넣지 않는다. 원인 기반 문구 하나가 두 상황(실운영 무토큰·테스트 모드)을
+            //    모두 정확히 설명하며, 화면에 테스트 모드 조건 분기를 심으면 그것이 프로덕션 문구로 번진다.
+            SetStatus("사용자 목록을 불러올 수 없습니다. " + BackendFailureMessage.Describe(ex), isError: true);
         }
         UpdateSummary();
         StartFrameCountLoad();   // 행이 다 채워진 뒤에 개수 조회를 띄운다(await하지 않는다 — 목록을 막지 않는다)

@@ -133,8 +133,17 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Log.CloseAndFlush();
+        // it23 §12.2: 외부 카메라(DSLR) SDK Shutdown 보장 지점.
+        // ⚠️ 컨테이너 정리를 로그 종료보다 **먼저** 한다: 싱글턴 해제(NikonExternalCamera → SDK shim)에서
+        //    나오는 경고가 Log.CloseAndFlush() 뒤에 발생하면 파일에 한 줄도 남지 않는다.
+        //    (벤더 SDK는 Shutdown 미호출 시 드라이버가 불안정해진다는 경고가 있어, 해제 실패를 봐야 한다.)
+        // ⚠️ OnExit은 동기 메서드다 — 여기서 async를 기다리지 않는다. 해제는 각 싱글턴의 동기 Dispose가
+        //    담당한다(NikonExternalCamera는 IDisposable·IAsyncDisposable을 함께 구현한다 — 컨테이너의
+        //    동기 Dispose는 IAsyncDisposable만 가진 싱글턴을 만나면 InvalidOperationException을 던진다).
+        //    어댑터 싱글턴은 설정·촬영 화면 진입만으로 생성되지만(그 VM들이 IExternalCamera를 주입받는다)
+        //    ExternalCameraEnabled=false면 연결을 시도한 적이 없어 Dispose가 사실상 no-op이다.
         _host?.Dispose();
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 }

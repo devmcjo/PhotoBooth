@@ -8,17 +8,111 @@
         MinWidth="640" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource Brush.CaptureBg}">
-    <!-- 실제 촬영과 동일한 프리뷰/플래시/셔터 재현. 저장은 하지 않음(테스트 전용). (it9 §2.2 C1) -->
+    <!-- 실제 촬영과 동일한 프리뷰/플래시/셔터 재현. 저장은 하지 않음(테스트 전용). (it9 §2.2 C1)
+         it23: 상단에 장치 목록(웹캠 + 외부 카메라)을 두고, 외부 항목 선택 시 정보 패널 + 셔터 테스트를 노출한다. -->
     <Grid>
-        <!-- 프리뷰(CaptureView와 동일 렌더: CameraFramePresenter 재사용) -->
+        <!-- 프리뷰(CaptureView와 동일 렌더: CameraFramePresenter 재사용).
+             외부 카메라 항목에서는 프리뷰가 없다 — 정보 패널이 그 자리를 채운다. -->
         <Image x:Name="PreviewImage" Stretch="Uniform"
-               RenderOptions.BitmapScalingMode="LowQuality" />
+               RenderOptions.BitmapScalingMode="LowQuality"
+               Visibility="{Binding IsWebcamSelected, Converter={StaticResource BoolToVis}}" />
 
-        <!-- 상시 노티: 테스트 화면 · 저장 안 됨 명시(요구 §1) -->
+        <!-- 셔터 테스트 결과(정규화 없이 원본 비율). 3초 후 VM이 폐기한다 — 저장하지 않는다. -->
+        <Image x:Name="ShotImage" Stretch="Uniform" Margin="24,96,24,140"
+               RenderOptions.BitmapScalingMode="HighQuality"
+               Visibility="{Binding HasShotImage, Converter={StaticResource BoolToVis}}" />
+
+        <!-- ── 외부 카메라 정보 패널(§9.3 W9) ── -->
+        <Border Background="{StaticResource Brush.Scrim}" CornerRadius="8" Padding="24"
+                HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="560" Margin="24,96,24,140"
+                Visibility="{Binding IsExternalSelected, Converter={StaticResource BoolToVis}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="{Binding ExternalModelName}" Foreground="{StaticResource Brush.OnAccent}"
+                               FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
+
+                    <!-- 미연결 사유 + 탈출 경로([다시 연결]) — 사유 없이 비활성만 남기지 않는다(요구 8). -->
+                    <StackPanel Margin="0,12,0,0"
+                                Visibility="{Binding HasExternalStatus, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding ExternalStatus}" Foreground="{StaticResource Brush.Warning}"
+                                   FontSize="15" TextWrapping="Wrap" />
+                        <Button Content="다시 연결" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Left" MinWidth="0" Padding="20,0" Margin="0,12,0,0"
+                                Command="{Binding ReconnectExternalCommand}" />
+                    </StackPanel>
+
+                    <StackPanel Margin="0,12,0,0"
+                                Visibility="{Binding IsExternalConnected, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Foreground="{StaticResource Brush.OnAccent}" FontSize="14" Opacity="0.85">
+                            <Run Text="배터리: " /><Run Text="{Binding ExternalBatteryText}" />
+                        </TextBlock>
+
+                        <ItemsControl ItemsSource="{Binding ExternalCapabilityLines}" Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="{StaticResource Brush.OnAccent}"
+                                               FontSize="13" Opacity="0.8" TextWrapping="Wrap" Margin="0,1,0,1" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- 노출 조정: 설정 화면과 같은 행 VM을 재사용한다(규칙 복제 금지). -->
+                        <ItemsControl ItemsSource="{Binding ExposureParameters}" Margin="0,16,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <!-- 고정폭을 주지 않는다(라벨 잘림 방지 관례). -->
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                       Foreground="{StaticResource Brush.OnAccent}" FontSize="14"
+                                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                                            <Slider Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                    Minimum="0" Maximum="{Binding MaxIndex}"
+                                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                                    Value="{Binding SelectedIndex}"
+                                                    IsEnabled="{Binding IsDomainAvailable}" />
+                                            <TextBox Grid.Column="2" Width="110" VerticalAlignment="Center"
+                                                     Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding Hint}" Foreground="{StaticResource Brush.Warning}"
+                                                   FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                   Visibility="{Binding HasHint, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="노출 적용" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Left" MinWidth="0" Padding="20,0"
+                                Command="{Binding ApplyExposureCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 상시 노티(저장 안 됨) + 장치 목록 + 목적 라벨 -->
         <Border Background="{StaticResource Brush.Scrim}" CornerRadius="6" Padding="14,8"
                 HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0">
-            <TextBlock Text="테스트 화면입니다 · 촬영 결과는 저장되지 않습니다"
-                       Foreground="{StaticResource Brush.OnAccent}" FontSize="16" FontWeight="SemiBold" />
+            <StackPanel>
+                <TextBlock Text="테스트 화면입니다 · 촬영 결과는 저장되지 않습니다"
+                           Foreground="{StaticResource Brush.OnAccent}" FontSize="16" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <!-- ⚠️ SelectedIndex 금지 — 값 기반 SelectedItem(it7 B9: 목록 채움이 초기 선택을 0으로 덮는다).
+                     선택 변경은 code-behind가 커맨드로 중계한다(VM은 async 전환을 await로 처리). -->
+                <ComboBox x:Name="TargetCombo" Margin="0,10,0,0" MinWidth="300"
+                          HorizontalAlignment="Center"
+                          ItemsSource="{Binding Targets}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedItem="{Binding SelectedTarget}"
+                          SelectionChanged="OnTargetSelectionChanged" />
+                <TextBlock Text="{Binding PurposeLabel}" Foreground="{StaticResource Brush.OnAccent}"
+                           FontSize="13" Opacity="0.8" HorizontalAlignment="Center" Margin="0,8,0,0" />
+            </StackPanel>
         </Border>
 
         <!-- 셔터(플래시 재현) + 셔터 후 안내 -->
@@ -65,7 +159,8 @@
         <Grid Background="{StaticResource Brush.Scrim}"
               Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
             <TextBlock Text="{Binding LoadingMessage}" Foreground="{StaticResource Brush.OnAccent}"
-                       FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                       FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextWrapping="Wrap" TextAlignment="Center" Margin="40,0" />
         </Grid>
     </Grid>
 </Window>

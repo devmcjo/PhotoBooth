@@ -115,14 +115,61 @@ public sealed class AppSettings
     /// <summary>사용할 웹캠 장치 인덱스. 기본 0.</summary>
     public int CameraDevice { get; set; }
 
-    // ── 외부 장치(추후 지원 · item3 스캐폴드). 로그인 전용 옵션 자리. ──
-    // ⚠️ placeholder: 값은 INI에 저장/복원만 하고 현재 실기능에 배선하지 않는다(미지원 골격).
-    //    실제 하드웨어 연동은 장비 확정 후.
-    /// <summary>외부 카메라(DSLR 등) 사용. 기본 false(미지원 스캐폴드).</summary>
+    // ── 외부 장치. 로그인 전용 옵션 자리. ──
+    // it23: 외부 카메라는 placeholder에서 **실배선으로 승격**됐다(설계 §7.1). 값이 on이면 촬영 세션이
+    //       DSLR 스틸 경로를 시도하고, SDK·장비가 없으면 웹캠 단독으로 강등된다(크래시·중단 없음).
+    //       프린터는 여전히 placeholder다(범위 밖).
+    /// <summary>
+    /// 외부 카메라(DSLR) 사용. 기본 false.
+    /// <para>
+    /// on이어도 SDK 모듈·장비가 없으면 촬영은 웹캠 단독으로 강등된다(설계 §11 E1·E2) — 즉 이 값은
+    /// "쓸 수 있으면 쓴다"는 의도 표명이지 보장이 아니다. 프리뷰·타임랩스는 항상 웹캠 전담이다.
+    /// </para>
+    /// </summary>
     public bool ExternalCameraEnabled { get; set; }
 
-    /// <summary>사진 프린터(BT/WiFi) 사용. 기본 false(미지원 스캐폴드).</summary>
+    /// <summary>
+    /// 외부 카메라 모델 Id(<see cref="Devices.ExternalCameraModels"/> 레지스트리 키). 기본 D5300.
+    /// 미지 Id는 <see cref="Clamp"/>가 기본 모델로 보정한다 — SDK 모듈 파일명은 이 Id에서 유도되므로
+    /// 보정 없이 두면 "존재하지 않는 모듈"을 찾다가 영구 강등된다.
+    /// </summary>
+    public string ExternalCameraModel { get; set; } = Devices.ExternalCameraModels.Default.Id;
+
+    /// <summary>
+    /// 셔터 속도(카메라 표기 그대로의 표시 문자열, 예 <c>1/125</c>). <b>빈 값 = 미지정</b>(카메라 현재값 유지).
+    /// <para>
+    /// 인덱스가 아니라 문자열로 저장하는 이유(설계 §7.1): 카메라가 주는 이산 목록은 노출 모드·렌즈·SDK
+    /// 버전에 따라 달라진다 — 인덱스는 그때 조용히 다른 값을 가리키지만, 문자열은 "지금 지원하면 적용,
+    /// 아니면 건너뜀"이라는 안전한 재매칭 의미론을 갖는다.
+    /// </para>
+    /// </summary>
+    public string ExternalShutterSpeed { get; set; } = string.Empty;
+
+    /// <summary>조리개(예 <c>f/5.6</c>). 빈 값 = 미지정. 저장 규약은 <see cref="ExternalShutterSpeed"/>와 동일.</summary>
+    public string ExternalAperture { get; set; } = string.Empty;
+
+    /// <summary>ISO(예 <c>400</c>). 빈 값 = 미지정. 저장 규약은 <see cref="ExternalShutterSpeed"/>와 동일.</summary>
+    public string ExternalIso { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 사진 프린터 사용. 기본 false.
+    /// <para>
+    /// it24: "추후 지원" placeholder에서 <b>준비 플래그</b>로 승격됐다 — 의미는 "인쇄 기능이 도입되면 이
+    /// 프린터 구성을 사용한다"이고, 이번 이터레이션의 런타임 효과는 설정 화면의 프린터 하위 패널 노출뿐이다
+    /// (실제 인쇄는 명시적 비목표 — 설정 화면이 그 사실을 상시 고지한다).
+    /// </para>
+    /// </summary>
     public bool PhotoPrinterEnabled { get; set; }
+
+    /// <summary>
+    /// 선택된 설치 프린터 이름(Windows 프린터명 — 시스템 내 유일 식별자). <b>빈 값 = 미선택.</b>
+    /// <para>
+    /// it24 §7.3 P5: 열거 목록에 없더라도 <b>값을 지우지 않는다</b>. 프린터가 일시적으로 꺼져 있거나
+    /// 스풀러가 멈춘 상태에서 관리자가 맞춰 둔 이름을 삭제해 버리면, 복구 뒤에도 설정이 사라져 있다.
+    /// 유효성 검증은 사용 시점(인쇄 구현)의 몫이다 — 노출값 문자열의 "적용 시 검증" 철학과 동일하다.
+    /// </para>
+    /// </summary>
+    public string PhotoPrinterName { get; set; } = string.Empty;
 
     // ── 웹 연동 (firebase-contract §3.5) ──
     /// <summary>다운로드 페이지 Hosting base URL(트레일링 슬래시 제외). downloadPageUrl 조립 기준. 개발 기본값 박음(it9 후속).</summary>
@@ -185,6 +232,30 @@ public sealed class AppSettings
         NormalizeBackend();
 
         NormalizeQr();
+
+        NormalizeExternalCamera();
+
+        // it24: 프린터 이름은 Trim만 한다. 목록 대조는 여기서 하지 않는다 — ini에는 설치 프린터 목록이
+        //       없고(열거는 스풀러 조회다), 목록 부재를 이유로 값을 지우면 관리자 설정이 파괴된다(§7.3 P5).
+        PhotoPrinterName = (PhotoPrinterName ?? string.Empty).Trim();
+    }
+
+    /// <summary>
+    /// 외부 카메라 설정 정규화(it23 §7.1): 모델 Id 보정 + 노출 3키 Trim.
+    /// <para>
+    /// 노출값은 <b>도메인 검증을 하지 않는다</b> — 허용 목록은 카메라에 연결해야 알 수 있고 ini에는 없다.
+    /// 검증은 적용 시점(<c>SetExposureAsync</c>)이 담당하고, 여기서는 저장 형태만 정리한다.
+    /// 빈 값은 "미지정"이라는 의미가 있으므로 기본값으로 덮지 않는다.
+    /// </para>
+    /// </summary>
+    public void NormalizeExternalCamera()
+    {
+        // 미지 Id(오탈자·구버전 값)는 기본 모델로 보정. 보정하지 않으면 존재하지 않는 SDK 모듈을 찾는다.
+        ExternalCameraModel = Devices.ExternalCameraModels.Resolve(ExternalCameraModel).Id;
+
+        ExternalShutterSpeed = (ExternalShutterSpeed ?? string.Empty).Trim();
+        ExternalAperture = (ExternalAperture ?? string.Empty).Trim();
+        ExternalIso = (ExternalIso ?? string.Empty).Trim();
     }
 
     /// <summary>
@@ -262,7 +333,14 @@ public sealed class AppSettings
         },
         CameraDevice = CameraDevice,
         ExternalCameraEnabled = ExternalCameraEnabled,
+        // ⚠️ it23 신설 4필드를 여기서 빼면 설정 편집 취소 시 값이 조용히 유실된다(T-S3이 회귀 잠금).
+        ExternalCameraModel = ExternalCameraModel,
+        ExternalShutterSpeed = ExternalShutterSpeed,
+        ExternalAperture = ExternalAperture,
+        ExternalIso = ExternalIso,
         PhotoPrinterEnabled = PhotoPrinterEnabled,
+        // ⚠️ it24 신설 1필드도 여기서 빠지면 설정 편집 취소 시 값이 조용히 유실된다(T-S4가 회귀 잠금).
+        PhotoPrinterName = PhotoPrinterName,
         HostingBaseUrl = HostingBaseUrl,
         StorageBucket = StorageBucket,
         BackendBaseUrl = BackendBaseUrl,

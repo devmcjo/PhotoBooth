@@ -239,6 +239,33 @@ public class XamlResourceTests
         });
     }
 
+    /// <summary>
+    /// it23 §B5.4·§C8: 진단 모달의 신규 행(설정 파일 경로 · 테스트 모드 상태 · 라이선스 고지 상태) 바인딩이
+    /// VM 멤버와 일치하고, <b>폐지된 라이선스 진입 UI가 되살아나지 않았는지</b> 고정한다.
+    /// 바인딩 오타·폐지된 경로 참조는 예외 없이 조용히 실패한다(빈 칸).
+    /// </summary>
+    [Fact]
+    public void DiagnosticsWindow_New_Rows_Bind_To_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "DiagnosticsWindow.xaml"));
+        var vm = typeof(MCPhoto.App.ViewModels.DiagnosticsViewModel);
+
+        foreach (var member in new[]
+                 {
+                     "SettingsFilePath", "TestModeState", "IsTestModeOn",
+                     "LicenseNoticeState", "HasLicenseNotice",
+                 })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"[\s,}]", text);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        // 요구: 진단에서 고지를 **열지 않는다** — 경로 표시·폴더 열기 버튼이 없어야 한다.
+        Assert.DoesNotContain("LicenseFolderPath", text);
+        Assert.DoesNotContain("OpenLicenseFolderCommand", text);
+        Assert.DoesNotContain("라이선스 폴더 열기", text);
+    }
+
     // ── it12 R2/R3: SettingsView 레이아웃 재배치 + 게스트 게이트 노티(GuestGateNote) 정적 안전망 ──
     // SettingsView가 참조하는 모든 테마 StaticResource가
     // 해석되는지 headless로 검증(창 미표시). 로컬 키·App 컨버터 키는 제외.
@@ -258,6 +285,7 @@ public class XamlResourceTests
     [InlineData("HomeView.xaml")]          // it21: 4층 구조로 전면 재작성(앱 마크·흐름 안내·게스트 힌트)
     [InlineData("QrPopupView.xaml")]       // it21 §8.4: 좁은 창 대비 스크롤 래핑
     [InlineData("CutSelectView.xaml")]     // 배치 프리뷰(프레임+슬롯 오버레이) 신설
+    [InlineData("CaptureView.xaml")]       // it23: 외부 카메라 배지·강등 배너·수신 대기 스피너 추가
     public void Item1a_View_StaticResource_Keys_Resolve_In_Theme(string file)
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), file));
@@ -548,6 +576,358 @@ public class XamlResourceTests
         });
     }
 
+    // ── it23: 외부 카메라 UI 바인딩 정적 안전망 (설계 §14.4 T-X1) ──
+    // 바인딩 경로 오타는 **예외 없이 조용히 실패**한다(빈 화면·비활성 컨트롤). 단위 테스트로는 잡히지 않아
+    // XAML 텍스트와 VM 멤버를 대조한다.
+
+    /// <summary>
+    /// 설정 화면 외부 장치 섹션이 참조하는 VM 멤버가 실재한다.
+    /// 하나라도 오타면 그 컨트롤이 조용히 비어 있어 "설정을 켰는데 아무 일도 안 난다"가 된다.
+    /// </summary>
+    [Fact]
+    public void SettingsView_External_Camera_Bindings_Exist_On_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+        var vm = typeof(MCPhoto.App.ViewModels.SettingsViewModel);
+
+        foreach (var member in new[]
+                 {
+                     // it25 §6: "지원 모델" 콤보가 "인식된 카메라" 콤보로 전환됐다 —
+                     //          ItemsSource=RecognizedCameraOptions · SelectedValue=RecognizedCameraSelection.
+                     "ExternalCameraEnabled", "RecognizedCameraOptions", "RecognizedCameraSelection",
+                     "CanEditExternalCamera", "ExposureParameters", "HasExposureDomain",
+                 })
+        {
+            // ⚠️ 부분 문자열이 아니라 실제 `{Binding …}` 형태를 요구한다(주석에만 남은 이름 통과 방지).
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", text);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        // ★ ini 미러(ExternalCameraModel)는 **콤보에 직접 바인딩되지 않는다**(it25 §6.3):
+        //   직접 바인딩하면 인식 목록이 비는 순간 WPF가 저장값을 null로 되써서 소멸시킨다.
+        //   VM 속성 자체는 남아 있어야 한다(저장·md3 경로·USB 키워드의 기준값).
+        Assert.NotNull(vm.GetProperty("ExternalCameraModel"));
+        Assert.DoesNotMatch(@"\{Binding\s+ExternalCameraModel\s*[,}]", text);
+
+        // 노출 행 DataTemplate이 참조하는 멤버는 행 VM(ExposureParameterViewModel)에 있다.
+        var row = typeof(MCPhoto.App.ViewModels.ExposureParameterViewModel);
+        foreach (var member in new[] { "Label", "MaxIndex", "SelectedIndex", "Text", "Hint", "HasHint", "IsDomainAvailable" })
+            Assert.NotNull(row.GetProperty(member));
+
+        // 인식 콤보는 값 기반이어야 한다(it7 B9: SelectedIndex 바인딩은 저장값을 0으로 덮어쓴다).
+        Assert.Contains("SelectedValuePath=\"Value\"", text);
+        Assert.DoesNotContain("SelectedIndex=\"{Binding", text);
+        Assert.NotNull(typeof(MCPhoto.App.ViewModels.RecognizedCameraOption).GetProperty("Value"));
+        Assert.NotNull(typeof(MCPhoto.App.ViewModels.RecognizedCameraOption).GetProperty("Display"));
+
+        // "(추후 지원)" 딱지는 외부 카메라에서 떼어졌다(프린터 행 문구는 유지).
+        Assert.DoesNotContain("외부 장치 (추후 지원)", text);
+
+        // 편집 게이트가 **노출 3행에도** 걸려 있다(§8.3-3 · §9.2 TempUser 읽기 전용).
+        // ⚠️ 행 내부 컨트롤의 DataContext는 ExposureParameterViewModel이라 거기서는 이 게이트를 해석할 수
+        //    없다 → ItemsControl 자신에 걸어야 한다. 누락하면 TempUser가 값을 고쳐 저장한 뒤(저장은 미기록)
+        //    "저장되었습니다" 직후 입력이 조용히 되돌아간다(성공 오인).
+        var exposureList = Regex.Match(text, @"<ItemsControl[^>]*\{Binding ExposureParameters\}[^>]*>",
+            RegexOptions.Singleline);
+        Assert.True(exposureList.Success, "노출 3행 ItemsControl을 찾지 못함");
+        Assert.Contains(@"IsEnabled=""{Binding CanEditExternalCamera}""", exposureList.Value);
+    }
+
+    // ── it24: 외부 장치 섹션 개편(가시성·장치 검색·지원 모델 캡션·프린터 열거) 정적 안전망 ──
+    // 설계: docs/design/wpf-it24-external-device-discovery-design.md §8
+
+    /// <summary>
+    /// T-X1'' — 개편 섹션·오버레이가 참조하는 VM 멤버가 전부 실재한다.
+    /// 바인딩 경로 오타는 <b>예외 없이 조용히 실패</b>하므로(빈 문구·영구 비활성 버튼) 빌드가 잡지 못한다.
+    /// </summary>
+    [Fact]
+    public void SettingsView_External_Discovery_Bindings_Exist_On_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+        var vm = typeof(MCPhoto.App.ViewModels.SettingsViewModel);
+
+        foreach (var member in new[]
+                 {
+                     "IsExternalEditDenied", "IsDiscovering", "DiscoveryHeadline", "DiscoveryDetailLines",
+                     // it25: 프린터는 토글 표시값 하나만 남았고, 지원 카메라 오버레이가 신설됐다.
+                     "PhotoPrinterEnabled", "IsSupportedCameraListOpen", "SupportedCameraGroups",
+                 })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", text);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        foreach (var command in new[]
+                 {
+                     "DiscoverExternalCameraCommand",
+                     "OpenSupportedCameraListCommand", "CloseSupportedCameraListCommand",
+                 })
+        {
+            Assert.Matches(@"\{Binding\s+" + command + @"\s*[,}]", text);
+            Assert.NotNull(vm.GetProperty(command));
+        }
+
+        // 오버레이의 그룹 템플릿이 참조하는 멤버는 그룹 레코드에 있다(제조사 헤더 + 모델 행).
+        var group = typeof(MCPhoto.App.ViewModels.SupportedCameraGroup);
+        Assert.NotNull(group.GetProperty("Manufacturer"));
+        Assert.NotNull(group.GetProperty("Models"));
+        Assert.Matches(@"\{Binding\s+Manufacturer\s*[,}]", text);
+        Assert.Matches(@"\{Binding\s+Models\s*[,}]", text);
+
+        // ★ it25 §4.1: 프린터 열거 표면이 되살아나지 않았는지 고정한다(멤버·바인딩 모두 부재).
+        foreach (var removed in new[]
+                 {
+                     "PrinterOptions", "PhotoPrinterName", "HasPrinters",
+                     "PrinterStateText", "HasPrinterStateText", "RefreshPrintersCommand",
+                 })
+        {
+            Assert.Null(vm.GetProperty(removed));
+            Assert.DoesNotMatch(@"\{Binding\s+" + removed + @"\s*[,}]", text);
+        }
+    }
+
+    /// <summary>
+    /// ★ it24 §4.1 — 게스트에게 섹션을 숨기던 게이트가 <b>되살아나지 않았는지</b> 고정한다.
+    /// "외부 장치 연결 탭이 사라졌다"는 사용자 피드백의 직접 원인이 그 Visibility 한 줄이었다.
+    /// (구 T-V3 "섹션 Collapsed" 테스트를 대체하는 반대 방향의 잠금)
+    /// </summary>
+    [Fact]
+    public void SettingsView_External_Device_Section_Is_Not_Hidden_From_Guests()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+
+        // 섹션 제목 바로 앞의 컨테이너에 표시 게이트가 없어야 한다.
+        var section = Regex.Match(text,
+            @"<StackPanel[^>]*>\s*<Border Style=""\{StaticResource GroupDivider\}"" />\s*<TextBlock Text=""외부 장치""",
+            RegexOptions.Singleline);
+        Assert.True(section.Success,
+            "외부 장치 섹션 컨테이너를 찾지 못했다 — 게스트 가시성 게이트가 다시 붙었는지 확인하라");
+        Assert.DoesNotContain("Visibility", section.Value);
+
+        // 편집 게이트 자체는 살아 있어야 한다(보이되 읽기 전용).
+        Assert.Contains(@"IsEnabled=""{Binding CanEditExternalCamera}""", text);
+
+        // 섹션 안의 토글은 정확히 2개이며 각각의 게이트가 다르다(it25 §4.1):
+        //   ① 외부 카메라 = 편집 게이트(CanEditExternalCamera) — 보이되 권한 없으면 잠긴다.
+        //   ② 프린터      = 하드코딩 Disable — 지원되는 항목이 하나도 없어 아무도 편집할 수 없다.
+        // 둘을 뒤섞으면 "로그인하면 프린터를 고를 수 있는가"라는 거짓 안내가 생긴다.
+        int start = text.IndexOf(@"Text=""외부 장치""", StringComparison.Ordinal);
+        int end = text.IndexOf(@"Text=""고급""", StringComparison.Ordinal);
+        Assert.True(start > 0 && end > start, "외부 장치 섹션 경계를 찾지 못함");
+        // ⚠️ 주석을 먼저 제거한다 — 이 섹션의 주석이 게이트 변경 이력을 설명하므로,
+        //    제거하지 않으면 검사가 자기 자신의 설명문에 걸린다(Nikon csproj 경계 검사와 같은 기법).
+        var body = Regex.Replace(text[start..end], @"<!--.*?-->", string.Empty, RegexOptions.Singleline);
+
+        var toggles = Regex.Matches(body, @"<ToggleButton\b.*?/>", RegexOptions.Singleline);
+        Assert.Equal(2, toggles.Count);
+
+        var cameraToggle = toggles.Single(t => t.Value.Contains(@"{Binding ExternalCameraEnabled}", StringComparison.Ordinal));
+        Assert.Contains(@"IsEnabled=""{Binding CanEditExternalCamera}""", cameraToggle.Value);
+
+        var printerToggle = toggles.Single(t => t.Value.Contains(@"{Binding PhotoPrinterEnabled}", StringComparison.Ordinal));
+        Assert.Contains(@"IsEnabled=""False""", printerToggle.Value);
+        // 편집 게이트를 프린터에 달면 "권한이 있으면 된다"는 오해가 생긴다 — 그것이 it25가 되돌린 부분이다.
+        Assert.DoesNotContain(@"IsEnabled=""{Binding CanEditExternalCamera}""", printerToggle.Value);
+    }
+
+    /// <summary>
+    /// ★ [지원 카메라 목록] 버튼이 <b>외부 카메라 토글의 Visibility 뒤에 숨지 않는다</b>(팀리드 확정 —
+    /// 설계 §7.4의 "하위 패널 안" 배치를 뒤집었다).
+    /// <para>
+    /// 이 목록이 답하는 질문은 "내 카메라가 지원되나?"이고, 사용자는 그 답을 <b>토글을 켤지 결정하기 전에</b>
+    /// 알고 싶어 한다. 하위 패널 안에 두면 지원 여부를 몰라 아직 켜지 않은 사람이 목록에 도달할 수 없다.
+    /// 이 프로젝트는 "상태 뒤에 UI를 숨겼다가" 두 번 지적받았으므로(게스트 섹션 Collapsed · 프린터 토글
+    /// 강제 Disable) 배치를 위치 단정으로 못박는다 — 주석만 두면 다음 사람이 다시 하위 패널로 옮긴다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SettingsView_Supported_Camera_Button_Is_Outside_Toggle_Gated_Panel()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+
+        int sectionStart = text.IndexOf(@"Text=""외부 장치""", StringComparison.Ordinal);
+        int button = text.IndexOf("OpenSupportedCameraListCommand", StringComparison.Ordinal);
+        // 토글 on일 때만 노출되는 하위 패널의 여는 태그.
+        int gatedPanel = text.IndexOf(
+            @"<StackPanel Visibility=""{Binding ExternalCameraEnabled, Converter={StaticResource BoolToVis}}"">",
+            StringComparison.Ordinal);
+
+        Assert.True(sectionStart > 0, "외부 장치 섹션을 찾지 못함");
+        Assert.True(button > 0, "[지원 카메라 목록] 버튼 바인딩을 찾지 못함");
+        Assert.True(gatedPanel > 0, "외부 카메라 하위 패널(Visibility 게이트)을 찾지 못함");
+
+        // 섹션 안에 있고, **게이트 패널이 열리기 전에** 있어야 한다(= 토글 off에서도 보인다).
+        Assert.InRange(button, sectionStart, gatedPanel);
+
+        // 권한 게이트도 붙지 않는다(열람은 편집이 아니다) — 버튼 요소 자체에 IsEnabled가 없어야 한다.
+        var element = Regex.Match(text[button..], @"^[^>]*>", RegexOptions.Singleline);
+        Assert.True(element.Success);
+        Assert.DoesNotContain("IsEnabled", element.Value);
+    }
+
+    /// <summary>
+    /// 동결 문구(it24 §8.2 W15 + it25 §8.3 W32~W39)가 XAML에 그대로 있고, 폐기된 문구는 사라졌다.
+    /// 문구가 바뀌면 운영 문서·테스트와 어긋나므로 텍스트로 고정한다.
+    /// </summary>
+    [Fact]
+    public void SettingsView_External_Discovery_Frozen_Texts()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+
+        Assert.Contains("장치 검색", text);                                        // W15 (유지)
+        Assert.Contains(@"Text=""추후 지원 예정""", text);                          // W32 (신설)
+        Assert.Contains("연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원하는 제품 목록]에서 확인하세요.", text);   // W33 (개정)
+        // W35 재개정: 텍스트 버튼 → 44px 아이콘 버튼 → **텍스트 링크**(사용자 요구 — 둘 다 과하게 컸다).
+        // 링크 글자가 그대로 이름이라 AutomationProperties·ToolTip 단정은 폐기된다(불요해졌다).
+        Assert.Contains(">지원하는 제품 목록</Hyperlink>", text);                    // W35
+        // 링크 색은 팔레트가 흰 배경 텍스트용으로 따로 둔 Brush.Accent.Text여야 한다.
+        // Brush.Accent(#FF4D79)는 본문 텍스트로 쓰면 연해서 대비가 떨어진다 — 회귀하면 읽기 어려워진다.
+        Assert.Contains(@"<Hyperlink Foreground=""{StaticResource Brush.Accent.Text}""", text);
+        Assert.Contains(@"Text=""지원 카메라""", text);                             // W36
+        Assert.Contains("이 앱이 SDK 연동을 지원하는 카메라 목록입니다. 연결 인식 여부와는 무관합니다 — 연결 확인은 [장치 검색].", text);   // W37
+        Assert.Contains(@"Text=""인식된 카메라""", text);                           // §8.1 라벨 변경
+
+        // ★ it25 §8.3 폐기 목록: 콤보의 의미가 지원→인식으로 바뀌어 W24가 거짓이 됐고,
+        //   프린터 하위 패널이 사라져 W25·W31이 갈 곳이 없다. 되살아나면 화면이 거짓을 말한다.
+        // ⚠️ 주석을 먼저 제거한다 — 이 파일의 주석이 "어떤 문구가 왜 폐기됐는가"를 인용하며 설명하므로,
+        //    제거하지 않으면 검사가 자기 자신의 설명문에 걸린다(게스트 가시성 검사와 같은 기법).
+        var rendered = Regex.Replace(text, @"<!--.*?-->", string.Empty, RegexOptions.Singleline);
+        Assert.DoesNotContain("연결된 장치 목록이 아닙니다", rendered);              // W24 폐기
+        Assert.DoesNotContain("인쇄 기능은 아직 제공되지 않습니다", rendered);       // W25 폐기
+        Assert.DoesNotContain(@"Content=""다시 검색""", rendered);                   // W31 폐기
+        Assert.DoesNotContain(@"Text=""지원 모델""", rendered);
+
+        // W34는 VM 상수다(sentinel 항목 표시명) — XAML에 하드코딩되면 두 곳이 갈린다.
+        Assert.Equal("- 선택안함 -", MCPhoto.App.ViewModels.SettingsViewModel.RecognizedCameraNoneDisplay);
+        Assert.DoesNotContain("- 선택안함 -", rendered);
+    }
+
+    /// <summary>
+    /// ★ 외부 장치 섹션의 <b>모든</b> 바인딩 경로가 실제 멤버로 해석되는지 전수 대조한다.
+    /// <para>
+    /// 멤버를 하나하나 열거하는 위 테스트는 "내가 적은 것"만 확인한다 — XAML에 오타로 들어간 경로는
+    /// 그 목록에 없으므로 잡히지 않는다. 바인딩 오타는 예외도 경고도 없이 빈 칸·영구 비활성으로 나타나므로,
+    /// 섹션 안의 경로 집합 자체를 훑어 VM(또는 행 템플릿 VM)에 없는 이름이 있으면 실패시킨다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SettingsView_External_Device_Section_Has_No_Unresolved_Binding_Paths()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+
+        // 섹션 경계: "외부 장치" 제목 ~ 다음 그룹("고급") 제목.
+        int start = text.IndexOf(@"Text=""외부 장치""", StringComparison.Ordinal);
+        int end = text.IndexOf(@"Text=""고급""", StringComparison.Ordinal);
+        Assert.True(start > 0 && end > start, "외부 장치 섹션 경계를 찾지 못함");
+        var section = text[start..end];
+
+        var vm = typeof(MCPhoto.App.ViewModels.SettingsViewModel);
+        var exposureRow = typeof(MCPhoto.App.ViewModels.ExposureParameterViewModel);
+
+        var unresolved = new List<string>();
+        foreach (Match m in Regex.Matches(section, @"\{Binding\s*([^},]*)"))
+        {
+            var path = m.Groups[1].Value.Trim();
+            // 빈 경로: 문자열 항목 자신을 표시하는 DataTemplate({Binding}) — 대조할 멤버가 없다.
+            if (path.Length == 0) continue;
+            if (path.StartsWith("Converter", StringComparison.Ordinal)) continue;
+
+            if (vm.GetProperty(path) is null && exposureRow.GetProperty(path) is null)
+                unresolved.Add(path);
+        }
+
+        Assert.True(unresolved.Count == 0,
+            "외부 장치 섹션이 참조하나 VM에 없는 바인딩 경로: " + string.Join(", ", unresolved));
+    }
+
+    /// <summary>
+    /// ★ 리소스 키 목록 동결. 병합 딕셔너리 간 <c>StaticResource</c> 교차 참조는 창이 뜨지 않는 사고를
+    /// 만들었으므로, 새 키가 <b>테마가 아니라 이 파일의 로컬</b>에만 생기는지를 목록으로 고정한다.
+    /// <para>
+    /// 로컬 <c>x:Key</c>는 <see cref="SettingsView_StaticResource_Keys_Resolve_In_Theme"/>가 검증 대상에서
+    /// 제외하므로 안전하다 — 위험한 것은 <c>Themes/</c>에 키를 추가하는 쪽이다. it24 라이선스 고지가
+    /// 로컬 5개(배지·메타 라벨·메타 값·섹션 머리·카드 템플릿)를 더했고, 이 목록에 없는 키가 생기면 실패한다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SettingsView_Declares_No_New_Local_Resource_Keys()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+        var keys = Regex.Matches(text, @"x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value)
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "FullRow", "GroupDivider", "GroupTitle", "GuestGateNote",
+                "LicenseBadge", "LicenseCard", "LicenseMetaLabel", "LicenseMetaValue", "LicenseSectionHead",
+                "QrLimitNote", "RowLabel", "SettingRow",
+            },
+            keys);
+    }
+
+    /// <summary>
+    /// 촬영 화면이 참조하는 it23 VM 멤버가 실재한다(배지 W4·수신 W5·강등 배너 W6·프리뷰 부재 W8).
+    /// 동결 문구(§9.4)도 함께 고정한다 — 문구가 바뀌면 운영 문서·테스트와 어긋난다.
+    /// </summary>
+    [Fact]
+    public void CaptureView_External_Camera_Bindings_And_Frozen_Texts()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "CaptureView.xaml"));
+        var vm = typeof(MCPhoto.App.ViewModels.CaptureViewModel);
+
+        foreach (var member in new[] { "IsExternalSource", "IsReceiving", "PreviewAbsent", "HasDegradeBanner", "DegradeBanner" })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", text);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        Assert.Contains("외부 카메라 촬영 중 — 프리뷰는 참고용입니다", text);   // W4
+        Assert.Contains("사진 전송 중…", text);                                  // W5
+        Assert.Contains("프리뷰 없음 — 외부 카메라로 촬영됩니다", text);          // W8
+    }
+
+    /// <summary>
+    /// 카메라 테스트 모달(장치 목록·외부 정보 패널·노출 조정)의 테마 키와 VM 바인딩을 고정한다.
+    /// 이 창은 <c>Window</c>라 리소스 키 하나만 어긋나도 <b>창 자체가 뜨지 않는다</b>(XamlParseException).
+    /// </summary>
+    [Fact]
+    public void CameraTestWindow_Keys_And_External_Bindings_Resolve()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "CameraTestWindow.xaml"));
+        var referenced = ThemeKeysReferencedBy(text);
+
+        RunSta(() =>
+        {
+            var theme = LoadTheme();
+            var missing = referenced.Where(k => !theme.Contains(k)).ToList();
+            Assert.True(missing.Count == 0,
+                "CameraTestWindow.xaml 이 참조하나 테마에 없는 StaticResource: " + string.Join(", ", missing));
+        });
+
+        var vm = typeof(MCPhoto.App.ViewModels.CameraTestViewModel);
+        foreach (var member in new[]
+                 {
+                     "Targets", "SelectedTarget", "PurposeLabel", "IsExternalSelected", "IsWebcamSelected",
+                     "ExternalModelName", "ExternalBatteryText", "ExternalCapabilityLines",
+                     "ExternalStatus", "HasExternalStatus", "IsExternalConnected",
+                     "HasShotImage", "ExposureParameters",
+                 })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", text);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        // ⚠️ 목록은 값 기반 선택이어야 한다(it7 B9: SelectedIndex는 목록 채움이 초기 선택을 0으로 덮는다).
+        Assert.Contains("SelectedItem=\"{Binding SelectedTarget}\"", text);
+        Assert.DoesNotContain("SelectedIndex=\"{Binding", text);
+
+        // W9 목적 라벨은 VM이 만든다(문구 하드코딩 금지 — 항목별로 달라진다).
+        Assert.Contains("{Binding PurposeLabel}", text);
+    }
+
     // ── it21: 벡터 아이콘 시스템 · 상단 바 재배치 · 창모드 최소 크기 ──
     // 설계: docs/design/wpf-it21-main-visual-redesign-design.md
 
@@ -673,6 +1053,122 @@ public class XamlResourceTests
         Assert.Contains("ToolTip=\"홈으로\"", text);
         Assert.Contains("ToolTip=\"{Binding AccountLabel}\"", text);   // 계정 ID는 툴팁으로 이전됐다
         Assert.Contains("ToolTip=\"설정\"", text);
+    }
+
+    // ── it23 B부: 테스트 모드 경고 배너(§B9) ──
+
+    /// <summary>
+    /// B-T24: 배너가 루트 Grid의 <b>별 행</b>에 있고, 기존 자식 전부가 row 1로 내려갔는지 고정한다.
+    /// <para>
+    /// 왜 중요한가: 배너를 상단바 안에 두면 촬영·QR 화면에서 <b>사라진다</b>(상단바가 숨겨진다) → "지울 수 없는
+    /// 배너"가 아니게 된다. 또 기존 자식에 <c>Grid.Row="1"</c>이 누락되면 그 요소가 row 0에서 배너와 겹친다.
+    /// 겹침은 빌드·단위 테스트로 잡히지 않으므로 XAML 텍스트로 확인한다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TestMode_Banner_Occupies_Its_Own_Root_Row()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppDir(), "MainWindow.xaml"));
+
+        // 루트 Grid에 행 정의가 생겼다(Auto/*).
+        Assert.Contains("<Grid x:Name=\"RootGrid\">", text);
+        var rootRows = Regex.Match(text,
+            @"<Grid x:Name=""RootGrid"">\s*<Grid\.RowDefinitions>(.*?)</Grid\.RowDefinitions>",
+            RegexOptions.Singleline);
+        Assert.True(rootRows.Success, "루트 Grid에 RowDefinitions가 없다 — 배너가 기존 화면과 겹친다");
+        Assert.Contains(@"Height=""Auto""", rootRows.Groups[1].Value);
+        Assert.Contains(@"Height=""*""", rootRows.Groups[1].Value);
+
+        // 배너는 row 0, 표시 조건은 IsTestMode 단독(세션 상태와 무관 — 불변식 TM4).
+        var banner = Regex.Match(text, @"<Border Grid\.Row=""0""[^>]*?IsTestMode.*?</Border>", RegexOptions.Singleline);
+        Assert.True(banner.Success, "row 0의 테스트 모드 배너를 찾지 못함");
+        Assert.Contains("Brush.Danger.Surface", banner.Value);
+        Assert.Contains("{Binding TestModeBannerText}", banner.Value);
+        Assert.Contains("AutomationProperties.Name", banner.Value);   // 아이콘 없는 경고 → 접근 이름 필수
+        // 닫기 버튼·애니메이션이 없다(지울 수 없는 배너라는 것이 이 기능의 대가다).
+        Assert.DoesNotContain("<Button", banner.Value);
+        Assert.DoesNotContain("Storyboard", banner.Value);
+
+        // 기존 자식 5개가 전부 row 1로 내려갔다. 누락하면 배너와 겹친다(UV-4 검증 항목).
+        Assert.Contains(@"<ContentControl Grid.Row=""1""", text);
+        Assert.Contains(@"<Grid x:Name=""TopBar"" Grid.Row=""1""", text);
+        Assert.Contains(@"<TextBlock Grid.Row=""1"" Text=""{Binding VersionText}""", text);
+        Assert.Contains(@"<Border Grid.Row=""1"" Visibility=""{Binding HasToast", text);
+        Assert.Contains(@"<Grid Grid.Row=""1"" Background=""{StaticResource Brush.Scrim}""", text);
+    }
+
+    /// <summary>
+    /// 배너 문구가 VM 상수와 일치하는지(문구가 두 곳에서 갈리지 않게) + 셸에 바인딩 대상이 실재하는지.
+    /// </summary>
+    [Fact]
+    public void TestMode_Banner_Bindings_Exist_On_Shell()
+    {
+        var shell = typeof(MCPhoto.App.AppShellViewModel);
+
+        Assert.NotNull(shell.GetProperty("IsTestMode"));
+        Assert.NotNull(shell.GetProperty("TestModeBannerText"));
+        Assert.NotNull(shell.GetProperty("TestLoginLabel"));
+
+        // 로그인 화면의 재로그인 버튼 바인딩(테스트 모드에서만 노출).
+        var loginXaml = File.ReadAllText(Path.Combine(FindAppViewsDir(), "LoginGuestView.xaml"));
+        foreach (var member in new[] { "TestLoginLabel", "TestLoginCommand", "IsTestMode" })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", loginXaml);
+            Assert.NotNull(typeof(MCPhoto.App.ViewModels.LoginGuestViewModel).GetProperty(member));
+        }
+    }
+
+    // ── it24: 프로젝트 라이선스 고지 오버레이(설계 §3, it23 C부 재설계) ──
+
+    /// <summary>
+    /// C-T16: 오버레이가 참조하는 VM 멤버가 실재한다. 바인딩 경로 오타는 <b>예외 없이 조용히 실패</b>해
+    /// (빈 카드·빈 본문) 단위 테스트로는 잡히지 않는다. 테마 키 해석은
+    /// <see cref="SettingsView_StaticResource_Keys_Resolve_In_Theme"/>가 이미 검사한다.
+    /// </summary>
+    [Fact]
+    public void SettingsView_License_Viewer_Bindings_Exist_On_Vm()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+        var vm = typeof(MCPhoto.App.ViewModels.SettingsViewModel);
+
+        foreach (var member in new[]
+                 {
+                     "IsLicenseViewerOpen", "IsLicenseSummaryPage", "IsLicenseFullTextPage",
+                     "LicenseSelfComponents", "LicenseBundledComponents",
+                     "HasLicenseSelfComponents", "HasLicenseBundledComponents",
+                     "LicenseDocuments", "HasLicenseDocuments", "SelectedLicenseDocument",
+                     "LicenseDegradedMessage", "HasLicenseDegraded",
+                     "LicenseErrorMessage", "HasLicenseError",
+                     "LicenseText", "IsLicenseLoading",
+                     "LicenseFullTextCaption", "LicenseFullTextSubtitle", "LicenseNoticeAsOfText",
+                 })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", text);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        foreach (var command in new[]
+                 {
+                     "OpenLicenseViewerCommand", "CloseLicenseViewerCommand",
+                     "ShowLicenseFullTextCommand", "ShowLicenseNoticeCommand",
+                     "BackToLicenseSummaryCommand", "EscapeLicenseViewerCommand",
+                 })
+        {
+            Assert.Contains(command, text);
+            Assert.NotNull(vm.GetProperty(command));
+        }
+
+        // 카드 소스는 두 ItemsControl이 같은 템플릿을 공유한다(카드 규격이 한 곳에만 있다).
+        Assert.Equal(2, Regex.Matches(text, @"ItemTemplate=""\{StaticResource LicenseCard\}""").Count);
+
+        // 폴백·미참조 목록은 값 기반 선택이어야 한다(it7 B9: SelectedIndex는 목록 채움이 초기 선택을 0으로 덮는다).
+        Assert.Contains("SelectedItem=\"{Binding SelectedLicenseDocument}\"", text);
+
+        // 폴백 목록 항목은 말줄임 + ToolTip으로 전체 이름을 보여준다(리포의 고정폭 잘림 이력 대비).
+        var item = Regex.Match(text, @"<TextBlock Text=""\{Binding DisplayName\}"".*?/>", RegexOptions.Singleline);
+        Assert.True(item.Success, "폴백 문서 목록 항목 템플릿을 찾지 못함");
+        Assert.Contains("TextTrimming=\"CharacterEllipsis\"", item.Value);
+        Assert.Contains("ToolTip=\"{Binding DisplayName}\"", item.Value);
     }
 
     /// <summary>

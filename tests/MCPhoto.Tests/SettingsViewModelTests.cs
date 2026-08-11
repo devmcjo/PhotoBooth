@@ -4,6 +4,7 @@ using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Capture;
+using MCPhoto.Core.Devices;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -45,7 +46,17 @@ public class SettingsViewModelTests
     private sealed class FakeCameraTestDialog : ICameraTestDialogService
     {
         public int LastDeviceIndex { get; private set; } = -1;
+        /// <summary>it23: 마지막으로 요청된 초기 선택 항목(웹캠/외부 판정 관측용).</summary>
+        public CameraTestTarget? LastTarget { get; private set; }
+
         public Task ShowAsync(int deviceIndex) { LastDeviceIndex = deviceIndex; return Task.CompletedTask; }
+
+        public Task ShowAsync(CameraTestTarget target)
+        {
+            LastTarget = target;
+            LastDeviceIndex = target.DeviceIndex;
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>진단 모달 페이크 — ShowAsync 호출 횟수만 관측(실제 창 미표시). (it11 #14)</summary>
@@ -56,7 +67,8 @@ public class SettingsViewModelTests
     }
 
     private static SettingsViewModel MakeVm(ICameraService? camera = null, IniSettingsService? settings = null,
-        IFirebaseClient? firebase = null, IDiagnosticsDialogService? diagnostics = null)
+        IFirebaseClient? firebase = null, IDiagnosticsDialogService? diagnostics = null,
+        IExternalCamera? external = null)
     {
         var session = new SessionContext();
         settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
@@ -65,20 +77,24 @@ public class SettingsViewModelTests
         camera ??= new FakeCameraService(new CameraDevice(0, "Camera 0"));
         firebase ??= new FakeFirebaseClient { IsInitialized = false };
         diagnostics ??= new FakeDiagnosticsDialog();
-        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(), diagnostics, firebase);
+        // it23: 기본은 무해한 Null 구현(미구성) — 외부 카메라를 다루는 테스트만 Fake를 주입한다.
+        external ??= new NullExternalCamera();
+        return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(), diagnostics, firebase, external);
     }
 
     /// <summary>로그인 세션(기본 Admin) VM. 게이트 대상 필드(거울모드·재촬영·QR·필터) 편집·저장 가능. (it12 R1)</summary>
-    private static SettingsViewModel MakeLoggedInVm(IniSettingsService? settings = null, ICameraService? camera = null)
+    private static SettingsViewModel MakeLoggedInVm(IniSettingsService? settings = null, ICameraService? camera = null,
+        IExternalCamera? external = null, UserRole role = UserRole.Admin)
     {
         var session = new SessionContext();
-        session.Login(new User { Id = "admin", Role = UserRole.Admin });
+        session.Login(new User { Id = "admin", Role = role });
         settings ??= new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         settings.Load();
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         camera ??= new FakeCameraService(new CameraDevice(0, "Camera 0"));
         return new SettingsViewModel(shell, settings, camera, new FakeCameraTestDialog(),
-            new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+            new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false },
+            external ?? new NullExternalCamera());
     }
 
     // ── it13 §7.3: TempUser 한도 게이트 테스트 지원 ──
@@ -109,7 +125,8 @@ public class SettingsViewModelTests
         session.Login(new User { Id = "tmp", Role = UserRole.TempUser });
         await Task.Delay(20); // fire-and-forget 조회 완료 대기
         return new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
-            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false },
+            new NullExternalCamera());
     }
 
     [Fact]
@@ -144,7 +161,8 @@ public class SettingsViewModelTests
         session.Login(new User { Id = "u1", Role = UserRole.User }); // QR 로드값 검증은 로그인 사용자 대상(게스트는 소스단 off)
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
-            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false },
+            new NullExternalCamera());
         await vm.OnEnterAsync();
 
         Assert.True(vm.EnableQrDelivery);
@@ -252,12 +270,19 @@ public class SettingsViewModelTests
         Assert.True(r.FilterBeauty);
     }
 
-    // ── item3 스캐폴드: 외부 장치 placeholder(로그인 전용 편집, 저장만·실기능 미배선) ──
+    // ── 외부 장치: 카메라는 실배선 저장, 프린터는 "추후 지원 예정" 미기록(it25 §4.1) ──
 
+    /// <summary>
+    /// it25 재작성: 종전에는 두 토글이 <b>같이</b> 저장됐다(item3 placeholder 규약). 프린터 표면 환원 후에는
+    /// <b>갈라진다</b> — 외부 카메라는 편집 권한이 있으면 기록되고, 프린터는 <b>어느 역할에서도 미기록</b>이다.
+    /// <para>
+    /// 두 토글을 한 단정으로 묶어 두면 "프린터 저장이 살아났다"는 회귀를 이 테스트가 통과시킨다 —
+    /// 그래서 방향을 명시적으로 갈라 놓는다(미기록 = ini 원값 보존, §4.3).
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task LoggedIn_Saves_External_Device_Placeholders()
+    public async Task LoggedIn_Saves_External_Camera_But_Never_Printer()
     {
-        // 로그인 사용자는 외부 장치 placeholder 값을 저장·복원할 수 있어야(왕복). UI에선 Disable이지만 저장 경로는 게이트만 검증.
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         var vm = MakeLoggedInVm(settings: settings);
         await vm.OnEnterAsync();
@@ -266,18 +291,19 @@ public class SettingsViewModelTests
         Assert.False(vm.PhotoPrinterEnabled);
 
         vm.ExternalCameraEnabled = true;
-        vm.PhotoPrinterEnabled = true;
+        vm.PhotoPrinterEnabled = true;          // 편집 불가 컨트롤이지만 VM 속성은 뒤집을 수 있다
         vm.SaveSettingsCommand.Execute(null);
 
         var r = new IniSettingsService(iniPath: settings.IniPath).Load();
         Assert.True(r.ExternalCameraEnabled);
-        Assert.True(r.PhotoPrinterEnabled);
+        Assert.False(r.PhotoPrinterEnabled);    // ★ 미기록 → ini 원값(false) 유지
     }
 
     [Fact]
     public async Task Guest_Save_Preserves_Ini_External_Device_Placeholders()
     {
-        // 게스트는 외부 장치 섹션 미노출 → 저장 시 ini 원값 보존(클로버 방지). QR/필터 게이트와 동형.
+        // it24 §4.1: 게스트에게 섹션은 **보이되 읽기 전용**이다(구 "미노출" 정책 폐지).
+        // 그래서 이 테스트의 본질은 그대로다 — 저장 시 ini 원값 보존(클로버 방지). QR/필터 게이트와 동형.
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         var s = settings.Load();
         s.ExternalCameraEnabled = true;   // 관리자가 켜둔 값
@@ -513,7 +539,8 @@ public class SettingsViewModelTests
         session.Login(new User { Id = "admin", Role = UserRole.Admin });
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
-            new FakeCameraTestDialog(), diag, new FakeFirebaseClient { IsInitialized = false });
+            new FakeCameraTestDialog(), diag, new FakeFirebaseClient { IsInitialized = false },
+            new NullExternalCamera());
 
         Assert.True(vm.IsLoggedIn);
         await vm.OpenDiagnosticsCommand.ExecuteAsync(null);
@@ -528,6 +555,7 @@ public class SettingsViewModelTests
     {
         private readonly AppSettings _current = new();
         public AppSettings Current => _current;
+        public string IniPath => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MCPhoto.ini");
         public AppSettings Load() => _current;
         public bool Save() => false;
     }
@@ -540,7 +568,8 @@ public class SettingsViewModelTests
         settings.Load();
         var shell = new AppShellViewModel(new IdleWatchdog(), settings, new EmptyServiceProvider(), session);
         var vm = new SettingsViewModel(shell, settings, new FakeCameraService(new CameraDevice(0, "Camera 0")),
-            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false });
+            new FakeCameraTestDialog(), new FakeDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false },
+            new NullExternalCamera());
         return (vm, shell);
     }
 

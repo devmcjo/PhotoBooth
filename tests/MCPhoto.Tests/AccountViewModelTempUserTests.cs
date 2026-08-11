@@ -19,6 +19,7 @@ public class AccountViewModelTempUserTests
         private readonly AppSettings _settings;
         public StubSettingsService(AppSettings settings) => _settings = settings;
         public AppSettings Current => _settings;
+        public string IniPath => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MCPhoto.ini");
         public AppSettings Load() => _settings;
         public bool Save() => true;
     }

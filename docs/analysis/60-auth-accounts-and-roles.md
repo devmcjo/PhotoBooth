@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 60-auth-accounts-and-roles.md |
 | 범위 | MCPhoto의 계정 역할 위계(temp_user/user/advanced_user/manager/admin + 게스트), 권한 매트릭스, Google SSO 로그인/로그아웃 흐름, 진입 PIN 게이트, 계정 저장소(백엔드 API 경유 `users` 컬렉션)와 CRUD·cascade 삭제 |
-| 최종 업데이트 | 2026-07-29 (it16 — §1·§2 최신화 + **§3~§5 전면 재작성**: it13~it16 반영 / 로그아웃 JWT 폐기 수정 반영, 폐기된 USER-ACTIONS 링크 정리) |
+| 최종 업데이트 | 2026-08-10 (it23 — §3.4.1 테스트 모드 PIN 게이트 신설: 참조 동일성 판정·서버 권한 0) · 이전 2026-07-29 (it16 — §1·§2 최신화 + §3~§5 전면 재작성) |
 | 관련 소스 경로 | `src/MCPhoto.Core/Accounts/{IAccountService,IGoogleSignInService,GoogleOAuthPkce,GoogleSsoNotConfiguredException}.cs`, `src/MCPhoto.Core/Models/{UserRole,RoleChangePolicy,User}.cs`, `src/MCPhoto.Core/Frames/FrameEditPolicy.cs`, `src/MCPhoto.Http/HttpAccountService.cs`, `src/MCPhoto.Http/{HttpBackendClient.cs,Session/BackendSession.cs}`, `src/MCPhoto.App/{SessionContext,AppShellViewModel}.cs`, `src/MCPhoto.App/MainWindow.xaml`, `src/MCPhoto.App/Services/{GoogleSignInService,PinPromptDialogService}.cs`, `src/MCPhoto.App/Views/PinPromptWindow.xaml.cs`, `src/MCPhoto.App/ViewModels/{LoginGuestViewModel,AccountViewModel,UserMgmtViewModel,FrameSelectViewModel}.cs`, `web/functions/src/routes/{auth,accounts}.ts`, `web/functions/src/services/{accounts,googleAuth,dto}.ts`, `web/functions/src/domain/{roles,jwt,accountId}.ts` |
 | 갱신 규칙 | `UserRole` enum·`IsPower`/`CanWriteFrames`/`CanManage`/`CreatableRoles`/`CanCreate` 규칙, `RoleChangePolicy.AssignableRoles`(서버 `canSetRole`과 1:1), `IAccountService` 시그니처(현재 7메서드), Google SSO 흐름(loopback+PKCE ↔ `POST /auth/google`)과 JWT 보관 위치, 진입 PIN 게이트(`AppShellViewModel.EnsurePinGateAsync`)의 호출부·fail-closed 규약, 상단 바 팝오버 항목·가시성 바인딩(`MainWindow.xaml`), 세션 단일 소스(`SessionContext`)의 Login/Logout/Reset 계약이 바뀌면 이 문서를 갱신한다. |
 
@@ -297,6 +297,20 @@ CanResetPin(acting, target) = IsPower(acting) && ManageRank(target) < ManageRank
 - 다이얼로그 `PinPromptWindow`는 확인/최초설정 2모드이며, it15 §5.6 완화 2건을 보유한다: **연속 5회 불일치 시 창 자동 닫힘**(게이트 미통과)과 **불일치마다 1.5초 입력 비활성**(`src/MCPhoto.App/Views/PinPromptWindow.xaml.cs:23`, `:26`, `:117-127`).
 - 네트워크·서버 오류(PIN 미설정 409 포함)는 **실패 횟수에 세지 않고** 게이트도 열지 않는다("확인할 수 없습니다. 네트워크를 확인하세요.", `PinPromptWindow.xaml.cs:129-133`) — 정상 사용자가 장애로 잠기지 않게 하면서 fail-closed를 유지한다.
 - 서버는 **계정 잠금을 두지 않는다**(타인 계정 락아웃=DoS 도입 위험, `web/functions/src/services/accounts.ts:86` 주석). 브루트포스 완화는 위 클라 2건이 전부다 → [§5](#5-향후-개선-여지현재-비범위).
+
+#### 3.4.1 테스트 모드의 PIN 게이트 (it23)
+
+`EnsurePinGateAsync` **선두**에 테스트 계정 전용 분기가 있다. 이것이 없으면 테스트 모드가 무의미해진다: 이 게이트는 `IAccountService`(Bearer 필수)를 호출하는데 테스트 모드에는 **토큰이 없어** 확인이 실패하고, fail-closed 규약대로 게이트가 열리지 않는다 → 설정·계정 관리·사용자 관리에 도달할 수 없어 "역할 배지만 바뀌는 기능"이 된다.
+
+| `[Test] Pin` | 동작 | 왜 |
+| --- | --- | --- |
+| 없음 | **게이트 생략**(즉시 통과) | 목적이 "빠르게 역할 UI를 본다"이므로 기본 흐름을 막지 않는다 |
+| 4자리 숫자 | 게이트를 띄우고 **로컬 대조**(서버 미호출) | PIN 게이트 UI 자체(입력 검증·5회 실패 자동 닫힘·1.5초 쿨다운)를 서버 없이 검증할 수 있다 |
+
+- **`PromptSetup` 분기에 도달하는 경로가 없다.** `HasPin`을 별도 키로 두지 않고 **`Pin` 존재에서 파생**하기 때문이다 — 두 값이 모순될 수 없으므로 "존재하지 않는 계정에 PIN을 쓰려 시도"하는 상태가 표현 자체로 불가능하다.
+- **분기 조건은 `ITestModeService.IsTestUser(user)` 한 줄뿐이며 판정은 참조 동일성(`ReferenceEquals`)이다.** `IsEnabled`(= ini가 켜져 있다)로 분기하면 **테스트 모드가 켜진 채 실제 SSO 로그인한 계정의 PIN 게이트까지 우회**되어 인증 우회 취약점이 된다. 참조 비교이므로 이메일·Id·역할이 전부 같은 실계정도 판정이 false다(위조 불가). 회귀 테스트가 "다른 `User` 인스턴스는 서버 경로를 탄다"를 고정한다.
+- 다이얼로그 서비스 미등록 시 `false`(fail-closed) — 테스트 모드가 기존 규약의 예외를 만들지 않는다. 5회 실패 시에도 창이 닫히고 게이트는 열리지 않는다(ini의 `Pin`을 확인하면 된다).
+- **게스트는 원래 무가드**이므로(위 표) 테스트 모드가 새로 뚫는 것은 "로그인 상태에서의 PIN"이며, 그 로그인 상태 자체가 ini로 만들어진 가짜다. **서버 권위 영역(계정 DB·프레임 정본·업로드 정원)은 토큰이 없어 건드릴 수 없다.** 키 전수·보안 범위는 [12 §7](./12-exe-app-settings-and-config.md), 기능 개요는 [11 §20](./11-exe-app-features.md).
 
 ### 3.5 로그아웃 / 세션 유지 규칙(중요)
 

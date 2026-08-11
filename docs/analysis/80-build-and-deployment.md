@@ -116,10 +116,15 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 | `None` 항목 + `CopyToOutputDirectory` | 일반 빌드/실행 | 리포 루트 `licenses/**` → 출력 `licenses\` |
 | `CopyLicensesToPublish` Target | 단일 파일 publish | `AfterTargets="Publish"`로 게시 완료 후 직접 Copy |
 
-- 산출물: `licenses/FFmpeg-COPYING.GPLv3.txt`(전문) · `FFmpeg-README.txt`(버전·configuration 전문·소스 URL·3년 서면 오퍼) · `README.txt`(인덱스).
-- **인스톨러는 별도 설정이 필요 없다** — `[Files]`가 `{#PublishDir}\*`를 `recursesubdirs`로 담으므로 publish 에 들어가면 자동 포함이다(실측 확인).
-- ⚠️ **ffmpeg 를 계속 번들하는 한 이 폴더를 지우면 라이선스 위반이다.** `LicenseComplianceTests`가 "ffmpeg 복사 규칙이 살아 있으면 고지 3종이 있어야 한다"를 강제한다. 반대로 ffmpeg 를 배포에서 빼면 그 시점에 의무가 소멸한다.
-- 앱 내 고지는 진단·상태 창의 "오픈소스 라이선스" 카드(경로 표시 + 폴더 열기 + 누락 경고).
+- 산출물 5개(it24 개명·추가 반영):
+  - `FFmpeg-COPYING.GPLv3.txt` — GPLv3 전문. **원문 그대로**(674줄·LF·BOM 없음)이며 서식 통일 대상에서 제외한다.
+  - `FFmpeg-NOTICE.txt` — 버전·저작권·configuration 전문·소스 URL 2곳·3년 서면 오퍼·추가제약 없음·상표 (종전 `FFmpeg-README.txt`).
+  - `NOTICE.txt` — 고지 색인 (종전 `README.txt`).
+  - `MCPhoto-LICENSE-MIT.txt` — 루트 `LICENSE`의 **링크 복사**(물리 사본을 두지 않는다).
+  - `notice-manifest.json` — 앱 화면이 읽는 **요약 메타데이터**. 형식은 [41 §11](./41-local-data-and-file-formats.md).
+- **인스톨러는 별도 설정이 필요 없다** — `[Files]`가 `{#PublishDir}\*`를 `recursesubdirs`로 담으므로 publish 에 들어가면 자동 포함이다(실측 확인). `.json` 신규 파일도 마찬가지다: `Excludes`는 서비스 계정 키 패턴(`*serviceaccount*.json` 등)만 제외하므로 `notice-manifest.json`은 걸리지 않는다(**실측 확인** — 빌드 출력·테스트 출력·publish 세 곳 모두에서 5개 파일 확인).
+- ⚠️ **ffmpeg 를 계속 번들하는 한 이 폴더를 지우면 라이선스 위반이다.** `LicenseComplianceTests`가 "ffmpeg 복사 규칙이 살아 있으면 고지 4종(txt 3 + 매니페스트)이 있어야 한다"를 강제하고, 별도로 **출력 폴더 기준** 정합 테스트가 ① 매니페스트가 선언한 파일이 실제로 실리는지 ② 실린 `.txt`가 모두 선언되었는지 ③ 매니페스트의 버전·저작권·기준일이 txt 내용과 일치하는지를 검사한다. 반대로 ffmpeg 를 배포에서 빼면 그 시점에 의무가 소멸한다.
+- 앱 내 고지는 설정 → 고급 → **[프로젝트 라이선스 고지]** (요약 카드 + 전문 2단 구조). 진단·상태 창에는 존재 여부 1줄만 남는다. 상세 [11 §19](./11-exe-app-features.md).
 - 상세·후속 경로: [ffmpeg 라이선스·배포 설계](../design/wpf-ffmpeg-licensing-and-distribution-design.md).
 
 ---

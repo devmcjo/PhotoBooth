@@ -31,6 +31,9 @@
     <ProjectReference Include="..\MCPhoto.Capture\MCPhoto.Capture.csproj" />
     <!-- 백엔드 프록시 HTTP 계층(방향 B). it15부터 레거시 직결 경로가 폐지되어 유일한 서버 경로다. -->
     <ProjectReference Include="..\MCPhoto.Http\MCPhoto.Http.csproj" />
+    <!-- it23: 외부 카메라(DSLR) 어댑터. SDK 참조는 이 프로젝트 안에만 생기므로, 라이선스 문제로
+         동봉이 불가해지면 이 줄과 DI 등록 한 줄을 되돌려 NullExternalCamera로 복귀한다(설계 §13). -->
+    <ProjectReference Include="..\MCPhoto.Devices.Nikon\MCPhoto.Devices.Nikon.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -87,8 +90,10 @@
     <None Include="$(LicensesSource)\**\*.*"
           Link="licenses\%(RecursiveDir)%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
-    <!-- MC포토 본체(MIT) 전문도 함께 실어야 licenses/README.txt의 안내가 참이 된다.
-         원본은 리포 루트 LICENSE 하나 — 사본을 만들지 않고 링크 복사로 단일 소스를 유지한다. -->
+    <!-- MC포토 본체(MIT) 전문도 함께 실어야 licenses/NOTICE.txt의 안내가 참이 된다.
+         원본은 리포 루트 LICENSE 하나 — 사본을 만들지 않고 링크 복사로 단일 소스를 유지한다.
+         ⚠️ 위 와일드카드(**\*.*)가 notice-manifest.json(요약 메타데이터)까지 복사한다 —
+            그 파일이 빠지면 고지 화면이 항상 강등 상태로 보인다. -->
     <None Include="$(McPhotoLicenseFile)"
           Condition="Exists('$(McPhotoLicenseFile)')"
           Link="licenses\MCPhoto-LICENSE-MIT.txt"

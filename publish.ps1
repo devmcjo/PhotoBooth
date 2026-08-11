@@ -71,6 +71,18 @@ if ($apiKey) {
     Write-Host "  or add 'BackendApiKey=<key>' to MCPhoto.ini on the target PC." -ForegroundColor Yellow
 }
 
+# ---- Stale license notices ----
+# 'dotnet publish' never deletes files it no longer produces, and this output folder is reused
+# across releases. When a notice file is renamed (it24: README.txt -> NOTICE.txt), the old file
+# keeps shipping next to the new one. Two legal notices that say different things is worse than
+# one: the app also lists any undeclared notice file on screen as a deployment defect.
+# Wiping only 'licenses' is enough - csproj recreates all of it on every publish.
+$licDir = Join-Path $out 'licenses'
+if (Test-Path -LiteralPath $licDir) {
+    Remove-Item -LiteralPath $licDir -Recurse -Force
+    Write-Host "Cleaned stale license notices: $licDir" -ForegroundColor DarkGray
+}
+
 Write-Host "Publishing... -> $out" -ForegroundColor Cyan
 dotnet publish @pubArgs
 

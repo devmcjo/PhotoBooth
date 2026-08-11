@@ -43,18 +43,21 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     private readonly IBuildInfoService _buildInfo;
     private readonly IServerDeployInfoService _serverDeploy;
     private readonly IClipboardService _clipboard;
-    private readonly ILicenseFolderService _licenseFolder;
+    private readonly ILicenseNoticeService _licenseNotice;
     private readonly ILocalFrameStore _localFrames;
+    private readonly ITestModeService? _testMode;
     private readonly ILogger<DiagnosticsViewModel>? _logger;
 
     public DiagnosticsViewModel(ICameraService camera, FfmpegRunner ffmpeg, IFirebaseClient firebase,
         ILogFolderService logFolder, ISettingsService settings, SessionContext session,
         IBuildInfoService buildInfo, IServerDeployInfoService serverDeploy, IClipboardService clipboard,
-        ILicenseFolderService licenseFolder,
+        ILicenseNoticeService licenseNotice,
         ILocalFrameStore localFrames,
-        ILogger<DiagnosticsViewModel>? logger = null)
+        ILogger<DiagnosticsViewModel>? logger = null,
+        ITestModeService? testMode = null)
     {
-        _licenseFolder = licenseFolder;
+        _licenseNotice = licenseNotice;
+        _testMode = testMode;
         _localFrames = localFrames;
         _camera = camera;
         _ffmpeg = ffmpeg;
@@ -117,18 +120,46 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     /// <summary>로그 폴더 절대 경로(표시·수동 탐색용).</summary>
     public string LogFolderPath => _logFolder.LogFolderPath;
 
-    // ── 오픈소스 라이선스 (it22 §5.1 1-6) ──
-    /// <summary>라이선스 고지 폴더 절대 경로(열기 실패 시 수동 탐색용).</summary>
-    public string LicenseFolderPath => _licenseFolder.LicenseFolderPath;
+    // ── 앱 구성(it23 §B5.4) ──
 
     /// <summary>
-    /// 고지 폴더가 배포물에 실제로 있는지. false면 **라이선스 위반 상태로 배포된 것**이므로
-    /// 경로만 보여주고 끝내지 않고 화면에 경고를 띄운다(운영자가 즉시 알아야 한다).
+    /// 활성 INI 절대 경로. 후보(실행경로 → ProgramData → LocalAppData) 중 <b>쓰기 가능한 첫 곳</b>이
+    /// 선택되므로 사용자가 편집한 파일이 앱이 읽는 파일과 다를 수 있다 — 그 판정 결과를 앱이 어디에도
+    /// 표시하지 않아 "설정이 안 먹는다"의 원인 추적이 불가능했다. 여기가 유일한 노출 지점이다.
     /// </summary>
-    public bool HasLicenseFolder => _licenseFolder.Exists;
+    public string SettingsFilePath => _settings.IniPath;
 
-    /// <summary>고지 폴더 누락 경고 노출 여부(바인딩 편의 — HasLicenseFolder의 반전).</summary>
-    public bool IsLicenseFolderMissing => !_licenseFolder.Exists;
+    /// <summary>테스트 로그인 모드가 켜져 있는지(색 분기 — 켜짐이면 danger).</summary>
+    public bool IsTestModeOn => _testMode?.IsEnabled == true;
+
+    /// <summary>
+    /// 테스트 모드 상태 표기. 켜짐이면 <b>인증을 우회했다는 사실</b>을 역할과 함께 명시한다 —
+    /// 사후 조사에서 "이 실행은 로그인 없이 그 역할로 돌았다"가 화면에도 남아야 한다.
+    /// </summary>
+    public string TestModeState => IsTestModeOn
+        ? $"켜짐({_testMode!.Options.Role.ToLabel()}) — 인증 우회 중"
+        : "꺼짐";
+
+    // ── 오픈소스 라이선스 (it22 §5.1 1-6 → it23 §C8) ──
+    // it23: 경로 TextBox·[폴더 열기]·안내 문구를 폐지했다(요구: 진단에서 열지 않는다). 전문 열람은 설정 화면.
+    //       다만 진단 화면은 "배포물에 고지가 누락됐다"를 현장에서 잡는 마지막 그물이므로
+    //       카메라·ffmpeg 행과 같은 **1줄 헬스 상태**로 남긴다(카드 전체 삭제는 그 그물을 없앤다).
+
+    /// <summary>고지 문서 수(모달 진입 시 1회 열거 — 버튼이 없으므로 재평가 트리거도 없다).</summary>
+    private int? _licenseNoticeCount;
+
+    private int LicenseNoticeCount => _licenseNoticeCount ??= _licenseNotice.ListDocuments().Count;
+
+    /// <summary>고지가 배포물에 실려 있는지(색 분기 — 정상=success / 누락=danger).</summary>
+    public bool HasLicenseNotice => LicenseNoticeCount > 0;
+
+    /// <summary>
+    /// 고지 상태 표기. 폴더가 없거나 문서가 0건이면 **라이선스 위반 상태로 배포된 것**이므로
+    /// 조용히 넘어가지 않고 운영자가 읽을 문구를 남긴다.
+    /// </summary>
+    public string LicenseNoticeState => HasLicenseNotice
+        ? $"정상({LicenseNoticeCount}개)"
+        : "누락 — 배포 산출물에 고지가 없습니다";
 
     // ── 개발자 문의 ──
     /// <summary>개발자 연락처(고정값). 문의 메일에 아래 버전·빌드일·웹 배포일을 함께 적도록 안내한다.</summary>
@@ -189,10 +220,6 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     /// <summary>로그 폴더를 탐색기로 열기(best-effort, 실패해도 크래시 없음).</summary>
     [RelayCommand]
     private void OpenLogFolder() => _logFolder.OpenLogFolder();
-
-    /// <summary>라이선스 고지 폴더를 탐색기로 열기(best-effort). 폴더가 없으면 아무 일도 하지 않는다.</summary>
-    [RelayCommand]
-    private void OpenLicenseFolder() => _licenseFolder.OpenLicenseFolder();
 
     /// <summary>
     /// 최종 웹 배포일 조회(서버 GET /health). 진입 시 다이얼로그 서비스가 1회 호출하고,

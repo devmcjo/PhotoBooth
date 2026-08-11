@@ -63,6 +63,19 @@ public static class UserRoleExtensions
     public static bool CanWriteFrames(this UserRole role)
         => role is UserRole.AdvancedUser or UserRole.Manager or UserRole.Admin;
 
+    /// <summary>
+    /// 외부 장치(DSLR) 설정 <b>편집</b> 권한. User 이상 — TempUser 제외. (it23 §8.1)
+    /// <para>
+    /// ⚠️ "편집" 권한이지 "동작" 권한이 아니다: 촬영 세션에서 DSLR을 쓰는지는 ini의
+    /// <c>ExternalCameraEnabled</c>가 결정하며 게스트(손님) 세션에도 적용된다. 부스의 손님이 장비 구성을
+    /// 바꿀 수는 없지만 그 장비로 찍히는 것은 당연하다 — 기존 설정 게이트 관례(편집만 제한)와 동형이다.
+    /// </para>
+    /// ⚠️ <see cref="HierarchyRank"/> 부등식으로 쓰지 않는다 — 역할이 추가될 때 편집 권한이 조용히
+    ///    따라 움직이는 것을 막기 위해 명시 열거를 유지한다(<see cref="IsPower"/>·<see cref="CanWriteFrames"/>와 같은 이유).
+    /// </summary>
+    public static bool CanConfigureExternalCamera(this UserRole role)
+        => role is UserRole.User or UserRole.AdvancedUser or UserRole.Manager or UserRole.Admin;
+
     /// <summary>역할 한글 표시 라벨(계정 생성 콤보·사용자 관리 목록·팝오버 등, it13 §9.1). 미지원값은 "사용자".</summary>
     public static string ToLabel(this UserRole role) => role switch
     {
