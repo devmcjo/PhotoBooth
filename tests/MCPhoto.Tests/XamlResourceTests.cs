@@ -776,8 +776,13 @@ public class XamlResourceTests
 
         Assert.Contains("장치 검색", text);                                        // W15 (유지)
         Assert.Contains(@"Text=""추후 지원 예정""", text);                          // W32 (신설)
-        Assert.Contains("연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원 카메라 목록]에서 확인하세요.", text);   // W33
-        Assert.Contains(@"Content=""지원 카메라 목록""", text);                     // W35
+        Assert.Contains("연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [?] 버튼에서 확인하세요.", text);   // W33 (개정)
+        // W35 개정: 텍스트 버튼 → 아이콘 전용 버튼(사용자 요구 — 정보 조회 치고 과하게 컸다).
+        // 라벨이 사라지므로 **ToolTip·AutomationProperties가 유일한 이름**이 된다 → 둘을 함께 못박는다.
+        // 툴팁이 없으면 이 버튼은 화면에서 정체를 알 수 없는 "?" 하나가 되고, AutomationProperties가
+        // 없으면 스크린리더 사용자에게는 이름 없는 버튼이 된다.
+        Assert.Contains(@"Content=""?"" ToolTip=""지원 카메라 목록 보기""", text);   // W35
+        Assert.Contains(@"AutomationProperties.Name=""지원 카메라 목록 보기""", text);
         Assert.Contains(@"Text=""지원 카메라""", text);                             // W36
         Assert.Contains("이 앱이 SDK 연동을 지원하는 카메라 목록입니다. 연결 인식 여부와는 무관합니다 — 연결 확인은 [장치 검색].", text);   // W37
         Assert.Contains(@"Text=""인식된 카메라""", text);                           // §8.1 라벨 변경
