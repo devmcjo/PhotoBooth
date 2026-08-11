@@ -776,13 +776,13 @@ public class XamlResourceTests
 
         Assert.Contains("장치 검색", text);                                        // W15 (유지)
         Assert.Contains(@"Text=""추후 지원 예정""", text);                          // W32 (신설)
-        Assert.Contains("연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [?] 버튼에서 확인하세요.", text);   // W33 (개정)
-        // W35 개정: 텍스트 버튼 → 아이콘 전용 버튼(사용자 요구 — 정보 조회 치고 과하게 컸다).
-        // 라벨이 사라지므로 **ToolTip·AutomationProperties가 유일한 이름**이 된다 → 둘을 함께 못박는다.
-        // 툴팁이 없으면 이 버튼은 화면에서 정체를 알 수 없는 "?" 하나가 되고, AutomationProperties가
-        // 없으면 스크린리더 사용자에게는 이름 없는 버튼이 된다.
-        Assert.Contains(@"Content=""?"" ToolTip=""지원 카메라 목록 보기""", text);   // W35
-        Assert.Contains(@"AutomationProperties.Name=""지원 카메라 목록 보기""", text);
+        Assert.Contains("연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원하는 제품 목록]에서 확인하세요.", text);   // W33 (개정)
+        // W35 재개정: 텍스트 버튼 → 44px 아이콘 버튼 → **텍스트 링크**(사용자 요구 — 둘 다 과하게 컸다).
+        // 링크 글자가 그대로 이름이라 AutomationProperties·ToolTip 단정은 폐기된다(불요해졌다).
+        Assert.Contains(">지원하는 제품 목록</Hyperlink>", text);                    // W35
+        // 링크 색은 팔레트가 흰 배경 텍스트용으로 따로 둔 Brush.Accent.Text여야 한다.
+        // Brush.Accent(#FF4D79)는 본문 텍스트로 쓰면 연해서 대비가 떨어진다 — 회귀하면 읽기 어려워진다.
+        Assert.Contains(@"<Hyperlink Foreground=""{StaticResource Brush.Accent.Text}""", text);
         Assert.Contains(@"Text=""지원 카메라""", text);                             // W36
         Assert.Contains("이 앱이 SDK 연동을 지원하는 카메라 목록입니다. 연결 인식 여부와는 무관합니다 — 연결 확인은 [장치 검색].", text);   // W37
         Assert.Contains(@"Text=""인식된 카메라""", text);                           // §8.1 라벨 변경

@@ -542,18 +542,22 @@
                                             Collapsed → "탭이 사라졌어", 프린터 토글 강제 Disable → "강제로 비활성화").
                                             같은 실패를 세 번째로 재생산하지 않기 위해 Visibility 바인딩 밖에 둔다.
                                          권한 게이트 없음 — 열람은 편집이 아니고 지원 모델은 비밀이 아니다.
-                                         ⚠️ **아이콘 전용 버튼**이다(사용자 요구 — 텍스트 버튼이 정보 조회 치고 과하게
-                                            컸다). 이 섹션의 [↻ 카메라 다시 검색]과 **같은 규격**(Width 44·Padding 0·
-                                            ToolTip)이라 신규 리소스 키가 없다.
-                                         ⚠️ hover **툴팁만으로 내용을 보여주지 않는다.** ① 키오스크는 터치 화면일 수 있어
-                                            hover가 존재하지 않는다 ② 이 리포는 "hover 툴팁은 시인성이 낮아 폐지"를
-                                            이미 결정했다(이 파일 상단 GuestGateNote 주석, it12 개정). 툴팁은 "이 버튼이
-                                            무엇인가"만 알리고, 목록 자체는 **클릭으로 열리는 오버레이**가 담당한다. -->
-                                    <Button Content="?" ToolTip="지원 카메라 목록 보기"
-                                            Style="{StaticResource Button.Secondary}"
-                                            MinWidth="0" Width="44" Padding="0" Margin="0,0,10,0"
-                                            AutomationProperties.Name="지원 카메라 목록 보기"
-                                            Command="{Binding OpenSupportedCameraListCommand}" />
+                                         ⚠️ **텍스트 링크**다(사용자 요구 — 텍스트 버튼도, 44px 아이콘 버튼도 정보 조회
+                                            치고 과하게 컸다("버그 같아")). 조작 비중이 낮은 열람 진입이라 버튼의
+                                            시각 무게가 이 행의 주역(토글)을 눌렀다.
+                                         ⚠️ 이 앱 **최초의 Hyperlink**다. 규약: ① 색은 `Brush.Accent.Text`(#D6376A —
+                                            팔레트가 흰 배경 텍스트용으로 따로 둔 값이다. `Brush.Accent`는 텍스트로는
+                                            연해서 쓰지 않는다) ② 밑줄은 상시(Hyperlink 기본) — 링크임을 알리는 유일한
+                                            시각 신호다 ③ hover 색 변경 없음(더 연한 색으로 바꾸면 대비가 떨어진다.
+                                            Hyperlink가 기본 제공하는 손가락 커서가 hover 피드백을 담당한다).
+                                         ⚠️ 신규 리소스 키 0개 — 인라인 속성만 쓴다(병합 딕셔너리 교차 참조 함정 회피).
+                                         ⚠️ 접근성: 링크 글자 자체가 이름이므로 AutomationProperties가 불요하다(아이콘
+                                            버튼일 때는 필요했다). Hyperlink는 Tab 포커스·Enter 활성이 기본이다. -->
+                                    <TextBlock Style="{StaticResource Text.Caption}"
+                                               VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Hyperlink Foreground="{StaticResource Brush.Accent.Text}"
+                                                   Command="{Binding OpenSupportedCameraListCommand}">지원하는 제품 목록</Hyperlink>
+                                    </TextBlock>
                                     <!-- 게스트: "로그인 필요"(IsGuest 트리거 내장 — 신규 키 없음). -->
                                     <TextBlock Style="{StaticResource GuestGateNote}" />
                                     <!-- 로그인했으나 편집 불가(TempUser)에게만 "권한 없음"(it24 §4.3).
@@ -595,9 +599,9 @@
 
                                 <!-- W33: 콤보의 의미를 고지한다(it24 W24를 대체 — 콤보가 지원 목록이 아니게 되어
                                      "연결된 장치 목록이 아닙니다"가 거짓이 됐다). 두 개념의 도착지를 함께 안내한다. -->
-                                <!-- W33 개정: 지원 목록 진입이 아이콘 버튼이 되었으므로 사라진 라벨을 지목하지 않고
-                                     화면에 실제로 보이는 글리프(?)를 가리킨다. 없는 라벨을 안내하면 그 문구가 거짓이 된다. -->
-                                <TextBlock Text="연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [?] 버튼에서 확인하세요."
+                                <!-- W33 개정: 화면에 실제로 보이는 링크 글자를 지목한다. 없는 라벨을 안내하면
+                                     그 문구가 거짓이 된다(아이콘 버튼 시절의 "[?] 버튼" 표기도 같은 이유로 폐기). -->
+                                <TextBlock Text="연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원하는 제품 목록]에서 확인하세요."
                                            Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
                                            TextWrapping="Wrap" Margin="0,0,0,8" />
 
