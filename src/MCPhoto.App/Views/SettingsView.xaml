@@ -830,23 +830,18 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="프로젝트 라이선스 고지" Style="{StaticResource Text.H2}" />
-                                <TextBlock Text="이 소프트웨어가 사용·동봉하는 오픈소스 구성 요소와 라이선스입니다."
-                                           Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
-                            </StackPanel>
-                            <Button Grid.Column="1" Content="닫기" Style="{StaticResource Button.Ghost}"
-                                    MinWidth="0" Padding="20,0" VerticalAlignment="Top"
-                                    Command="{Binding CloseLicenseViewerCommand}" />
-                        </Grid>
+                        <!-- 헤더는 제목·설명만 둔다. 닫기는 하단 액션 바로 내렸다 —
+                             이 앱의 모달·오버레이 관례가 "하단 sticky 바 + 중앙 정렬"이다
+                             (설정 저장/닫기 바·진단 모달 닫기 바와 동일). -->
+                        <StackPanel Grid.Row="0">
+                            <TextBlock Text="프로젝트 라이선스 고지" Style="{StaticResource Text.H2}" />
+                            <TextBlock Text="이 소프트웨어가 사용·동봉하는 오픈소스 구성 요소와 라이선스입니다."
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
 
                         <Border Grid.Row="1" Height="1" Background="{StaticResource Brush.Divider}"
                                 Margin="0,16,0,16" />
@@ -923,6 +918,16 @@
                             <TextBlock Grid.Column="1" Text="{Binding LicenseNoticeAsOfText}"
                                        Style="{StaticResource Text.Caption}" Margin="16,0,0,0" />
                         </Grid>
+
+                        <!-- 하단 액션 바(설정·진단과 동일 패턴): 구분선 + 중앙 정렬 + 버튼 간 Margin 8,0.
+                             스타일 그대로 쓰고 Padding·MinWidth·VerticalAlignment를 개별로 덮지 않는다. -->
+                        <StackPanel Grid.Row="6" Margin="0,20,0,0">
+                            <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,0,0,16" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                                        Command="{Binding CloseLicenseViewerCommand}" Margin="8,0" />
+                            </StackPanel>
+                        </StackPanel>
                     </Grid>
 
                     <!-- ══════ Level 2 — 라이선스 전문 / 상세 고지 1건 ══════ -->
@@ -931,29 +936,17 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Content="← 뒤로" Style="{StaticResource Button.Ghost}"
-                                    MinWidth="0" Padding="20,0" VerticalAlignment="Top"
-                                    Margin="0,0,16,0"
-                                    Command="{Binding BackToLicenseSummaryCommand}" />
-                            <StackPanel Grid.Column="1">
-                                <!-- 정상 경로에서는 {구성 요소} · {SPDX} — 파일명이 들어가지 않는다. -->
-                                <TextBlock Text="{Binding LicenseFullTextCaption}"
-                                           Style="{StaticResource Text.H2}" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding LicenseFullTextSubtitle}"
-                                           Style="{StaticResource Text.Caption}" Margin="0,4,0,0" />
-                            </StackPanel>
-                            <Button Grid.Column="2" Content="닫기" Style="{StaticResource Button.Ghost}"
-                                    MinWidth="0" Padding="20,0" VerticalAlignment="Top"
-                                    Command="{Binding CloseLicenseViewerCommand}" />
-                        </Grid>
+                        <!-- 헤더는 제목·설명만. 뒤로·닫기는 하단 액션 바로 내렸다(Level 1과 동일 패턴). -->
+                        <StackPanel Grid.Row="0">
+                            <!-- 정상 경로에서는 {구성 요소} · {SPDX} — 파일명이 들어가지 않는다. -->
+                            <TextBlock Text="{Binding LicenseFullTextCaption}"
+                                       Style="{StaticResource Text.H2}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding LicenseFullTextSubtitle}"
+                                       Style="{StaticResource Text.Caption}" Margin="0,4,0,0" />
+                        </StackPanel>
 
                         <Border Grid.Row="1" Height="1" Background="{StaticResource Brush.Divider}"
                                 Margin="0,16,0,16" />
@@ -987,6 +980,20 @@
                                    Foreground="{StaticResource Brush.Text.Muted}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
                                    Visibility="{Binding IsLicenseLoading, Converter={StaticResource BoolToVis}}" />
+
+                        <!-- 하단 액션 바(Level 1과 동일): 구분선 + 중앙 정렬 + Margin 8,0.
+                             복귀는 Button.Secondary(이동 액션 — 장치 검색·진단·상태와 같은 급),
+                             닫기는 Button.Ghost. 라벨에 화살표 글리프를 넣지 않는다 —
+                             이 앱의 버튼 라벨은 전부 평범한 한글이고 글리프는 아이콘 전용 버튼(↻)에만 쓴다. -->
+                        <StackPanel Grid.Row="3" Margin="0,20,0,0">
+                            <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,0,0,16" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="목록으로" Style="{StaticResource Button.Secondary}"
+                                        Command="{Binding BackToLicenseSummaryCommand}" Margin="8,0" />
+                                <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                                        Command="{Binding CloseLicenseViewerCommand}" Margin="8,0" />
+                            </StackPanel>
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </Border>
