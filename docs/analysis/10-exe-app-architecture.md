@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 10-exe-app-architecture.md |
 | 범위 | MCPhoto Exe 앱(WPF/.NET 8)의 솔루션 구성·계층·MVVM/DI·상태머신·캡처 파이프라인·전역 예외/데이터 폴더 |
-| 최종 업데이트 | 2026-08-10 (it23 반영 — `MCPhoto.Devices.Nikon` 프로젝트 신설, 외부 카메라·테스트 모드·라이선스 고지 DI 등록) · 이전 2026-07-29 (it15·it16 — `MCPhoto.Firebase` → `MCPhoto.Http`) |
+| 최종 업데이트 | 2026-08-11 (it25 — `IPrinterEnumerator`가 소비자 0 스캐폴드로 강등) · 이전 2026-08-10 (it23 — `MCPhoto.Devices.Nikon` 프로젝트 신설, 외부 카메라·테스트 모드·라이선스 고지 DI 등록) |
 | 관련 소스 경로 | `src/MCPhoto.App/**`, `src/MCPhoto.Core/Navigation/**`, `src/MCPhoto.Core/Capture/**`, `src/MCPhoto.Capture/**`, `MCPhoto.sln` |
 | 갱신 규칙 | 프로젝트 참조 관계, DI 등록(`ServiceRegistration.cs`), 상태 enum/전이표(`SessionStateMachine.cs`), View↔VM 매핑(`App.xaml`), 캡처 스레딩 모델(`OpenCvCameraService`)이 바뀌면 이 문서를 갱신한다. |
 
@@ -93,7 +93,7 @@ MCPhoto.App  ──▶  MCPhoto.Capture         ──▶  MCPhoto.Core
 | `INikonSdkShim`→`MissingNikonSdkShim`, `IExternalCamera`→`NikonExternalCamera` | **Singleton** | 외부 카메라(DSLR). 물리 장치 1대 + SDK 모듈 수명(Shutdown) 때문에 Singleton. **SDK 실물이 없어 shim이 항상 "모듈 없음"** → 촬영은 웹캠 단독으로 강등된다. SDK 도착 시 shim 등록 한 줄만 교체(it23) |
 | `ExternalStillDecoder` | Singleton | DSLR 수신 JPEG를 웹캠과 동일 규칙(거울→슬롯 크롭→긴 변 2400 상한)으로 `CapturedStill`로 정규화(it23) |
 | `IPhotoPrinter`→`NullPhotoPrinter` | Singleton | 프린터 **인쇄** 스캐폴드(현재 no-op — 실제 인쇄는 it24에서도 명시적 비목표). ⚠️ **열거는 별도 계약**(`IPrinterEnumerator`)이다 — "출력"과 "목록"을 한 인터페이스에 묶으면 "선택했으니 인쇄되겠지"라는 오해가 계약 수준으로 굳는다 |
-| `IPrinterEnumerator`→`SystemPrinterEnumerator` | Singleton | 설치 프린터 **열거**(it24 — `System.Printing`/`LocalPrintServer`, Local+Connections). 상태가 없어 Singleton 무해하고, 호출이 없으면 스풀러를 접촉하지 않는다. 관리자 권한 불요이며 실패는 예외가 아니라 `Succeeded=false`("확인 불가")로 — 빈 목록("설치된 프린터 없음")과 구조적으로 구분된다 |
+| `IPrinterEnumerator`→`SystemPrinterEnumerator` | Singleton | 설치 프린터 **열거**(it24 — `System.Printing`/`LocalPrintServer`, Local+Connections). 실패는 예외가 아니라 `Succeeded=false`("확인 불가")로 — 빈 목록("설치된 프린터 없음")과 구조적으로 구분된다. ⚠️ **it25: 프로덕션 소비자 0 스캐폴드**(프린터 표면이 "추후 지원 예정"으로 환원 — 설정 VM은 이 계약을 주입받지 않는다). 등록을 남기는 이유는 상태 없는 Singleton이 무해하고(호출이 없으면 스풀러 무접촉) 인쇄 이터레이션의 재배선에서 배선 실수 표면을 늘리지 않기 위함이다. **삭제 금지 — 재개는 인쇄 기능 이터레이션**이며 그때 it24 §7의 열거 판정(P1~P5)을 되살린다. 보존 근거 3건(`System.Printing`이 WindowsDesktop 참조팩에 동봉되어 패키지 추가 불요 · 스풀러 중지 시 "확인 불가" 강등 · 기본 프린터 null 가드)은 두 파일의 클래스 주석에 있고 계약 테스트가 계속 잠근다 |
 | `IIdleWatchdog`→`IdleWatchdog`, `AppShellViewModel` | Singleton | 유휴 감시·셸 상태머신(`:66-67`) |
 | `ILocalSaveService`, `FfmpegRunner`, `ITimelapseService`, `ICompositionService` | Singleton | 상태 없는(또는 공유) 서비스(`:70`, `:73-74`, `:77`) |
 | **백엔드 서비스 묶음** — `BackendSessionSynchronizer`/`IBackendSession`, `IFirebaseClient`→`HttpFirebaseClient`, `IFrameRepository`→`HttpFrameRepository`, `IAccountService`→`HttpAccountService`, `IQrUsageService`, `ITempUserLimitsService` | Singleton | `RegisterBackendServices`(`:81`, `:100-169`) + 명명 HttpClient `"backend"`(`:103-109`) |

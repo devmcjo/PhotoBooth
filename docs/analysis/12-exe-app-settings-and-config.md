@@ -4,7 +4,7 @@
 | --- | --- |
 | 문서 | 12-exe-app-settings-and-config.md |
 | 범위 | `AppSettings` 전 항목·기본값·범위, INI 저장/폴백/신뢰성/외래 섹션 보존, `[Test]` 섹션(역할별 테스트 모드), 브랜딩(branding.ini), 빌드 정보(어셈블리 버전 리소스 + exe 타임스탬프), 표시 모드 즉시 적용, 창 위치 저장 |
-| 최종 업데이트 | 2026-08-10 (it23 반영 — 외부 카메라 키 5종 실배선, `[Test]` 섹션 §7 신설, 외래 섹션 보존 §2.7 신설) · 이전 2026-07-29 (it15·it16) |
+| 최종 업데이트 | 2026-08-11 (it25 — §1 프린터 2키 환원·편집 게이트 5키로 축소, §7 `[Test] ExternalCamera`·`ExternalCameraType` 2키 신설) · 이전 2026-08-10 (it23 — 외부 카메라 키 5종 실배선, `[Test]` 섹션 §7 신설, 외래 섹션 보존 §2.7 신설) |
 | 관련 소스 경로 | `src/MCPhoto.Core/Settings/**`, `src/MCPhoto.Core/Branding/**`, `src/MCPhoto.Core/Build/**`, `src/MCPhoto.App/branding.ini.sample`, `Directory.Build.props`, `src/MCPhoto.App/MainWindow.xaml.cs`, `src/MCPhoto.App/ServiceRegistration.cs` |
 | 갱신 규칙 | `AppSettings` 필드 추가/기본값/Clamp 변경, INI 매핑(`IniSettingsService`) 변경, 폴백 경로(`SettingsPathResolver`) 변경, 브랜딩 로직/기본값 변경 시 이 문서를 갱신한다. |
 
@@ -51,8 +51,8 @@
 | `ExternalShutterSpeed` | string | **""**(미지정) | 트림만 — 도메인 검증은 적용 시점 | `ExternalShutterSpeed` | 셔터 속도 표시 문자열(예 `1/125`). 빈 값 = 카메라 현재값 유지. **인덱스가 아니라 문자열**(카메라 목록은 모드·SDK 버전에 따라 달라진다) |
 | `ExternalAperture` | string | **""**(미지정) | 트림만 | `ExternalAperture` | 조리개(예 `f/5.6`) |
 | `ExternalIso` | string | **""**(미지정) | 트림만 | `ExternalIso` | ISO(예 `400`) |
-| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 **준비 플래그**(it24 — placeholder에서 편집 가능으로 승격). 의미는 "인쇄 기능이 도입되면 이 프린터 구성을 사용한다"이고, 현재 런타임 효과는 **설정 화면의 프린터 하위 패널 노출뿐**이다(실제 인쇄는 비목표 — 화면이 상시 고지한다) |
-| `PhotoPrinterName` | string | **""**(미선택) | 트림만 — **목록 대조 없음** | `PhotoPrinterName` | 선택된 설치 프린터 이름(Windows 프린터명, 연결 프린터는 `\\서버\이름`). ⚠️ 열거 목록에 없어도 **값을 지우지 않는다** — 프린터가 잠시 꺼진 상태에서 관리자 설정을 파괴하지 않기 위함이고, 검증은 사용 시점(인쇄 구현)의 몫이다 |
+| `PhotoPrinterEnabled` | bool | **false** | — | `PhotoPrinterEnabled` | 사진 프린터 **예약 플래그**(it25 — 편집 가능에서 다시 placeholder로 환원). 현재 **런타임 효과가 없고 UI에서 편집할 수 없다**(토글이 `IsEnabled="False"` + "추후 지원 예정" 캡션). 값은 표시되고 라운드트립 보존되지만 VM이 기록하지 않는다 |
+| `PhotoPrinterName` | string | **""**(미선택) | 트림만 — **목록 대조 없음** | `PhotoPrinterName` | **잔존 키**(it25 — UI 표면 없음, 값 보존). it24 배포본이 쓴 값이 있을 수 있어 `WriteFrom` 매핑에 남긴다. ⚠️ 키를 빼면 기존 ini의 값이 **첫 저장에서 소멸**한다(`[MCPhoto]` 소유 키는 매핑에서 빠지는 순간 지워진다) |
 | `BackendBaseUrl` | string | **`https://asia-northeast3-mcphoto-955fb.cloudfunctions.net/api`**(운영 기본값 내장) | 트림 + 트레일링 `/` **부여**(`NormalizeBackend`) | `BackendBaseUrl` | 백엔드 API 주소. 빈 값이면 백엔드 미구성(업로드·로그인 불가) |
 | `BackendApiKey` | string | **""** — 실제 기본값은 **exe 내장 키**(`AssemblyMetadata "MCPhoto.BackendApiKey"`)를 로드 시 주입 | 트림 | `BackendApiKey` | 배포 게이트 키(`X-MCPhoto-Client`). ⚠️ INI에 평문 — 유출 시 서버에서 해당 키만 폐기 |
 | `GoogleClientId` | string | 운영 프로젝트 Desktop 클라이언트 ID 내장 | 트림 | `GoogleClientId` | Google SSO authorize URL 조립. **빈 값이면 로그인 화면의 "Google로 로그인" 버튼을 숨김**(SSO opt-out) |
@@ -63,7 +63,9 @@
 
 > **it12 R1 — 로그인 전용 편집(게이트)**: 게스트(비로그인) 설정 화면에서 `MirrorMode`·`RetakeEnabled`·`RetakeLimit`·`FilterGrayscale`/`FilterBrightness`/`FilterBeauty`·`EnableQrDelivery`(+`SendPhoto`/`SendTimelapse`)·`HostingBaseUrl`·`StorageBucket`는 OFF 표시·컨트롤 비활성 + "로그인 필요" 인라인 노티 상시 표시(R3, hover 툴팁에서 개정)이며 저장 시 미기록(ini 원값 보존=클로버 금지). 게이트는 `SettingsViewModel`(VM)에만 존재 — `AppSettings` 모델은 전 필드 항상 직렬화되고, 촬영/필터 런타임은 `Settings.Current`(ini=관리자값)대로 동작한다(편집 권한만 제한, 기능은 불변).
 
-> **it23 → it24 — 외부 장치 편집 게이트(`CanConfigureExternalCamera`)**: `ExternalCameraEnabled`·`ExternalCameraModel`·`ExternalShutterSpeed`/`ExternalAperture`/`ExternalIso` **+ it24에서 편입된 `PhotoPrinterEnabled`·`PhotoPrinterName`** = **7키**는 **User 이상**(TempUser 제외)만 편집·저장한다. 역할 판정은 서수 부등식이 아니라 **명시 열거**다(`UserRoleExtensions.CanConfigureExternalCamera` — 역할이 추가될 때 권한이 조용히 따라 움직이는 것을 막는다).
+> **it23 → it25 — 외부 장치 편집 게이트(`CanConfigureExternalCamera`)**: `ExternalCameraEnabled`·`ExternalCameraModel`·`ExternalShutterSpeed`/`ExternalAperture`/`ExternalIso` = **5키**는 **User 이상**(TempUser 제외)만 편집·저장한다. 역할 판정은 서수 부등식이 아니라 **명시 열거**다(`UserRoleExtensions.CanConfigureExternalCamera` — 역할이 추가될 때 권한이 조용히 따라 움직이는 것을 막는다).
+>
+> ⚠️ **프린터 2키는 이 게이트에서 빠졌다**(it25 — 표면 환원). 이제 **어느 역할에서도 기록되지 않으므로** 게이트를 통과할 일이 없다. it24가 두 키를 이 블록에 편입했던 판정은 본 항목이 대체한다.
 > - it24 게이트 통일 근거: 종전 프린터 2키는 `!IsGuest` 블록에 있었으나 UI가 `IsEnabled="False"`라 TempUser도 값을 바꿀 수단이 없었다(기록값은 항상 Load 원값) — 게이트를 좁혀도 **관측 가능한 행동 차이가 없다**.
 > - ⚠️ 다른 게이트와 **다른 점**: 편집 불가 세션에서도 로드 시 **강제 off 하지 않는다**. it24부터 섹션은 게스트에게도 **보이되 읽기 전용**이므로(§11 설정 화면), off로 표시하면 운영 상태를 오해하게 된다 — ini 원값을 그대로 보여 주고 저장 시 미기록으로 원값을 보존한다.
 > - ⚠️ **편집 게이트이지 동작 게이트가 아니다**: 촬영 세션이 DSLR을 쓰는지는 ini의 `ExternalCameraEnabled` 기준이며 **게스트(손님) 세션에도 적용**된다 — 손님이 장비 구성을 바꿀 수는 없지만 그 장비로 찍히는 것은 당연하다는 키오스크 모델이다. 이것이 게스트에게도 원값을 보여 주는 이유다.
@@ -230,6 +232,8 @@ QA·개발이 **로그인 없이** 특정 역할의 화면을 그대로 띄우�
 | `Pin` | string | (없음) | 4자리 숫자 아님 → 없음 취급 + Warning | **없으면 PIN 게이트 생략, 있으면 게이트를 띄우고 로컬 대조**(서버 호출 없음). 게이트 UI 자체(입력 검증·5회 실패 자동 닫힘·쿨다운)를 테스트할 수단 |
 | `QrBlocked` | bool | **0** | 인식 불가 → false | TempUser 역할의 가장 특징적인 UI(QR 편집 차단 + 사유 문구)를 재현한다. `Role=temp_user`와 함께 쓸 때만 의미 |
 | `QrBlockReason` | enum | `count` | 목록 밖 → `count` + Warning | `time` \| `count`. 설정 화면 문구가 사유별로 다르다 |
+| `ExternalCamera` | bool | **0**(false) | 인식 불가 → **false**(안전측 — 시뮬레이션 꺼짐) | **외부 카메라 표시 시뮬레이션** 마스터 스위치(it25). 켜지면 설정 화면 [장치 검색]의 **관측 표시를 대체**해, 실물 DSLR·SDK 없이 인식 콤보·검색 문구를 확인할 수 있다 |
+| `ExternalCameraType` | int enum | **-1**(없음) | 목록 밖·파싱 실패 → **-1** + Warning | 어느 모델이 인식된 것으로 표시될지. `-1` = 없음(인식 0 상태 재현) / `0` = Nikon D5300. 코드는 모델 레지스트리 행의 `TestTypeCode`이며 **한 번 배정하면 변경·재사용하지 않는다**(ini에 적힌 숫자가 계약). `ExternalCamera=1`일 때만 해석된다 — 꺼져 있으면 값을 무시하고 경고도 내지 않는다(실제 문제는 마스터 스위치이므로 Type 경고는 오히려 QA를 헤매게 한다) |
 
 작성 예시:
 
@@ -240,7 +244,12 @@ Id=testadmin
 Email=test@email.com
 Role=admin
 Pin=1234
+; 외부 카메라 인식 시뮬레이션(it25): 1 = 켜기, Type 0 = Nikon D5300 / -1 = 인식된 장치 없음
+ExternalCamera=1
+ExternalCameraType=0
 ```
+
+⚠️ 실운영 ini에 `[Test]` 섹션이 존재하면 안 된다(배포 체크리스트 대상). 위 주석 줄은 앱이 INI를 다시 쓸 때 사라진다.
 
 **동작 규약**
 
@@ -249,6 +258,21 @@ Pin=1234
 - **경고 배너가 상시 노출된다.** 이 기능은 릴리스 빌드에도 포함되므로(`#if DEBUG` 격리 없음), `TestMode=1`이면 화면 최상단에 닫을 수 없는 배너가 뜬다. 실운영 오투입을 즉시 드러내기 위한 것이며 유휴 경고 스크림에도 가려지지 않는다.
 - **실계정으로 새지 않는다.** 테스트 계정 판정은 값 비교가 아니라 **참조 동일성**(`ITestModeService.IsTestUser`)이다. 즉 `TestMode=1`을 켠 채 실제 Google SSO로 로그인하면 — 이메일·Id·역할이 우연히 전부 같아도 — 그 계정은 **정상 PIN 게이트·정상 서버 경로**를 탄다. 테스트 모드 INI를 켜둔 채 실계정으로 작업할 수 있다(배너는 계속 표시).
 - 로그아웃은 정상 동작하며(게스트 상태도 테스트 대상), 테스트 모드에서는 로그인 화면에 **[테스트 계정으로 로그인]** 버튼이 노출되어 앱 재시작 없이 되돌아올 수 있다.
+
+**외부 카메라 시뮬레이션의 경계(it25)** — 이 두 키가 "있는 것처럼" 만드는 범위는 **설정 화면의 검색·표시 표면뿐**이다.
+
+| | `[MCPhoto] ExternalCameraEnabled` (운영) | `[Test] ExternalCamera` (시뮬레이션) |
+|---|---|---|
+| 의미 | 촬영 세션이 DSLR 스틸 경로를 **시도**할지 | 설정 화면 [장치 검색]의 **관측 표시를 대체**할지 |
+| 읽는 곳 | 촬영 VM(세션 소스 확정)·테스트 모달 항목 노출·설정 하위 패널 노출 | 설정 VM의 검색 시퀀스 **한 곳** |
+| 영향 범위 | 실동작(연결 시도·강등·배너) — 게스트 세션에도 적용 | 화면 표시(헤드라인·상세 라인·인식 콤보)만. 촬영·모달·업로드 무접촉 |
+| 편집 방식 | 설정 화면 토글(앱이 저장) | **ini 직접 편집만** |
+| 화면 표식 | 없음(정상 운영 상태) | 테스트 모드 배너 접미(`· 외부 카메라 시뮬레이션({모델})`) + 검색 결과의 "테스트 모드 시뮬레이션 결과입니다 — 실제 장치 관측이 아닙니다." 라인 |
+
+- **분기 조건은 `IsTestUser`(참조 동일성)를 통과해야 한다.** `TestMode=1`을 켠 채 실계정으로 로그인한 세션은 **실관측 경로**를 탄다(시뮬레이션 미적용, 표식 라인 없음) — `IsEnabled`만 보고 분기하면 그 운영자가 가짜 "연결 확인됨"을 보고 실장비 진단을 그르친다.
+- **배너 접미도 같은 조건이다**: 테스트 계정 세션의 배너에만 `· 외부 카메라 시뮬레이션({모델 표시명})`이 붙고(모델 매핑이 없으면 `(인식된 장치 없음)`), 로그아웃·실계정 병행 로그인 배너에는 붙지 않는다. 조건이 어긋나면 배너가 적용되지 않는 시뮬레이션을 "중"이라고 말하는 거짓 표시가 된다 — 회귀 테스트 3종(테스트 계정 on/off · **실계정**)이 이 조건을 잠근다.
+- **촬영은 정직하게 실패한다.** 시뮬레이션을 켠 채 `ExternalCameraEnabled=on`으로 촬영에 진입하면 실제 연결이 시도되고 SDK 부재로 웹캠 강등 토스트가 뜬다. 설정 화면의 S6(시뮬레이션)과 어긋나 보이는 이 상태가 의도된 것이며, 표식 라인이 그 간극을 설명한다. **가짜 사진이 만들어지는 코드 경로는 없다** — 촬영·테스트 모달 VM은 `ITestModeService`를 참조하지 않는다(정적 검사로 고정).
+- **ini 자동 기록 없음**: 시뮬레이션은 `[MCPhoto]` 어느 키도 갱신하지 않는다.
 
 ⚠️ **보안**: INI를 쓸 수 있는 사람은 인증 없이 관리자 역할의 **화면**에 도달할 수 있다. 단 게스트도 원래 설정 화면에 무가드로 진입하며, 서버 권위 영역(계정 DB·프레임 정본·업로드 정원)은 토큰이 없어 **건드릴 수 없다**.
 
