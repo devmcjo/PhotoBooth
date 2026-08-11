@@ -18,3 +18,4 @@
 - [System.Printing 무의존 참조](system-printing-available.md) — net8.0-windows+UseWPF에서 csproj 수정 0(실측). 큐 객체는 즉시 Dispose·POCO 복사, 관리 권한 요청 금지
 - [it24 검색 관측 이음새](it24-discovery-observation-seam.md) — 검색 VM 테스트는 probePortableDevices 주입 필수(미주입=실 WMI로 flaky). S1은 ManualResetEventSlim으로 관측
 - [publish 스테이징은 재사용된다](publish-staging-is-reused.md) — dotnet publish는 사라진 파일을 안 지운다. 배포 파일 개명 시 구·신이 함께 실림(bin\Release·publish\ 잔재 확인 필수)
+- [상태 뒤에 UI 숨기기 = 반려 3회](ui-behind-state-antipattern.md) — Visibility 게이트 대신 Disable+사유 캡션. 게이트 뺀 배치는 위치 단정 테스트로 고정

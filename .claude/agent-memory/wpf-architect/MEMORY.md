@@ -14,3 +14,5 @@
 - [스펙 폐기 관례](spec-deprecation-convention.md) — "제거" 요구는 삭제가 아니라 폐기 표시+이력 보존+참조 전수 정리·번호 재배열 금지·동명이의 오치환 경계
 - [라이선스 고지 불변 경계](license-notice-constraints.md) — GPLv3 전문·루트 LICENSE 무수정·요약은 매니페스트(열거는 부재 탐지 불가)·공개 문구에 슬래시 금지(테스트가 잠금)
 - [it24 장치 탐색 정직성](it24-device-discovery-honesty.md) — "없습니다 vs 확인불가" 명제분리·준비도=shim IsOperational+파일·WMI 제네릭이름 반증·System.Printing 동반어셈블리
+- [it25 시뮬레이션 경계](it25-test-simulation-boundary.md) — TestMode 시뮬레이션=표시전용(TS1~TS4, IsTestUser 게이트)·TestTypeCode 행내 매핑·인식콤보 SelectedValue 분리(클로버)·프린터 스캐폴드 환원
+- [it25 인식·시뮬레이션](it25-recognition-and-simulation.md) — 노출기준="지원+인식"(설치나열 반려)·합성행 (미인식)·Clamp/Resolve 비대칭·[Test] 장치시뮬 DI분기(반쪽금지)·모델추가 3지점
