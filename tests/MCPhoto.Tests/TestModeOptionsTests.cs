@@ -33,6 +33,8 @@ public class TestModeOptionsTests
         Assert.Null(o.Pin);
         Assert.False(o.QrBlocked);
         Assert.Equal(QrGateReason.Count, o.QrBlockReason);
+        Assert.False(o.ExternalCamera);                 // it25 §9.2
+        Assert.Equal(-1, o.ExternalCameraType);
         Assert.Empty(o.Warnings);
     }
 
@@ -178,6 +180,98 @@ public class TestModeOptionsTests
 
         Assert.DoesNotContain("IsTest", names);
         Assert.DoesNotContain("IsTestMode", names);
+    }
+
+    // ══════════ it25 §5.1: 외부 카메라 시뮬레이션 2키 ══════════
+
+    /// <summary>T-B1: 2키 결측 시 기본값, 정상 조합 파싱, bool 표기 변형.</summary>
+    [Fact]
+    public void B1_External_Camera_Keys_Default_And_Parse()
+    {
+        // 결측 → (false, -1). TestMode만 켠 상태가 종전 동작과 완전히 같아야 한다.
+        var missing = Parse("[Test]\nTestMode=1\n");
+        Assert.False(missing.ExternalCamera);
+        Assert.Equal(-1, missing.ExternalCameraType);
+        Assert.Empty(missing.Warnings);
+
+        // 정상 조합 → (true, 0) = D5300 인식 시뮬레이션(S6).
+        var on = Parse("[Test]\nTestMode=1\nExternalCamera=1\nExternalCameraType=0\n");
+        Assert.True(on.ExternalCamera);
+        Assert.Equal(0, on.ExternalCameraType);
+        Assert.Empty(on.Warnings);
+
+        // 인식 0 상태(S4)의 명시 조합 — 모순이 아니라 정의된 조합이다.
+        var none = Parse("[Test]\nTestMode=1\nExternalCamera=on\nExternalCameraType=-1\n");
+        Assert.True(none.ExternalCamera);
+        Assert.Equal(-1, none.ExternalCameraType);
+        Assert.Empty(none.Warnings);
+    }
+
+    /// <summary>bool 표기 변형(<c>true</c>/<c>on</c>/<c>yes</c>)이 기존 규약대로 통한다.</summary>
+    [Theory]
+    [InlineData("true")]
+    [InlineData("on")]
+    [InlineData("yes")]
+    [InlineData("1")]
+    public void B1_External_Camera_Bool_Spellings(string value)
+        => Assert.True(Parse($"[Test]\nTestMode=1\nExternalCamera={value}\n").ExternalCamera);
+
+    /// <summary>
+    /// T-B2: 목록 밖·파싱 실패 Type은 <c>-1</c>로 폴백하고 <b>경고 정확 1건</b>을 남긴다(E21).
+    /// 시뮬레이션은 그대로 S4 시나리오로 동작하므로 화면이 멈추지 않는다.
+    /// </summary>
+    [Theory]
+    [InlineData("-2")]
+    [InlineData("99")]
+    [InlineData("abc")]
+    public void B2_Unknown_External_Camera_Type_Falls_Back_With_One_Warning(string value)
+    {
+        var o = Parse($"[Test]\nTestMode=1\nExternalCamera=1\nExternalCameraType={value}\n");
+
+        Assert.True(o.ExternalCamera);
+        Assert.Equal(-1, o.ExternalCameraType);
+        Assert.Single(o.Warnings);
+        Assert.Contains("[Test] ExternalCameraType", o.Warnings[0]);
+        Assert.Contains(value, o.Warnings[0]);   // 운영자가 쓴 원문을 그대로 인용한다
+    }
+
+    /// <summary>인식 불가 bool은 안전측(false = 시뮬레이션 꺼짐)이며 경고를 남기지 않는다(bool 규약).</summary>
+    [Fact]
+    public void B2_Unrecognized_External_Camera_Bool_Is_Off_Without_Warning()
+    {
+        var o = Parse("[Test]\nTestMode=1\nExternalCamera=maybe\n");
+
+        Assert.False(o.ExternalCamera);
+        Assert.Empty(o.Warnings);
+    }
+
+    /// <summary>
+    /// ★ Type은 마스터 스위치가 켜졌을 때만 의미다 — 꺼진 상태에서는 <b>경고 없이 무시</b>한다(§5.1).
+    /// 꺼진 상태의 값에 경고를 내면 "Type이 틀렸다"고 말하는 셈인데 실제 문제는 "ExternalCamera=1을
+    /// 안 썼다"이므로 안내가 QA를 헤매게 한다.
+    /// </summary>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("99")]
+    public void B2_Type_Is_Ignored_Without_Warning_When_Switch_Is_Off(string value)
+    {
+        var o = Parse($"[Test]\nTestMode=1\nExternalCamera=0\nExternalCameraType={value}\n");
+
+        Assert.False(o.ExternalCamera);
+        Assert.Equal(-1, o.ExternalCameraType);
+        Assert.Empty(o.Warnings);
+    }
+
+    /// <summary>TestMode=0이면 시뮬레이션 2키도 해석되지 않는다(기존 마스터 스위치 규약 그대로).</summary>
+    [Fact]
+    public void B2_Test_Mode_Off_Ignores_Simulation_Keys()
+    {
+        var o = Parse("[Test]\nTestMode=0\nExternalCamera=1\nExternalCameraType=0\n");
+
+        Assert.False(o.Enabled);
+        Assert.False(o.ExternalCamera);
+        Assert.Equal(-1, o.ExternalCameraType);
+        Assert.Empty(o.Warnings);
     }
 
     /// <summary>

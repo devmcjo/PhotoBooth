@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using MCPhoto.App;
 using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
@@ -184,14 +185,29 @@ public class SettingsViewModelExternalCameraTests
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
+    /// <summary>
+    /// it25 §6 재작성: 구 <c>Model_Options_Come_From_Registry</c>가 고정했던 "콤보 = 레지스트리 전체"는
+    /// 폐기됐다(콤보가 "인식된 카메라"가 됐다). <b>같은 사실을 두 갈래로 나눠</b> 다시 못박는다 —
+    /// 지원 목록은 오버레이가 레지스트리에서 파생하고, 콤보는 인식 결과만 담는다.
+    /// <para>
+    /// 단정을 지우면 "레지스트리에 모델을 추가했는데 화면 어디에도 안 뜬다"는 회귀를 아무도 못 잡는다.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task Model_Options_Come_From_Registry()
+    public async Task Registry_Feeds_Supported_Overlay_While_Combo_Holds_Recognition_Only()
     {
         var vm = MakeVm(new IniSettingsService(iniPath: TempIni()), UserRole.Admin);
         await vm.OnEnterAsync();
 
-        Assert.Same(ExternalCameraModels.All, vm.ExternalCameraModelOptions);
-        Assert.Equal("Nikon D5300", vm.ExternalCameraModelOptions[0].DisplayName);
+        // ① 지원 목록은 레지스트리 전수를 담는다(제조사·제품명 분리).
+        var group = Assert.Single(vm.SupportedCameraGroups);
+        Assert.Equal("Nikon", group.Manufacturer);
+        Assert.Equal(new[] { "D5300" }, group.Models);
+        Assert.Equal(ExternalCameraModels.All.Count, vm.SupportedCameraGroups.Sum(g => g.Models.Count));
+
+        // ② 인식 콤보는 지원 목록이 아니다 — 검색 전에는 sentinel 단독이다.
+        Assert.Single(vm.RecognizedCameraOptions);
+        Assert.Equal(SettingsViewModel.RecognizedCameraNoneDisplay, vm.RecognizedCameraOptions[0].Display);
     }
 
     // ── T-V4: 도메인 미확보 — 슬라이더 disable + 자유 입력 저장 ──

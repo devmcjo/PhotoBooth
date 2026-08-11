@@ -137,7 +137,8 @@ public class DiagnosticsViewModelTests
             IsEnabled = enabled;
             Options = enabled
                 ? new TestModeOptions(true, "testuser", "test@email.com", role, null, false, QrGateReason.Count,
-                    Array.Empty<string>())
+                    ExternalCamera: false, ExternalCameraType: -1,
+                    Warnings: Array.Empty<string>())
                 : TestModeOptions.Disabled;
         }
         public bool IsEnabled { get; }

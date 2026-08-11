@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using MCPhoto.App;
 using MCPhoto.App.Services;
 using MCPhoto.App.ViewModels;
@@ -14,10 +15,11 @@ using MCPhoto.Tests.Fakes;
 namespace MCPhoto.Tests;
 
 /// <summary>
-/// it24 Step 6: 설정 화면의 장치 검색 커맨드·프린터 열거·게이트 배선 검증(설계 §12.3 T-D1~D5·T-P1~P5·T-V3').
+/// it24 Step 6: 설정 화면의 장치 검색 커맨드·게이트 배선 검증(설계 §12.3 T-D1~D5·T-V3').
+/// it25 Step 1: 프린터 표면 환원 후의 보존·무접촉 단정(T-A1').
 /// <para>
 /// 여기서 증명되는 것은 <b>"관측이 이렇게 들어오면 화면은 이렇게 말한다"</b>까지다. 실물 D5300의 WMI 관측
-/// 여부·이름(U1·U2)과 SDK 정상 상태의 실거동(U6)은 실기 단계의 몫이다(§12.4 정직 목록).
+/// 여부·이름(U1·U2)과 SDK 정상 상태의 실거동(U6)은 실기 단계의 몫이다(it24 §12.4 정직 목록).
 /// </para>
 /// </summary>
 public class SettingsViewModelDiscoveryTests
@@ -57,12 +59,11 @@ public class SettingsViewModelDiscoveryTests
     private static string TempIni() => Path.Combine(Path.GetTempPath(), $"svm_it24_{Guid.NewGuid():N}.ini");
 
     /// <summary>
-    /// 검색·열거 테스트용 VM. WMI 프로브는 <b>반드시 주입</b>한다 — 기본값은 이 머신의 실제 장치를 돌려주므로
+    /// 검색 테스트용 VM. WMI 프로브는 <b>반드시 주입</b>한다 — 기본값은 이 머신의 실제 장치를 돌려주므로
     /// 참고 라인(W23)·매칭 결과가 머신 구성에 따라 달라져 상태표 검증이 흔들린다.
     /// </summary>
     private static SettingsViewModel MakeVm(IniSettingsService settings, UserRole? role,
         IExternalCamera? external = null,
-        IPrinterEnumerator? printers = null,
         Func<IReadOnlyList<string>>? probe = null)
     {
         var session = new SessionContext();
@@ -73,7 +74,6 @@ public class SettingsViewModelDiscoveryTests
             new StubDiagnosticsDialog(), new FakeFirebaseClient { IsInitialized = false },
             external ?? new NullExternalCamera(),
             logger: null, licenseNotice: null,
-            printers: printers,
             probePortableDevices: probe ?? (() => Array.Empty<string>()));
     }
 
@@ -245,6 +245,11 @@ public class SettingsViewModelDiscoveryTests
         Assert.Contains("연결 확인됨", vm.DiscoveryHeadline);
         Assert.Contains(SettingsViewModel.DiscoveryBatteryText(75), vm.DiscoveryDetailLines);
         Assert.Contains(SettingsViewModel.DiscoveryTestHintText, vm.DiscoveryDetailLines);
+        // it25 §6.4 확장: S6은 인식 콤보를 채우는 **유일한** 상태다(sentinel + 인식 1행).
+        Assert.Equal(2, vm.RecognizedCameraOptions.Count);
+        Assert.Equal("Nikon D5300", vm.RecognizedCameraOptions[1].Display);
+        // 실경로에서는 시뮬레이션 표식이 붙지 않는다.
+        Assert.DoesNotContain(SettingsViewModel.DiscoverySimulatedText, vm.DiscoveryDetailLines);
     }
 
     /// <summary>★ T-D2 — 검색은 순간 관찰이다: 성공해도 연결을 잔류시키지 않는다(§5.5).</summary>
@@ -334,14 +339,12 @@ public class SettingsViewModelDiscoveryTests
         var guest = MakeVm(SettingsWith(s => s.ExternalCameraEnabled = true), role: null);
         await guest.OnEnterAsync();
         Assert.False(guest.DiscoverExternalCameraCommand.CanExecute(null));
-        Assert.False(guest.RefreshPrintersCommand.CanExecute(null));
 
         // TempUser는 편집은 못 하지만 진단(검색)은 할 수 있다 — 진단·상태 모달과 같은 눈높이.
         var temp = MakeVm(SettingsWith(s => s.ExternalCameraEnabled = true), UserRole.TempUser);
         await temp.OnEnterAsync();
         Assert.False(temp.CanEditExternalCamera);
         Assert.True(temp.DiscoverExternalCameraCommand.CanExecute(null));
-        Assert.True(temp.RefreshPrintersCommand.CanExecute(null));
     }
 
     // ══════════ T-V3': 게스트 가시성 정책 변경(§4.1·§4.3) ══════════
@@ -368,28 +371,23 @@ public class SettingsViewModelDiscoveryTests
                 s.PhotoPrinterEnabled = true;
                 s.PhotoPrinterName = "Canon SELPHY CP1500";
             }, path);
-            var vm = MakeVm(settings, role: null,
-                printers: new FakePrinterEnumerator().With("Canon SELPHY CP1500"));
+            var vm = MakeVm(settings, role: null);
             await vm.OnEnterAsync();
 
             Assert.True(vm.IsGuest);
 
-            // ① 편집 표면 전부 잠김: 토글·모델 콤보·노출 3행·프린터 토글·프린터 콤보가 이 한 값에 매달려 있다.
+            // ① 편집 표면 전부 잠김: 토글·인식 콤보·노출 3행이 이 한 값에 매달려 있다.
+            //    (프린터 토글은 it25 §4.1에서 역할과 무관한 하드코딩 Disable로 환원됐다 — XAML 쪽 짝 참조)
             Assert.False(vm.CanEditExternalCamera);
-            // ② 검색·재검색도 게스트에겐 불가(진단 액션이지만 익명 손님보다는 좁은 게이트).
+            // ② 검색도 게스트에겐 불가(진단 액션이지만 익명 손님보다는 좁은 게이트).
             Assert.False(vm.DiscoverExternalCameraCommand.CanExecute(null));
-            Assert.False(vm.RefreshPrintersCommand.CanExecute(null));
             // ③ 게이트 노티는 "로그인 필요"다 — "권한 없음"이 뜨면 "로그인하면 되는가"에 답하지 못한다.
             Assert.False(vm.IsExternalEditDenied);
 
             // ④ ★ 그런데 값은 보인다(강제 off 없음) — 섹션이 숨겨져 있었다면 검증할 필요조차 없던 항목이다.
             Assert.True(vm.ExternalCameraEnabled);
-            Assert.True(vm.PhotoPrinterEnabled);
-            Assert.Equal("Canon SELPHY CP1500", vm.PhotoPrinterName);
+            Assert.True(vm.PhotoPrinterEnabled);   // 편집 불가 토글이어도 ini 원값을 정직하게 보여 준다
             Assert.Equal(SettingsViewModel.DiscoveryNotSearchedText, vm.DiscoveryHeadline);
-            // 프린터 목록도 게스트에게 보인다(프린터명은 비밀이 아니고, 편집은 ①이 막는다).
-            Assert.Single(vm.PrinterOptions);
-            Assert.True(vm.HasPrinters);
 
             // ⑤ 저장을 눌러도 ini 원값이 그대로다(보이는 값을 되기록해 관리자 구성을 클로버하지 않는다).
             vm.ExternalCameraEnabled = false;
@@ -425,184 +423,30 @@ public class SettingsViewModelDiscoveryTests
         Assert.False(vm.IsGuest);
     }
 
-    // ══════════ T-P1: P3 정상 목록 ══════════
+    // ══════════ T-A1' (it25 §4): 프린터 환원 — VM은 열거자를 접촉하지 않고 2키를 기록하지 않는다 ══════════
+    //
+    // it24의 프린터 VM 테스트 12종(P3 목록·P2/P4 구분·P5 합성 행·저장 2키·토글 훅·단일 비행)은 표면이
+    // 사라져 성립하지 않는다. 그 단정을 **지우지 않고** 두 갈래로 옮겼다:
+    //   ① "명제 구분(R4)·예외 무투과"는 열거자 계약 계층으로 이관 —
+    //      ExternalDeviceScaffoldTests(PrinterEnumerationResult 구분·SystemPrinterEnumerator 예외 무투과) +
+    //      아래 Real_Printer_Enumeration_Never_Throws(§12.4 존치).
+    //   ② "저장값을 지우지 않는다"·"스풀러를 건드리지 않는다"는 아래 두 테스트로 압축.
 
-    [Fact]
-    public async Task P3_Lists_Printers_With_Default_Suffix()
-    {
-        var printers = new FakePrinterEnumerator()
-            .With("Canon SELPHY CP1500")
-            .With("Microsoft Print to PDF", isDefault: true);
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin, printers: printers);
-
-        await vm.OnEnterAsync();
-
-        Assert.Equal(1, printers.EnumerateCalls);        // 진입 시 1회(토글 on 상태)
-        Assert.Equal(2, vm.PrinterOptions.Count);
-        Assert.Equal("Canon SELPHY CP1500", vm.PrinterOptions[0].Display);
-        Assert.Equal(SettingsViewModel.PrinterDefaultDisplay("Microsoft Print to PDF"), vm.PrinterOptions[1].Display);
-        // 저장 키는 가공되지 않은 원문이어야 한다(다음 실행에서 이름으로 다시 찾는다).
-        Assert.Equal("Microsoft Print to PDF", vm.PrinterOptions[1].Name);
-        Assert.True(vm.HasPrinters);
-        Assert.Equal(string.Empty, vm.PrinterStateText);
-        Assert.False(vm.HasPrinterStateText);
-    }
-
-    [Fact]
-    public async Task Printer_Panel_Off_Does_Not_Enumerate()
-    {
-        var printers = new FakePrinterEnumerator().With("Canon SELPHY CP1500");
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = false), UserRole.Admin, printers: printers);
-
-        await vm.OnEnterAsync();
-
-        Assert.Equal(0, printers.EnumerateCalls);   // 하위 패널이 없으면 스풀러를 건드리지 않는다
-        Assert.Empty(vm.PrinterOptions);
-    }
-
-    // ══════════ T-P2: P2("없습니다")와 P4("확인할 수 없습니다")의 구분 ══════════
-
-    [Fact]
-    public async Task P2_Empty_Success_Says_None_Installed()
-    {
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin,
-            printers: new FakePrinterEnumerator());   // 성공 · 0대
-
-        await vm.OnEnterAsync();
-
-        Assert.Equal(SettingsViewModel.PrinterNoneText, vm.PrinterStateText);
-        Assert.False(vm.HasPrinters);
-        Assert.True(vm.HasPrinterStateText);
-    }
-
-    [Fact]
-    public async Task P4_Enumeration_Failure_Says_Undetermined_Not_None()
-    {
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin,
-            printers: new FakePrinterEnumerator { Succeeded = false });
-
-        await vm.OnEnterAsync();
-
-        // ★ 두 상태가 문구로 구분된다 — 조치가 다르다(프린터 재연결 vs 스풀러 서비스 시작).
-        Assert.Equal(SettingsViewModel.PrinterUndeterminedText, vm.PrinterStateText);
-        Assert.NotEqual(SettingsViewModel.PrinterNoneText, vm.PrinterStateText);
-        Assert.False(vm.HasPrinters);
-    }
-
-    [Fact]
-    public async Task Enumerator_Exception_Degrades_To_Undetermined()
-    {
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin,
-            printers: new FakePrinterEnumerator { Throws = new InvalidOperationException("스풀러 붕괴") });
-
-        await vm.OnEnterAsync();
-
-        Assert.Equal(SettingsViewModel.PrinterUndeterminedText, vm.PrinterStateText);
-        Assert.False(vm.IsEnumeratingPrinters);   // finally 확정
-    }
-
-    [Fact]
-    public async Task Missing_Enumerator_Service_Degrades_To_Undetermined()
-    {
-        // 서비스 미주입도 "프린터가 없다"가 아니다(R4).
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin, printers: null);
-
-        await vm.OnEnterAsync();
-
-        Assert.Equal(SettingsViewModel.PrinterUndeterminedText, vm.PrinterStateText);
-    }
-
-    // ══════════ T-P3: P5 저장값 보존(합성 행) ══════════
-
-    [Fact]
-    public async Task P5_Saved_Name_Absent_From_List_Is_Kept_As_Synthetic_Row()
-    {
-        var path = TempIni();
-        try
-        {
-            var settings = SettingsWith(s =>
-            {
-                s.PhotoPrinterEnabled = true;
-                s.PhotoPrinterName = "Canon SELPHY CP1500";   // 지금 꺼져 있는 프린터
-            }, path);
-            settings.Save();
-
-            var vm = MakeVm(settings, UserRole.Admin,
-                printers: new FakePrinterEnumerator().With("Microsoft Print to PDF", isDefault: true));
-            await vm.OnEnterAsync();
-
-            // 합성 행이 첫 항목으로 들어가고 선택이 유지된다.
-            Assert.Equal(SettingsViewModel.PrinterUnverifiedDisplay("Canon SELPHY CP1500"),
-                vm.PrinterOptions[0].Display);
-            Assert.Equal("Canon SELPHY CP1500", vm.PrinterOptions[0].Name);
-            Assert.Equal("Canon SELPHY CP1500", vm.PhotoPrinterName);
-
-            // ★ 저장해도 원문이 보존된다 — 목록 부재를 이유로 관리자 값을 지우지 않는다.
-            vm.SaveSettingsCommand.Execute(null);
-            Assert.Equal("Canon SELPHY CP1500", new IniSettingsService(iniPath: path).Load().PhotoPrinterName);
-        }
-        finally { if (File.Exists(path)) File.Delete(path); }
-    }
-
-    [Fact]
-    public async Task Empty_Saved_Name_Adds_No_Synthetic_Row()
-    {
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin,
-            printers: new FakePrinterEnumerator().With("Microsoft Print to PDF"));
-        await vm.OnEnterAsync();
-
-        Assert.Single(vm.PrinterOptions);
-        Assert.Equal(string.Empty, vm.PhotoPrinterName);
-    }
-
-    [Fact]
-    public async Task P4_Preserves_Saved_Name_Even_Without_A_List()
-    {
-        // 열거 실패 상태에서도 선택이 해석돼야 한다 — 항목이 없으면 WPF 콤보가 SelectedValue를 null로 되쓴다.
-        var settings = SettingsWith(s =>
-        {
-            s.PhotoPrinterEnabled = true;
-            s.PhotoPrinterName = "Canon SELPHY CP1500";
-        });
-        var vm = MakeVm(settings, UserRole.Admin, printers: new FakePrinterEnumerator { Succeeded = false });
-
-        await vm.OnEnterAsync();
-
-        Assert.Equal("Canon SELPHY CP1500", vm.PhotoPrinterName);
-        Assert.Single(vm.PrinterOptions);
-        Assert.Equal(SettingsViewModel.PrinterUnverifiedDisplay("Canon SELPHY CP1500"), vm.PrinterOptions[0].Display);
-        Assert.False(vm.HasPrinters);   // 선택 가능한 설치 프린터가 있다는 뜻은 아니다
-    }
-
-    // ══════════ T-P4: 저장 게이트 통일(§9.2) ══════════
-
-    [Fact]
-    public async Task User_Saves_Printer_Two_Keys()
-    {
-        var path = TempIni();
-        try
-        {
-            var settings = SettingsWith(_ => { }, path);
-            var vm = MakeVm(settings, UserRole.User,
-                printers: new FakePrinterEnumerator().With("Canon SELPHY CP1500"));
-            await vm.OnEnterAsync();
-
-            vm.PhotoPrinterEnabled = true;
-            if (vm.PrinterEnumerationTask is { } t) await t;
-            vm.PhotoPrinterName = "Canon SELPHY CP1500";
-            vm.SaveSettingsCommand.Execute(null);
-
-            var r = new IniSettingsService(iniPath: path).Load();
-            Assert.True(r.PhotoPrinterEnabled);
-            Assert.Equal("Canon SELPHY CP1500", r.PhotoPrinterName);
-        }
-        finally { if (File.Exists(path)) File.Delete(path); }
-    }
-
+    /// <summary>
+    /// ★ 전 역할에서 프린터 2키가 <b>미기록</b>으로 보존된다(§4.1·§4.3).
+    /// <para>
+    /// 구 <c>User_Saves_Printer_Two_Keys</c>의 <b>단정 반전</b>이다 — it24는 User가 2키를 기록하는 것을
+    /// 고정했고, it25는 <b>어느 역할도 기록하지 않는</b> 것을 고정한다. 미기록이면 Clone 원값이 그대로
+    /// 재기록되므로 라운드트립 보존이 자동 성립한다. 키를 <c>WriteFrom</c>에서 빼는 것과는 다르다 —
+    /// 그렇게 하면 기존 ini의 값이 첫 저장에서 소멸한다.
+    /// </para>
+    /// </summary>
     [Theory]
+    [InlineData(UserRole.Admin)]
+    [InlineData(UserRole.User)]
     [InlineData(UserRole.TempUser)]
     [InlineData(null)]
-    public async Task TempUser_And_Guest_Save_Preserve_Printer_Ini_Values(UserRole? role)
+    public async Task Save_Never_Writes_Printer_Keys(UserRole? role)
     {
         var path = TempIni();
         try
@@ -614,71 +458,54 @@ public class SettingsViewModelDiscoveryTests
             }, path);
             Assert.True(settings.Save());
 
-            var vm = MakeVm(settings, role, printers: new FakePrinterEnumerator());
+            var vm = MakeVm(settings, role);
             await vm.OnEnterAsync();
 
-            // 화면을 못 만지지만, 저장 경로가 관리자 값을 클로버하지 않는지가 핵심이다.
+            // 토글 표시값은 ini 원값이다(강제 off 표시 금지).
+            Assert.True(vm.PhotoPrinterEnabled);
+
+            // 편집 불가 컨트롤이지만, VM 속성을 직접 뒤집어도 저장 경로가 ini를 건드리지 않아야 한다.
             vm.PhotoPrinterEnabled = false;
-            vm.PhotoPrinterName = string.Empty;
             vm.SaveSettingsCommand.Execute(null);
 
             var r = new IniSettingsService(iniPath: path).Load();
             Assert.True(r.PhotoPrinterEnabled);
-            Assert.Equal(@"\\print01\Photo-Lab", r.PhotoPrinterName);
+            Assert.Equal(@"\\print01\Photo-Lab", r.PhotoPrinterName);   // 표면이 없는 잔존 키도 보존
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
-    // ══════════ T-P5: 토글 전환 훅 ══════════
-
+    /// <summary>
+    /// ★ 설정 VM은 <b>어떤 시점에도</b> 프린터 열거자를 접촉하지 않는다(소비자 0 스캐폴드).
+    /// <para>
+    /// 구 트리거 테스트 5종(진입 열거·토글 훅·저장 재트리거·패널 off·단일 비행)을 하나로 압축한 형태다.
+    /// 열거자를 <b>주입할 자리 자체가 사라졌으므로</b>(ctor 인자 제거) 접촉 0을 타입 수준에서 고정한다 —
+    /// 페이크 호출 횟수보다 강한 단정이며, 누군가 배선을 되살리면 컴파일 단계에서 이 테스트가 깨진다.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task Toggling_Printer_On_Enumerates_Once()
+    public async Task Settings_Vm_Never_Touches_Printer_Enumerator()
     {
-        var printers = new FakePrinterEnumerator().With("Canon SELPHY CP1500");
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = false), UserRole.Admin, printers: printers);
+        // ① ctor에 열거자를 넘길 방법이 없다.
+        Assert.DoesNotContain(
+            typeof(SettingsViewModel).GetConstructors()
+                .SelectMany(c => c.GetParameters())
+                .Select(p => p.ParameterType),
+            t => t == typeof(IPrinterEnumerator));
+
+        // ② 필드로도 붙들지 않는다(생성자 밖에서 서비스 로케이터로 끌어오는 경로 차단).
+        Assert.DoesNotContain(
+            typeof(SettingsViewModel)
+                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                .Select(f => f.FieldType),
+            t => t == typeof(IPrinterEnumerator));
+
+        // ③ 진입·토글·저장 어느 경로도 예외 없이 지나간다(표면이 사라졌으니 상태 문구도 없다).
+        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin);
         await vm.OnEnterAsync();
-        Assert.Equal(0, printers.EnumerateCalls);
-
-        vm.PhotoPrinterEnabled = true;
-        if (vm.PrinterEnumerationTask is { } first) await first;
-        Assert.Equal(1, printers.EnumerateCalls);
-
-        // 껐다 켜도 목록이 이미 있으면 재열거하지 않는다([다시 검색]이 명시 경로다).
         vm.PhotoPrinterEnabled = false;
         vm.PhotoPrinterEnabled = true;
-        if (vm.PrinterEnumerationTask is { } second) await second;
-        Assert.Equal(1, printers.EnumerateCalls);
-
-        // 명시 재검색은 항상 다시 조회한다.
-        await vm.RefreshPrintersCommand.ExecuteAsync(null);
-        Assert.Equal(2, printers.EnumerateCalls);
-    }
-
-    [Fact]
-    public async Task Load_Does_Not_Double_Enumerate_On_Entry()
-    {
-        // LoadSettings가 토글 값을 심는 동안에도 훅이 발화한다 — 진입 열거가 두 번 일어나면 스풀러를 두 번 왕복한다.
-        var printers = new FakePrinterEnumerator().With("Canon SELPHY CP1500");
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin, printers: printers);
-
-        await vm.OnEnterAsync();
-        if (vm.PrinterEnumerationTask is { } t) await t;
-
-        Assert.Equal(1, printers.EnumerateCalls);
-    }
-
-    [Fact]
-    public async Task Saving_Does_Not_Retrigger_Enumeration()
-    {
-        // SaveSettings는 끝에서 LoadSettings로 클램프 값을 되읽는다 — 그 왕복이 열거를 다시 트리거하면 안 된다.
-        var printers = new FakePrinterEnumerator().With("Canon SELPHY CP1500");
-        var vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = true), UserRole.Admin, printers: printers);
-        await vm.OnEnterAsync();
-
         vm.SaveSettingsCommand.Execute(null);
-        if (vm.PrinterEnumerationTask is { } t) await t;
-
-        Assert.Equal(1, printers.EnumerateCalls);
     }
 
     // ══════════ 실 스풀러 스모크(§14 Step 5 수동 검증 ①의 자동화 형태) ══════════
@@ -687,8 +514,12 @@ public class SettingsViewModelDiscoveryTests
     /// 실제 <c>System.Printing</c> 열거가 <b>예외를 던지지 않는다</b>. 결과 개수는 머신 구성에 따라 다르므로
     /// 값을 단정하지 않는다 — 검증 대상은 "어떤 환경에서도 결과 객체로 끝난다"는 계약이다.
     /// <para>
-    /// 스풀러 중지 상태(P4)의 실측은 서비스 중지 권한이 필요해 이 스위트에서 다루지 않는다 —
-    /// 그 경로는 <see cref="FakePrinterEnumerator"/>의 <c>Succeeded=false</c>로 결정적으로 검증한다.
+    /// ★ it25 §12.4: 프린터 표면이 환원된 뒤에도 <b>존치</b>한다. 열거자는 소비자 0 스캐폴드이고,
+    /// 이 테스트가 그 스캐폴드의 "예외를 던지지 않는다" 계약이 인쇄 이터레이션까지 살아 있음을 잠근다.
+    /// </para>
+    /// <para>
+    /// 스풀러 중지 상태(P4)의 실측은 서비스 중지 권한이 필요해 여기서 다루지 않는다 — 그 경로와
+    /// P2≠P4 구분은 <c>ExternalDeviceScaffoldTests</c>가 <see cref="FakePrinterEnumerator"/>로 검증한다.
     /// </para>
     /// </summary>
     [Fact]
@@ -704,39 +535,5 @@ public class SettingsViewModelDiscoveryTests
         Assert.DoesNotContain(result.Printers, p => string.IsNullOrWhiteSpace(p.Name));
         // 기본 프린터는 최대 1대다(중복이면 "(기본)" 접미가 여러 줄에 붙어 오해를 만든다).
         Assert.True(result.Printers.Count(p => p.IsDefault) <= 1);
-    }
-
-    [Fact]
-    public async Task Printer_Enumeration_Is_Single_Flight()
-    {
-        // 열거 진행 중 상태는 서비스 호출 순간에만 관측 가능하므로 페이크 훅 안에서 스냅샷을 뜬다.
-        SettingsViewModel? vm = null;
-        bool enumeratingDuringCall = false;
-        bool canRefreshDuringCall = true;
-        string stateTextDuringCall = string.Empty;
-        int callsDuringReentry = 0;
-
-        var printers = new FakePrinterEnumerator().With("Canon SELPHY CP1500");
-        printers.OnEnumerate = () =>
-        {
-            enumeratingDuringCall = vm!.IsEnumeratingPrinters;
-            stateTextDuringCall = vm.PrinterStateText;   // P1 문구
-            canRefreshDuringCall = vm.RefreshPrintersCommand.CanExecute(null);
-            // 진행 중 재진입은 무시돼야 한다(스풀러를 두 번 왕복하지 않는다).
-            vm.RefreshPrintersCommand.Execute(null);
-            callsDuringReentry = printers!.EnumerateCalls;
-        };
-
-        vm = MakeVm(SettingsWith(s => s.PhotoPrinterEnabled = false), UserRole.Admin, printers: printers);
-        await vm.OnEnterAsync();
-
-        await vm.RefreshPrintersCommand.ExecuteAsync(null);
-
-        Assert.True(enumeratingDuringCall);
-        Assert.Equal(SettingsViewModel.PrinterEnumeratingText, stateTextDuringCall);   // P1
-        Assert.False(canRefreshDuringCall);
-        Assert.Equal(1, callsDuringReentry);      // 재진입 호출이 열거를 늘리지 않았다
-        Assert.Equal(1, printers.EnumerateCalls);
-        Assert.False(vm.IsEnumeratingPrinters);   // finally 확정
     }
 }

@@ -12,6 +12,20 @@ namespace MCPhoto.App.Services;
 /// <see cref="IPrinterEnumerator"/>의 Windows 구현(<c>System.Printing</c> — WPF 동반 어셈블리, 추가 패키지 없음).
 /// (it24 §7.2·§7.3)
 /// <para>
+/// ⚠️ <b>it25 A부: 프린터 표면 환원으로 프로덕션 소비자 0 — 의도된 스캐폴드다</b>(<c>NullPhotoPrinter</c>와 동일 지위).
+/// <b>삭제 금지.</b> DI 등록도 유지한다(상태 없는 Singleton이고 호출이 없으면 스풀러를 접촉하지 않는다) —
+/// 등록을 지우면 재배선 시 배선 실수가 날 표면이 늘어난다.
+/// </para>
+/// <para>
+/// <b>언제 되살리는가</b>: <b>인쇄 기능 이터레이션</b>에서 재개하며, 그때 it24 §7의 열거 판정(P1~P5)과
+/// 설정 화면의 프린터 하위 패널을 되살린다. 이 파일이 담고 있는 실측 결론은 그 시점에 그대로 재사용된다:
+/// ① <c>System.Printing</c>은 WindowsDesktop 참조팩에 동봉되어 <b>패키지 추가가 불요</b>하다(csproj 수정 0),
+/// ② 스풀러 중지·권한 등 어떤 예외도 "확인 불가"(<c>Succeeded=false</c>)로 강등되며 호출측으로 새지 않는다,
+/// ③ 기본 프린터 미설정 머신에서는 기본 프린터 조회가 실패할 수 있어 <b>null 가드</b>가 필요하다.
+/// 계약 테스트(<c>ExternalDeviceScaffoldTests</c> · <c>Real_Printer_Enumeration_Never_Throws</c>)가 이 결론을
+/// 계속 잠그므로, 소비자가 0이어도 <b>이 코드는 죽은 코드가 아니다</b>.
+/// </para>
+/// <para>
 /// 왜 WMI(<c>Win32_Printer</c>)가 아닌가: 미래의 실제 인쇄 구현이 쓸 스택과 같은 API로 열거하면
 /// "열거와 인쇄가 같은 진실을 본다" — 기본 프린터 식별도 <see cref="LocalPrintServer.DefaultPrintQueue"/>로
 /// 1급 지원된다. 열거만 WMI로 하면 나중에 두 진실이 갈린다.

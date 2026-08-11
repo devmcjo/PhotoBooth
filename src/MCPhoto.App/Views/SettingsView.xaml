@@ -532,6 +532,19 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="외부 카메라 사용" Style="{StaticResource RowLabel}" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <!-- W35: 지원 카메라 목록 진입.
+                                         ⚠️ 이 버튼은 **토글 행에 있고 하위 패널 밖에 있다**(팀리드 확정 — 설계 §7.4의
+                                            "하위 패널 안" 배치를 뒤집었다). 이 목록이 답하는 질문은 "내 카메라가
+                                            지원되나?"이고, 사용자는 그 답을 **외부 카메라를 켤지 결정하기 전에** 알고
+                                            싶어 한다. 토글 on일 때만 보이면 지원 여부를 몰라 아직 켜지 않은 사람이
+                                            목록에 도달할 수 없다 — 순서가 거꾸로다.
+                                         ⚠️ 이 프로젝트는 "상태 뒤에 UI를 숨겼다가" 두 번 지적받았다(게스트에게 섹션
+                                            Collapsed → "탭이 사라졌어", 프린터 토글 강제 Disable → "강제로 비활성화").
+                                            같은 실패를 세 번째로 재생산하지 않기 위해 Visibility 바인딩 밖에 둔다.
+                                         권한 게이트 없음 — 열람은 편집이 아니고 지원 모델은 비밀이 아니다. 글리프 금지. -->
+                                    <Button Content="지원 카메라 목록" Style="{StaticResource Button.Secondary}"
+                                            MinWidth="0" Padding="20,0" Margin="0,0,10,0"
+                                            Command="{Binding OpenSupportedCameraListCommand}" />
                                     <!-- 게스트: "로그인 필요"(IsGuest 트리거 내장 — 신규 키 없음). -->
                                     <TextBlock Style="{StaticResource GuestGateNote}" />
                                     <!-- 로그인했으나 편집 불가(TempUser)에게만 "권한 없음"(it24 §4.3).
@@ -554,20 +567,26 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <!-- it24 §6.1: 라벨을 "지원 모델"로 — 선택 가능한 것 = 이 앱이 SDK로 지원하는 것. -->
-                                    <TextBlock Grid.Column="0" Text="지원 모델" Style="{StaticResource RowLabel}" />
+                                    <!-- it25 §6: 라벨을 "인식된 카메라"로 — 콤보의 의미가 "지원 모델"에서
+                                         "연결이 인식된 카메라"로 바뀌었다. 지원 목록은 아래 [지원 카메라 목록]이 맡는다. -->
+                                    <TextBlock Grid.Column="0" Text="인식된 카메라" Style="{StaticResource RowLabel}" />
                                     <!-- ⚠️ SelectedIndex 금지, 값 기반 SelectedValue(it7 B9 사고 이력):
-                                         인덱스 바인딩은 목록이 채워지는 순간 저장값을 0으로 덮어쓴다. -->
+                                         인덱스 바인딩은 목록이 채워지는 순간 저장값을 0으로 덮어쓴다.
+                                         ⚠️ SelectedValue는 ini 미러(ExternalCameraModel)가 **아니다**(it25 §6.3):
+                                            직접 바인딩하면 인식 목록이 비는 순간 WPF가 매칭 실패한 값을 null로
+                                            되써서 운영자가 맞춰 둔 저장값이 소멸한다.
+                                         ⚠️ IsEnabled는 편집 게이트만 본다 — 인식이 0이어도 **열 수 있어야** 한다
+                                            (사용자 요구: "열어도 선택안함만 존재하면"). 빈 목록 Disable을 쓰지 않는다. -->
                                     <ComboBox Grid.Column="1" HorizontalAlignment="Right" Width="220"
-                                              ItemsSource="{Binding ExternalCameraModelOptions}"
-                                              DisplayMemberPath="DisplayName" SelectedValuePath="Id"
-                                              SelectedValue="{Binding ExternalCameraModel}"
+                                              ItemsSource="{Binding RecognizedCameraOptions}"
+                                              DisplayMemberPath="Display" SelectedValuePath="Value"
+                                              SelectedValue="{Binding RecognizedCameraSelection}"
                                               IsEnabled="{Binding CanEditExternalCamera}" />
                                 </Grid>
 
-                                <!-- W24: "지원 모델"과 "연결된 장치"를 섞지 않게 하는 구분 캡션(it24 R5).
-                                     사용자가 두 개념을 오해하지 않는 것이 이 문구의 유일한 목적이다. -->
-                                <TextBlock Text="이 앱이 SDK 연동을 지원하는 모델 목록입니다. 연결된 장치 목록이 아닙니다 — 연결 확인은 [장치 검색]."
+                                <!-- W33: 콤보의 의미를 고지한다(it24 W24를 대체 — 콤보가 지원 목록이 아니게 되어
+                                     "연결된 장치 목록이 아닙니다"가 거짓이 됐다). 두 개념의 도착지를 함께 안내한다. -->
+                                <TextBlock Text="연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원 카메라 목록]에서 확인하세요."
                                            Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
                                            TextWrapping="Wrap" Margin="0,0,0,8" />
 
@@ -674,62 +693,20 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="프린터 사용" Style="{StaticResource RowLabel}" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <!-- it24 §7.1: IsEnabled="False" 해제 → 외부 카메라와 같은 편집 게이트.
-                                         "추후 지원 예정" 캡션은 삭제하고 W25 상시 고지가 그 역할을 대신한다
-                                         (삭제가 아니라 정확화 — 실제 인쇄가 아직 없다는 사실은 계속 말한다). -->
-                                    <TextBlock Style="{StaticResource GuestGateNote}" />
-                                    <TextBlock Text="권한 없음" Style="{StaticResource Text.Caption}"
+                                    <!-- it25 §4.1: 프린터 표면 환원. 지원되는 항목이 하나도 없으므로 토글을
+                                         **하드코딩 Disable**로 되돌리고 W32 캡션이 그 이유를 말한다.
+                                         ⚠️ 게이트 노티(GuestGateNote·"권한 없음")를 붙이지 않는다 — 아무도 편집할 수
+                                            없는 컨트롤에 "로그인하면 되는가"를 암시하는 문구는 거짓 안내다.
+                                         ⚠️ 표시값은 ini 원값 그대로다(강제 off 표시 금지 원칙). 저장은 미기록이라
+                                            운영자가 ini에 켜 둔 값이 이 화면을 지나며 사라지지 않는다. -->
+                                    <TextBlock Text="추후 지원 예정" Style="{StaticResource Text.Caption}"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               VerticalAlignment="Center" Margin="0,0,10,0"
-                                               Visibility="{Binding IsExternalEditDenied, Converter={StaticResource BoolToVis}}" />
+                                               VerticalAlignment="Center" Margin="0,0,10,0" />
                                     <ToggleButton Style="{StaticResource Toggle}"
                                                   IsChecked="{Binding PhotoPrinterEnabled}"
-                                                  IsEnabled="{Binding CanEditExternalCamera}" />
+                                                  IsEnabled="False" />
                                 </StackPanel>
                             </Grid>
-
-                            <!-- 프린터 하위 패널: 토글 on일 때만(외부 카메라 하위 패널과 같은 구조). -->
-                            <StackPanel Visibility="{Binding PhotoPrinterEnabled, Converter={StaticResource BoolToVis}}">
-                                <!-- W25 상시 고지: 실제 인쇄가 없다는 사실을 화면이 계속 말한다.
-                                     이 문구가 없으면 "선택했으니 인쇄되겠지"라는 오해가 생긴다 — 그 오해를 막는 한
-                                     "미리 골라 두기"는 거짓이 아니라 준비다(노출값 선행 입력과 같은 워크플로). -->
-                                <TextBlock Text="인쇄 기능은 아직 제공되지 않습니다. 선택한 프린터는 인쇄 기능이 추가되면 사용됩니다."
-                                           Style="{StaticResource Text.Caption}" Foreground="{StaticResource Brush.Text.Muted}"
-                                           TextWrapping="Wrap" Margin="0,0,0,8" />
-
-                                <Grid Style="{StaticResource SettingRow}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="프린터" Style="{StaticResource RowLabel}" />
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                        <!-- ⚠️ 편집 게이트는 **컨테이너**에 건다: 콤보 자신의 IsEnabled는 목록 유무
-                                             (HasPrinters)를 표현해야 하므로, 권한 게이트는 부모가 소유한다.
-                                             부모가 Disable이면 자식은 어떤 값이어도 활성화될 수 없다(노출 3행과 같은 기법).
-                                             [다시 검색]은 더 넓은 게이트(IsLoggedIn — 진단 성격)를 쓰므로 이 컨테이너 밖이다. -->
-                                        <StackPanel Orientation="Horizontal" IsEnabled="{Binding CanEditExternalCamera}">
-                                            <!-- ⚠️ 값 기반 선택(it7 B9). 표시는 Display(기본/설치 확인 필요 접미),
-                                                 저장 키는 Name 원문이다 — 가공 문자열을 저장하면 다음 실행에서 못 찾는다. -->
-                                            <ComboBox Width="300"
-                                                      ItemsSource="{Binding PrinterOptions}"
-                                                      DisplayMemberPath="Display" SelectedValuePath="Name"
-                                                      SelectedValue="{Binding PhotoPrinterName}"
-                                                      IsEnabled="{Binding HasPrinters}" />
-                                        </StackPanel>
-                                        <!-- W31 -->
-                                        <Button Content="다시 검색" Style="{StaticResource Button.Secondary}"
-                                                MinWidth="0" Padding="20,0" Margin="10,0,0,0"
-                                                Command="{Binding RefreshPrintersCommand}" />
-                                    </StackPanel>
-                                </Grid>
-
-                                <!-- 상태 문구(P1/P2/P4)만 노출. P3·P5(정상 목록)에서는 빈 값이라 Collapsed다. -->
-                                <TextBlock Text="{Binding PrinterStateText}" Style="{StaticResource Text.Caption}"
-                                           Foreground="{StaticResource Brush.Text.Muted}"
-                                           TextWrapping="Wrap" Margin="0,0,0,8"
-                                           Visibility="{Binding HasPrinterStateText, Converter={StaticResource BoolToVis}}" />
-                            </StackPanel>
                         </StackPanel>
 
                         <Border Style="{StaticResource GroupDivider}" />
@@ -995,6 +972,75 @@
                             </StackPanel>
                         </StackPanel>
                     </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ══════════ 지원 카메라 목록 오버레이 (it25 §7) ══════════
+             왜 별도 Window가 아닌가: headless 테스트가 Window를 인스턴스화할 수 없어 XAML 회귀(바인딩
+             오타·리소스 키)를 잡을 수 없다 — 라이선스 고지 오버레이와 같은 논거이며 컨테이너 구조도 같다.
+             ⚠️ Grid.RowSpan="2" — sticky 저장/닫기 바까지 덮어야 모달이 된다.
+             ⚠️ 신규 테마 리소스 키 0개(병합 딕셔너리 교차 참조 함정 회피). 그룹 헤더 굵기는 인라인
+                FontWeight로 준다 — 스타일 키를 새로 만들지 않는다.
+             ⚠️ 이 목록은 "지원"이고 콤보는 "인식"이다. 두 개념의 경계를 W37이 화면에서 직접 말한다. -->
+        <Grid Grid.RowSpan="2" Background="{StaticResource Brush.Scrim}"
+              AutomationProperties.Name="지원 카메라"
+              Visibility="{Binding IsSupportedCameraListOpen, Converter={StaticResource BoolToVis}}">
+            <Border Style="{StaticResource Card}" Background="{StaticResource Brush.Bg}"
+                    Effect="{StaticResource Shadow.Pop}" MaxWidth="640" Margin="40">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <!-- W36 -->
+                        <TextBlock Text="지원 카메라" Style="{StaticResource Text.H2}" />
+                        <!-- W37 -->
+                        <TextBlock Text="이 앱이 SDK 연동을 지원하는 카메라 목록입니다. 연결 인식 여부와는 무관합니다 — 연결 확인은 [장치 검색]."
+                                   Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Height="1" Background="{StaticResource Brush.Divider}"
+                            Margin="0,16,0,16" />
+
+                    <!-- 모델 수가 늘어도 카드가 화면을 넘지 않게 세로 스크롤을 준다(창모드 하한 800×600 대비). -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding SupportedCameraGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="{Binding Manufacturer}" Style="{StaticResource Text.Body}"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Models}" Margin="16,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding}" Style="{StaticResource Text.Body}"
+                                                               TextWrapping="Wrap" Margin="0,0,0,2" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- 하단 액션 바(설정·진단·라이선스와 동일 패턴): 구분선 + 중앙 정렬 + 버튼 간 Margin 8,0.
+                         스타일 그대로 쓰고 Padding·MinWidth를 개별로 덮지 않는다. 라벨에 글리프 금지. -->
+                    <StackPanel Grid.Row="3" Margin="0,20,0,0">
+                        <Border Height="1" Background="{StaticResource Brush.Divider}" Margin="0,0,0,16" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <!-- W39 -->
+                            <Button Content="닫기" Style="{StaticResource Button.Ghost}"
+                                    Command="{Binding CloseSupportedCameraListCommand}" Margin="8,0" />
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

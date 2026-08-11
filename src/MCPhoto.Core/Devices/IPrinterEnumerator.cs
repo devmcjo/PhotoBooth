@@ -31,6 +31,29 @@ public sealed record PrinterEnumerationResult(bool Succeeded, IReadOnlyList<Inst
 /// <summary>
 /// 설치 프린터 열거 계약. (it24 §7.3)
 /// <para>
+/// ⚠️ <b>it25 A부: 프린터 표면 환원으로 프로덕션 소비자 0 — 의도된 스캐폴드다</b>(<c>IPhotoPrinter</c>와 동일 지위).
+/// <b>삭제 금지.</b>
+/// </para>
+/// <para>
+/// <b>왜 남겼는가</b>: it24 Step 5가 <b>장비 없이 실측으로 해소한 사실 3건</b>이 이 계약과 그 구현·테스트에
+/// 굳어 있다. 지우면 인쇄 기능 이터레이션에서 같은 검증을 처음부터 다시 치른다.
+/// <list type="number">
+/// <item><c>System.Printing</c>은 <b>WindowsDesktop 참조팩에 동봉</b>되어 있다 — <c>net8.0-windows</c> +
+///       <c>UseWPF</c> 프로젝트에서 <b>패키지·참조 추가가 불요</b>하다(csproj 수정 0).</item>
+/// <item>스풀러 서비스가 중지된 상태에서도 <b>예외가 호출측으로 새지 않는다</b> — "확인할 수 없다"
+///       (<see cref="PrinterEnumerationResult.Succeeded"/>=false)로 강등된다.</item>
+/// <item>기본 프린터가 설정되지 않은 머신에서 기본 프린터 조회가 실패할 수 있어 <b>null 가드</b>가 필요하다
+///       (그 경우 "(기본)" 접미만 빠지고 목록은 정상이다).</item>
+/// </list>
+/// </para>
+/// <para>
+/// <b>언제 되살리는가</b>: <b>인쇄 기능 이터레이션</b>에서 재개한다. 그때 it24 §7의 열거 판정(P1~P5 —
+/// 열거 중 / 성공·0대 / 정상 목록 / 열거 실패 / 저장값 합성 행)과 설정 화면 하위 패널을 되살리고,
+/// 실제 출력은 <c>IPhotoPrinter.PrintAsync</c>에 배선한다. 그 시점까지 이 계약의 "예외를 던지지 않는다"·
+/// "P2≠P4" 규약은 <b>계약 테스트가 계속 잠근다</b>(<c>ExternalDeviceScaffoldTests</c> ·
+/// <c>Real_Printer_Enumeration_Never_Throws</c>) — 그 테스트가 스캐폴드가 살아 있다는 증명이다.
+/// </para>
+/// <para>
 /// <c>IPhotoPrinter</c>(인쇄)와 <b>별개의 계약</b>인 이유: 그쪽은 "출력"을, 이쪽은 "목록"을 다룬다.
 /// 이번 이터레이션은 열거·선택·저장까지이고 실제 인쇄는 명시적 비목표이므로, 두 관심사를 한 인터페이스에
 /// 묶으면 "선택했으니 인쇄되겠지"라는 오해가 계약 수준으로 굳는다.

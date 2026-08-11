@@ -270,12 +270,19 @@ public class SettingsViewModelTests
         Assert.True(r.FilterBeauty);
     }
 
-    // ── item3 스캐폴드: 외부 장치 placeholder(로그인 전용 편집, 저장만·실기능 미배선) ──
+    // ── 외부 장치: 카메라는 실배선 저장, 프린터는 "추후 지원 예정" 미기록(it25 §4.1) ──
 
+    /// <summary>
+    /// it25 재작성: 종전에는 두 토글이 <b>같이</b> 저장됐다(item3 placeholder 규약). 프린터 표면 환원 후에는
+    /// <b>갈라진다</b> — 외부 카메라는 편집 권한이 있으면 기록되고, 프린터는 <b>어느 역할에서도 미기록</b>이다.
+    /// <para>
+    /// 두 토글을 한 단정으로 묶어 두면 "프린터 저장이 살아났다"는 회귀를 이 테스트가 통과시킨다 —
+    /// 그래서 방향을 명시적으로 갈라 놓는다(미기록 = ini 원값 보존, §4.3).
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task LoggedIn_Saves_External_Device_Placeholders()
+    public async Task LoggedIn_Saves_External_Camera_But_Never_Printer()
     {
-        // 로그인 사용자는 외부 장치 placeholder 값을 저장·복원할 수 있어야(왕복). UI에선 Disable이지만 저장 경로는 게이트만 검증.
         var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
         var vm = MakeLoggedInVm(settings: settings);
         await vm.OnEnterAsync();
@@ -284,12 +291,12 @@ public class SettingsViewModelTests
         Assert.False(vm.PhotoPrinterEnabled);
 
         vm.ExternalCameraEnabled = true;
-        vm.PhotoPrinterEnabled = true;
+        vm.PhotoPrinterEnabled = true;          // 편집 불가 컨트롤이지만 VM 속성은 뒤집을 수 있다
         vm.SaveSettingsCommand.Execute(null);
 
         var r = new IniSettingsService(iniPath: settings.IniPath).Load();
         Assert.True(r.ExternalCameraEnabled);
-        Assert.True(r.PhotoPrinterEnabled);
+        Assert.False(r.PhotoPrinterEnabled);    // ★ 미기록 → ini 원값(false) 유지
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Build;
+using MCPhoto.Core.Devices;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -246,6 +247,22 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     public static string FormatTestModeBanner(string roleLabel, string email) =>
         $"⚠ 테스트 모드 — 인증 없이 {roleLabel} 권한으로 실행 중입니다. 실제 운영에 사용하지 마세요. ({email})";
 
+    /// <summary>
+    /// 배너 접미 — 외부 카메라 표시 시뮬레이션이 <b>실제로 적용되는 세션</b>일 때만 붙는다(it25).
+    /// <para>
+    /// 왜 필요한가: 시뮬레이션이 켜지면 설정 화면은 "연결 확인됨"인데 촬영은 SDK 부재로 웹캠 강등한다.
+    /// 그 <b>의도된 간극</b>을 설정 화면 밖(촬영·결과 화면)에서도 설명해 줄 표식이 필요하다.
+    /// </para>
+    /// </summary>
+    public static string FormatExternalCameraSimulationSuffix(string modelLabel) =>
+        $" · 외부 카메라 시뮬레이션({modelLabel})";
+
+    /// <summary>
+    /// 시뮬레이션이 켜졌으나 인식된 모델이 없을 때의 라벨(<c>ExternalCameraType=-1</c>).
+    /// 빈 괄호를 남기지 않는다 — "시뮬레이션()"은 무엇이 켜졌는지 말하지 못한다.
+    /// </summary>
+    public const string ExternalCameraSimulationNoneLabel = "인식된 장치 없음";
+
     /// <summary>현재 상태에 맞는 배너 문구. 테스트 모드가 꺼져 있으면 빈 문자열(배너 자체가 Collapsed).</summary>
     public string TestModeBannerText
     {
@@ -255,8 +272,29 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
             var user = CurrentUser;
             if (user is null) return TestModeBannerLoggedOut;
             if (!_testMode.IsTestUser(user)) return TestModeBannerRealAccount;
-            return FormatTestModeBanner(user.Role.ToLabel(), user.Email ?? string.Empty);
+            // ⚠️ 접미는 **이 갈래에만** 붙는다(테스트 계정 세션). 위 두 갈래(로그아웃·실계정)에 붙이면
+            //    시뮬레이션이 적용되지 않는 상태에서 "시뮬레이션 중"이라고 말하는 **거짓 배너**가 된다 —
+            //    시뮬레이션 게이트가 IsTestUser(참조 동일성)이므로 배너 조건도 같아야 한다(TS2).
+            return FormatTestModeBanner(user.Role.ToLabel(), user.Email ?? string.Empty)
+                 + ExternalCameraSimulationSuffix();
         }
+    }
+
+    /// <summary>
+    /// 시뮬레이션 접미 계산. 판정을 <see cref="ExternalCameraSimulation.Plan"/>(순수 함수)에 위임하는 이유:
+    /// 여기서 <c>Options.ExternalCamera</c>를 직접 읽으면 "시뮬레이션이 켜졌는가"의 판정이 **두 곳**이 되고,
+    /// 배너가 "시뮬레이션 중"이라고 말하는데 설정 화면은 실관측을 하는 어긋남이 생길 수 있다.
+    /// <para>
+    /// ⚠️ 이 메서드는 <b>표시 전용</b>이다 — 관측을 대체하지 않고 어떤 장치 경로에도 계획을 넘기지 않는다
+    /// (불변식 TS1은 "관측 대체 분기"에 대한 제약이며, 이 호출은 문자열 하나를 만든다).
+    /// </para>
+    /// </summary>
+    private string ExternalCameraSimulationSuffix()
+    {
+        var plan = ExternalCameraSimulation.Plan(_testMode?.Options ?? TestModeOptions.Disabled);
+        if (plan is null) return string.Empty;
+        return FormatExternalCameraSimulationSuffix(
+            plan.Model?.DisplayName ?? ExternalCameraSimulationNoneLabel);
     }
 
     /// <summary>로그인 화면의 [테스트 계정으로 로그인 ({역할})] 라벨. 테스트 모드가 꺼져 있으면 빈 문자열.</summary>

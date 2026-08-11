@@ -162,4 +162,48 @@ public class ExternalDeviceScaffoldTests
         // 목록만 보면 두 상태는 구분되지 않는다 — Succeeded가 그 구분을 담는 유일한 자리다.
         Assert.NotEqual(failed, emptySuccess);
     }
+
+    // ══════════ it25 §12.3·§12.4: R4 구분·예외 무투과 단정의 **계약 계층 이관** ══════════
+    //
+    // it24는 이 두 명제를 설정 VM 수준에서 잠갔다(P2/P4 문구·E17 강등). it25에서 프린터 표면이
+    // 환원되어 VM 단정은 성립하지 않지만, **단정을 지우면 회귀를 못 잡는다** — 그래서 같은 사실을
+    // 열거자 계약 계층에서 잠근다. 인쇄 이터레이션이 재배선할 때 이 계약이 살아 있어야 한다.
+
+    /// <summary>
+    /// ★ 열거자 소비자는 "성공·0대"(P2)와 "실패"(P4)를 <b>결과 객체만으로</b> 구분할 수 있어야 한다.
+    /// 두 상태의 조치가 다르다(프린터 재연결 vs 인쇄 스풀러 서비스 시작).
+    /// </summary>
+    [Fact]
+    public async Task Enumerator_Contract_Distinguishes_Empty_Success_From_Failure()
+    {
+        var empty = await new Fakes.FakePrinterEnumerator().EnumerateAsync();
+        Assert.True(empty.Succeeded);
+        Assert.Empty(empty.Printers);
+
+        var failed = await new Fakes.FakePrinterEnumerator { Succeeded = false }.EnumerateAsync();
+        Assert.False(failed.Succeeded);
+        Assert.Empty(failed.Printers);
+    }
+
+    /// <summary>
+    /// ★ 실 구현은 <b>예외를 결과로 바꾼다</b>(계약: "실패는 예외가 아니라 결과값"). 스풀러 중지·권한
+    /// 부족 등 어떤 내부 예외여도 P4로 강등되며, 빈 목록(P2)으로 뭉개지지 않는다.
+    /// <para>
+    /// 실 스풀러가 살아 있는 머신에서는 성공 경로가 관측되므로, 여기서 단정하는 것은 "예외가 호출측으로
+    /// 새지 않는다"와 "실패 시 Succeeded=false"의 두 가지다. 후자는 페이크로만 결정적으로 재현된다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Enumerator_Contract_Never_Lets_Exceptions_Escape()
+    {
+        // 계약을 어기고 던지는 구현이 있어도, 그 사실이 타입으로 드러나야 한다(소비자가 감쌀 근거).
+        var rogue = new Fakes.FakePrinterEnumerator { Throws = new InvalidOperationException("스풀러 붕괴") };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => rogue.EnumerateAsync());
+
+        // 실 구현(System.Printing)은 내부 예외를 삼켜 결과 객체로 끝낸다.
+        IPrinterEnumerator real = new MCPhoto.App.Services.SystemPrinterEnumerator();
+        var result = await real.EnumerateAsync();
+        Assert.NotNull(result);
+        Assert.NotNull(result.Printers);
+    }
 }

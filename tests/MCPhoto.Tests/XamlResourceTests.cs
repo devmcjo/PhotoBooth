@@ -592,7 +592,9 @@ public class XamlResourceTests
 
         foreach (var member in new[]
                  {
-                     "ExternalCameraEnabled", "ExternalCameraModel", "ExternalCameraModelOptions",
+                     // it25 §6: "지원 모델" 콤보가 "인식된 카메라" 콤보로 전환됐다 —
+                     //          ItemsSource=RecognizedCameraOptions · SelectedValue=RecognizedCameraSelection.
+                     "ExternalCameraEnabled", "RecognizedCameraOptions", "RecognizedCameraSelection",
                      "CanEditExternalCamera", "ExposureParameters", "HasExposureDomain",
                  })
         {
@@ -601,14 +603,22 @@ public class XamlResourceTests
             Assert.NotNull(vm.GetProperty(member));
         }
 
+        // ★ ini 미러(ExternalCameraModel)는 **콤보에 직접 바인딩되지 않는다**(it25 §6.3):
+        //   직접 바인딩하면 인식 목록이 비는 순간 WPF가 저장값을 null로 되써서 소멸시킨다.
+        //   VM 속성 자체는 남아 있어야 한다(저장·md3 경로·USB 키워드의 기준값).
+        Assert.NotNull(vm.GetProperty("ExternalCameraModel"));
+        Assert.DoesNotMatch(@"\{Binding\s+ExternalCameraModel\s*[,}]", text);
+
         // 노출 행 DataTemplate이 참조하는 멤버는 행 VM(ExposureParameterViewModel)에 있다.
         var row = typeof(MCPhoto.App.ViewModels.ExposureParameterViewModel);
         foreach (var member in new[] { "Label", "MaxIndex", "SelectedIndex", "Text", "Hint", "HasHint", "IsDomainAvailable" })
             Assert.NotNull(row.GetProperty(member));
 
-        // 모델 콤보는 값 기반이어야 한다(it7 B9: SelectedIndex 바인딩은 저장값을 0으로 덮어쓴다).
-        Assert.Contains("SelectedValuePath=\"Id\"", text);
+        // 인식 콤보는 값 기반이어야 한다(it7 B9: SelectedIndex 바인딩은 저장값을 0으로 덮어쓴다).
+        Assert.Contains("SelectedValuePath=\"Value\"", text);
         Assert.DoesNotContain("SelectedIndex=\"{Binding", text);
+        Assert.NotNull(typeof(MCPhoto.App.ViewModels.RecognizedCameraOption).GetProperty("Value"));
+        Assert.NotNull(typeof(MCPhoto.App.ViewModels.RecognizedCameraOption).GetProperty("Display"));
 
         // "(추후 지원)" 딱지는 외부 카메라에서 떼어졌다(프린터 행 문구는 유지).
         Assert.DoesNotContain("외부 장치 (추후 지원)", text);
@@ -627,7 +637,7 @@ public class XamlResourceTests
     // 설계: docs/design/wpf-it24-external-device-discovery-design.md §8
 
     /// <summary>
-    /// T-X1' — 개편 섹션이 참조하는 VM 멤버가 전부 실재한다.
+    /// T-X1'' — 개편 섹션·오버레이가 참조하는 VM 멤버가 전부 실재한다.
     /// 바인딩 경로 오타는 <b>예외 없이 조용히 실패</b>하므로(빈 문구·영구 비활성 버튼) 빌드가 잡지 못한다.
     /// </summary>
     [Fact]
@@ -639,25 +649,41 @@ public class XamlResourceTests
         foreach (var member in new[]
                  {
                      "IsExternalEditDenied", "IsDiscovering", "DiscoveryHeadline", "DiscoveryDetailLines",
-                     "PrinterOptions", "PhotoPrinterName", "HasPrinters", "PrinterStateText", "HasPrinterStateText",
+                     // it25: 프린터는 토글 표시값 하나만 남았고, 지원 카메라 오버레이가 신설됐다.
+                     "PhotoPrinterEnabled", "IsSupportedCameraListOpen", "SupportedCameraGroups",
                  })
         {
             Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", text);
             Assert.NotNull(vm.GetProperty(member));
         }
 
-        foreach (var command in new[] { "DiscoverExternalCameraCommand", "RefreshPrintersCommand" })
+        foreach (var command in new[]
+                 {
+                     "DiscoverExternalCameraCommand",
+                     "OpenSupportedCameraListCommand", "CloseSupportedCameraListCommand",
+                 })
         {
             Assert.Matches(@"\{Binding\s+" + command + @"\s*[,}]", text);
             Assert.NotNull(vm.GetProperty(command));
         }
 
-        // 프린터 콤보는 값 기반이어야 한다(it7 B9: 인덱스 바인딩은 목록 채움이 저장값을 0번으로 덮는다).
-        // 표시는 가공 문자열(Display), 저장 키는 원문(Name) — 뒤바뀌면 다음 실행에서 프린터를 못 찾는다.
-        Assert.Contains("SelectedValuePath=\"Name\"", text);
-        Assert.Contains("DisplayMemberPath=\"Display\"", text);
-        Assert.NotNull(typeof(MCPhoto.App.ViewModels.PrinterOptionItem).GetProperty("Name"));
-        Assert.NotNull(typeof(MCPhoto.App.ViewModels.PrinterOptionItem).GetProperty("Display"));
+        // 오버레이의 그룹 템플릿이 참조하는 멤버는 그룹 레코드에 있다(제조사 헤더 + 모델 행).
+        var group = typeof(MCPhoto.App.ViewModels.SupportedCameraGroup);
+        Assert.NotNull(group.GetProperty("Manufacturer"));
+        Assert.NotNull(group.GetProperty("Models"));
+        Assert.Matches(@"\{Binding\s+Manufacturer\s*[,}]", text);
+        Assert.Matches(@"\{Binding\s+Models\s*[,}]", text);
+
+        // ★ it25 §4.1: 프린터 열거 표면이 되살아나지 않았는지 고정한다(멤버·바인딩 모두 부재).
+        foreach (var removed in new[]
+                 {
+                     "PrinterOptions", "PhotoPrinterName", "HasPrinters",
+                     "PrinterStateText", "HasPrinterStateText", "RefreshPrintersCommand",
+                 })
+        {
+            Assert.Null(vm.GetProperty(removed));
+            Assert.DoesNotMatch(@"\{Binding\s+" + removed + @"\s*[,}]", text);
+        }
     }
 
     /// <summary>
@@ -681,28 +707,66 @@ public class XamlResourceTests
         // 편집 게이트 자체는 살아 있어야 한다(보이되 읽기 전용).
         Assert.Contains(@"IsEnabled=""{Binding CanEditExternalCamera}""", text);
 
-        // 섹션 안의 **모든 토글**이 편집 게이트를 달고 있다 — 가시성을 연 대가로 편집이 새면
-        // 게스트·TempUser가 장비 구성을 바꿔 [저장]을 누를 수 있게 된다(저장은 미기록이라 성공 오인이 된다).
+        // 섹션 안의 토글은 정확히 2개이며 각각의 게이트가 다르다(it25 §4.1):
+        //   ① 외부 카메라 = 편집 게이트(CanEditExternalCamera) — 보이되 권한 없으면 잠긴다.
+        //   ② 프린터      = 하드코딩 Disable — 지원되는 항목이 하나도 없어 아무도 편집할 수 없다.
+        // 둘을 뒤섞으면 "로그인하면 프린터를 고를 수 있는가"라는 거짓 안내가 생긴다.
         int start = text.IndexOf(@"Text=""외부 장치""", StringComparison.Ordinal);
         int end = text.IndexOf(@"Text=""고급""", StringComparison.Ordinal);
         Assert.True(start > 0 && end > start, "외부 장치 섹션 경계를 찾지 못함");
-        // ⚠️ 주석을 먼저 제거한다 — 이 섹션의 주석이 "왜 IsEnabled=False를 뗐는가"를 설명하므로,
+        // ⚠️ 주석을 먼저 제거한다 — 이 섹션의 주석이 게이트 변경 이력을 설명하므로,
         //    제거하지 않으면 검사가 자기 자신의 설명문에 걸린다(Nikon csproj 경계 검사와 같은 기법).
         var body = Regex.Replace(text[start..end], @"<!--.*?-->", string.Empty, RegexOptions.Singleline);
 
         var toggles = Regex.Matches(body, @"<ToggleButton\b.*?/>", RegexOptions.Singleline);
-        Assert.True(toggles.Count >= 2, $"외부 장치 섹션의 토글이 2개 미만이다(발견 {toggles.Count}개)");
-        foreach (Match toggle in toggles)
-        {
-            Assert.Contains(@"IsEnabled=""{Binding CanEditExternalCamera}""", toggle.Value);
-        }
+        Assert.Equal(2, toggles.Count);
 
-        // 하드코딩 Disable(구 프린터 토글)이 남아 있지 않다 — 그것이 이번 피드백의 원인 문구였다.
-        Assert.DoesNotContain(@"IsEnabled=""False""", body);
+        var cameraToggle = toggles.Single(t => t.Value.Contains(@"{Binding ExternalCameraEnabled}", StringComparison.Ordinal));
+        Assert.Contains(@"IsEnabled=""{Binding CanEditExternalCamera}""", cameraToggle.Value);
+
+        var printerToggle = toggles.Single(t => t.Value.Contains(@"{Binding PhotoPrinterEnabled}", StringComparison.Ordinal));
+        Assert.Contains(@"IsEnabled=""False""", printerToggle.Value);
+        // 편집 게이트를 프린터에 달면 "권한이 있으면 된다"는 오해가 생긴다 — 그것이 it25가 되돌린 부분이다.
+        Assert.DoesNotContain(@"IsEnabled=""{Binding CanEditExternalCamera}""", printerToggle.Value);
     }
 
     /// <summary>
-    /// 동결 문구(§8.2 W15·W24·W25·W31)가 XAML에 그대로 있고, 대체된 placeholder 문구는 사라졌다.
+    /// ★ [지원 카메라 목록] 버튼이 <b>외부 카메라 토글의 Visibility 뒤에 숨지 않는다</b>(팀리드 확정 —
+    /// 설계 §7.4의 "하위 패널 안" 배치를 뒤집었다).
+    /// <para>
+    /// 이 목록이 답하는 질문은 "내 카메라가 지원되나?"이고, 사용자는 그 답을 <b>토글을 켤지 결정하기 전에</b>
+    /// 알고 싶어 한다. 하위 패널 안에 두면 지원 여부를 몰라 아직 켜지 않은 사람이 목록에 도달할 수 없다.
+    /// 이 프로젝트는 "상태 뒤에 UI를 숨겼다가" 두 번 지적받았으므로(게스트 섹션 Collapsed · 프린터 토글
+    /// 강제 Disable) 배치를 위치 단정으로 못박는다 — 주석만 두면 다음 사람이 다시 하위 패널로 옮긴다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SettingsView_Supported_Camera_Button_Is_Outside_Toggle_Gated_Panel()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+
+        int sectionStart = text.IndexOf(@"Text=""외부 장치""", StringComparison.Ordinal);
+        int button = text.IndexOf("OpenSupportedCameraListCommand", StringComparison.Ordinal);
+        // 토글 on일 때만 노출되는 하위 패널의 여는 태그.
+        int gatedPanel = text.IndexOf(
+            @"<StackPanel Visibility=""{Binding ExternalCameraEnabled, Converter={StaticResource BoolToVis}}"">",
+            StringComparison.Ordinal);
+
+        Assert.True(sectionStart > 0, "외부 장치 섹션을 찾지 못함");
+        Assert.True(button > 0, "[지원 카메라 목록] 버튼 바인딩을 찾지 못함");
+        Assert.True(gatedPanel > 0, "외부 카메라 하위 패널(Visibility 게이트)을 찾지 못함");
+
+        // 섹션 안에 있고, **게이트 패널이 열리기 전에** 있어야 한다(= 토글 off에서도 보인다).
+        Assert.InRange(button, sectionStart, gatedPanel);
+
+        // 권한 게이트도 붙지 않는다(열람은 편집이 아니다) — 버튼 요소 자체에 IsEnabled가 없어야 한다.
+        var element = Regex.Match(text[button..], @"^[^>]*>", RegexOptions.Singleline);
+        Assert.True(element.Success);
+        Assert.DoesNotContain("IsEnabled", element.Value);
+    }
+
+    /// <summary>
+    /// 동결 문구(it24 §8.2 W15 + it25 §8.3 W32~W39)가 XAML에 그대로 있고, 폐기된 문구는 사라졌다.
     /// 문구가 바뀌면 운영 문서·테스트와 어긋나므로 텍스트로 고정한다.
     /// </summary>
     [Fact]
@@ -710,17 +774,27 @@ public class XamlResourceTests
     {
         var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
 
-        Assert.Contains("장치 검색", text);                                        // W15
-        Assert.Contains("다시 검색", text);                                        // W31
-        Assert.Contains("이 앱이 SDK 연동을 지원하는 모델 목록입니다. 연결된 장치 목록이 아닙니다", text);   // W24
-        Assert.Contains("인쇄 기능은 아직 제공되지 않습니다. 선택한 프린터는 인쇄 기능이 추가되면 사용됩니다.", text); // W25
-        Assert.Contains(@"Text=""지원 모델""", text);                              // §6.1 라벨 변경
+        Assert.Contains("장치 검색", text);                                        // W15 (유지)
+        Assert.Contains(@"Text=""추후 지원 예정""", text);                          // W32 (신설)
+        Assert.Contains("연결이 인식된 카메라만 표시됩니다. 인식 확인은 [장치 검색], 지원 모델은 [지원 카메라 목록]에서 확인하세요.", text);   // W33
+        Assert.Contains(@"Content=""지원 카메라 목록""", text);                     // W35
+        Assert.Contains(@"Text=""지원 카메라""", text);                             // W36
+        Assert.Contains("이 앱이 SDK 연동을 지원하는 카메라 목록입니다. 연결 인식 여부와는 무관합니다 — 연결 확인은 [장치 검색].", text);   // W37
+        Assert.Contains(@"Text=""인식된 카메라""", text);                           // §8.1 라벨 변경
 
-        // "추후 지원 예정" 딱지는 W25가 대체했다 — 남아 있으면 "강제로 비활성화된 설정"이라는 피드백이 재생산된다.
-        // ⚠️ 표시되는 형태(Text 속성)만 검사한다 — 주석의 변경 이력 서술까지 금지하면 설명을 지워야 한다.
-        Assert.DoesNotContain(@"Text=""추후 지원 예정""", text);
-        // 프린터 토글의 하드코딩 Disable도 사라졌다.
-        Assert.DoesNotContain(@"IsChecked=""{Binding PhotoPrinterEnabled}"" IsEnabled=""False""", text);
+        // ★ it25 §8.3 폐기 목록: 콤보의 의미가 지원→인식으로 바뀌어 W24가 거짓이 됐고,
+        //   프린터 하위 패널이 사라져 W25·W31이 갈 곳이 없다. 되살아나면 화면이 거짓을 말한다.
+        // ⚠️ 주석을 먼저 제거한다 — 이 파일의 주석이 "어떤 문구가 왜 폐기됐는가"를 인용하며 설명하므로,
+        //    제거하지 않으면 검사가 자기 자신의 설명문에 걸린다(게스트 가시성 검사와 같은 기법).
+        var rendered = Regex.Replace(text, @"<!--.*?-->", string.Empty, RegexOptions.Singleline);
+        Assert.DoesNotContain("연결된 장치 목록이 아닙니다", rendered);              // W24 폐기
+        Assert.DoesNotContain("인쇄 기능은 아직 제공되지 않습니다", rendered);       // W25 폐기
+        Assert.DoesNotContain(@"Content=""다시 검색""", rendered);                   // W31 폐기
+        Assert.DoesNotContain(@"Text=""지원 모델""", rendered);
+
+        // W34는 VM 상수다(sentinel 항목 표시명) — XAML에 하드코딩되면 두 곳이 갈린다.
+        Assert.Equal("- 선택안함 -", MCPhoto.App.ViewModels.SettingsViewModel.RecognizedCameraNoneDisplay);
+        Assert.DoesNotContain("- 선택안함 -", rendered);
     }
 
     /// <summary>

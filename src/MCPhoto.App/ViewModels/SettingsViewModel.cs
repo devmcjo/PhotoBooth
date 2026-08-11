@@ -37,10 +37,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     private readonly ILicenseNoticeService? _licenseNotice;
     /// <summary>
-    /// 설치 프린터 열거(it24 §7.3). 미주입(null)이면 열거가 "확인할 수 없습니다"(P4)로 축퇴한다 —
-    /// "설치된 프린터가 없습니다"(P2)로 뭉개지 않는다(R4: 서비스 부재는 부재의 근거가 아니다).
+    /// 테스트 모드 판정(it25 §5.5). <b>시뮬레이션 분기의 유일한 입력</b>이며 이 화면의 검색 시퀀스
+    /// 한 곳에서만 읽는다(불변식 TS1). 미주입(null)이면 시뮬레이션이 아예 성립하지 않는다.
+    /// <para>
+    /// ⚠️ 분기 조건은 <c>IsTestUser</c>(참조 동일성)를 통과해야 한다(TM3·TS2). <c>IsEnabled</c> 단독으로
+    /// 분기하면 테스트 ini를 켜 둔 채 <b>실계정으로 로그인한 운영자</b>가 가짜 "연결 확인됨"을 보고
+    /// 실장비 진단을 그르친다.
+    /// </para>
     /// </summary>
-    private readonly IPrinterEnumerator? _printers;
+    private readonly ITestModeService? _testMode;
     /// <summary>
     /// PnP 휴대용 장치 이름 조회 이음새(it24 §5.1 ③). 기본값은 실제 WMI 프로브다.
     /// <para>
@@ -75,8 +80,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _hostingBaseUrl = string.Empty;
     [ObservableProperty] private int _cameraDevice;
     // it23: 외부 카메라는 실배선(촬영 세션이 이 값을 읽는다).
-    // it24: 프린터도 placeholder를 벗었다 — 열거·선택·저장은 실배선이고 실제 인쇄만 비목표다
-    //       (프린터 관련 신규 멤버는 [external-discovery] 구역에 모여 있다).
+    // it25: 프린터는 placeholder로 **환원**됐다 — 토글은 IsEnabled="False" + "추후 지원 예정" 캡션이고
+    //       VM은 표시값만 로드한다(저장 미기록 = ini 원값 보존, §4.1·§4.3).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasExposureDomain), nameof(CanOpenCameraTest))]
     private bool _externalCameraEnabled;
@@ -139,9 +144,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </para>
     /// </summary>
     public bool IsExternalEditDenied => IsLoggedIn && !CanEditExternalCamera;
-
-    /// <summary>연동 가능 모델 목록(콤보 바인딩). 모델 추가는 Core 레지스트리 표 한 줄이다(§3.3).</summary>
-    public IReadOnlyList<ExternalCameraModel> ExternalCameraModelOptions { get; } = ExternalCameraModels.All;
 
     /// <summary>노출 3요소 편집 행(슬라이더 + 직접 입력). 순서 = 화면 표시 순서.</summary>
     public IReadOnlyList<ExposureParameterViewModel> ExposureParameters { get; }
@@ -206,8 +208,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IFirebaseClient firebase, IExternalCamera external,
         ILogger<SettingsViewModel>? logger = null,
         ILicenseNoticeService? licenseNotice = null,
-        IPrinterEnumerator? printers = null,
-        Func<IReadOnlyList<string>>? probePortableDevices = null)
+        Func<IReadOnlyList<string>>? probePortableDevices = null,
+        ITestModeService? testMode = null)
     {
         _shell = shell;
         _settings = settings;
@@ -218,7 +220,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _external = external;
         _logger = logger;
         _licenseNotice = licenseNotice;
-        _printers = printers;
+        _testMode = testMode;
         // 네임스페이스를 들이지 않고 정규화 이름으로 호출한다(MCPhoto.Capture와 MCPhoto.Core.Capture 혼동 회피).
         _probePortableDevices = probePortableDevices
             ?? (() => MCPhoto.Capture.PortableDeviceProbe.TryGetPortableDeviceNames(_logger));
@@ -252,12 +254,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         LoadSettings();
         await RefreshExposureDomainAsync();
         await RefreshCamerasAsync();
-        // it24 §8.3: 프린터 하위 패널이 열린 상태로 진입할 때만 열거한다(off면 패널이 없으니 열거도 없다).
-        //            스풀러 조회는 USB 세션을 만들지 않아 자동 수행이 §5.4 결정과 충돌하지 않는다.
-        // ⚠️ 여기서는 CanRefreshPrinters(IsLoggedIn) 게이트를 의도적으로 지나친다: 게스트에게도 섹션이
-        //    보이므로(§4.1) 목록이 비어 있으면 콤보가 근거 없이 비활성으로만 남는다. 프린터명은 비밀이 아니고
-        //    편집은 별도 게이트가 막는다 — [다시 검색] 버튼만 로그인 게이트를 쓴다(반복 조회는 명시 행위다).
-        if (PhotoPrinterEnabled) await RefreshPrintersAsync();
+        // it25 §4.1: 프린터 표면이 "추후 지원 예정" placeholder로 환원되어 **진입 시 열거가 없다**.
+        //            설정은 열람 빈도가 높은 화면이고, 편집·표시할 프린터 표면이 없는데 스풀러를 왕복할
+        //            이유가 사라졌다(열거자는 소비자 0 스캐폴드로 남는다 — §4.2).
     }
 
     public override Task OnLeaveAsync()
@@ -374,8 +373,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             ExternalCameraEnabled = s.ExternalCameraEnabled;
             ExternalCameraModel = s.ExternalCameraModel;
             ApplySavedExposureText(s);
+            // it25 §4.3: 토글 표시값만 로드한다(편집 불가). PhotoPrinterName은 UI 표면이 없는
+            //            잔존 키이므로 VM이 읽지도 쓰지도 않는다 — 저장 시 Clone 원값이 그대로 재기록된다.
             PhotoPrinterEnabled = s.PhotoPrinterEnabled;
-            PhotoPrinterName = s.PhotoPrinterName;
             OutputFormat = s.OutputFormat;
             DisplayMode = s.DisplayMode;
             StorageBucket = s.StorageBucket;
@@ -493,9 +493,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // it23 §8.3-2: 외부 카메라 4필드는 **편집 권한이 있을 때만** 기록한다.
         // ⚠️ TempUser·게스트 세션이 이 값을 기록하면 관리자가 맞춰 둔 장비 구성·노출이 클로버된다
         //    (읽기 전용으로 보여 준 값을 저장해 버리는 형태). 미기록 = ini 원값 보존.
-        // it24 §9.2: 프린터 2키를 이 블록으로 편입해 외부 장치 섹션 7필드가 **단일 게이트**를 쓴다.
-        // ⚠️ 행동 회귀 없음: 종전 프린터 토글은 UI가 IsEnabled="False"라 TempUser도 값을 바꿀 수단이 없었다
-        //    (기록값은 항상 Load 원값) — 게이트를 좁혀도 관측 가능한 차이가 없다.
+        // it25 §4.1: 프린터 2키(PhotoPrinterEnabled·PhotoPrinterName)는 **어느 역할에서도 기록하지 않는다** —
+        // ⚠️ 표면을 환원했으므로 VM이 가진 값은 "편집 불가 컨트롤의 표시값"뿐이다. 그것을 되기록하면
+        //    ini 원값과 다를 이유가 없는 값을 매 저장마다 덮어쓰는 셈이고, 키 의미가 바뀔 때(인쇄 이터레이션)
+        //    조용한 클로버 경로가 된다. 미기록 = Clone 원값 그대로 재기록 = 라운드트립 보존(§4.3).
         if (CanEditExternalCamera)
         {
             s.ExternalCameraEnabled = ExternalCameraEnabled;
@@ -503,8 +504,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
             s.ExternalShutterSpeed = _shutterSpeed.Text;
             s.ExternalAperture = _aperture.Text;
             s.ExternalIso = _iso.Text;
-            s.PhotoPrinterEnabled = PhotoPrinterEnabled;
-            s.PhotoPrinterName = PhotoPrinterName ?? string.Empty;
         }
         s.OutputFormat = OutputFormat;
         s.DisplayMode = DisplayMode;
@@ -532,7 +531,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private async Task Close() => await _shell.ReturnFromOverlay();
 
     // ══════════════════════════════════════════════════════════════════════════════════
-    // [external-discovery:begin] it24 — 외부 장치 검색 · 프린터 열거 (설계 §5 · §7)
+    // [external-discovery:begin] it24 — 외부 장치 검색 (설계 §5) / it25 — 인식된 카메라 · 프린터 환원
     //
     // ⚠️ 이 구역의 전 문구는 **두 명제를 섞지 않는다**(설계 §3):
     //    "연결 가능한 장치를 찾지 못했습니다"(부재 단정)는 SDK 제어 스택이 갖춰졌을 때만 말할 수 있고,
@@ -541,7 +540,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // ⚠️ USB 관측(WMI)은 **양성 신호 전용**이다: "감지되었습니다"는 말해도 미감지를 "없음"의 근거로 쓰지 않는다.
     // ══════════════════════════════════════════════════════════════════════════════════
 
-    // ── 동결 문구(설계 §8.2 W16~W30). 상수로 모으는 이유는 NikonCameraReasons와 같다 —
+    // ── 동결 문구(it24 §8.2 W16~W23 · it25 §8.3 W34·W38). 상수로 모으는 이유는 NikonCameraReasons와 같다 —
     //    같은 상태가 화면·테스트·운영 문서에서 다르게 설명되는 것을 막는다. ──
 
     /// <summary>W16 — S0(검색 전).</summary>
@@ -561,12 +560,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public const string DiscoveryTestHintText = "세부 확인·셔터 테스트는 [카메라 테스트]에서 할 수 있습니다";
     /// <summary>W22 — S7(검색 시퀀스 예외).</summary>
     public const string DiscoveryFailedText = "장치 검색에 실패했습니다. 다시 시도해 주세요.";
-    /// <summary>W26 — P2(열거 성공·0대). 스풀러 DB 기준 명제로 한정한다(장치 전원·연결 상태가 아니다).</summary>
-    public const string PrinterNoneText = "설치된 프린터가 없습니다";
-    /// <summary>W27 — P4(열거 실패). ★ P2와 구조적으로 다른 상태다(조치가 다르다).</summary>
-    public const string PrinterUndeterminedText = "프린터 목록을 확인할 수 없습니다 (인쇄 스풀러 상태 확인)";
-    /// <summary>W28 — P1(열거 중).</summary>
-    public const string PrinterEnumeratingText = "프린터 확인 중…";
+    /// <summary>
+    /// W38 — 시뮬레이션 명시 라인(it25 §8.3, 불변식 TS4). 시뮬레이션이 만든 결과에는 <b>항상</b> 붙는다.
+    /// 이 한 줄이 없으면 스크린샷 단위에서 실관측과 구분할 수단이 사라진다.
+    /// </summary>
+    public const string DiscoverySimulatedText = "테스트 모드 시뮬레이션 결과입니다 — 실제 장치 관측이 아닙니다.";
+    /// <summary>W34 — 인식 콤보의 sentinel 항목 표시명(선택 안 한 상태).</summary>
+    public const string RecognizedCameraNoneDisplay = "- 선택안함 -";
 
     /// <summary>W20 — S3·S5 감지 라인. 관측된 이름 원문을 그대로 노출한다(운영자가 육안으로 대조한다).</summary>
     public static string DiscoveryDetectedText(string names) => $"USB에서 장치가 감지되었습니다: {names}";
@@ -577,10 +577,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>W23 — 비매칭 휴대용 장치 참고 라인(제네릭 이름으로 뜬 카메라를 운영자가 알아볼 유일한 단서).</summary>
     public static string DiscoveryOtherDevicesText(string names)
         => $"참고: 감지된 휴대용 장치(카메라가 아닐 수 있음): {names}";
-    /// <summary>W29 — P5 합성 행 표시명(저장값이 목록에 없을 때).</summary>
-    public static string PrinterUnverifiedDisplay(string name) => $"{name} (설치 확인 필요)";
-    /// <summary>W30 — P3 기본 프린터 접미.</summary>
-    public static string PrinterDefaultDisplay(string name) => $"{name} (기본)";
 
     /// <summary>W23 참고 라인에 나열할 최대 개수(그 이상은 화면을 덮는다).</summary>
     private const int OtherDeviceNoteLimit = 4;
@@ -597,6 +593,90 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>검색 결과 헤드라인(S0~S7). 초기값은 W16 — 검색하지 않은 상태를 정직하게 말한다.</summary>
     [ObservableProperty] private string _discoveryHeadline = DiscoveryNotSearchedText;
+
+    // ── 인식된 카메라 콤보(it25 §6) ──
+    //
+    // it24까지 이 콤보는 **지원 모델 목록**이었다. it25에서 의미가 "연결이 인식된 카메라"로 바뀌었고,
+    // 지원 목록은 [지원 카메라 목록] 오버레이로 완전히 분리됐다(R5 강화).
+    //
+    // ⚠️ "인식됨"은 **SDK 연결 확인(S6)만**이다(§6.1). WMI 관측 양성(S3·S5)은 장치명 문자열 우연에
+    //    기대는 best-effort라 "그 지원 모델이 맞다"를 보장하지 못하는데, 콤보는 저장으로 이어지는
+    //    조작 표면이다 — 제어 불가 항목을 올리면 운영자가 "선택했는데 촬영이 안 되는" 상태를 스스로
+    //    만들 수 있다. 감지 사실은 검색 결과 라인(W20)이 이미 말한다.
+    // ⚠️ 현 프로덕션(SDK 미동봉)에서 실경로의 인식 목록은 **항상 비어 있다** — 결함이 아니라
+    //    사용자가 기술한 기본 상태이며(빈 콤보 = sentinel 단독), 채워진 콤보의 확인 수단이 시뮬레이션이다.
+
+    /// <summary>
+    /// 인식 콤보 목록. 초기값은 sentinel 단독 — S0은 "검색 전"이지 "없음 단정"이 아니다(W16·W33이 안내한다).
+    /// ini에 저장되지 않는 <b>화면 세션 상태</b>이며 [장치 검색] 1회마다 재구성된다.
+    /// </summary>
+    public ObservableCollection<RecognizedCameraOption> RecognizedCameraOptions { get; } =
+        new() { RecognizedCameraOption.None };
+
+    /// <summary>
+    /// 인식 콤보의 선택(<c>SelectedValue</c> 바인딩 대상). <c>""</c> = sentinel(선택 안 함).
+    /// <para>
+    /// ⚠️ 이 값을 ini 미러(<see cref="ExternalCameraModel"/>)에 <b>직접 바인딩하지 않는 이유</b>:
+    /// 인식 목록이 비는 순간 WPF ComboBox가 매칭 실패한 <c>SelectedValue</c>를 null로 되써서
+    /// 운영자가 맞춰 둔 저장값이 저장 한 번에 소멸한다(it24 P5·it7 B9 계열 함정). 사용자가
+    /// "빈 목록에는 선택안함만"을 명시했으므로 합성 행 해법을 쓸 수 없어 <b>선택을 분리</b>한다.
+    /// </para>
+    /// </summary>
+    [ObservableProperty] private string _recognizedCameraSelection = string.Empty;
+
+    /// <summary>
+    /// 목록 재구성이 만든 프로그램적 선택 변경을 ini 미러 갱신과 구분하는 가드
+    /// (<c>_normalizing</c>·<c>ExposureParameterViewModel._syncing</c>과 같은 관례).
+    /// </summary>
+    private bool _syncingRecognizedSelection;
+
+    /// <summary>
+    /// 콤보 선택 → ini 미러 반영. <b>사용자가 인식 항목을 명시 선택했을 때만</b> 갱신한다(§6.3).
+    /// <list type="bullet">
+    /// <item>null 되쓰기(E25) → <c>""</c>로 정규화하고 저장값은 건드리지 않는다.</item>
+    /// <item>sentinel 선택 → 저장값 불변(검색 결과가 설정을 지우지 않는다).</item>
+    /// <item>목록 재구성 중의 선택 → 가드로 억제(자동 변경 금지).</item>
+    /// </list>
+    /// </summary>
+    partial void OnRecognizedCameraSelectionChanged(string value)
+    {
+        // WPF는 목록에 없는 SelectedValue를 null로 되쓴다 — 표시상 sentinel로 정규화한다.
+        if (value is null) { RecognizedCameraSelection = string.Empty; return; }
+        if (_syncingRecognizedSelection || value.Length == 0) return;
+        if (ExternalCameraModels.Find(value) is { } model) ExternalCameraModel = model.Id;
+    }
+
+    /// <summary>
+    /// 인식 목록 재구성. <paramref name="recognized"/>가 null이면 sentinel 단독(S0~S5·S7)이고,
+    /// 값이 있으면(S6만) sentinel + 인식 1행이다(§6.4 전수표).
+    /// <para>
+    /// ⚠️ 어떤 검색 상태도 <see cref="ExternalCameraModel"/>(ini 미러)을 바꾸지 않는다. 인식 Id가
+    /// 저장 Id와 <b>일치할 때만</b> 그 행을 자동 선택하고, 다르면 sentinel에 둔다 — 자동 선택이
+    /// 저장값을 따라가는 것이 아니라, 저장값이 이미 그것일 때 화면이 그 사실을 반영하는 것이다.
+    /// </para>
+    /// </summary>
+    private void ApplyRecognizedCamera(ExternalCameraModel? recognized)
+    {
+        _syncingRecognizedSelection = true;
+        try
+        {
+            RecognizedCameraOptions.Clear();
+            RecognizedCameraOptions.Add(RecognizedCameraOption.None);
+
+            if (recognized is null)
+            {
+                RecognizedCameraSelection = string.Empty;
+                return;
+            }
+
+            RecognizedCameraOptions.Add(new RecognizedCameraOption(recognized.Id, recognized.DisplayName));
+            RecognizedCameraSelection =
+                string.Equals(recognized.Id, ExternalCameraModel, StringComparison.OrdinalIgnoreCase)
+                    ? recognized.Id
+                    : string.Empty;
+        }
+        finally { _syncingRecognizedSelection = false; }
+    }
 
     /// <summary>
     /// 상세 라인(사유 원문·감지·배터리·참고). 사유는 <c>NikonCameraReasons</c> 원문을 그대로 흘린다 —
@@ -630,6 +710,26 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         try
         {
+            // ══ it25 §5.5: 시뮬레이션 판정 **단일 지점**(불변식 TS1) ══
+            // 조건이 이 두 줄 외에 존재하지 않는다. IExternalCamera·INikonSdkShim·CaptureViewModel·
+            // CameraTestViewModel·DI 등록 어디에도 시뮬레이션 구현을 주입하거나 데코레이트하지 않는다.
+            // ⚠️ 금지: _testMode?.IsEnabled 단독 분기(TS2 — 테스트 ini를 켠 채 실계정으로 일하는 운영자에게
+            //          가짜 "연결 확인됨"을 보여 실장비 진단을 그르친다) / IExternalCamera 데코레이터(TS1 —
+            //          ConnectAsync는 촬영도 쓰는 멤버라 촬영 경로가 오염된다).
+            var plan = ExternalCameraSimulation.Plan(_testMode?.Options ?? TestModeOptions.Disabled);
+            if (plan is not null && _testMode!.IsTestUser(_shell.CurrentUser))
+            {
+                // 관측 I/O(CheckReadiness·WMI 프로브·ConnectAsync)를 **전부 건너뛴다** — 관측 위조가 아니라
+                // 관측 생략 + 대체 입력이며(R3 유지), 그 사실을 W38 라인이 화면에서 명시한다(TS4).
+                var simulated = ExternalDiscoveryJudge.Judge(plan.Readiness, usbCandidateSeen: false, plan.Connected);
+                ApplyDiscoveryResult(simulated, plan.Readiness,
+                    candidates: Array.Empty<string>(), allNames: Array.Empty<string>(),
+                    modelName: plan.Model?.DisplayName, battery: null,
+                    unavailableReason: null, recognized: plan.Model);
+                DiscoveryDetailLines.Add(DiscoverySimulatedText);
+                return;
+            }
+
             var keywords = ModelKeywords();
 
             var probed = await Task.Run(() => (
@@ -664,7 +764,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
             }
 
             var state = ExternalDiscoveryJudge.Judge(probed.Readiness, candidates.Count > 0, connected);
-            ApplyDiscoveryResult(state, probed.Readiness, candidates, probed.Names, modelName, battery);
+            ApplyDiscoveryResult(state, probed.Readiness, candidates, probed.Names, modelName, battery,
+                unavailableReason: _external.UnavailableReason,
+                // 실경로의 인식 모델은 **구성된 모델**이다 — ConnectAsync가 그 모델의 md3로 연결을 시도했고
+                // 성공했으므로, 확인된 것은 그 1종이다(§6.5의 정직한 한계).
+                recognized: connected ? ExternalCameraModels.Resolve(ExternalCameraModel) : null);
         }
         catch (Exception ex)
         {
@@ -672,6 +776,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _logger?.LogWarning(ex, "외부 카메라 검색 실패");
             DiscoveryDetailLines.Clear();
             DiscoveryHeadline = DiscoveryFailedText;
+            ApplyRecognizedCamera(null);   // S7도 인식 0 상태다(§6.4) — 직전 검색의 인식 행을 남겨 두지 않는다
         }
         finally { IsDiscovering = false; }
     }
@@ -685,17 +790,27 @@ public sealed partial class SettingsViewModel : ViewModelBase
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>
-    /// 판정 결과 → 화면 문구(§5.3 표 그대로). 문구 조립이 이 한 곳에만 있어야 상태별 명제가 어긋나지 않는다.
+    /// 판정 결과 → 화면 문구 + 인식 콤보(it24 §5.3 표 · it25 §6.4 표). 문구 조립이 이 한 곳에만 있어야
+    /// 상태별 명제가 어긋나지 않으며, 시뮬레이션도 같은 곳을 지난다(§5.4).
     /// </summary>
+    /// <param name="unavailableReason">
+    /// S4·S5의 상세 라인이 될 사유. <b>파라미터로 받는 이유</b>: 여기서 <c>_external.UnavailableReason</c>을
+    /// 직접 읽으면 시뮬레이션 결과에 <b>실장비 관측 한 줄이 섞여</b> 들어간다(시뮬레이션 산출물은 계획이
+    /// 말한 것만이어야 한다 — TS3·TS4). 실경로가 넘기고 시뮬레이션은 null을 넘긴다.
+    /// </param>
+    /// <param name="recognized">인식 콤보에 올릴 모델(S6에서만 non-null). §6.4 전수표.</param>
     private void ApplyDiscoveryResult(
         ExternalCameraDiscoveryState state,
         ExternalCameraReadiness readiness,
         IReadOnlyList<string> candidates,
         IReadOnlyList<string> allNames,
         string? modelName,
-        int? battery)
+        int? battery,
+        string? unavailableReason,
+        ExternalCameraModel? recognized)
     {
         DiscoveryDetailLines.Clear();
+        ApplyRecognizedCamera(recognized);
 
         switch (state)
         {
@@ -713,20 +828,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
             case ExternalCameraDiscoveryState.NotFound:                      // S4
                 DiscoveryHeadline = DiscoveryNotFoundText;
-                AddDetailLine(_external.UnavailableReason);
+                AddDetailLine(unavailableReason);
                 AddOtherDeviceNote(allNames, candidates);
                 break;
 
             case ExternalCameraDiscoveryState.DetectedConnectFailed:         // S5
                 DiscoveryHeadline = DiscoveryDetectedText(string.Join(", ", candidates));
                 DiscoveryDetailLines.Add(DiscoveryConnectFailedText);
-                AddDetailLine(_external.UnavailableReason);
+                AddDetailLine(unavailableReason);
                 break;
 
             case ExternalCameraDiscoveryState.Connected:                     // S6
                 DiscoveryHeadline = DiscoveryConnectedText(
                     string.IsNullOrWhiteSpace(modelName)
-                        ? ExternalCameraModels.Resolve(ExternalCameraModel).DisplayName
+                        ? (recognized ?? ExternalCameraModels.Resolve(ExternalCameraModel)).DisplayName
                         : modelName!);
                 if (battery is int percent) DiscoveryDetailLines.Add(DiscoveryBatteryText(percent));
                 DiscoveryDetailLines.Add(DiscoveryTestHintText);
@@ -759,124 +874,50 @@ public sealed partial class SettingsViewModel : ViewModelBase
         DiscoveryDetailLines.Add(DiscoveryOtherDevicesText(string.Join(", ", listed)));
     }
 
-    // ── 프린터 열거 ──
+    // ── 지원 카메라 목록 오버레이(it25 §7) ──
+    //
+    // 콤보가 "인식된 카메라"가 된 뒤로 **이 오버레이가 지원 목록의 유일한 자리**다.
+    // ⚠️ 별도 Window로 만들지 않는다: headless 테스트가 Window를 인스턴스화할 수 없어(B-T9 함정)
+    //    XAML 회귀(바인딩 오타·리소스 키)를 잡을 수 없다 — 라이선스 고지가 같은 이유로 오버레이다.
+    // ⚠️ 권한 게이트를 걸지 않는다: 지원 모델 목록은 비밀이 아니고 열람은 편집이 아니다.
 
-    /// <summary>선택된 설치 프린터 이름(콤보 SelectedValue ↔ ini). 빈 값 = 미선택.</summary>
-    [ObservableProperty] private string _photoPrinterName = string.Empty;
-
-    /// <summary>열거 진행 중(P1). 단일 비행 + [다시 검색] 비활성 조건.</summary>
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RefreshPrintersCommand))]
-    private bool _isEnumeratingPrinters;
-
-    /// <summary>
-    /// 프린터 목록 상태 문구(P1/P2/P4). P3·P5(정상 목록)에서는 빈 문자열 — 표시할 이상이 없다.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPrinterStateText))]
-    private string _printerStateText = string.Empty;
-
-    /// <summary>상태 문구 표시 여부(문구가 있을 때만 — <see cref="HasSavedNotice"/>와 동형).</summary>
-    public bool HasPrinterStateText => !string.IsNullOrEmpty(PrinterStateText);
+    /// <summary>오버레이 표시 여부. 정적 데이터만 보여 주므로 열림이 어떤 장치·파일 I/O도 유발하지 않는다.</summary>
+    [ObservableProperty] private bool _isSupportedCameraListOpen;
 
     /// <summary>
-    /// 실제로 설치된 프린터가 있는지(콤보 IsEnabled). P2·P4에서 false다.
+    /// 제조사별로 묶은 지원 모델(오버레이 바인딩). 레지스트리 파생 <b>불변</b> 목록이라 INPC가 불요하다.
     /// <para>
-    /// ⚠️ <c>PrinterOptions.Count &gt; 0</c>으로 파생시키지 않는다 — 저장값 보존용 합성 행(P5)이
-    /// 목록에 들어갈 수 있어, 개수만 보면 "선택할 수 있는 프린터가 있다"를 잘못 말하게 된다.
+    /// <c>CollectionViewSource</c> 그룹핑을 쓰지 않는 이유: 정적 소량 데이터에 뷰 계층 그룹핑을 얹으면
+    /// 테스트 불가능한 XAML 로직만 늘어난다. 순수 LINQ면 headless로 정렬·묶음을 단정할 수 있다.
     /// </para>
     /// </summary>
-    [ObservableProperty] private bool _hasPrinters;
+    public IReadOnlyList<SupportedCameraGroup> SupportedCameraGroups { get; } =
+        ExternalCameraModels.All
+            .GroupBy(m => m.Manufacturer, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new SupportedCameraGroup(
+                g.Key,
+                g.Select(m => m.ModelName).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray()))
+            .ToArray();
 
-    /// <summary>콤보 목록. 표시 가공(W29/W30)은 <see cref="PrinterOptionItem.Display"/>에만 하고 저장 키는 원문이다.</summary>
-    public ObservableCollection<PrinterOptionItem> PrinterOptions { get; } = new();
+    /// <summary>[지원 카메라 목록] — 오버레이 열기(게이트 없음).</summary>
+    [RelayCommand]
+    private void OpenSupportedCameraList() => IsSupportedCameraListOpen = true;
 
-    /// <summary>
-    /// 진행 중인 열거(테스트가 결정적으로 대기하는 이음새 — <see cref="LicenseLoadTask"/> 선례).
-    /// 토글 전환 훅은 동기 메서드라 <c>async void</c>를 쓸 수 없어 Task를 여기에 남긴다.
-    /// </summary>
-    public Task? PrinterEnumerationTask { get; private set; }
+    /// <summary>[닫기] — 오버레이 닫기. 구독·타이머·자원이 없어 정리할 것도 없다(E27).</summary>
+    [RelayCommand]
+    private void CloseSupportedCameraList() => IsSupportedCameraListOpen = false;
 
-    private bool CanRefreshPrinters() => IsLoggedIn && !IsEnumeratingPrinters;
-
-    /// <summary>
-    /// 설치 프린터 열거(P1~P5). 스풀러 조회는 서비스 내부에서 <c>Task.Run</c>으로 격리된다.
-    /// <para>
-    /// 프린터 열거는 USB 장치 세션을 만들지 않으므로(스풀러 DB 조회) "설정 진입만으로 USB를 건드리지 않는다"는
-    /// it23 결정과 충돌하지 않는다 — 그래서 카메라 검색과 달리 자동 수행이 허용된다.
-    /// </para>
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanRefreshPrinters))]
-    private async Task RefreshPrintersAsync()
-    {
-        if (IsEnumeratingPrinters) return;
-        IsEnumeratingPrinters = true;
-        PrinterStateText = PrinterEnumeratingText;   // P1
-        try
-        {
-            // 서비스 미주입은 "프린터가 없다"가 아니라 "확인할 수 없다"다(R4).
-            var result = _printers is null
-                ? PrinterEnumerationResult.Failed
-                : await _printers.EnumerateAsync();
-            ApplyPrinterEnumeration(result);
-        }
-        catch (Exception ex)
-        {
-            // E17: 계약상 예외를 던지지 않지만, 다른 구현이 던져도 화면은 P4로 끝난다.
-            _logger?.LogWarning(ex, "프린터 열거 실패(확인 불가로 표시)");
-            ApplyPrinterEnumeration(PrinterEnumerationResult.Failed);
-        }
-        finally { IsEnumeratingPrinters = false; }
-    }
-
-    /// <summary>
-    /// 열거 결과 → 콤보·상태 문구(§7.3 P2~P5).
-    /// <para>
-    /// ⚠️ <b>저장값을 절대 지우지 않는다</b>(P5·E18). 목록에 없으면 합성 행을 첫 항목으로 넣어 선택을 유지한다 —
-    /// 항목이 없는 상태로 두면 WPF ComboBox가 매칭 실패한 <c>SelectedValue</c>를 null로 되써서
-    /// 관리자가 맞춰 둔 프린터 이름이 저장 한 번에 사라진다(목록 부재는 프린터가 잠시 꺼진 것일 수 있다).
-    /// </para>
-    /// </summary>
-    private void ApplyPrinterEnumeration(PrinterEnumerationResult result)
-    {
-        var saved = (PhotoPrinterName ?? string.Empty).Trim();
-
-        PrinterOptions.Clear();
-        foreach (var printer in result.Printers)
-        {
-            PrinterOptions.Add(new PrinterOptionItem(
-                printer.Name,
-                printer.IsDefault ? PrinterDefaultDisplay(printer.Name) : printer.Name));
-        }
-
-        bool savedIsInstalled = saved.Length > 0
-            && result.Printers.Any(p => string.Equals(p.Name, saved, StringComparison.OrdinalIgnoreCase));
-        if (saved.Length > 0 && !savedIsInstalled)
-            PrinterOptions.Insert(0, new PrinterOptionItem(saved, PrinterUnverifiedDisplay(saved)));
-
-        // 목록 교체 과정에서 콤보가 선택을 비웠을 수 있으므로 스냅샷으로 복원한다.
-        if (!string.Equals(PhotoPrinterName, saved, StringComparison.Ordinal)) PhotoPrinterName = saved;
-
-        HasPrinters = result.Succeeded && result.Printers.Count > 0;
-        PrinterStateText = result.Succeeded
-            ? (result.Printers.Count == 0 ? PrinterNoneText : string.Empty)
-            : PrinterUndeterminedText;
-    }
-
-    /// <summary>
-    /// 프린터 토글 off→on 전환 시 열거 1회(§8.3). 이미 목록이 있으면 재열거하지 않는다 —
-    /// 토글을 껐다 켜는 동안 스풀러를 반복 조회할 이유가 없다([다시 검색]이 명시 경로다).
-    /// <para>
-    /// <c>_normalizing</c> 가드: <see cref="LoadSettings"/>가 ini 값을 심는 동안에도 이 훅이 발화한다.
-    /// 진입 시점의 열거는 <see cref="OnEnterAsync"/>가 한 번만 수행하므로 여기서는 억제해야 중복이 없다.
-    /// </para>
-    /// </summary>
-    partial void OnPhotoPrinterEnabledChanged(bool value)
-    {
-        if (_normalizing || !value) return;
-        if (PrinterOptions.Count > 0) return;
-        PrinterEnumerationTask = RefreshPrintersAsync();
-    }
+    // ── 프린터 ──
+    //
+    // it25 §4: 사용자 지시("아직 지원되는 항목이 하나도 없으니까 추후 제공으로 남겨놔줘")로 프린터 표면을
+    // placeholder로 환원했다. VM에 남는 것은 토글 표시값(PhotoPrinterEnabled) 하나뿐이며 열거·선택·상태
+    // 문구·[다시 검색]은 전부 사라졌다(it24 §7의 판정 (b)를 it25 §4가 대체).
+    //
+    // ⚠️ 열거자(IPrinterEnumerator·SystemPrinterEnumerator)는 **삭제하지 않았다** — 소비자 0인 의도된
+    //    스캐폴드이며 인쇄 기능 이터레이션이 재배선한다(IPhotoPrinter/NullPhotoPrinter와 같은 지위, §4.2).
+    // ⚠️ ini 2키(PhotoPrinterEnabled·PhotoPrinterName)도 유지한다. WriteFrom에서 빼면 기존 ini의 값이
+    //    **첫 저장에서 소멸**하므로(외래 섹션 보존과 같은 계열의 함정) AppSettings는 한 줄도 건드리지 않는다.
 
     // [external-discovery:end]
 
@@ -1230,17 +1271,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
 }
 
 /// <summary>
-/// 프린터 콤보 항목(it24 §8.3). <paramref name="Name"/>이 저장 키(Windows 프린터명)이고
-/// <paramref name="Display"/>는 표시 전용 가공(W29 "(설치 확인 필요)" · W30 "(기본)")이다.
+/// 인식된 카메라 콤보 항목(it25 §6.2). <paramref name="Value"/>가 값 기반 선택 키(레지스트리 Id 또는
+/// sentinel의 빈 문자열)이고 <paramref name="Display"/>는 표시 문자열이다.
 /// <para>
-/// ⚠️ 두 값을 분리하는 이유: 가공 문자열을 저장하면 다음 실행에서 그 이름의 프린터를 찾지 못한다.
-/// 콤보는 <c>SelectedValuePath="Name"</c>으로 값 기반 선택을 쓴다(it7 B9 — 인덱스 바인딩 금지).
+/// ⚠️ 콤보는 <c>SelectedValuePath="Value"</c>로 값 기반 선택을 쓴다(it7 B9 — 인덱스 바인딩은 목록이
+/// 채워지는 순간 선택을 0번으로 덮는다). sentinel의 <c>Value</c>가 <c>""</c>인 것이 요점 —
+/// "선택 안 함"이 유효한 값으로 표현되므로 인식 0 상태에서도 콤보를 열 수 있다.
 /// </para>
 /// </summary>
-public sealed record PrinterOptionItem(string Name, string Display)
+public sealed record RecognizedCameraOption(string Value, string Display)
 {
+    /// <summary>sentinel 항목(W34). 인식 결과와 무관하게 항상 목록의 첫 행이다.</summary>
+    public static RecognizedCameraOption None { get; } =
+        new(string.Empty, SettingsViewModel.RecognizedCameraNoneDisplay);
+
     public override string ToString() => Display;
 }
+
+/// <summary>
+/// 지원 카메라 오버레이의 제조사 그룹 1개(it25 §7.3). 제조사가 헤더, 제품명이 하위 행이다 —
+/// 사용자 요구("제조사, 제품명 별로 정리")의 화면 구조를 그대로 데이터로 만든다.
+/// </summary>
+public sealed record SupportedCameraGroup(string Manufacturer, IReadOnlyList<string> Models);
 
 /// <summary>표시 모드 콤보 항목(값 + 한글 라벨). ToString=라벨(닫힌 박스 폴백 대비). (it9 후속)</summary>
 public sealed record DisplayModeOption(DisplayMode Value, string Label)

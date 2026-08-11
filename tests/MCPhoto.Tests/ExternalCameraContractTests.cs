@@ -10,18 +10,65 @@ public class ExternalCameraContractTests
 {
     // ── T-R1: 모델 레지스트리(§3.3) ──
 
+    /// <summary>
+    /// T-R1' (it25 §7.2): 스키마가 (Id, Manufacturer, ModelName, Md3FileName, TestTypeCode) 5필드로 확장된 뒤에도
+    /// <c>DisplayName</c>이 <b>같은 문자열</b>을 돌려준다 — 파생 속성이라 기존 소비자 3곳(설정 콤보 표시·
+    /// S6 헤드라인 폴백·USB 키워드 유도)이 무영향임을 증명한다.
+    /// </summary>
     [Fact]
     public void Registry_Default_Is_D5300_With_Type0011_Module()
     {
         var d = ExternalCameraModels.Default;
 
         Assert.Equal("NikonD5300", d.Id);
-        Assert.Equal("Nikon D5300", d.DisplayName);
+        Assert.Equal("Nikon", d.Manufacturer);
+        Assert.Equal("D5300", d.ModelName);
         Assert.Equal("Type0011.md3", d.Md3FileName);
+        Assert.Equal(0, d.TestTypeCode);
+        // ★ 파생 호환: 제조사 + 제품명이 스키마 확장 전과 동일한 표시명을 만든다.
+        Assert.Equal("Nikon D5300", d.DisplayName);
         // 현재 활성 항목은 D5300 하나(모델 추가는 표 한 줄).
         Assert.Single(ExternalCameraModels.All);
         Assert.Same(ExternalCameraModels.All[0], d);
     }
+
+    // ── T-B3 (it25 §5.2): [Test] ExternalCameraType ↔ 모델 매핑의 안정성 ──
+
+    /// <summary>
+    /// ★ 매핑 코드는 <b>행 안에</b> 있고 배열 인덱스가 아니다 — 전 행의 <c>TestTypeCode</c>가 유일하고
+    /// 음수가 아니어야 한다. 중복 코드는 컴파일을 통과하지만 <c>FindByTestType</c>이 앞 행만 돌려주는
+    /// 조용한 버그가 되므로(it7 B9 <c>SelectedIndex</c> 사고와 동형) 여기서 잡는다.
+    /// <para>
+    /// 코드는 <c>Id</c>와 같은 지위다: 한 번 배정하면 변경·재사용 금지(ini에 적힌 숫자가 계약).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Registry_TestTypeCodes_Are_Unique_And_NonNegative()
+    {
+        var codes = ExternalCameraModels.All.Select(m => m.TestTypeCode).ToArray();
+
+        Assert.All(codes, c => Assert.True(c >= 0, $"TestTypeCode는 음수일 수 없다(-1은 '없음' 예약): {c}"));
+        Assert.Equal(codes.Length, codes.Distinct().Count());
+    }
+
+    [Fact]
+    public void Registry_FindByTestType_Maps_Zero_To_D5300()
+    {
+        Assert.Same(ExternalCameraModels.Default, ExternalCameraModels.FindByTestType(0));
+    }
+
+    /// <summary>
+    /// <c>-1</c>(없음)·미지 코드는 null이며 <b>보정하지 않는다</b> — <c>Find</c>와 같은 철학이다.
+    /// 조회가 몰래 기본값을 돌려주면 "ini에 적힌 값이 유효한가"를 판정할 수 없고, 시뮬레이션이
+    /// "없음"을 표현할 수단을 잃는다(Type=-1이 S4 시나리오의 유일한 입력이다).
+    /// </summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-2)]
+    [InlineData(99)]
+    [InlineData(int.MinValue)]
+    public void Registry_FindByTestType_Unknown_Or_Negative_Returns_Null(int code)
+        => Assert.Null(ExternalCameraModels.FindByTestType(code));
 
     [Theory]
     [InlineData("NikonD5300")]

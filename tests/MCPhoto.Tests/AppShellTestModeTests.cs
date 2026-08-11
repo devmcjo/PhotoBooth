@@ -306,6 +306,91 @@ public class AppShellTestModeTests
         }
     }
 
+    // ══════════ it25: 외부 카메라 시뮬레이션 배너 접미 ══════════
+    //
+    // 목적: 시뮬레이션이 켜지면 설정 화면은 "연결 확인됨"인데 촬영은 SDK 부재로 웹캠 강등한다.
+    //       그 **의도된 간극**을 설정 화면 밖에서도 설명해 주는 표식이다.
+    // ⚠️ 접미의 판정 조건은 시뮬레이션 게이트와 **같아야** 한다(IsTestUser 참조 동일성). 다르면 배너가
+    //    "시뮬레이션 중"이라고 말하면서 실제로는 실관측을 하는 거짓 표시가 된다 — 이번 이터레이션 전체가
+    //    없애려는 실패 유형 그 자체다. 아래 세 테스트 중 **실계정 케이스가 그 거짓을 잠그는 단정**이다.
+
+    /// <summary>① 테스트 계정 + 시뮬레이션 on → 접미가 붙고 모델 표시명이 들어간다.</summary>
+    [Fact]
+    public void Banner_Appends_Simulation_Suffix_For_Test_Account()
+    {
+        var h = MakeShell(AdminSectionNoPin + "ExternalCamera=1\nExternalCameraType=0\n");
+        h.Shell.Startup();
+
+        var banner = h.Shell.TestModeBannerText;
+
+        Assert.Contains(AppShellViewModel.FormatExternalCameraSimulationSuffix("Nikon D5300"), banner);
+        Assert.Contains("외부 카메라 시뮬레이션", banner);
+        // 기존 배너 본문(역할·이메일·경고)이 접미 때문에 잘려 나가지 않는다.
+        Assert.Contains("관리자", banner);
+        Assert.Contains("test@email.com", banner);
+        Assert.Contains("실제 운영에 사용하지 마세요", banner);
+    }
+
+    /// <summary>
+    /// 시뮬레이션이 켜졌으나 인식된 모델이 없으면(<c>Type=-1</c>) 라벨이 "인식된 장치 없음"이다.
+    /// 빈 괄호("시뮬레이션()")를 남기면 무엇이 켜졌는지 말하지 못한다.
+    /// </summary>
+    [Fact]
+    public void Banner_Suffix_Says_None_When_No_Model_Is_Mapped()
+    {
+        var h = MakeShell(AdminSectionNoPin + "ExternalCamera=1\nExternalCameraType=-1\n");
+        h.Shell.Startup();
+
+        Assert.Contains(
+            AppShellViewModel.FormatExternalCameraSimulationSuffix(
+                AppShellViewModel.ExternalCameraSimulationNoneLabel),
+            h.Shell.TestModeBannerText);
+        Assert.DoesNotContain("시뮬레이션()", h.Shell.TestModeBannerText);
+    }
+
+    /// <summary>② 테스트 계정 + 시뮬레이션 off(기본) → 접미 없음. 기존 배너와 문자 단위로 동일하다.</summary>
+    [Fact]
+    public void Banner_Has_No_Suffix_When_Simulation_Is_Off()
+    {
+        var h = MakeShell(AdminSectionNoPin);
+        h.Shell.Startup();
+
+        Assert.Equal(
+            AppShellViewModel.FormatTestModeBanner("관리자", "test@email.com"),
+            h.Shell.TestModeBannerText);
+        Assert.DoesNotContain("시뮬레이션", h.Shell.TestModeBannerText);
+    }
+
+    /// <summary>
+    /// ★ ③ 테스트 ini on + <b>실계정 로그인</b> → 접미 없음. 이 상태에서는 시뮬레이션이 적용되지 않으므로
+    /// (게이트가 <c>IsTestUser</c>이므로) "시뮬레이션 중" 표시는 <b>거짓</b>이다.
+    /// <para>
+    /// 접미를 <c>IsEnabled</c>나 <c>Options</c> 값만 보고 붙이면 이 테스트가 깨진다 — 그것이 이 단정의 목적이다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Banner_Has_No_Suffix_For_Real_Account_Even_With_Simulation_Ini()
+    {
+        var h = MakeShell(AdminSectionNoPin + "ExternalCamera=1\nExternalCameraType=0\n");
+        h.Shell.Startup();
+        Assert.Contains("시뮬레이션", h.Shell.TestModeBannerText);   // 테스트 계정에서는 붙어 있다
+
+        h.Session.Login(new User { Id = "real", Email = "real@example.com", Role = UserRole.User });
+
+        Assert.Equal(AppShellViewModel.TestModeBannerRealAccount, h.Shell.TestModeBannerText);
+        Assert.DoesNotContain("시뮬레이션", h.Shell.TestModeBannerText);
+    }
+
+    /// <summary>로그아웃 상태에도 접미가 붙지 않는다(시뮬레이션이 적용될 세션이 없다).</summary>
+    [Fact]
+    public void Banner_Has_No_Suffix_When_Logged_Out()
+    {
+        var h = MakeShell(AdminSectionNoPin + "ExternalCamera=1\nExternalCameraType=0\n");
+
+        Assert.Equal(AppShellViewModel.TestModeBannerLoggedOut, h.Shell.TestModeBannerText);
+        Assert.DoesNotContain("시뮬레이션", h.Shell.TestModeBannerText);
+    }
+
     /// <summary>
     /// B-T23: 로그아웃 시 배너 문구 통지가 발행된다. 없으면 배너가 "관리자 권한으로 실행 중"이라는
     /// <b>거짓</b>을 계속 말한다.

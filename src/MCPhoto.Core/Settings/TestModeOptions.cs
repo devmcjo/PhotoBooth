@@ -29,6 +29,18 @@ namespace MCPhoto.Core.Settings;
 /// </param>
 /// <param name="QrBlocked">TempUser QR 한도 초과 상태 주입 여부(서버 조회가 불가능하므로 유일한 재현 수단).</param>
 /// <param name="QrBlockReason">초과 사유(설정 화면 문구가 사유별로 다르다). <paramref name="QrBlocked"/>가 참일 때만 의미.</param>
+/// <param name="ExternalCamera">
+/// 외부 카메라 <b>표시 시뮬레이션</b> 마스터 스위치(it25 §5.1). 켜지면 설정 화면 [장치 검색]의
+/// <b>관측 채취가 대체</b>되어 장비·SDK 없이 인식 콤보·검색 문구를 확인할 수 있다.
+/// <para>
+/// ⚠️ 촬영·카메라 테스트 모달·업로드는 <b>무접촉</b>이다(불변식 TS1). 시뮬레이션 산출물은 화면 문구뿐이며
+/// 이미지·파일을 만들지 않는다 — 그래서 "가짜 사진이 실제 서버에 올라간다"는 상태가 표현 자체로 불가능하다.
+/// </para>
+/// </param>
+/// <param name="ExternalCameraType">
+/// 어느 모델이 인식된 것으로 시뮬레이션할지(<c>ExternalCameraModel.TestTypeCode</c>). <c>-1</c> = 없음
+/// (인식 0 상태의 UI를 결정론적으로 확인하는 값). <paramref name="ExternalCamera"/>가 참일 때만 의미.
+/// </param>
 /// <param name="Warnings">검증 실패로 기본값 폴백한 항목의 사람 말 경고(호출자가 로깅한다).</param>
 public sealed record TestModeOptions(
     bool Enabled,
@@ -38,6 +50,8 @@ public sealed record TestModeOptions(
     string? Pin,
     bool QrBlocked,
     QrGateReason QrBlockReason,
+    bool ExternalCamera,
+    int ExternalCameraType,
     IReadOnlyList<string> Warnings)
 {
     /// <summary>INI 섹션 이름. 대소문자는 파서가 무시한다(<c>[test]</c>도 유효).</summary>
@@ -48,6 +62,8 @@ public sealed record TestModeOptions(
     public const string DefaultEmail = "test@email.com";
     public const UserRole DefaultRole = UserRole.AdvancedUser;
     public const QrGateReason DefaultQrBlockReason = QrGateReason.Count;
+    /// <summary>인식된 모델 없음(it25 §5.1). 시뮬레이션이 켜져 있어도 이 값이면 S4(찾지 못했다)를 재현한다.</summary>
+    public const int DefaultExternalCameraType = -1;
 
     /// <summary>
     /// 역할 허용 문자열(snake_case). <b>명시 열거</b>이며 서수 부등식을 쓰지 않는다 — 리포 규약(it13이 서수를 버린 이유).
@@ -60,6 +76,7 @@ public sealed record TestModeOptions(
     public static TestModeOptions Disabled { get; } = new(
         Enabled: false, Id: DefaultId, Email: DefaultEmail, Role: DefaultRole,
         Pin: null, QrBlocked: false, QrBlockReason: DefaultQrBlockReason,
+        ExternalCamera: false, ExternalCameraType: DefaultExternalCameraType,
         Warnings: Array.Empty<string>());
 
     /// <summary>
@@ -138,7 +155,31 @@ public sealed record TestModeOptions(
             }
         }
 
-        return new TestModeOptions(true, id, email, role, pin, qrBlocked, reason, warnings);
+        // ── it25 §5.1: 외부 카메라 표시 시뮬레이션 2키 ──
+        // 인식 불가 bool은 안전측(false = 시뮬레이션 꺼짐)으로 떨어진다 — bool 규약 그대로(무경고).
+        var externalCamera = ini.GetBool(SectionName, "ExternalCamera", false);
+
+        // ⚠️ Type은 마스터 스위치가 켜졌을 때만 해석한다(§5.1). 꺼진 상태의 값에 경고를 내면
+        //    "ExternalCameraType이 틀렸다"고 말하는 셈인데 실제 문제는 "ExternalCamera=1을 안 썼다"이므로
+        //    안내가 오히려 QA를 헤매게 한다. 해석하지 않은 값은 -1(없음)로 확정해
+        //    record가 무의미한 조합을 표현할 수 없게 한다.
+        var rawType = ini.GetString(SectionName, "ExternalCameraType", string.Empty).Trim();
+        int externalCameraType = DefaultExternalCameraType;
+        if (externalCamera && rawType.Length > 0)
+        {
+            var parsed = ini.GetInt(SectionName, "ExternalCameraType", int.MinValue);
+            if (parsed == DefaultExternalCameraType || Devices.ExternalCameraModels.FindByTestType(parsed) is not null)
+            {
+                externalCameraType = parsed;
+            }
+            else
+            {
+                warnings.Add($"[Test] ExternalCameraType 값을 알 수 없습니다(\"{rawType}\") — {DefaultExternalCameraType}(없음)로 실행합니다.");
+            }
+        }
+
+        return new TestModeOptions(true, id, email, role, pin, qrBlocked, reason,
+            externalCamera, externalCameraType, warnings);
     }
 
     /// <summary>
