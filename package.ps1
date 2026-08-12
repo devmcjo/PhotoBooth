@@ -77,13 +77,22 @@ $isccCandidates = @()
 foreach ($pf in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
     if (-not $pf) { continue }
     $isccCandidates += Get-ChildItem -LiteralPath $pf -Directory -Filter 'Inno Setup*' -ErrorAction SilentlyContinue |
-        ForEach-Object { Join-Path $_.FullName 'ISCC.exe' } |
-        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+        ForEach-Object {
+            $p = Join-Path $_.FullName 'ISCC.exe'
+            if (Test-Path -LiteralPath $p -PathType Leaf) {
+                # Rank by the MAJOR IN THE FOLDER NAME ("Inno Setup 7" -> 7), not by the exe's
+                # version resource: ISCC 7.0.2 reports FileVersion 0.0.0.0 (measured), so a
+                # version-resource sort would pick an older Inno Setup 6 over 7 on a machine
+                # that has both. Unnumbered folders rank 0 and only win if nothing else matched.
+                $m = [regex]::Match($_.Name, '(\d+)\s*$')
+                [pscustomobject]@{ Path = $p; Major = if ($m.Success) { [int]$m.Groups[1].Value } else { 0 } }
+            }
+        }
 }
 # PATH fallback (custom install location, or a portable copy).
 if (-not $isccCandidates) {
     $onPath = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-    if ($onPath) { $isccCandidates = @($onPath.Source) }
+    if ($onPath) { $isccCandidates = @([pscustomobject]@{ Path = $onPath.Source; Major = 0 }) }
 }
 
 if (-not $isccCandidates) {
@@ -95,24 +104,18 @@ then run this script again. The published exe in '$out' is unaffected and still 
     return
 }
 
-# Highest file version wins (7.x over 6.x). Ties fall back to path order.
-# ⚠️ Build the version from FileMajorPart/FileMinorPart, NOT VersionInfo.FileVersionRaw:
-#    FileVersionRaw is a PowerShell 7+ extended property and package.bat runs Windows
-#    PowerShell 5.1, where it is absent (the sort would silently compare nulls).
-$iscc = $isccCandidates |
-    Sort-Object -Property @{ Expression = {
-        $vi = (Get-Item -LiteralPath $_).VersionInfo
-        New-Object System.Version ($vi.FileMajorPart, $vi.FileMinorPart, $vi.FileBuildPart, $vi.FilePrivatePart)
-    } } -Descending |
-    Select-Object -First 1
-$isccVer = (Get-Item -LiteralPath $iscc).VersionInfo.FileVersion
+# Highest folder major wins (7 over 6). Ties fall back to enumeration order.
+$iscc = ($isccCandidates | Sort-Object -Property Major -Descending | Select-Object -First 1).Path
+# ISCC's own version resource is unreliable (7.0.2 reports 0.0.0.0), so report the folder it
+# came from instead - that is what actually tells the operator which Inno Setup ran.
+$isccWhere = Split-Path -Leaf (Split-Path -Parent $iscc)
 if ($isccCandidates.Count -gt 1) {
     Write-Host "Inno Setup: found $($isccCandidates.Count) installs, using the newest." -ForegroundColor DarkGray
 }
 
 # ---- 3. Compile ----
 Write-Host "`n=== 2/2  Building installer ===" -ForegroundColor Cyan
-Write-Host "ISCC: $iscc  (v$isccVer)" -ForegroundColor DarkGray
+Write-Host "ISCC: $iscc  ($isccWhere)" -ForegroundColor DarkGray
 & $iscc $iss
 if ($LASTEXITCODE -ne 0) {
     Write-Error "installer build failed (exit $LASTEXITCODE)"
