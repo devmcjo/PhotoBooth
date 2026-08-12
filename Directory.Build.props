@@ -10,6 +10,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <!-- 어셈블리 메타데이터 -->
     <Company>MCPhoto</Company>
+    <!-- 제품 이름: exe 파일 속성·작업 관리자·AssemblyProduct에 노출된다. 웹 페이지·인스톨러와
          동일하게 "MCPhoto"로 통일(it19 후속 — 종전 "MC포토"). -->
     <Product>MCPhoto</Product>
     <NeutralLanguage>ko-KR</NeutralLanguage>
