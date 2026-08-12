@@ -91,6 +91,24 @@ Name: "desktopicon"; Description: "바탕화면 바로가기 생성"; GroupDescr
 Filename: "{app}\{#AppExeName}"; Description: "{#AppName} 실행"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; 캐시는 정리, 사용자 설정/결과물은 보존
+; ⚠️ 언인스톨러는 **자기가 설치한 파일만** 추적한다. 앱이 실행 중에 만든 것은 목록에 없어
+;    그대로 남는다 — 실측(2026-08-12)에서 제거 후 `{app}` 에 아래가 남았다:
+;      MCPhoto.ini  … 설정 파일(앱이 최초 실행 시 생성. 승격 실행이면 Program Files 에 쓴다)
+;      Frame\       … 서버에서 내려받은 프레임(FrameCatalogService.BundleFolder = {exe}\Frame)
+;    사용자 요구가 "Program Files·로그·레지스트리 모두 제거"이므로 명시 열거한다.
+Type: files; Name: "{app}\MCPhoto.ini"
+Type: files; Name: "{app}\branding.ini"
+Type: filesandordirs; Name: "{app}\Frame"
+Type: filesandordirs; Name: "{app}\result"
+; 위를 지운 뒤 빈 설치 폴더까지 정리한다(dirifempty 는 비어 있을 때만 지우므로,
+; 운영자가 따로 둔 파일이 있으면 보존된다 — 남의 파일을 지우지 않는다).
+Type: dirifempty; Name: "{app}"
+
+; 데이터 폴더: 로그·캐시·세션 임시물은 정리한다.
 Type: filesandordirs; Name: "{commonappdata}\MCPhoto\cache"
 Type: filesandordirs; Name: "{commonappdata}\MCPhoto\logs"
+Type: filesandordirs; Name: "{commonappdata}\MCPhoto\sessions"
+Type: files; Name: "{commonappdata}\MCPhoto\MCPhoto.ini"
+; ⚠️ `{commonappdata}\MCPhoto` 자체는 dirifempty 로만 지운다 — 촬영 결과물(result\)이
+;    여기 있을 수 있고, 그것은 사용자 자산이라 제거가 임의로 지워서는 안 된다.
+Type: dirifempty; Name: "{commonappdata}\MCPhoto"
