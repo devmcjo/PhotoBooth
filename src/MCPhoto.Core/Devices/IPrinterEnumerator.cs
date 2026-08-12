@@ -38,8 +38,10 @@ public sealed record PrinterEnumerationResult(bool Succeeded, IReadOnlyList<Inst
 /// <b>왜 남겼는가</b>: it24 Step 5가 <b>장비 없이 실측으로 해소한 사실 3건</b>이 이 계약과 그 구현·테스트에
 /// 굳어 있다. 지우면 인쇄 기능 이터레이션에서 같은 검증을 처음부터 다시 치른다.
 /// <list type="number">
-/// <item><c>System.Printing</c>은 <b>WindowsDesktop 참조팩에 동봉</b>되어 있다 — <c>net8.0-windows</c> +
-///       <c>UseWPF</c> 프로젝트에서 <b>패키지·참조 추가가 불요</b>하다(csproj 수정 0).</item>
+/// <item><c>System.Printing</c>은 <b>WindowsDesktop 참조팩에 동봉</b>되어 있다 — <c>net10.0-windows</c> +
+///       <c>UseWPF</c> 프로젝트에서 <b>패키지·참조 추가가 불요</b>하다(csproj 수정 0).
+///       ⚠️ 실측 시점의 TFM은 <c>net8.0-windows</c>였고 .NET 10 이관 후에도 성립한다(빌드가 증명한다 —
+///       <c>SystemPrinterEnumerator</c>가 <c>using System.Printing</c>으로 컴파일된다).</item>
 /// <item>스풀러 서비스가 중지된 상태에서도 <b>예외가 호출측으로 새지 않는다</b> — "확인할 수 없다"
 ///       (<see cref="PrinterEnumerationResult.Succeeded"/>=false)로 강등된다.</item>
 /// <item>기본 프린터가 설정되지 않은 머신에서 기본 프린터 조회가 실패할 수 있어 <b>null 가드</b>가 필요하다

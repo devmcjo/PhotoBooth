@@ -38,7 +38,7 @@
 | `dotnet build` | `src\MCPhoto.App\bin\Debug\net10.0-windows\` | `publish.ps1:16-17` |
 | `dotnet build -c Release` | `src\MCPhoto.App\bin\Release\net10.0-windows\` | `publish.ps1:17` |
 
-일반 빌드에서는 프레임워크 의존(자체 .NET 설치 필요) 산출물이 나오며, ffmpeg·Frame·branding 은 출력 폴더 하위로 복사된다(§3, §4).
+일반 빌드에서는 프레임워크 의존(자체 .NET 설치 필요) 산출물이 나오며, ffmpeg·branding 은 출력 폴더 하위로 복사된다(§3, §4). ⚠️ **`Frame\`은 더 이상 복사되지 않는다**(it27 — §4).
 
 ---
 

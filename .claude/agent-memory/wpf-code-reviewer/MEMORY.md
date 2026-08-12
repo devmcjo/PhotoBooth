@@ -5,3 +5,4 @@
 - [DI 등록 되돌리기 실험](di-wiring-revert-experiment.md) — 배선 수정 리뷰는 옛 등록으로 되돌려 실패를 실측(direct 승격). 복원 후 --no-build 금지
 - [로그아웃 경로는 실질 1개](photobooth-logout-paths.md) — Reset(clearUser:true) 실호출 0(it8 A1). 업로드 중엔 상단바 숨김이라 로그아웃 자체가 불가
 - [컬럼 폭 잘림 FormattedText 실측](xaml-column-width-measure-recipe.md) — UI가 PIN 게이트로 실행 불가 → 실측이 direct 근거. 기준값·1146px 합계·StackPanel TextTrimming 함정
+- [제거 시 dirifempty 실측 레시피](inno-uninstall-dirifempty-probe.md) — dirifempty는 설치파일 삭제 **후** 평가된다(실측). result\ 보존 판정은 probe 인스톨러로 direct 근거화

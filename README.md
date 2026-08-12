@@ -35,7 +35,7 @@ photobooth/
 │  ├─ MCPhoto.Capture/     # OpenCvSharp 카메라, ffmpeg 녹화/타임랩스, 합성, 필터
 │  ├─ MCPhoto.Http/        # 백엔드(HTTPS API) 클라이언트 — 계정·프레임·업로드·설정
 │  └─ MCPhoto.App/         # WPF UI(Views/ViewModels), DI 부트스트랩, 상태머신
-├─ tests/MCPhoto.Tests/    # 단위·headless XAML 회귀 테스트 (1006개)
+├─ tests/MCPhoto.Tests/    # 단위·headless XAML 회귀 테스트 (1492개)
 ├─ web/
 │  ├─ public/              # 모바일 다운로드 페이지(바닐라 JS)
 │  ├─ functions/           # 백엔드 API (Cloud Functions 2nd gen, TypeScript) — 테스트 350개
@@ -56,7 +56,7 @@ photobooth/
 ```bash
 # 요구: .NET 10 SDK (Windows)
 dotnet build MCPhoto.sln -c Debug        # 빌드
-dotnet test  MCPhoto.sln                 # 테스트 (1006개)
+dotnet test  MCPhoto.sln                 # 테스트 (1492개)
 dotnet run  --project src/MCPhoto.App    # 실행
 ```
 

@@ -50,11 +50,15 @@ if ($SkipPublish) {
         return
     }
     Write-Host "=== 1/2  Publishing ===" -ForegroundColor Cyan
-    # Dot-source so a 'return' inside publish.ps1 (app running, publish failed) lands here and
-    # we can stop before packaging a half-built folder.
+    # Invoke as a child scope. A 'return' inside publish.ps1 (app running -> exe locked) lands
+    # here, and 'dotnet publish' failing there raises a terminating error (its own
+    # $ErrorActionPreference='Stop' + Write-Error) that propagates and stops us before packaging.
     & $publish
+    # Belt and braces: $LASTEXITCODE reflects the last NATIVE command ('dotnet publish'). It is
+    # $null when publish.ps1 bailed before running dotnet at all, which also fails this test -
+    # deliberately, because "we never published" must not be packaged as a release either.
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "publish failed (exit $LASTEXITCODE) - not packaging."
+        Write-Error "publish did not complete (dotnet exit code: '$LASTEXITCODE') - not packaging."
         return
     }
 }
