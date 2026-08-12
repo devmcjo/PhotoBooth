@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | WPF 앱 빌드/게시(단일 파일 publish)·ffmpeg 번들·인스톨러 구성 분석 |
 | 범위 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`·`publish.bat`, `Directory.Build.props`(버전 원천), `installer/MCPhoto.iss`, `branding.ini.sample`, **백엔드 게이트 키 exe 내장**. 백엔드 계약은 [30](./30-backend-firebase-integration.md), 웹·Functions 배포는 `web/deploy-web.bat` |
-| 최종 업데이트 | 2026-08-12 (.NET 10 이관 + 인스톨러 정비 — AppVersion exe 판독·PublishDir 정정·[Files] 화이트리스트·publish.ps1 -Installer) · 이전 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
+| 최종 업데이트 | 2026-08-12 (.NET 10 이관 + 인스톨러 정비 — AppVersion exe 판독·PublishDir 정정·[Files] 화이트리스트·**package.bat 신설**로 패키징 분리) · 이전 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
 | 관련 소스 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`, `publish.bat`, `Directory.Build.props`, `installer/MCPhoto.iss`, `src/MCPhoto.App/branding.ini.sample`, `tools/ffmpeg/ffmpeg.exe`, `publish/MCPhoto/`(산출물) |
 | 갱신 규칙 | csproj 의 Target·복사 항목, publish 스크립트(게이트 키 주입 포함), iss 파일이 바뀌면 표/근거(`파일:라인`) 갱신. ffmpeg 경로/번들 방식 변경은 [10번](./10-exe-app-architecture.md) §4.5와 동시 갱신 |
 
@@ -164,6 +164,20 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 ## 6. 인스톨러 (Inno Setup)
 
 `installer/MCPhoto.iss`가 Inno Setup 스크립트다(WBS Step 12).
+
+### 6.0 진입점 — 테스트용과 배포용을 분리한다
+
+| 실행 | 하는 일 | 산출물 |
+|---|---|---|
+| `publish.bat` / `publish.ps1` | publish**만**. 인스톨러를 만들지 않는다 | `publish\MCPhoto\MCPhoto.exe` |
+| **`package.bat` / `package.ps1`** | publish → Inno Setup 컴파일 | `installer\Output\MCPhoto-Setup-{버전}.exe` |
+| `package.ps1 -SkipPublish` | 기존 publish 산출물을 그대로 패키징(`.iss`만 손볼 때) | 상동 |
+
+- **왜 분리했나**: publish는 테스트용 내부 루프다. 패키징을 여기에 얹으면 테스트 산출물이 배포물처럼 보이는 사고가 난다. 배포 경로를 별도 진입점으로 두면 "이걸 실행하면 배포물이 나온다"가 명확해진다.
+- **package는 기본적으로 다시 publish한다**: publish 출력 폴더는 재사용되므로, 거기 있는 것을 그냥 감싸면 **낡은 exe가 배포**될 수 있다(그런데 인스톨러 이름·버전은 그 exe에서 읽으므로 그럴듯해 보인다). 재빌드가 이 드리프트를 원천 제거한다. `.iss`만 반복 수정할 때만 `-SkipPublish`를 쓴다.
+- **ISCC 탐색은 버전 폴더를 하드코딩하지 않는다**: Inno Setup 7(현행)은 6과 나란히 설치되고 32/64비트 에디션이 따로 있다. `Program Files` 양쪽 트리에서 `Inno Setup *` 폴더를 열거해 **파일 버전이 가장 높은 것**을 고르고, 없으면 PATH를 본다. 새 메이저가 나와도 이 스크립트를 고칠 필요가 없다.
+  - ⚠️ 버전 비교는 `FileMajorPart`/`FileMinorPart`로 조립한다. `VersionInfo.FileVersionRaw`는 **PowerShell 7+ 전용 확장 속성**이고 `package.bat`은 Windows PowerShell 5.1을 부르므로, 그걸 쓰면 5.1에서 null끼리 비교해 조용히 잘못된 버전을 고른다.
+- Inno Setup이 없으면 **명확한 오류로 끝난다**(설치 링크 안내 포함). publish 산출물은 그대로 쓸 수 있음을 함께 알린다.
 
 | 항목 | 값 | 근거 |
 |------|-----|------|

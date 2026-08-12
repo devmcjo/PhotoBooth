@@ -2,10 +2,11 @@
 ; 배포물 = MCPhoto.exe(자체 포함 단일 파일) + licenses\ + tools\ffmpeg. 이 셋뿐이다(§[Files] 참조).
 ; 데이터 폴더는 %ProgramData%\MCPhoto (쓰기 가능). 설정 파일은 앱이 최초 실행 시 스스로 만든다.
 ;
-; 빌드 전제: publish.ps1 이 만든 자체 포함 단일 exe 산출물.
-;   powershell -ExecutionPolicy Bypass -File publish.ps1      → publish\MCPhoto\
-;   그 후: iscc installer\MCPhoto.iss
-; publish.ps1 -Installer 를 쓰면 위 두 단계가 한 번에 실행된다.
+; 빌드: **package.bat**(또는 package.ps1) 하나로 publish → 인스톨러까지 실행된다.
+;   publish.bat 은 테스트용(publish만)이고 인스톨러를 만들지 않는다 — 테스트 산출물이
+;   배포물처럼 보이는 사고를 막기 위해 일부러 분리했다.
+; 수동으로 컴파일할 수도 있다: iscc installer\MCPhoto.iss (publish 가 선행돼야 한다)
+; Inno Setup 6·7 모두 호환된다(7이 현행). package.ps1 은 설치된 버전 중 가장 높은 것을 자동 선택한다.
 
 ; 표시 이름은 여기 한 곳에서만 정의한다({#AppName}로 참조 — 종전엔 [Icons]·[Run]에 하드코딩돼 있었다).
 #define AppName "MCPhoto"
