@@ -1,7 +1,7 @@
 # wpf-architect 프로젝트 메모리 (MCPhoto)
 
 - [Camera Singleton 제약](camera-singleton-constraint.md) — 카메라 서비스 Singleton 공유·StartAsync 재시작 불가·CameraFramePresenter 재사용·Preview 데드코드
-- [설정 INI 인프라](mcphoto-settings-ini-infra.md) — IniFile/SettingsPathResolver 재사용·실행경로 우선·설정 오버레이 네비게이션 + ⚠️ Save()가 [MCPhoto] 외 섹션을 지우고 종료마다 호출됨(새 섹션 설계 시 선결)
+- [설정 INI 인프라](mcphoto-settings-ini-infra.md) — IniFile/SettingsPathResolver 재사용·실행경로 우선·설정 오버레이 네비게이션·외래 섹션 유실은 it23에서 해소(미매핑 키는 여전히 버림)
 - [it10 서버 키 배포](it10-server-key-distribution.md) — 키 번들은 publish.ps1 레벨(csproj 금지)·시드 폴백 D1~D3 미확정·프레임 이름 '_' 규약 함정
 - [설정 게스트 편집 게이트](settings-guest-edit-gate.md) — 편집 권한 게이트 3지점(Load강제off/Save미기록/XAML IsEnabled)·VM계층만·런타임 불변·Toggle.Gated 툴팁
 - [Firebase 접근 추상화](firebase-access-abstraction.md) — Core 인터페이스 5종으로 격리·구현만 HTTP 교체 시 UI 무변경·만료정리 앱 미호출
@@ -16,3 +16,5 @@
 - [it24 장치 탐색 정직성](it24-device-discovery-honesty.md) — "없습니다 vs 확인불가" 명제분리·준비도=shim IsOperational+파일·WMI 제네릭이름 반증·System.Printing 동반어셈블리
 - [it25 시뮬레이션 경계](it25-test-simulation-boundary.md) — TestMode 시뮬레이션=표시전용(TS1~TS4, IsTestUser 게이트)·TestTypeCode 행내 매핑·인식콤보 SelectedValue 분리(클로버)·프린터 스캐폴드 환원
 - [it25 인식·시뮬레이션](it25-recognition-and-simulation.md) — 노출기준="지원+인식"(설치나열 반려)·합성행 (미인식)·Clamp/Resolve 비대칭·[Test] 장치시뮬 DI분기(반쪽금지)·모델추가 3지점
+- [XAML 회귀 커버리지 실체](xaml-regression-coverage-truth.md) — Window도 소스스캔으로 검증됨(UserControl 우위 아님)·전체파싱은 Themes만·표면형태는 소유권으로 판정
+- [it26 쓰기위치·완료팝업](it26-writable-paths-and-completion-popup.md) — 자산등급별 이관(파일 무접촉=유실0)·ini 정책 불변 이유·모달 부활 허가조건(자동만료+연장불가)·세션폴더는 반환값만

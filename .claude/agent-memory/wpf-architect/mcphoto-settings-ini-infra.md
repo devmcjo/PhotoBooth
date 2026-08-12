@@ -17,15 +17,13 @@ MCPhoto는 설정 저장에 자체 구현 INI 인프라를 쓴다 — 신규 외
 - 설정 저장은 `IniSettingsService.Save()`가 bool 반환(폴백 체인 실패 시 false) — 성공 오인 금지 원칙(실패 시 오류 토스트). `AppSettings.Clamp()`가 값 범위 강제.
 - App 데이터 폴더 = `App.DataFolder`(%CommonApplicationData%\MCPhoto, 로그·세션). 실행경로 = `AppContext.BaseDirectory`.
 
-**⚠️ MCPhoto.ini에 새 섹션을 설계할 때의 함정 (2026-08-10 it23에서 확인)**
-- `IniSettingsService.Save()`는 `new IniFile()`에 `[MCPhoto]`만 채워 파일을 **통째로 덮어쓴다** →
-  `[MCPhoto]` 외 섹션은 **소멸**한다. 게다가 `MainWindow.OnClosing`이 **앱 종료마다 무조건 `Save()`를
-  호출**하므로, 사람이 손으로 넣은 섹션은 "설정을 저장했을 때"가 아니라 **첫 종료에** 사라진다
-  (원인 추적이 매우 어려운 형태의 유실이다).
-- 따라서 **새 섹션 기능보다 "외래 섹션 보존"을 먼저 구현**한다. 해법은 `Save()`가 아니라
-  **폴백 루프 안에서 경로별로 재조립** + 그 경로의 현재 파일을 읽어 미보유 섹션을 채취하는 것
-  (한 번 조립한 문자열을 폴백 경로에 재사용하면 1순위의 섹션이 2순위 파일로 **이식**된다).
-  `[MCPhoto]` 안의 미매핑 키는 계속 버린다 — 키 단위 병합은 오탈자·폐기 키를 되살린다.
+**⚠️ MCPhoto.ini에 새 섹션을 설계할 때의 함정 (2026-08-10 it23에서 확인 → **it23에서 수정 완료**)**
+- ~~`Save()`가 `[MCPhoto]` 외 섹션을 지운다~~ → **해소됨**(2026-08-12 재확인). 현재
+  `IniSettingsService.Save()`는 폴백 루프 안에서 **경로별로 재조립**하고 `TryReadExisting(candidate)` +
+  `AdoptMissingSections`로 그 경로의 외래 섹션(`[Test]` 등)을 보존한다. `MainWindow.OnClosing`이
+  앱 종료마다 `Save()`를 부르는 것은 여전하지만 더 이상 유실을 만들지 않는다.
+- 남는 규약: `[MCPhoto]` 안의 미매핑 키는 **계속 버린다** — 키 단위 병합은 오탈자·폐기 키를 되살린다.
+  한 번 조립한 문자열을 폴백 경로에 재사용하면 1순위 파일의 섹션이 2순위 파일로 **이식**된다(경로별 재조립 필수).
 - **활성 ini 경로는 "파일이 있는 곳"이 아니라 "쓰기 가능한 첫 후보"**다(`ResolveWritable`).
   사람이 편집한 ini가 앱이 읽는 ini가 아닐 수 있으므로, ini 기반 기능을 설계하면 **경로를 화면
   (진단)·로그에 노출**하는 항목을 함께 넣는다. `ISettingsService`에는 `IniPath`가 없고
