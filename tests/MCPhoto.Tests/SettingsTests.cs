@@ -98,6 +98,48 @@ public class SettingsTests : IDisposable
         Assert.Equal(value, svc2.Load().EnableQrDelivery);
     }
 
+    // ── it26 §7.1 T20: 유휴 팝업 결과물 폴더 열기 옵션(기본 off · 키 부재 시 false) ──
+
+    [Fact]
+    public void EnableResultFolderOpen_Defaults_Off()
+    {
+        // ⛔ 기본 on으로 바뀌면 설치 직후 부스가 **모르는 채로** 손님에게 탐색기를 열어 준다(fail-safe 기본값).
+        Assert.False(new IniSettingsService(iniPath: _tempPath).Load().EnableResultFolderOpen);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EnableResultFolderOpen_RoundTrips(bool value)
+    {
+        var svc = new IniSettingsService(iniPath: _tempPath);
+        var s = svc.Load();
+        s.EnableResultFolderOpen = value;
+        Assert.True(svc.Save());
+
+        Assert.Equal(value, new IniSettingsService(iniPath: _tempPath).Load().EnableResultFolderOpen);
+    }
+
+    [Fact]
+    public void Missing_EnableResultFolderOpen_Key_Falls_Back_To_False()
+    {
+        // 마이그레이션 불요 증명: 기존 ini(키 없음)를 그대로 읽으면 off다.
+        File.WriteAllText(_tempPath, "[MCPhoto]\nCutCount=6\nSaveLocalCopy=1\n");
+
+        var s = new IniSettingsService(iniPath: _tempPath).Load();
+
+        Assert.False(s.EnableResultFolderOpen);
+        Assert.True(s.SaveLocalCopy);   // 다른 키의 읽기는 영향받지 않는다
+    }
+
+    [Fact]
+    public void Clone_Carries_EnableResultFolderOpen()
+    {
+        // Clone 누락은 설정 편집 취소 시 값이 조용히 유실되는 형태로 나타난다.
+        var s = new AppSettings { EnableResultFolderOpen = true };
+        Assert.True(s.Clone().EnableResultFolderOpen);
+    }
+
     [Fact]
     public void GoogleClientId_RoundTrips()
     {

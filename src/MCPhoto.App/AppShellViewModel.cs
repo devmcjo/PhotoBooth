@@ -5,6 +5,7 @@ using MCPhoto.App.ViewModels;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Build;
 using MCPhoto.Core.Devices;
+using MCPhoto.Core.LocalSave;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Navigation;
 using MCPhoto.Core.Settings;
@@ -34,6 +35,11 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     /// </summary>
     private readonly ITestModeService? _testMode;
 
+    /// <summary>
+    /// 폴더 열기(유휴 팝업의 [결과물 폴더 열기]). 미주입(테스트 다수)이면 커맨드가 실패 경로로 안전 동작한다. (it26 §5.3)
+    /// </summary>
+    private readonly Services.IFolderOpener? _folderOpener;
+
     /// <summary>무동작 후 경고 팝업까지(초). 2분. (it8 §2 A1)</summary>
     public int IdleWarningSeconds { get; set; } = 120;
 
@@ -43,6 +49,26 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     // 유휴 경고 오버레이 상태(모달 오버레이 — 현재 화면 유지한 채 위에 표시).
     [ObservableProperty] private bool _isIdleWarningVisible;
     [ObservableProperty] private int _idleCountdownRemaining;
+
+    // ── it26 §4: 유휴 경고 팝업의 [결과물 폴더 열기] 링크 ──
+    // ⚠️ 팝업 자체(120초·10초·두 버튼·문구·타이머 구조)는 그대로다 — 링크만 얹는다.
+
+    /// <summary>링크 노출 여부. <see cref="ShowIdleWarning"/> 시점에 1회 계산한다(바인딩마다 재계산 없음).</summary>
+    [ObservableProperty] private bool _isResultFolderLinkVisible;
+
+    /// <summary>폴더 열기 실패 안내(팝업 안에만 표시). 빈 문자열이면 미노출.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasResultFolderOpenError))]
+    private string _resultFolderOpenError = string.Empty;
+
+    /// <summary>열기 실패 안내 노출 여부(문구가 있을 때만).</summary>
+    public bool HasResultFolderOpenError => !string.IsNullOrEmpty(ResultFolderOpenError);
+
+    /// <summary>
+    /// 열기 실패 안내 문구(it26 M2). 경로를 함께 노출해 <b>수동 탐색이 가능</b>하게 한다
+    /// (LogFolderService의 "경로는 항상 보여 준다" 관례 계승).
+    /// </summary>
+    public static string FormatResultFolderOpenError(string path) => $"폴더를 열 수 없습니다. 저장 위치: {path}";
 
     private IdleCountdown? _idleCountdown;
     private DispatcherTimer? _idleCountdownTimer;
@@ -159,7 +185,8 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         IServiceProvider services,
         SessionContext session,
         ILogger<AppShellViewModel>? logger = null,
-        ITestModeService? testMode = null)
+        ITestModeService? testMode = null,
+        Services.IFolderOpener? folderOpener = null)
     {
         _idle = idle;
         _settings = settings;
@@ -167,6 +194,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         _session = session;
         _logger = logger;
         _testMode = testMode;
+        _folderOpener = folderOpener;
         _dispatcher = Dispatcher.CurrentDispatcher;
         // 빌드 정보는 선택적(미등록/테스트 시 null → 표기 비노출). 앱에선 DI로 항상 주입(it18: 어셈블리 출처).
         _buildInfo = services.GetService<IBuildInfoService>();
@@ -512,13 +540,24 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     private void OnIdleTimeout(object? sender, EventArgs e)
         => _dispatcher.BeginInvoke(ShowIdleWarning);
 
-    private void ShowIdleWarning()
+    /// <remarks>
+    /// <c>internal</c>인 이유: 이 경로는 <c>DispatcherTimer</c>·메시지 펌프를 요구하는 <c>OnIdleTimeout</c>을 거치므로
+    /// headless 테스트가 그 앞을 직접 밀어야 한다(창을 만들지 않고 링크 가시성·실패 캡션을 검증한다).
+    /// 동작은 종전과 동일하며 접근성만 넓혔다.
+    /// </remarks>
+    internal void ShowIdleWarning()
     {
         if (IsIdleWarningVisible) return;
         _idle.Stop(); // 경고 단계에선 warning 타이머 정지(카운트다운이 이어받음)
         _idleCountdown = new IdleCountdown(IdleCountdownSeconds);
         IdleCountdownRemaining = _idleCountdown.Remaining;
         IsIdleWarningVisible = true;
+
+        // it26 §4.6: 링크 가시성은 여기서 1회 계산한다("옵션 on AND 이 세션 저장 성공"의 AND).
+        //   직전 팝업의 실패 안내가 남아 있으면 다음 손님 화면에 이전 경로가 뜬다 → 함께 비운다.
+        ResultFolderOpenError = string.Empty;
+        IsResultFolderLinkVisible = ResultFolderLinkPolicy.ShouldShow(
+            _session.LocalSaveFolder, _settings.Current.EnableResultFolderOpen);
 
         _idleCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _idleCountdownTimer.Tick += OnIdleCountdownTick;
@@ -537,7 +576,7 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void HideIdleWarning()
+    internal void HideIdleWarning()
     {
         _idleCountdownTimer?.Stop();
         if (_idleCountdownTimer is not null)
@@ -545,6 +584,10 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
         _idleCountdownTimer = null;
         _idleCountdown = null;
         IsIdleWarningVisible = false;
+
+        // it26 §5.3: 다음 팝업에 stale 링크·오류가 남지 않게 여기서도 초기화한다.
+        IsResultFolderLinkVisible = false;
+        ResultFolderOpenError = string.Empty;
     }
 
     // ── 공통 네비게이션 커맨드 ──
@@ -672,6 +715,36 @@ public sealed partial class AppShellViewModel : ObservableObject, IDisposable
     {
         HideIdleWarning();
         ReturnHome("유휴 경고 — 메인으로", clearUser: false);
+    }
+
+    /// <summary>
+    /// [결과물 폴더 열기]: <b>이 세션의 저장 폴더만</b> 탐색기로 연다. (it26 §5.1)
+    /// <para>
+    /// ⚠️ 경로는 <see cref="SessionContext.LocalSaveFolder"/>(= <c>SaveAsync</c>의 반환값)다 —
+    /// 저장 루트를 열면 <b>직전 손님들의 사진이 전부 보이고</b>, 폴더명이 촬영 시각이라 방문 시각까지 드러난다.
+    /// 시각으로 폴더명을 재계산하는 것도 금지다(<c>-2</c> 접미 때문에 다른 손님 폴더를 연다).
+    /// </para>
+    /// <para>
+    /// ⚠️ 카운트다운에 손대지 않는다(사용자 지시: "링크를 눌러도 카운트다운을 멈추지마"). 일시정지·연장 로직을
+    /// 만들지 않으며, <c>NotifyUserActivity</c>도 경고 표시 중에는 무시되므로 추가 조치가 필요 없다.
+    /// 탐색기 창은 별 프로세스라 앱이 홈으로 돌아가도 닫히지 않는다.
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private void OpenResultFolder()
+    {
+        var folder = _session.LocalSaveFolder;
+        if (string.IsNullOrEmpty(folder)) return;   // 링크가 보이지 않아야 하는 상태 — 무해한 no-op
+
+        if (_folderOpener?.TryOpen(folder) == true)
+        {
+            ResultFolderOpenError = string.Empty;
+            return;
+        }
+
+        // 실패 안내는 **팝업 안에만** 남긴다(토스트로 남기면 다음 손님 화면에 이전 손님 경로가 뜬다).
+        ResultFolderOpenError = FormatResultFolderOpenError(folder);
+        _logger?.LogWarning("결과물 폴더 열기 실패: {Path}", folder);
     }
 
     public void Dispose()

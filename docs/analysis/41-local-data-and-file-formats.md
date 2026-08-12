@@ -302,7 +302,9 @@ deleteLocal(frame):
 | 항목 | 규격 |
 |------|------|
 | 활성 조건 | 설정 `SaveLocalCopy` on |
-| 위치 | 설정 `LocalSavePath`. 빈 값이면 **플랫폼 기본 결과물 위치**(Windows: `{실행경로}\result\`) |
+| 위치 | 설정 `LocalSavePath`. 빈 값이면 **플랫폼 기본 결과물 위치**(Windows: **`%ProgramData%\MCPhoto\result\`** — it26 이관, 종전 `{실행경로}\result\`). 명시값은 항상 우선 |
+| 이관 규약(it26) | 구 위치의 파일을 **옮기지도 지우지도 않는다.** 앱은 `result`를 쓰기만 하므로 새 기본값은 **새 세션만** 새 폴더로 보내고 구 폴더는 그대로 남는다(제거 시에도 보존). 시작 시 구 폴더가 있으면 위치를 Warning 로그로 알린다 |
+| 세션 폴더 경로 | `SaveAsync`의 **반환값**이 유일한 출처다(`SessionContext.LocalSaveFolder`, 세션 수명). 시각으로 재계산하면 `-2` 접미 때문에 **다른 세션 폴더**를 가리킨다 |
 | 세션 폴더명 | **`mcphoto_YYMMDD_HHMM`** (예: `mcphoto_260730_1445`) |
 | 충돌 처리 | 같은 폴더가 있으면 `-2`, `-3` … 접미 |
 | 파일 | `final.{jpg\|png}` + `timelapse.mp4`(있을 때만) |
@@ -377,15 +379,19 @@ deleteLocal(frame):
 | 용도 | Windows(현행) | macOS | iOS / iPadOS | Android | 웹 |
 |------|---------------|-------|--------------|---------|-----|
 | 설정 | `MCPhoto.ini`(3단 폴백) | `~/Library/Application Support/MCPhoto/` | `UserDefaults` 또는 앱 지원 디렉터리 | `DataStore` | `localStorage` |
-| 로컬 프레임 | `{실행경로}\Frame\` | `~/Library/Application Support/MCPhoto/Frame/` | `Library/Application Support/Frame/` | `filesDir/frames/` | IndexedDB(Blob + 메타) |
+| 로컬 프레임(캐시, 쓰기) | **`%ProgramData%\MCPhoto\Frame\`**(it26) | `~/Library/Application Support/MCPhoto/Frame/` | `Library/Application Support/Frame/` | `filesDir/frames/` | IndexedDB(Blob + 메타) |
+| 번들 프레임(읽기 전용) | `{실행경로}\Frame\`(운영자 배치 · `FrameCatalogService.BundleFolder`) | 앱 번들 리소스 | 앱 번들 | `assets/` | 정적 자산 |
 | 세션 임시 | `%ProgramData%\MCPhoto\sessions\{id}\` | `NSTemporaryDirectory()/mcphoto/{id}/` | `tmp` 또는 캐시 디렉터리 | `cacheDir/sessions/{id}/` | 메모리 / OPFS |
-| 결과물 영구 | `{실행경로}\result\mcphoto_YYMMDD_HHMM\` | `~/Pictures/MCPhoto/` 또는 지정 경로 | Photos 라이브러리(권한) | `MediaStore.Images` / `MediaStore.Video` | 브라우저 다운로드 |
+| 결과물 영구 | **`%ProgramData%\MCPhoto\result\mcphoto_YYMMDD_HHMM\`**(it26) | `~/Pictures/MCPhoto/` 또는 지정 경로 | Photos 라이브러리(권한) | `MediaStore.Images` / `MediaStore.Video` | 브라우저 다운로드 |
 | 로그 | `%ProgramData%\MCPhoto\logs\` | `~/Library/Logs/MCPhoto/` | `Library/Caches/logs/` + 공유 | `filesDir/logs/` | 콘솔 |
 | 브랜딩·버전 | 실행 경로 INI 파일 | 앱 번들 또는 지원 디렉터리 | 앱 번들 `Info.plist` | `BuildConfig` | 빌드 상수 |
-| 프레임 이미지 캐시 | `{실행경로}\Frame\`(공용과 동일 폴더) | 동상 | 앱 지원 디렉터리 | `filesDir` | IndexedDB |
+| 프레임 이미지 캐시 | `%ProgramData%\MCPhoto\Frame\`(공용·개인 캐시가 같은 루트) | 동상 | 앱 지원 디렉터리 | `filesDir` | IndexedDB |
 | fallback 프레임 캐시 | `%ProgramData%\MCPhoto\cache\fallback_frame.png` | 캐시 디렉터리 | 캐시 디렉터리 | `cacheDir` | 메모리 |
 
 > **공통 원칙**: 실행 파일 폴더가 쓰기 가능한 것은 Windows의 개발/포터블 배포 특성이다. 다른 플랫폼에서는 **앱 전용 쓰기 가능 디렉터리**를 쓰고, 사용자에게 보여야 하는 산출물만 공용 위치(사진 라이브러리 등)로 내보낸다.
+>
+> **it26: Windows도 같은 원칙으로 정리됐다.** 앱이 쓰는 것은 전부 `%ProgramData%\MCPhoto` 아래다(설정 ini는 예외 — 실행경로 1순위 정책 유지, [12 §2.3](./12-exe-app-settings-and-config.md)). 실행 폴더는 읽기 전용 배포물이며, `{실행경로}\Frame`(운영자 배치 번들)·`branding.ini`를 **읽기만** 한다.
+> 이관 전 설치본이 `{실행경로}\Frame`에 남긴 캐시는 **읽기 전용 보조 루트**로 계속 읽는다(쓰기·생성은 새 루트만, 이름 충돌은 새 루트 우선). 파일을 옮기지 않으므로 자산 유실 경로가 없다 — 이동은 승격 권한이 필요해 대개 "복사만 성공, 원본 잔존"으로 끝나고, png는 옮겼는데 `.slots`가 잠기면 그 프레임이 양쪽에서 모두 무효가 된다(= "프레임이 사라졌다").
 
 ---
 

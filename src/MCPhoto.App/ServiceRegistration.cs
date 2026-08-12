@@ -49,6 +49,9 @@ internal static class ServiceRegistration
 
         // it11 #14: 진단·상태 모달(관리자 트러블슈팅). 로그 폴더 서비스 + 다이얼로그 서비스.
         services.AddSingleton<ILogFolderService, LogFolderService>();
+        // it26 §5.3: 임의 폴더 열기(유휴 팝업의 [결과물 폴더 열기]). best-effort — 실패해도 예외 없음.
+        //   해석만으로는 어떤 프로세스도 만들지 않는다(TryOpen 호출 시점에만 explorer를 띄운다).
+        services.AddSingleton<IFolderOpener, FolderOpener>();
         // 오픈소스 라이선스 고지(설치 폴더의 licenses/). GPLv3 재배포 의무 이행용. (it22 §5.1 → it23 §C7)
         // it23: 폴더 열기·경로 표시를 폐지하고 **전문을 설정 화면에서 직접 렌더링**한다(열거 + 읽기).
         services.AddSingleton<ILicenseNoticeService, LicenseNoticeService>();
@@ -135,9 +138,17 @@ internal static class ServiceRegistration
                 : inner;
         });
 
-        // it8 A2(정정): 로컬 프레임 저장소 = 실행 폴더 Frame\ (번들과 동일 폴더, 번들+파워캐시+user 공존).
+        // it26 §3.4: 프레임 **캐시**(서버에서 내려받은 공용·개인)는 쓰기 가능한 %ProgramData%\MCPhoto\Frame로 옮겼다.
+        //   종전엔 실행 폴더 Frame\에 썼고, 설치본의 정상 실행(비승격)에서는 그 쓰기가 실패했다 — 캐시 기록에
+        //   실패한 id는 FrameCatalogService._cacheFailedIds에 들어가 **이번 실행 동안 목록에 오르지 않는다**
+        //   (= 기본 프레임이 안 보인다).
+        // ⚠️ {exe}\Frame은 그대로 남는다: ① FrameCatalogService.BundleFolder(운영자가 배치하는 읽기 전용 번들)
+        //   ② 이관 전 설치본이 남긴 캐시의 읽기 소스(legacyReadRoot — 쓰기·생성은 하지 않는다).
+        //   파일을 옮기지 않으므로 자산 유실 경로가 존재하지 않는다.
         services.AddSingleton<ILocalFrameStore>(_ =>
-            new LocalFrameStore(System.IO.Path.Combine(AppContext.BaseDirectory, "Frame")));
+            new LocalFrameStore(
+                System.IO.Path.Combine(App.DataFolder, "Frame"),
+                legacyReadRoot: System.IO.Path.Combine(AppContext.BaseDirectory, "Frame")));
 
         // Step 9: 세션 컨텍스트 + 프레임 카탈로그 + 화면 VM들
         services.AddSingleton<SessionContext>();

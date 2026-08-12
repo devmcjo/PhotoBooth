@@ -1249,4 +1249,118 @@ public class XamlResourceTests
         Assert.True(strip.Success, "HomeView.xaml 에서 흐름 안내 스트립(FlowStrip)을 찾지 못함");
         Assert.Contains("IsHitTestVisible=\"False\"", strip.Value);
     }
+
+    // ── it26: 유휴 팝업 [결과물 폴더 열기] 링크 + 설정 화면 2행 ──
+    // 설계: docs/design/wpf-it26-writable-paths-and-completion-popup-design.md §6
+
+    /// <summary>유휴 경고 오버레이 마크업(scrim Grid + 카드)만 잘라낸다.</summary>
+    private static string IdleWarningOverlayMarkup()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppDir(), "MainWindow.xaml"));
+        var m = Regex.Match(text, @"<Grid\b[^>]*?IsIdleWarningVisible.*?</Grid>", RegexOptions.Singleline);
+        Assert.True(m.Success, "MainWindow.xaml 에서 유휴 경고 오버레이를 찾지 못함");
+        return m.Value;
+    }
+
+    /// <summary>
+    /// T25 — 링크·실패 캡션의 바인딩이 셸 VM 멤버와 일치한다. 바인딩 오타는 예외 없이 조용히 실패한다
+    /// (링크가 영구히 안 보이거나 캡션이 빈 칸이 된다).
+    /// </summary>
+    [Fact]
+    public void MainWindow_Idle_Warning_Binds_Result_Folder_Link()
+    {
+        var overlay = IdleWarningOverlayMarkup();
+        var vm = typeof(MCPhoto.App.AppShellViewModel);
+
+        foreach (var member in new[] { "IsResultFolderLinkVisible", "ResultFolderOpenError", "HasResultFolderOpenError" })
+        {
+            Assert.Matches(@"\{Binding\s+" + member + @"\s*[,}]", overlay);
+            Assert.NotNull(vm.GetProperty(member));
+        }
+
+        Assert.Matches(@"Command=""\{Binding\s+OpenResultFolderCommand\}""", overlay);
+        Assert.NotNull(vm.GetProperty("OpenResultFolderCommand"));
+
+        // 링크 문구(M1) 동결.
+        Assert.Contains(">결과물 폴더 열기</Hyperlink>", overlay);
+    }
+
+    /// <summary>
+    /// T26 — 유휴 팝업의 <b>기존 규격이 그대로다</b>. 이번 변경은 "링크를 얹기"이며 팝업을 다시 만드는 것이 아니다.
+    /// (row 1 배치는 TM4 — 스크림이 테스트 모드 배너를 덮으면 안 된다.)
+    /// </summary>
+    [Fact]
+    public void MainWindow_Idle_Warning_Keeps_Existing_Spec()
+    {
+        var overlay = IdleWarningOverlayMarkup();
+
+        Assert.Contains("Grid.Row=\"1\"", overlay);
+        Assert.Contains("{StaticResource Brush.Scrim}", overlay);
+        Assert.Contains("MinWidth=\"420\"", overlay);
+        Assert.Contains("잠시 자리를 비우셨나요?", overlay);
+        Assert.Contains("초 후 메인 화면으로 돌아갑니다", overlay);
+        Assert.Contains("{Binding IdleCountdownRemaining}", overlay);
+        Assert.Contains("이어서 진행하기", overlay);
+        Assert.Contains("메인 화면으로", overlay);
+        Assert.Contains("{Binding ContinueSessionCommand}", overlay);
+        Assert.Contains("{Binding GoHomeFromIdleCommand}", overlay);
+
+        // 상수도 코드에서 불변임을 함께 고정(요구 "10초 카운팅"은 이미 충족돼 있었다).
+        var shell = typeof(MCPhoto.App.AppShellViewModel);
+        Assert.NotNull(shell.GetProperty("IdleWarningSeconds"));
+        Assert.NotNull(shell.GetProperty("IdleCountdownSeconds"));
+    }
+
+    /// <summary>
+    /// T27 — 링크가 it24 Hyperlink 규약을 그대로 따른다: 색은 <c>Brush.Accent.Text</c>,
+    /// 밑줄은 기본(상시), hover 색 변경 없음, 신규 리소스 키 0개.
+    /// </summary>
+    [Fact]
+    public void MainWindow_Result_Folder_Link_Follows_Hyperlink_Convention()
+    {
+        var overlay = IdleWarningOverlayMarkup();
+        var link = Regex.Match(overlay, @"<Hyperlink\b.*?</Hyperlink>", RegexOptions.Singleline);
+        Assert.True(link.Success, "유휴 오버레이에서 Hyperlink 를 찾지 못함");
+
+        Assert.Contains("Foreground=\"{StaticResource Brush.Accent.Text}\"", link.Value);
+        Assert.DoesNotContain("TextDecorations", link.Value);   // 밑줄은 기본값을 쓴다(끄지 않는다)
+        Assert.DoesNotContain("Trigger", link.Value);           // hover 색 변경 없음
+        Assert.DoesNotContain("x:Key", overlay);                // 오버레이가 신규 리소스를 정의하지 않았다
+    }
+
+    /// <summary>
+    /// T28 — 완료 토스트 마크업이 <b>여전히 있다</b>. it26은 <c>CompleteSession</c>을 건드리지 않으며,
+    /// 토스트에는 외부 카메라 강등·촬영 중단 등 다른 소비자도 있다(제거하면 함께 사라진다).
+    /// </summary>
+    [Fact]
+    public void MainWindow_Toast_Markup_Still_Exists()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppDir(), "MainWindow.xaml"));
+
+        Assert.Contains("{Binding HasToast", text);
+        Assert.Contains("{Binding ToastMessage}", text);
+        Assert.Contains("{Binding DismissToastCommand}", text);
+    }
+
+    /// <summary>
+    /// T29 — 설정 화면의 실경로 캡션·옵션 토글 바인딩. 캡션이 끊기면 저장 위치가 이관됐다는 사실을
+    /// 운영자가 알 방법이 사라진다(발견성의 주력이다).
+    /// </summary>
+    [Fact]
+    public void SettingsView_Binds_Result_Folder_Rows()
+    {
+        var text = File.ReadAllText(Path.Combine(FindAppViewsDir(), "SettingsView.xaml"));
+        var vm = typeof(MCPhoto.App.ViewModels.SettingsViewModel);
+
+        Assert.Matches(@"\{Binding\s+LocalSavePathEffectiveNote\s*[,}]", text);
+        Assert.NotNull(vm.GetProperty("LocalSavePathEffectiveNote"));
+
+        Assert.Matches(@"IsChecked=""\{Binding\s+EnableResultFolderOpen\}""", text);
+        Assert.NotNull(vm.GetProperty("EnableResultFolderOpen"));
+
+        // 라벨이 "어디에 나타나는지"를 말한다 — 켜고 나서 찾지 못하는 것을 막는다(§6.3).
+        Assert.Contains("↳ 유휴 팝업에 결과물 폴더 열기", text);
+        // 캡션(M5)은 위험을 명시한다 — 이 옵션이 유일한 게이트이므로 켜기 전에 읽어야 한다.
+        Assert.Contains("손님이 조작하는 잠금 키오스크에서는 끄세요", text);
+    }
 }

@@ -1,6 +1,10 @@
 ; MCPhoto 인스톨러 (Inno Setup 6)
 ; 배포물 = MCPhoto.exe(자체 포함 단일 파일) + licenses\ + tools\ffmpeg. 이 셋뿐이다(§[Files] 참조).
 ; 데이터 폴더는 %ProgramData%\MCPhoto (쓰기 가능). 설정 파일은 앱이 최초 실행 시 스스로 만든다.
+; it26: 앱이 쓰는 것은 전부 이 데이터 폴더 아래다 — 설정(MCPhoto.ini) · 로그 · 캐시 · 세션 임시물 +
+;   **촬영 결과물(result\)** 과 **프레임 캐시(Frame\)**. 설치 폴더는 읽기 전용 배포물이며, 앱은
+;   {app}\Frame(운영자가 배치하는 번들) · {app}\branding.ini 를 읽기만 한다.
+;   ⚠️ 승격 실행(관리자 권한)으로 띄우면 ini만은 {app}\MCPhoto.ini 에 생길 수 있다(경로 정책 1순위가 실행경로).
 ;
 ; 빌드: **package.bat**(또는 package.ps1) 하나로 publish → 인스톨러까지 실행된다.
 ;   publish.bat 은 테스트용(publish만)이고 인스톨러를 만들지 않는다 — 테스트 산출물이
@@ -78,6 +82,11 @@ Source: "{#PublishDir}\tools\*"; DestDir: "{app}\tools"; \
 Name: "{commonappdata}\MCPhoto"; Permissions: users-modify
 Name: "{commonappdata}\MCPhoto\logs"; Permissions: users-modify
 Name: "{commonappdata}\MCPhoto\cache"; Permissions: users-modify
+; it26: 결과물·프레임 캐시를 여기로 이관했으므로 두 폴더를 **명시 생성**한다.
+;   상속에 의존하지 않는 이유: 비승격 첫 실행이 폴더 생성부터 실패하면 손님 사진이 조용히 저장되지 않는다
+;   (LocalSaveService 는 예외 대신 null 을 반환한다 — 화면에 아무 안내도 나오지 않는다).
+Name: "{commonappdata}\MCPhoto\result"; Permissions: users-modify
+Name: "{commonappdata}\MCPhoto\Frame"; Permissions: users-modify
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -98,10 +107,12 @@ Filename: "{app}\{#AppExeName}"; Description: "{#AppName} 실행"; Flags: nowait
 ;    사용자 요구가 "Program Files·로그·레지스트리 모두 제거"이므로 명시 열거한다.
 Type: files; Name: "{app}\MCPhoto.ini"
 Type: files; Name: "{app}\branding.ini"
+; 구 프레임 캐시(재취득 가능 — 서버에서 다시 내려받는다). it26 이후 앱은 여기에 쓰지 않고 읽기만 한다.
 Type: filesandordirs; Name: "{app}\Frame"
-; ⛔ `{app}\result` 는 **절대 지우지 않는다.** 로컬 저장 기본 경로가 `{exe}\result` 이므로
-;    (`ResultViewModel`: LocalSavePath 가 비면 AppContext.BaseDirectory\result) 그 폴더에는
-;    **손님 사진과 타임랩스**가 들어 있다. 제거가 고객 자산을 지우는 것은 복구 불가한 사고다.
+; ⛔ `{app}\result` 는 **절대 지우지 않는다.** it26 이전 버전의 로컬 저장 기본 경로가 `{exe}\result` 였으므로
+;    (LocalSavePath 가 비면 AppContext.BaseDirectory\result) 그 폴더에는 **손님 사진과 타임랩스**가 들어 있다.
+;    이관 후에는 "구 버전이 남긴 손님 자산"이라 더 중요하다 — 앱도 그 폴더를 옮기거나 지우지 않는다
+;    (시작 시 위치를 Warning 로그로 알려 주는 것이 전부다). 제거가 고객 자산을 지우는 것은 복구 불가한 사고다.
 ;    → result 가 있으면 아래 dirifempty 가 걸러 설치 폴더도 함께 보존된다(의도된 동작).
 ; 위를 지운 뒤 빈 설치 폴더까지 정리한다(dirifempty 는 비어 있을 때만 지우므로,
 ; 촬영 결과물이나 운영자가 따로 둔 파일이 있으면 보존된다 — 남의 파일을 지우지 않는다).
@@ -112,6 +123,11 @@ Type: filesandordirs; Name: "{commonappdata}\MCPhoto\cache"
 Type: filesandordirs; Name: "{commonappdata}\MCPhoto\logs"
 Type: filesandordirs; Name: "{commonappdata}\MCPhoto\sessions"
 Type: files; Name: "{commonappdata}\MCPhoto\MCPhoto.ini"
+; it26: 프레임 캐시(신규 위치). **재취득 가능**하므로 캐시 원칙대로 지운다 — 서버에서 다시 내려받는다.
+Type: filesandordirs; Name: "{commonappdata}\MCPhoto\Frame"
+; ⛔ `{commonappdata}\MCPhoto\result` 는 **절대 이 목록에 추가하지 않는다.** it26 이후 손님 사진의
+;    기본 저장 위치이며, 로컬 사본은 QR 전송과 독립이라 서버에 없을 수도 있다(유일 사본일 수 있다).
+;    "캐시는 지우고 자산은 남긴다"가 이 절의 원칙이다.
 ; ⚠️ `{commonappdata}\MCPhoto` 자체는 dirifempty 로만 지운다 — 촬영 결과물(result\)이
 ;    여기 있을 수 있고, 그것은 사용자 자산이라 제거가 임의로 지워서는 안 된다.
 Type: dirifempty; Name: "{commonappdata}\MCPhoto"

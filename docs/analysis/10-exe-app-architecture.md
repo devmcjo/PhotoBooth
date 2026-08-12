@@ -98,7 +98,7 @@ MCPhoto.App  ──▶  MCPhoto.Capture         ──▶  MCPhoto.Core
 | `ILocalSaveService`, `FfmpegRunner`, `ITimelapseService`, `ICompositionService` | Singleton | 상태 없는(또는 공유) 서비스(`:70`, `:73-74`, `:77`) |
 | **백엔드 서비스 묶음** — `BackendSessionSynchronizer`/`IBackendSession`, `IFirebaseClient`→`HttpFirebaseClient`, `IFrameRepository`→`HttpFrameRepository`, `IAccountService`→`HttpAccountService`, `IQrUsageService`, `ITempUserLimitsService` | Singleton | `RegisterBackendServices`(`:81`, `:100-169`) + 명명 HttpClient `"backend"`(`:103-109`) |
 | `IUploadService`→`UploadService`, `IQrService`→`QrService` | Singleton | Core 구현(백엔드 비의존, `:82-83`) |
-| `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=`AppContext.BaseDirectory\Frame`(`:86-87`) |
+| `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=**`{App.DataFolder}\Frame`**(it26 이관) + 읽기 전용 보조 루트 `AppContext.BaseDirectory\Frame`(구 캐시 — 쓰기 금지) |
 | `SessionContext`, `FrameCatalogService` | Singleton(`:90-91`) |
 | **화면 VM 전부** | **Transient**(진입마다 새 인스턴스) | `RegisterScreens`: Home/LoginGuest/FrameSelect/Guide/Capture/CutSelect/Result/QrPopup/FrameEditor/FramePicker/Settings/UserMgmt/Account/Diagnostics (`DoneViewModel`은 완료 화면 폐지로 제거) |
 | `PreviewViewModel` | Transient |

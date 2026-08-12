@@ -214,8 +214,10 @@
 ### 8.2 로컬 저장
 
 - **목적**: 결과물을 기기에 영구 보관(TTL 무관).
-- **규칙**: `SaveLocalCopy` on이면 저장. 경로는 `LocalSavePath`, 빈 값이면 `{실행경로}\result`(`ResultViewModel.cs:138-144`). `LocalSaveService.SaveAsync`가 `{경로}\mcphoto_YYMMDD_HHMM\`(충돌 시 `-2`,`-3`…) 폴더에 `final.{ext}`·`timelapse.mp4` 복사, 쓰기 불가 시 예외 대신 null(크래시 금지, `LocalSaveService.cs`).
-- **근거**: `ResultViewModel.cs:137-145`, `LocalSaveService.cs`.
+- **규칙**: `SaveLocalCopy` on이면 저장. 경로는 `LocalSavePath`, **빈 값이면 `%ProgramData%\MCPhoto\result`**(it26 — 종전 `{실행경로}\result`. 해석은 `LocalSavePathResolver.Resolve` 단일 지점). `LocalSaveService.SaveAsync`가 `{경로}\mcphoto_YYMMDD_HHMM\`(충돌 시 `-2`,`-3`…) 폴더에 `final.{ext}`·`timelapse.mp4` 복사, 쓰기 불가 시 예외 대신 null(크래시 금지, `LocalSaveService.cs`).
+- **⚠️ 이관 규약(it26)**: `LocalSavePath` **명시값은 항상 우선**이며 이관이 건드리지 않는다. 구 위치(`{실행경로}\result`)의 파일은 **옮기지도 지우지도 않는다** — 앱은 그 폴더가 있으면 시작 시 위치를 Warning 로그로 알리는 것이 전부다(제거 시에도 보존 — `installer/MCPhoto.iss`).
+- **반환값 사용**: `SaveAsync`가 돌려주는 **실제 세션 폴더 절대경로**를 `SessionContext.LocalSaveFolder`에 보관한다(유휴 팝업의 [결과물 폴더 열기]가 이 값을 쓴다). 시각으로 폴더명을 재계산하면 `-2` 접미 때문에 **다른 손님 폴더**를 가리킨다.
+- **근거**: `ResultViewModel.cs`(로컬 저장 블록), `LocalSaveService.cs`, `LocalSavePathResolver.cs`.
 
 ### 8.3 QR 전송(사진/타임랩스 개별 토글)
 
@@ -259,6 +261,8 @@
   - [이어서 진행하기](`ContinueSession`, `:339-344`)=경고 해제+타이머 재시작(현재 화면·로그인 유지). [메인 화면으로](`GoHomeFromIdle`, `:348-352`)=즉시 홈. 카운트다운 0 → `ReturnHome(clearUser:false)`.
   - 경고 표시 중 사용자 활동은 무시(버튼으로만 해제, `NotifyUserActivity` `:216-220`).
   - **로그아웃 절대 금지**(`:260`, it8 A1). FrameEditor는 유휴 감시 제외(로그인 필수 능동작업).
+  - **[결과물 폴더 열기] 링크(it26, 기본 미노출)**: 두 버튼 아래에 얹힌 하이퍼링크. 노출 조건은 `EnableResultFolderOpen`(ini, **기본 off**) **AND** 이 세션의 로컬 저장 성공(`SessionContext.LocalSaveFolder` non-null)이며, 아니면 `Collapsed`다. 여는 것은 **그 세션 폴더만**(저장 루트를 열면 직전 손님 사진이 전부 보인다). 클릭은 **카운트다운을 멈추지도 연장하지도 않는다**. 열기 실패는 팝업 안 캡션으로 경로를 노출하고 카운트다운은 계속된다(`IFolderOpener`, best-effort).
+  - ⚠️ 링크가 실제로 보이는 창구는 사실상 **`Qr` 상태 하나**다(저장 → 업로드 → QR 순서이므로). 저장 전 상태(프레임 선택~결과)에서는 경로가 null이라 숨겨진다. 세션이 끝나면 `Reset()`이 경로를 null로 지우므로 **다음 손님 팝업에 이전 손님 폴더가 노출되지 않는다**.
 - **근거**: `AppShellViewModel.cs`, `IdleWatchdog.cs`, `IdleCountdown.cs`, `MainWindow.xaml:81-103`.
 
 ## 11. 설정 화면

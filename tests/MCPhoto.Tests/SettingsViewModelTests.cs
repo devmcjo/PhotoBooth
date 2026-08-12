@@ -270,6 +270,90 @@ public class SettingsViewModelTests
         Assert.True(r.FilterBeauty);
     }
 
+    // ── it26 §7.1 T21 / §6.2: 결과물 폴더 열기 옵션(게스트 편집 금지) + 로컬 저장 경로 실경로 캡션 ──
+
+    [Fact]
+    public async Task Guest_Sees_ResultFolderOpen_Off_And_Save_Preserves_Ini()
+    {
+        // ⛔ 링크에 로그인 게이트가 없으므로 이 키가 유일한 방어선이다 —
+        //    게스트가 켤 수도, 관리자가 켜 둔 값을 게스트 저장으로 지울 수도 없어야 한다.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var s = settings.Load();
+        s.EnableResultFolderOpen = true;   // 관리자가 켜 둔 상태
+        settings.Save();
+
+        var vm = MakeVm(settings: settings); // 게스트
+        await vm.OnEnterAsync();
+        Assert.True(vm.IsGuest);
+        Assert.False(vm.EnableResultFolderOpen);   // 표시 전용 off
+
+        vm.EnableResultFolderOpen = true;          // 게스트가 켜 보려 해도
+        vm.SaveSettingsCommand.Execute(null);
+
+        Assert.True(new IniSettingsService(iniPath: settings.IniPath).Load().EnableResultFolderOpen); // ini 원값 보존
+    }
+
+    [Fact]
+    public async Task Guest_Save_Does_Not_Enable_ResultFolderOpen_When_Ini_Is_Off()
+    {
+        // 반대 방향(원값 off): 게스트 저장이 키를 켜지 못한다.
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        settings.Load();
+        settings.Save();
+
+        var vm = MakeVm(settings: settings); // 게스트
+        await vm.OnEnterAsync();
+        vm.EnableResultFolderOpen = true;
+        vm.SaveSettingsCommand.Execute(null);
+
+        Assert.False(new IniSettingsService(iniPath: settings.IniPath).Load().EnableResultFolderOpen);
+    }
+
+    [Fact]
+    public async Task LoggedIn_Saves_ResultFolderOpen()
+    {
+        var settings = new IniSettingsService(iniPath: Path.Combine(Path.GetTempPath(), $"svm_{Guid.NewGuid():N}.ini"));
+        var vm = MakeLoggedInVm(settings: settings);
+        await vm.OnEnterAsync();
+        Assert.False(vm.EnableResultFolderOpen);   // 기본 off
+
+        vm.EnableResultFolderOpen = true;
+        vm.SaveSettingsCommand.Execute(null);
+
+        Assert.True(new IniSettingsService(iniPath: settings.IniPath).Load().EnableResultFolderOpen);
+    }
+
+    [Fact]
+    public async Task LocalSavePath_Note_Shows_Effective_Path()
+    {
+        var vm = MakeLoggedInVm();
+        await vm.OnEnterAsync();
+
+        // 빈 값 = 데이터 폴더의 result (이 캡션의 존재 이유).
+        Assert.Equal(string.Empty, vm.LocalSavePath);
+        Assert.Equal(SettingsViewModel.FormatLocalSavePathNote(
+                Path.Combine(MCPhoto.App.App.DataFolder, "result")),
+            vm.LocalSavePathEffectiveNote);
+
+        // 명시값을 넣으면 그 값이 그대로 캡션에 반영된다(입력 즉시 갱신 — NotifyPropertyChangedFor).
+        vm.LocalSavePath = @"D:\booth\photos";
+        Assert.Equal(SettingsViewModel.FormatLocalSavePathNote(@"D:\booth\photos"), vm.LocalSavePathEffectiveNote);
+    }
+
+    [Fact]
+    public async Task LocalSavePath_Note_Raises_Change_Notification()
+    {
+        // 캡션이 갱신되지 않으면 운영자가 방금 입력한 경로와 다른 위치를 읽는다(조용한 거짓 표시).
+        var vm = MakeLoggedInVm();
+        await vm.OnEnterAsync();
+
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        vm.LocalSavePath = @"E:\photos";
+
+        Assert.Contains(nameof(SettingsViewModel.LocalSavePathEffectiveNote), raised);
+    }
+
     // ── 외부 장치: 카메라는 실배선 저장, 프린터는 "추후 지원 예정" 미기록(it25 §4.1) ──
 
     /// <summary>

@@ -77,7 +77,7 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 
 | 항목 | 값 | 근거 |
 | --- | --- | --- |
-| 기본 위치 | 설정 `LocalSavePath` 빈 값 시 `{실행경로}\result\` | 기본 `string.Empty`(`src/MCPhoto.Core/Settings/AppSettings.cs:88`), 런타임 폴백 `Path.Combine(AppContext.BaseDirectory, "result")`(`src/MCPhoto.App/ViewModels/ResultViewModel.cs:141-143`) |
+| 기본 위치 | 설정 `LocalSavePath` 빈 값 시 **`%ProgramData%\MCPhoto\result\`**(it26 이관 — 종전 `{실행경로}\result\`) | 기본 `string.Empty`(`src/MCPhoto.Core/Settings/AppSettings.cs`), 해석 `LocalSavePathResolver.Resolve`(`src/MCPhoto.Core/LocalSave/LocalSavePathResolver.cs`), 호출 `ResultViewModel.Next` |
 | 세션 폴더명 | `mcphoto_YYMMDD_HHMM` (예: `mcphoto_260720_1445`) | `LocalSaveService.SessionFolderName`(`src/MCPhoto.Core/LocalSave/LocalSaveService.cs:19-21`) |
 | 파일 | `final.{jpg\|png}`, `timelapse.mp4`(있을 때만) | `LocalSaveService.SaveAsync`(`:43-54`) |
 | 충돌 처리 | 동일 폴더 존재 시 `-2`, `-3`… 접미사 | `MakeUniqueFolder`(`:67-77`) |
@@ -85,6 +85,15 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 | 실패 처리 | 경로 쓰기 불가 시 크래시 대신 `null` 반환 + `LogError("로컬 저장 실패: {Path}")` | `:59-64` |
 
 `SaveLocalCopy` off거나 `localSavePath` 미설정이면 `"localSavePath 미설정 — 로컬 저장 건너뜀"`(`LocalSaveService.cs:33`) 후 저장 생략.
+
+**it26 시작 시 진단 Warning 2건**(둘 다 파일을 만들거나 옮기지 않는다 — 사실만 남긴다, `App.LogWritablePathWarnings`):
+
+| 로그 | 뜻 | 조치 |
+| --- | --- | --- |
+| `설정 파일이 설치 폴더에 있습니다: {Path} — 승격 실행 여부에 따라 설정이 갈릴 수 있습니다` | ini가 `%ProgramFiles%`(x86 포함) 하위다 = **승격 실행**으로 만들어진 파일이다. 비승격 실행은 그 위치에 못 써 `%ProgramData%`의 다른 ini를 읽는다 → "설정을 바꿨는데 반영되지 않는다"의 원인 | 실행 방식을 하나로 고정한다(설치본은 **비승격이 정상**). 진단 모달의 "설정 파일 경로" 행이 지금 쓰는 파일을 그대로 보여 준다 |
+| `이전 버전이 설치 폴더에 저장한 결과물이 있습니다: {Old} — 새 저장 위치는 {New}입니다` | it26 이전 버전이 `{실행경로}\result`에 남긴 **손님 사진**이 있다. 앱은 그것을 옮기지도 지우지도 않는다(제거 시에도 보존) | 필요하면 **운영자가 수동 복사**한다. 앱이 손님 사진을 옮기는 코드를 갖지 않는 것이 유실 0의 근거다 |
+
+폴더 열기 실패는 `폴더 열기 실패: {Path}` 또는 `폴더가 없어 열 수 없습니다: {Path}`(둘 다 Warning, `FolderOpener`) + 유휴 팝업 안 캡션으로 경로가 노출된다(수동 탐색 가능). 잠금 키오스크에서 `explorer.exe`가 정책으로 차단되는 경우가 대표적이다.
 
 ---
 

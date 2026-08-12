@@ -101,8 +101,27 @@ public sealed class AppSettings
     /// <summary>결과물 로컬 저장 on/off. 기본 on. QR 전송과 독립.</summary>
     public bool SaveLocalCopy { get; set; } = true;
 
-    /// <summary>로컬 저장 위치. 기본 {실행경로}\result\. 빈 문자열이면 런타임에 기본값 산출.</summary>
+    /// <summary>
+    /// 로컬 저장 위치. <b>빈 문자열이면 런타임 기본값</b>(<see cref="LocalSave.LocalSavePathResolver"/>).
+    /// it26 §3.3: 그 기본값이 <c>{실행경로}\result</c> → <c>%ProgramData%\MCPhoto\result</c>로 바뀌었다
+    /// (비승격 실행에서 설치 폴더에 못 써 조용히 미저장되던 결함). ⚠️ <b>명시값은 항상 우선</b>이며 이관이 건드리지 않는다.
+    /// </summary>
     public string LocalSavePath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 유휴 경고 팝업에 [결과물 폴더 열기] 링크를 노출한다. <b>기본 off.</b> (it26 §5.2)
+    /// <para>
+    /// 기본값이 off인 이유: 이 링크가 붙는 팝업은 <b>손님 앞에서 무인으로</b> 뜨고, 탐색기는 잠금 키오스크에서
+    /// 파일시스템 통로가 된다(세션 폴더로 열려도 상위 이동이 가능하다). 설치 직후의 부스가 모르는 채로
+    /// 손님에게 파일 브라우저를 건네는 상태가 되어서는 안 된다 — fail-safe 기본값이다.
+    /// </para>
+    /// <para>
+    /// ⚠️ 링크에는 로그인·표시 모드 게이트가 <b>없다</b>(사용자 확정: "옵션화했으니 … 지원해도돼").
+    /// 따라서 이 키가 유일한 방어선이고, 게스트는 설정 화면에 PIN 없이 들어오므로 <b>게스트 편집 금지</b>가
+    /// 필수다(SettingsViewModel: Load 강제 off · Save 미기록).
+    /// </para>
+    /// </summary>
+    public bool EnableResultFolderOpen { get; set; }
 
     // ── 표시 (PRD §9 #23) ──
     /// <summary>표시 모드. 개발 기간 기본 창모드(배포 시 전체화면으로 되돌릴 것). (it9 후속)</summary>
@@ -323,6 +342,8 @@ public sealed class AppSettings
         FilterBeauty = FilterBeauty,
         SaveLocalCopy = SaveLocalCopy,
         LocalSavePath = LocalSavePath,
+        // ⚠️ it26 신설 키를 여기서 빼면 설정 편집 취소 시 값이 조용히 유실된다(T-S3·T-S4와 동형).
+        EnableResultFolderOpen = EnableResultFolderOpen,
         DisplayMode = DisplayMode,
         WindowBounds = new WindowBounds
         {

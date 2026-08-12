@@ -208,9 +208,9 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 | 요구 사항 | Windows(현행) | macOS | iOS/iPadOS | Android | 웹 |
 |-----------|---------------|-------|------------|---------|-----|
 | 클라이언트 설정 영속 | `MCPhoto.ini` 3단 폴백 | `~/Library/Application Support/…` (plist/JSON) | `UserDefaults` 또는 앱 지원 디렉터리 JSON | `DataStore`/SharedPreferences | `localStorage` |
-| 로컬 프레임 저장소 | 실행폴더 `Frame\{이름}.png` + `.slots` | 앱 지원 디렉터리 | 앱 Documents/Library | `filesDir` | IndexedDB(Blob) |
+| 로컬 프레임 저장소 | **`%ProgramData%\MCPhoto\Frame\{이름}.png` + `.slots`**(it26. 실행폴더 `Frame\`은 읽기 전용 번들·구 캐시) | 앱 지원 디렉터리 | 앱 Documents/Library | `filesDir` | IndexedDB(Blob) |
 | 세션 임시 작업 폴더 | `%ProgramData%\MCPhoto\sessions\{guid}` | `NSTemporaryDirectory` | `tmp`/캐시 | `cacheDir` | 메모리/OPFS |
-| 결과물 영구 보관 | `{실행경로}\result\mcphoto_YYMMDD_HHMM\` | `~/Pictures` 또는 지정 경로 | Photos 라이브러리 저장(권한 필요) | `MediaStore.Images/Video` | 브라우저 다운로드 |
+| 결과물 영구 보관 | **`%ProgramData%\MCPhoto\result\mcphoto_YYMMDD_HHMM\`**(it26. 설정 `LocalSavePath` 명시값이 우선) | `~/Pictures` 또는 지정 경로 | Photos 라이브러리 저장(권한 필요) | `MediaStore.Images/Video` | 브라우저 다운로드 |
 | 로그 영속 | Serilog 파일 일 롤링 | `os_log` + 파일 | 파일 + 공유 시트 | 파일 + `logcat` | 콘솔(영속 불가) |
 | 브랜딩·버전 | 외부 INI | 외부 파일 또는 번들 | 번들 `Info.plist` + 원격 구성 | `BuildConfig` + 원격 구성 | 빌드 상수 |
 

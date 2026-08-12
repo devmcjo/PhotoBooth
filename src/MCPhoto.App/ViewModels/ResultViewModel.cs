@@ -135,13 +135,17 @@ public sealed partial class ResultViewModel : ViewModelBase
             }
 
             // 로컬 저장(saveLocalCopy on)
+            // it26 §3.3: 기본 경로가 {exe}\result → {App.DataFolder}\result로 이관됐다(비승격 실행에서
+            //   설치 폴더에 못 써 **조용히 미저장**되던 실결함). LocalSavePath 명시값은 항상 우선이며
+            //   해석은 LocalSavePathResolver 한 곳에만 있다.
+            // it26 §4.5: 반환값(실제 세션 폴더 절대경로)을 세션에 보관한다 — 유휴 팝업의
+            //   [결과물 폴더 열기]가 이 값을 쓴다. 실패하면 null이 담겨 링크가 자동으로 숨겨진다.
             if (settings.SaveLocalCopy && session.FinalImagePath is not null)
             {
                 StatusMessage = "로컬 저장 중...";
-                var savePath = string.IsNullOrWhiteSpace(settings.LocalSavePath)
-                    ? Path.Combine(AppContext.BaseDirectory, "result")
-                    : settings.LocalSavePath;
-                await _localSave.SaveAsync(savePath, session.FinalImagePath, session.TimelapsePath, session.SessionTime);
+                var savePath = LocalSavePathResolver.Resolve(settings.LocalSavePath, App.DataFolder);
+                session.LocalSaveFolder = await _localSave.SaveAsync(
+                    savePath, session.FinalImagePath, session.TimelapsePath, session.SessionTime);
             }
 
             // QR 전송 런타임 게이트: raw 설정 + 로그인 + TempUser 한도상태를 QrEffectivePolicy 단일 지점에서 조합.

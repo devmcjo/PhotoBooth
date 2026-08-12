@@ -52,6 +52,25 @@ public class SettingsPathResolverTests
         Assert.Equal(@"C:\la\MCPhoto\MCPhoto.ini", c[2]);
     }
 
+    /// <summary>
+    /// it26 §3.5 T23 — <b>ini 경로 정책은 이 이터레이션에서 바뀌지 않는다</b>(result·Frame만 이관됐다).
+    /// <para>
+    /// 왜 잠그는가: 1순위를 %ProgramData%로 "정리"하면 ① 승격으로 운영해 온 기존 설치가 <c>{app}\MCPhoto.ini</c>를
+    /// 읽지 못해 기본값으로 시작하고 첫 종료에 그 기본값을 새 위치에 기록한다(되돌릴 수 없는 설정 유실)
+    /// ② 개발 실행이 설치본과 같은 ini를 공유해 <c>[Test]</c>(인증 우회)가 전파된다 — 설정 혼동이 아니라 보안 사고다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Ini_Path_Policy_Still_Prefers_Exe_Directory()
+    {
+        var c = SettingsPathResolver.DefaultCandidates(@"C:\app", @"C:\pd", @"C:\la");
+
+        Assert.Equal(@"C:\app\MCPhoto.ini", c[0]);                    // 실행경로가 1순위
+        Assert.DoesNotContain(@"C:\pd", c[0]);                        // ProgramData가 1순위가 아니다
+        Assert.Equal(@"C:\app\MCPhoto.ini",
+            SettingsPathResolver.ResolveWritable(c, _ => true));      // 전부 쓰기 가능하면 실행경로를 고른다
+    }
+
     [Fact]
     public void Empty_Candidates_Throws()
         => Assert.Throws<ArgumentException>(() => SettingsPathResolver.ResolveWritable(Array.Empty<string>(), _ => true));

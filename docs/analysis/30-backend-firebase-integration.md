@@ -322,7 +322,7 @@ Http 구현 4종(`HttpFirebaseClient`·`HttpFrameRepository`·`HttpAccountServic
 | `IQrUsageService`→`HttpQrUsageService` | Singleton | `ServiceRegistration.cs:151-159` |
 | `ITempUserLimitsService`→`HttpTempUserLimitsService` | Singleton | `ServiceRegistration.cs:161-169` |
 | `IUploadService`→`UploadService`, `IQrService`→`QrService` | Singleton(Core 구현) | `ServiceRegistration.cs:82-83` |
-| `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=`{BaseDirectory}\Frame` | `ServiceRegistration.cs:86-87` |
+| `ILocalFrameStore`→`LocalFrameStore` | Singleton, 루트=**`{App.DataFolder}\Frame`**(it26) + 읽기 전용 보조 루트 `{BaseDirectory}\Frame` | `ServiceRegistration.cs`(프레임 저장소 등록) |
 
 - 팩토리 람다는 첫 해석 시점에 `ISettingsService.Current`를 읽는다(설정 로드 후라 안전, `ServiceRegistration.cs:98`).
 - **feature flag 분기는 없다** — it15에서 레거시 Admin SDK 직결 경로가 폐지되어 백엔드 전용이다(`ServiceRegistration.cs:80`).

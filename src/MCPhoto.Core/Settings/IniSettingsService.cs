@@ -199,6 +199,8 @@ public sealed class IniSettingsService : ISettingsService
         s.FilterBeauty = ini.GetBool(Section, nameof(s.FilterBeauty), s.FilterBeauty);
         s.SaveLocalCopy = ini.GetBool(Section, nameof(s.SaveLocalCopy), s.SaveLocalCopy);
         s.LocalSavePath = ini.GetString(Section, nameof(s.LocalSavePath), s.LocalSavePath);
+        // it26: 유휴 팝업의 결과물 폴더 열기. 키가 없으면 기본값(false) 폴백 → 마이그레이션 불요.
+        s.EnableResultFolderOpen = ini.GetBool(Section, nameof(s.EnableResultFolderOpen), s.EnableResultFolderOpen);
         s.DisplayMode = ini.GetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
         s.CameraDevice = ini.GetInt(Section, nameof(s.CameraDevice), s.CameraDevice);
         // it23: 외부 카메라는 실배선(모델 Id + 노출 3종). 키가 없으면 기본값 폴백 → 마이그레이션 불요.
@@ -244,6 +246,7 @@ public sealed class IniSettingsService : ISettingsService
         ini.SetBool(Section, nameof(s.FilterBeauty), s.FilterBeauty);
         ini.SetBool(Section, nameof(s.SaveLocalCopy), s.SaveLocalCopy);
         ini.Set(Section, nameof(s.LocalSavePath), s.LocalSavePath);
+        ini.SetBool(Section, nameof(s.EnableResultFolderOpen), s.EnableResultFolderOpen);
         ini.SetEnum(Section, nameof(s.DisplayMode), s.DisplayMode);
         ini.SetInt(Section, nameof(s.CameraDevice), s.CameraDevice);
         // it23: 외부 카메라 실배선 4키. 노출 3키는 빈 값도 기록한다(빈 값 = "미지정"이라는 의미가 있다).

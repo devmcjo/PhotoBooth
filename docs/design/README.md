@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| 최종 업데이트 | 2026-08-01 (웹 클라이언트 **실사용 이슈 4건 수정 설계 2건** 등재 — 로그인 `invalid_client` 원인 특정 · Windows 디자인 정합 1:1 대조표) |
+| 최종 업데이트 | 2026-08-12 (**it26 앱 쓰기 위치 이관 · 유휴 팝업 결과물 폴더 열기** 등재 — 손님 사진을 옮기지 않는 이관 방식과 링크 노출 게이트) |
 | 갱신 규칙 | 새 설계 문서를 추가하면 이 인덱스의 해당 절에 등재한다. 이터레이션이 완료돼 내용이 `docs/analysis`에 흡수되면 §4로 옮긴다 |
 
 ---
@@ -33,6 +33,7 @@
 | Windows 앱 구조를 바꾼다 | [WPF 아키텍처](./wpf-architecture.md) |
 | **ffmpeg를 빼거나 바꾼다 / 배포물 용량·라이선스를 다룬다** | [ffmpeg 라이선스·배포 설계](./wpf-ffmpeg-licensing-and-distribution-design.md) — GPLv3 준수 이행은 **완료(§10)**. ⚠️ **ffmpeg를 계속 번들하는 한 `licenses/`를 지우면 라이선스 위반**이다. 용량(97MB)을 줄이려면 §5.2(LGPL+`h264_mf`)·§5.3(MF 직접 호출)을 볼 것 — 커스텀 최소 빌드(§3.3)는 **의무를 늘리므로 금지** |
 | 메인 화면·상단바·아이콘·창 크기를 바꾼다 | [it21 메인 시각 리디자인](./wpf-it21-main-visual-redesign-design.md) — 벡터 아이콘 시스템(`Themes/Icons.xaml`)·상단바 배치·창모드 하한 800×600 |
+| **앱이 파일을 쓰는 위치(결과물·프레임 캐시·설정)를 바꾼다 / 유휴 팝업을 손댄다** | [it26 쓰기 위치 이관·결과물 폴더 열기](./wpf-it26-writable-paths-and-completion-popup-design.md) — ⛔ 손님 사진(`result\`)을 **옮기거나 지우는 코드를 만들지 않는다**. ini 경로 정책(실행경로 1순위)은 **불변**이며 그 근거가 §3.5에 있다 |
 
 ---
 
@@ -93,6 +94,7 @@
 | [wpf-it20-frame-download-waiting-design](./wpf-it20-frame-download-waiting-design.md) | **it20** 기본 프레임 다운로드 대기 UI. 로딩 4국면(`Loading`/`Ready`/`Degraded`/`Failed`)·무진행 30초/총 60초 2단 상한·`finally`가 국면을 무조건 확정하는 구조·`FrameCatalogService` 단일 비행(single-flight) + 진행 중계 |
 | [wpf-ffmpeg-licensing-and-distribution-design](./wpf-ffmpeg-licensing-and-distribution-design.md) | ffmpeg GPLv3 준수 의무와 배포 형태. 동봉 자체는 위반이 아니고 **조건 미이행**이 위반이라는 판정, LGPL 빌드·`h264_mf` 전환 경로. **경로 1(준수 이행) 완료(2026-08-06 — §10)**, 경로 2·3은 미착수(용량 문제만 남아 법적 압박 없음). 의무 O1~O5 판정이 라이선스 관련 모든 후속 작업의 근거다 |
 | [wpf-it24-license-notice-redesign-design](./wpf-it24-license-notice-redesign-design.md) | **it24 — 프로젝트 라이선스 고지 화면 재설계 · 고지 문서 상용화.** "라이선스 창이 너무 없어보인다"는 요구를 **파일 단위 → 구성 요소 단위**로 재해석: 좌 파일명 목록 + 우 전문 덤프를 폐기하고 **요약 카드(Level 1) + 전문(Level 2)** 2단으로 바꿨다. 요약의 단일 소스는 배포물 안 `licenses/notice-manifest.json`(코드 하드코딩·txt 산문 파싱을 모두 기각한 근거 §2.4), **열거 ∪ 매니페스트 양방향 diff**로 "있어야 할 파일이 없다"와 "선언되지 않은 파일이 있다"를 모두 드러낸다. **R2("전문을 다 보여주지 말라")를 GPLv3 §4와 충돌 없이 만족시키는 방법**(전문 삭제가 아니라 기본 화면에서 밀어내기 + 도달 경로 유지)이 §0.3의 핵심 판정. 고지 txt는 `NOTICE.txt`·`FFmpeg-NOTICE.txt`로 개명 + SPDX 식별자 도입 + 상용 문안 재작성(GPLv3 전문·루트 `LICENSE`는 **무수정**). 선행 [it23 C부](./wpf-it23-session-testmode-license-design.md)의 §C3.1·§C5.1·§C7.2·§C10을 대체한다 |
+| [wpf-it26-writable-paths-and-completion-popup-design](./wpf-it26-writable-paths-and-completion-popup-design.md) | **it26 — 앱 쓰기 위치 이관 · 유휴 팝업에 [결과물 폴더 열기].** 설치 폴더(`C:\Program Files\MCPhoto`)에 쓰던 3종 중 **결과물(`result\`)·프레임 캐시(`Frame\`)를 `%ProgramData%\MCPhoto`로 이관**하고 **ini는 실행경로 1순위를 유지**한다(순서를 바꾸면 기존 설치가 설정을 잃고 개발 실행이 설치본과 ini를 공유해 `[Test]` 우회가 전파된다 — §3.5). ⛔ **파일을 옮기지 않는 이관**이 유실 0의 근거다: 구 `result`는 그대로 남고(제거 시에도 보존), 구 `Frame`은 **읽기 전용 보조 루트**로 계속 읽는다(쓰기는 새 루트만·이름 충돌은 새 루트 우선). B부는 팝업 신설이 아니라 **기존 유휴 오버레이에 하이퍼링크 1줄**(120초·10초·두 버튼·문구 전부 불변): 노출은 `EnableResultFolderOpen`(**기본 off**) AND 이 세션 저장 성공, 여는 것은 **그 세션 폴더만**(경로는 `SaveAsync`의 **반환값** — 시각 재계산은 `-2` 접미 때문에 다른 손님 폴더를 연다), 클릭이 **카운트다운을 건드리지 않는다**. 기본 off와 게스트 편집 금지의 이유: 이 팝업은 **손님 앞에서 무인으로** 뜨고 링크에 로그인 게이트가 없다 |
 | [wpf-it17-auto-cutcount-design](./wpf-it17-auto-cutcount-design.md) | 촬영 컷 수 "자동" 모드(ini sentinel 0 → `max(6, 슬롯+2)`). 설정 도메인과 실효값 도메인을 분리한 근거, 단일 해석 지점(`CaptureSession.Begin`) |
 | [wpf-usermgmt-frame-count-design](./wpf-usermgmt-frame-count-design.md) | 사용자 관리 표의 **계정별 개인 프레임 개수**(정보성 읽기 전용). 목록 로드를 막지 않는 fire-and-forget 순차 조회·취소·무성 실패(`"—"` 유지) 설계. **일일 QR 한도 편집 UI는 범위 밖**(과금 도입 시) — [소유권 설계 §17 항목 4](./wpf-frame-ownership-binding-design.md#17-추후-개선-항목)의 분할 결정 |
 

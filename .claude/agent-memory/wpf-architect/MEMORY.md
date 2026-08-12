@@ -17,4 +17,4 @@
 - [it25 시뮬레이션 경계](it25-test-simulation-boundary.md) — TestMode 시뮬레이션=표시전용(TS1~TS4, IsTestUser 게이트)·TestTypeCode 행내 매핑·인식콤보 SelectedValue 분리(클로버)·프린터 스캐폴드 환원
 - [it25 인식·시뮬레이션](it25-recognition-and-simulation.md) — 노출기준="지원+인식"(설치나열 반려)·합성행 (미인식)·Clamp/Resolve 비대칭·[Test] 장치시뮬 DI분기(반쪽금지)·모델추가 3지점
 - [XAML 회귀 커버리지 실체](xaml-regression-coverage-truth.md) — Window도 소스스캔으로 검증됨(UserControl 우위 아님)·전체파싱은 Themes만·표면형태는 소유권으로 판정
-- [it26 쓰기위치·완료팝업](it26-writable-paths-and-completion-popup.md) — 자산등급별 이관(파일 무접촉=유실0)·ini 정책 불변 이유·모달 부활 허가조건(자동만료+연장불가)·세션폴더는 반환값만
+- [it26 쓰기위치·유휴팝업 링크](it26-writable-paths-and-completion-popup.md) — 자산등급별 이관(파일 무접촉=유실0)·ini 정책 불변 이유·손님 앞 무인팝업 기능은 기본off·세션폴더는 반환값만·"그 팝업 이미 있는지" 먼저 확인

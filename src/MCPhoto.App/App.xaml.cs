@@ -70,6 +70,9 @@ public partial class App : Application
         }
         catch (Exception ex) { Log.Warning(ex, "브랜딩 리소스 주입 실패(기본값 유지)"); }
 
+        // it26 §3.5·§3.6: 쓰기 위치 관측(Warning 2건). 정책을 바꾸지도, 파일을 옮기지도 않는다 — 사실만 남긴다.
+        LogWritablePathWarnings();
+
         // it15: 시드 계정 보장 삭제 — ID/PW 계정이 폐지되어 시드 개념 자체가 소멸.
         // 최초 admin은 마이그레이션 스크립트가 부트스트랩한다(설계 §5.5 P1).
 
@@ -79,6 +82,47 @@ public partial class App : Application
 
         var shell = _host.Services.GetRequiredService<MainWindow>();
         shell.Show();
+    }
+
+    /// <summary>
+    /// 시작 시 쓰기 위치 관측 2건(it26 §3.5 M6 · §3.6 M7). <b>아무 파일도 만들거나 옮기지 않는다</b> —
+    /// 무인 부스에서 "설정이 갈렸다" · "이전 사진이 어디 갔나"를 사후 추적할 단서만 남긴다.
+    /// <para>
+    /// M6: ini가 Program Files 하위면 그 파일은 <b>승격 실행</b>으로 만들어진 것이다(비승격 실행은 그 위치에
+    /// 쓸 수 없어 %ProgramData%를 쓴다) → 같은 PC에서 실행 방식에 따라 설정이 갈린다. 경로 정책은 불변이므로
+    /// 관측만 추가한다(순서를 바꾸면 기존 설치가 설정을 잃는다 — 설계 §3.5).
+    /// </para>
+    /// <para>
+    /// M7: 구 버전이 <c>{exe}\result</c>에 남긴 <b>손님 사진</b>. ⚠️ 이관은 파일을 옮기지 않으므로 그 폴더는
+    /// 그대로 남는다 — 운영자가 찾을 수 있도록 위치를 로그에 남기는 것이 이관의 유일한 후속 조치다.
+    /// </para>
+    /// </summary>
+    private void LogWritablePathWarnings()
+    {
+        try
+        {
+            var settings = _host!.Services.GetRequiredService<MCPhoto.Core.Settings.ISettingsService>();
+
+            if (MCPhoto.Core.Settings.SettingsPathDiagnostics.IsUnderProgramFiles(
+                    settings.IniPath,
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)))
+            {
+                Log.Warning("설정 파일이 설치 폴더에 있습니다: {Path} — 승격 실행 여부에 따라 설정이 갈릴 수 있습니다",
+                    settings.IniPath);
+            }
+
+            var legacyResult = Path.Combine(
+                AppContext.BaseDirectory, MCPhoto.Core.LocalSave.LocalSavePathResolver.DefaultFolderName);
+            if (Directory.Exists(legacyResult))
+            {
+                var effective = MCPhoto.Core.LocalSave.LocalSavePathResolver.Resolve(
+                    settings.Current.LocalSavePath, DataFolder);
+                Log.Warning("이전 버전이 설치 폴더에 저장한 결과물이 있습니다: {Old} — 새 저장 위치는 {New}입니다",
+                    legacyResult, effective);
+            }
+        }
+        catch (Exception ex) { Log.Warning(ex, "쓰기 위치 진단 실패(무시)"); }
     }
 
     /// <summary>

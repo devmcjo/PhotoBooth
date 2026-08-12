@@ -229,11 +229,16 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 | 섹션 | 내용 | 근거 |
 |------|------|------|
-| `[Dirs]` | `%ProgramData%\MCPhoto`(+`\logs`,`\cache`) 쓰기 가능(users-modify). Program Files 쓰기 회피 | `MCPhoto.iss:42-45` |
-| `[Icons]` | 시작 메뉴·바탕화면(선택) 바로가기 | `MCPhoto.iss:47-50` |
-| `[Tasks]` | `desktopicon`(바탕화면 바로가기 옵션) | `MCPhoto.iss:52-53` |
-| `[Run]` | 설치 후 앱 실행(nowait, skipifsilent) | `MCPhoto.iss:55-56` |
-| `[UninstallDelete]` | cache·logs 정리, 사용자 설정/결과물은 보존 | `MCPhoto.iss:58-61` |
+| `[Dirs]` | `%ProgramData%\MCPhoto`(+`\logs`,`\cache`,**`\result`**,**`\Frame`**) 쓰기 가능(users-modify). Program Files 쓰기 회피 | `installer/MCPhoto.iss` `[Dirs]` |
+| `[Icons]` | 시작 메뉴·바탕화면(선택) 바로가기 | `MCPhoto.iss` `[Icons]` |
+| `[Tasks]` | `desktopicon`(바탕화면 바로가기 옵션) | `MCPhoto.iss` `[Tasks]` |
+| `[Run]` | 설치 후 앱 실행(nowait, skipifsilent) | `MCPhoto.iss` `[Run]` |
+| `[UninstallDelete]` | cache·logs·sessions·**프레임 캐시(구·신 위치)** 정리, 사용자 설정/**결과물은 보존**(두 루트 모두 `dirifempty`) | `MCPhoto.iss` `[UninstallDelete]` |
+
+> **it26 — 앱은 설치 폴더에 쓰지 않는다(규약).** 앱이 쓰는 것은 전부 `%ProgramData%\MCPhoto` 아래다: 설정·로그·캐시·세션 임시물 + **촬영 결과물(`result\`)**·**프레임 캐시(`Frame\`)**. 설치 폴더에서 앱이 접촉하는 것은 읽기뿐이다(`{app}\Frame` = 운영자 배치 번들, `{app}\branding.ini`, `licenses\`, `tools\ffmpeg\`, `Assets\`).
+> **예외 1건**: ini 경로 정책은 실행경로 1순위를 유지하므로, **승격 실행**으로 띄우면 `{app}\MCPhoto.ini`가 생길 수 있다(기존 설치의 설정 유실·개발/설치본 ini 공유를 막기 위한 의도적 유지 — [12 §2.3](./12-exe-app-settings-and-config.md)). 시작 시 Warning 로그로 그 사실을 알린다.
+> **⛔ 제거가 지우지 않는 것**: `{app}\result`(구 버전이 남긴 손님 사진)와 `{commonappdata}\MCPhoto\result`(현 저장 위치). 로컬 사본은 QR 전송과 독립이라 **서버에 없을 수도 있어 유일 사본일 수 있다.** 두 경로는 `[UninstallDelete]`에 **행 자체가 없어야** 하며 `tests/MCPhoto.Tests/InstallerScriptTests.cs`가 그 부재를 정적으로 잠근다(주석 줄은 제외하고 지시 줄만 검사한다). 프레임 캐시는 서버에서 재취득 가능하므로 반대로 삭제 대상이다.
+> `[Dirs]`에 `result`·`Frame`을 **명시 생성**하는 이유: 상속에만 의존하면 비승격 첫 실행이 폴더 생성부터 실패할 수 있고, 그때 `LocalSaveService`는 예외 대신 `null`을 반환해 **손님 사진이 조용히 저장되지 않는다**.
 
 > 참고: iss 헤더 주석(`MCPhoto.iss:6`)은 `--self-contained false` publish 예시를 든다. 반면 실제 `publish.ps1`은 `--self-contained true`(단일 파일)로 게시한다(`publish.ps1:33`). iss 는 `PublishDir`의 산출물 전체를 그대로 담으므로 어느 쪽이든 동작하나, 두 문서의 self-contained 값이 불일치한다 → 배포 시 어떤 publish 산출물을 iss 소스로 쓸지 확정 필요(**가정**: 단일 파일 산출물 기준).
 

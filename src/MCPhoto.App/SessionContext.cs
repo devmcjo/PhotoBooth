@@ -43,6 +43,18 @@ public sealed class SessionContext
     /// <summary>세션 작업 폴더(임시 산출물).</summary>
     public string? WorkFolder { get; set; }
 
+    /// <summary>
+    /// 이 세션의 로컬 저장 폴더 절대경로. 저장을 하지 않았거나 실패했으면 null. (it26 §4.5)
+    /// <para>
+    /// 값의 유일한 출처는 <c>ILocalSaveService.SaveAsync</c>의 <b>반환값</b>이다 —
+    /// ⚠️ 폴더명을 <c>SessionTime</c>으로 재계산하면 안 된다: 같은 분에 두 세션이 겹치면 실제 폴더에
+    /// <c>-2</c> 접미가 붙어(<c>LocalSaveService.MakeUniqueFolder</c>) <b>직전 손님의 폴더</b>를 가리킨다.
+    /// </para>
+    /// 수명은 현재 세션뿐이다(<see cref="Reset"/>에서 null) — 다음 손님의 유휴 팝업이 이전 손님 폴더를
+    /// 가리키는 경로를 만들지 않기 위한 필수 규약이다.
+    /// </summary>
+    public string? LocalSaveFolder { get; set; }
+
     /// <summary>로그인. CurrentUser 설정 + 변경 통지.</summary>
     public void Login(User user)
     {
@@ -74,6 +86,8 @@ public sealed class SessionContext
         SessionTime = DateTime.Now;
         TryCleanupWorkFolder();
         WorkFolder = null;
+        // ⚠️ it26 §4.5: 누락하면 다음 손님의 유휴 팝업이 **이전 손님 폴더**를 여는 링크를 노출한다.
+        LocalSaveFolder = null;
 
         if (clearUser)
             Logout();

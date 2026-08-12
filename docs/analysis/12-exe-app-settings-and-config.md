@@ -40,7 +40,8 @@
 | `FilterBrightness` | bool | **true** | — | `FilterBrightness` | 결과 화면 "밝게" 필터 노출 |
 | `FilterBeauty` | bool | **true** | — | `FilterBeauty` | 결과 화면 "뷰티" 필터 노출 |
 | `SaveLocalCopy` | bool | **true**(오늘 확정) | — | `SaveLocalCopy` | 결과물 로컬 저장 on/off(QR과 독립) |
-| `LocalSavePath` | string | **""**(빈 값) | — | `LocalSavePath` | 빈 값이면 런타임 `{실행경로}\result` |
+| `LocalSavePath` | string | **""**(빈 값) | — | `LocalSavePath` | 빈 값이면 런타임 **`%ProgramData%\MCPhoto\result`**(it26 이관 — 종전 `{실행경로}\result`). **명시값은 항상 우선**(이관이 건드리지 않는다). 해석은 `LocalSavePathResolver.Resolve` 한 곳 |
+| `EnableResultFolderOpen` | bool | **false**(off) | — | `EnableResultFolderOpen` | 유휴 경고 팝업에 [결과물 폴더 열기] 링크 노출(it26). ⚠️ **켜면 손님이 탐색기를 열 수 있다** — 그 세션 폴더로 열리지만 거기서 임의 위치로 이동 가능하다. 링크에 로그인·표시모드 게이트가 없으므로 **이 키가 유일한 게이트**이며, 그래서 기본 off + **게스트 편집 금지**(로드 강제 off · 저장 미기록)다 |
 | `DisplayMode` | enum `DisplayMode` | **Windowed**(오늘 확정, 개발용) | {Fullscreen, Windowed} | `DisplayMode` | 창 표시 모드(§4) |
 | `WindowBounds` | `WindowBounds` | Left/Top=NaN, Width=1280, Height=720 | Width≥1280, Height≥720; Left/Top는 미클램프 | `WindowLeft`,`WindowTop`,`WindowWidth`,`WindowHeight` | 창모드 크기·위치(§5) |
 | `CameraDevice` | int | **0** | 음수면 0 | `CameraDevice` | 사용할 웹캠 장치 인덱스 |
@@ -142,6 +143,10 @@ CaptureSession.CutCount     ← 실효값: 6 | 7 | 8 | 10 | …       (Guide·Ca
 4. 전부 실패 시 error 로그 + **`false` 반환**.
 
 폴백 순서 요약: **실행 경로 → %ProgramData%\MCPhoto → %LocalAppData%\MCPhoto**.
+
+> **⚠️ it26: 이 경로 정책은 바뀌지 않았다.** 같은 이터레이션에서 결과물(`result\`)·프레임 캐시(`Frame\`)는 데이터 폴더로 이관했지만 **ini는 실행경로 1순위를 유지**한다. 순서를 바꾸면 ① 승격 실행으로 운영해 온 기존 설치가 `{app}\MCPhoto.ini`를 읽지 못해 기본값으로 시작하고 첫 종료에 그 기본값을 새 위치에 기록한다(되돌릴 수 없는 설정 유실) ② 개발 실행이 설치본과 **같은 ini를 공유**해 `[Test]` 섹션(인증 우회)이 전파된다 — 설정 혼동이 아니라 보안 사고다. ini는 운영자 자산(재구성 가능)이고 `result`는 손님 자산(재구성 불가)이라 위험 등급이 다르다.
+>
+> 대신 **관측만 추가**했다: 시작 시 ini가 `%ProgramFiles%`(x86 포함) 하위이면 Warning 1줄(`설정 파일이 설치 폴더에 있습니다: … — 승격 실행 여부에 따라 설정이 갈릴 수 있습니다`). 판정은 순수 함수 `SettingsPathDiagnostics.IsUnderProgramFiles`이며 진단 모달의 "설정 파일 경로" 행이 실제 위치를 그대로 보여 준다(추가 UI 없음).
 
 ### 2.4 저장 신뢰성(성공 오인 금지)
 

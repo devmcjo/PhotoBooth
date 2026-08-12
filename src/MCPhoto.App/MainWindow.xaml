@@ -191,6 +191,32 @@
                             HorizontalAlignment="Stretch" Margin="0,0,0,12" />
                     <Button Content="메인 화면으로" Style="{StaticResource Button.Ghost}"
                             Command="{Binding GoHomeFromIdleCommand}" HorizontalAlignment="Center" />
+
+                    <!-- it26 §6.1: [결과물 폴더 열기] 링크. 위 마크업은 한 줄도 바뀌지 않았다 — 얹기만 한다.
+                         ⚠️ 두 버튼 **아래**(카드 최하단)다: 링크는 3차 액션이므로 위에 두면 주 CTA의 시각 위계를 깬다.
+                         ⚠️ 노출은 "ini EnableResultFolderOpen on AND 이 세션 저장 성공"의 AND이며 기본은 off라
+                            대부분의 부스에서 이 줄은 Collapsed(= 종전과 픽셀 단위로 같은 팝업)다.
+                            비활성 대신 숨김인 이유: 누를 수 없는 링크를 10초 카운트다운 화면에 둘 이유가 없고,
+                            비활성 Hyperlink 시각 규격이 테마에 없어 신규 키를 부른다.
+                         ⚠️ 링크 규약은 it24(SettingsView "지원하는 제품 목록")를 그대로 따른다:
+                            색 Brush.Accent.Text · 밑줄 상시(기본) · hover 색 변경 없음 · 신규 리소스 키 0개 ·
+                            AutomationProperties 불요(링크 글자 자체가 이름이다).
+                         ⚠️ 클릭은 카운트다운을 멈추지도 연장하지도 않는다(사용자 지시) — 리셋 코드를 넣지 마라. -->
+                    <TextBlock Style="{StaticResource Text.Caption}"
+                               HorizontalAlignment="Center" Margin="0,14,0,0"
+                               Visibility="{Binding IsResultFolderLinkVisible, Converter={StaticResource BoolToVis}}">
+                        <Hyperlink Foreground="{StaticResource Brush.Accent.Text}"
+                                   Command="{Binding OpenResultFolderCommand}">결과물 폴더 열기</Hyperlink>
+                    </TextBlock>
+
+                    <!-- 열기 실패 안내(잠금 셸·정책 차단·폴더 삭제). 경로를 노출해 수동 탐색이 가능하게 한다.
+                         카운트다운은 계속 돌고, 다음 팝업에는 남지 않는다(Show/Hide 양쪽에서 비운다). -->
+                    <TextBlock Style="{StaticResource Text.Caption}"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0"
+                               MaxWidth="380"
+                               Text="{Binding ResultFolderOpenError}"
+                               Visibility="{Binding HasResultFolderOpenError, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </Border>
         </Grid>

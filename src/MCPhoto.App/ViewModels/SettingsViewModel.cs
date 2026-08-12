@@ -7,6 +7,7 @@ using MCPhoto.App.Services;
 using MCPhoto.Core.Accounts;
 using MCPhoto.Core.Capture;
 using MCPhoto.Core.Devices;
+using MCPhoto.Core.LocalSave;
 using MCPhoto.Core.Models;
 using MCPhoto.Core.Settings;
 using MCPhoto.Core.Upload;
@@ -76,7 +77,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _filterBeauty;
     [ObservableProperty] private bool _saveLocalCopy;
     [ObservableProperty] private int _retentionHours;
-    [ObservableProperty] private string _localSavePath = string.Empty;
+    // it26 §6.2: 빈 값이 어디를 뜻하는지 화면이 말해 준다 → 값이 바뀌면 캡션도 갱신돼야 한다.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LocalSavePathEffectiveNote))]
+    private string _localSavePath = string.Empty;
+    // it26 §5.2: 유휴 팝업의 [결과물 폴더 열기] 노출(기본 off, 게스트 편집 금지).
+    [ObservableProperty] private bool _enableResultFolderOpen;
     [ObservableProperty] private string _hostingBaseUrl = string.Empty;
     [ObservableProperty] private int _cameraDevice;
     // it23: 외부 카메라는 실배선(촬영 세션이 이 값을 읽는다).
@@ -98,6 +104,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>저장 안내 토스트 표시 여부(문구가 있을 때만).</summary>
     public bool HasSavedNotice => !string.IsNullOrEmpty(SavedNotice);
+
+    // ── it26 §6.2: 로컬 저장 경로의 실제 위치 캡션 ──
+
+    /// <summary>
+    /// "로컬 저장 경로" 입력란 아래 캡션. <b>비어 있을 때가 이 캡션의 존재 이유다</b> —
+    /// 빈 값이 어디를 뜻하는지(%ProgramData%\MCPhoto\result) 화면이 말해 주지 않으면 운영자는 결과물을 찾지 못한다.
+    /// 값이 있으면 입력값과 같은 문자열이 되지만 그대로 표시한다(분기하면 "언제 보이는지" 규칙이 하나 늘어난다).
+    /// </summary>
+    public string LocalSavePathEffectiveNote =>
+        FormatLocalSavePathNote(LocalSavePathResolver.Resolve(LocalSavePath, App.DataFolder));
+
+    /// <summary>실경로 캡션 문구 단일 지점(it26 M3).</summary>
+    public static string FormatLocalSavePathNote(string path) => $"실제 저장 위치: {path}";
 
     // ── 보완#1: 권한 게이트 ──
     /// <summary>로그인 여부(게스트=false). QR/Firebase 편집 가능 여부. 설정 진입 중 불변.</summary>
@@ -363,6 +382,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             SaveLocalCopy = s.SaveLocalCopy;
             RetentionHours = s.RetentionHours;
             LocalSavePath = s.LocalSavePath;
+            EnableResultFolderOpen = s.EnableResultFolderOpen;
             HostingBaseUrl = s.HostingBaseUrl;
             CameraDevice = s.CameraDevice;
             // it23 §8.3-1: 외부 카메라는 편집 불가 세션(TempUser)에서도 **강제 off 하지 않는다** —
@@ -393,6 +413,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 FilterGrayscale = false;
                 FilterBrightness = false;
                 FilterBeauty = false;
+                // it26 §7.1: 링크에 로그인 게이트가 없으므로 이 키가 유일한 방어선이다 —
+                //            손님이 설정 화면에서 스스로 켜는 경로를 만들지 않는다(표시 off + Save 미기록).
+                EnableResultFolderOpen = false;
             }
 
             // it13 §7.3: TempUser 한도 초과 — QR 3필드만 표시 전용 off(게스트와 별개, 로그인 상태 유지).
@@ -488,6 +511,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.SaveLocalCopy = SaveLocalCopy;
         s.RetentionHours = RetentionHours;
         s.LocalSavePath = LocalSavePath;
+        // it26 §7.1: 게스트 미기록(ini 원값 보존). 게스트는 PIN 없이 설정에 들어오는데, 이 키는 손님 앞
+        //            팝업에 탐색기 진입점을 노출할지 결정하는 유일한 방어선이다.
+        if (!IsGuest) s.EnableResultFolderOpen = EnableResultFolderOpen;
         if (!IsGuest) s.HostingBaseUrl = HostingBaseUrl;   // Firebase 관련: 게스트 미저장 (보완#1)
         s.CameraDevice = CameraDevice;
         // it23 §8.3-2: 외부 카메라 4필드는 **편집 권한이 있을 때만** 기록한다.
