@@ -99,9 +99,12 @@ Filename: "{app}\{#AppExeName}"; Description: "{#AppName} 실행"; Flags: nowait
 Type: files; Name: "{app}\MCPhoto.ini"
 Type: files; Name: "{app}\branding.ini"
 Type: filesandordirs; Name: "{app}\Frame"
-Type: filesandordirs; Name: "{app}\result"
+; ⛔ `{app}\result` 는 **절대 지우지 않는다.** 로컬 저장 기본 경로가 `{exe}\result` 이므로
+;    (`ResultViewModel`: LocalSavePath 가 비면 AppContext.BaseDirectory\result) 그 폴더에는
+;    **손님 사진과 타임랩스**가 들어 있다. 제거가 고객 자산을 지우는 것은 복구 불가한 사고다.
+;    → result 가 있으면 아래 dirifempty 가 걸러 설치 폴더도 함께 보존된다(의도된 동작).
 ; 위를 지운 뒤 빈 설치 폴더까지 정리한다(dirifempty 는 비어 있을 때만 지우므로,
-; 운영자가 따로 둔 파일이 있으면 보존된다 — 남의 파일을 지우지 않는다).
+; 촬영 결과물이나 운영자가 따로 둔 파일이 있으면 보존된다 — 남의 파일을 지우지 않는다).
 Type: dirifempty; Name: "{app}"
 
 ; 데이터 폴더: 로그·캐시·세션 임시물은 정리한다.
