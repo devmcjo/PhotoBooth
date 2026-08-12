@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | WPF 앱 빌드/게시(단일 파일 publish)·ffmpeg 번들·인스톨러 구성 분석 |
 | 범위 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`·`publish.bat`, `Directory.Build.props`(버전 원천), `installer/MCPhoto.iss`, `branding.ini.sample`, **백엔드 게이트 키 exe 내장**. 백엔드 계약은 [30](./30-backend-firebase-integration.md), 웹·Functions 배포는 `web/deploy-web.bat` |
-| 최종 업데이트 | 2026-08-12 (.NET 8 → .NET 10 LTS 이관 — TFM·산출물 경로) · 이전 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
+| 최종 업데이트 | 2026-08-12 (.NET 10 이관 + 인스톨러 정비 — AppVersion exe 판독·PublishDir 정정·[Files] 화이트리스트·publish.ps1 -Installer) · 이전 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
 | 관련 소스 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`, `publish.bat`, `Directory.Build.props`, `installer/MCPhoto.iss`, `src/MCPhoto.App/branding.ini.sample`, `tools/ffmpeg/ffmpeg.exe`, `publish/MCPhoto/`(산출물) |
 | 갱신 규칙 | csproj 의 Target·복사 항목, publish 스크립트(게이트 키 주입 포함), iss 파일이 바뀌면 표/근거(`파일:라인`) 갱신. ffmpeg 경로/번들 방식 변경은 [10번](./10-exe-app-architecture.md) §4.5와 동시 갱신 |
 
@@ -122,7 +122,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
   - `NOTICE.txt` — 고지 색인 (종전 `README.txt`).
   - `MCPhoto-LICENSE-MIT.txt` — 루트 `LICENSE`의 **링크 복사**(물리 사본을 두지 않는다).
   - `notice-manifest.json` — 앱 화면이 읽는 **요약 메타데이터**. 형식은 [41 §11](./41-local-data-and-file-formats.md).
-- **인스톨러는 별도 설정이 필요 없다** — `[Files]`가 `{#PublishDir}\*`를 `recursesubdirs`로 담으므로 publish 에 들어가면 자동 포함이다(실측 확인). `.json` 신규 파일도 마찬가지다: `Excludes`는 서비스 계정 키 패턴(`*serviceaccount*.json` 등)만 제외하므로 `notice-manifest.json`은 걸리지 않는다(**실측 확인** — 빌드 출력·테스트 출력·publish 세 곳 모두에서 5개 파일 확인).
+- **인스톨러가 `licenses\`를 명시 항목으로 담는다**(§6.1). ⚠️ 2026-08-12 이전 서술("`{#PublishDir}\*`를 담으므로 자동 포함")은 **더 이상 참이 아니다** — `[Files]`가 화이트리스트로 바뀌면서 담을 것을 한 줄씩 열거하게 됐다. 결과(고지 5개가 설치본에 들어감)는 같지만 **경로가 다르다**: 이제 `licenses\*` 한 줄이 그 보장을 지고 있으므로, 그 줄을 지우면 고지가 조용히 사라진다. `notice-manifest.json`도 이 줄에 포함된다(확장자 제한 없음).
 - ⚠️ **ffmpeg 를 계속 번들하는 한 이 폴더를 지우면 라이선스 위반이다.** `LicenseComplianceTests`가 "ffmpeg 복사 규칙이 살아 있으면 고지 4종(txt 3 + 매니페스트)이 있어야 한다"를 강제하고, 별도로 **출력 폴더 기준** 정합 테스트가 ① 매니페스트가 선언한 파일이 실제로 실리는지 ② 실린 `.txt`가 모두 선언되었는지 ③ 매니페스트의 버전·저작권·기준일이 txt 내용과 일치하는지를 검사한다. 반대로 ffmpeg 를 배포에서 빼면 그 시점에 의무가 소멸한다.
 - 앱 내 고지는 설정 → 고급 → **[프로젝트 라이선스 고지]** (요약 카드 + 전문 2단 구조). 진단·상태 창에는 존재 여부 1줄만 남는다. 상세 [11 §19](./11-exe-app-features.md).
 - 상세·후속 경로: [ffmpeg 라이선스·배포 설계](../design/wpf-ffmpeg-licensing-and-distribution-design.md).
@@ -167,22 +167,43 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 | 항목 | 값 | 근거 |
 |------|-----|------|
-| AppName / Version / Publisher | MCPhoto / 1.0.0 / MCPhoto | `MCPhoto.iss:9-12,19-22` |
-| 설치 경로 | `{autopf}\MCPhoto`(Program Files) | `MCPhoto.iss:22` |
-| 산출물 파일명 | `MCPhoto-Setup-1.0.0` | `MCPhoto.iss:29` |
-| 압축 | lzma2 + SolidCompression | `MCPhoto.iss:26-27` |
-| 아키텍처 | x64compatible | `MCPhoto.iss:28` |
-| 언어 | 한국어(Korean.isl) | `MCPhoto.iss:33` |
-| 소스(`PublishDir`) | 기본 `..\publish`, `iscc /DPublishDir=...`로 override 가능 | `MCPhoto.iss:14-16` |
+| `AppId`(제품 영구 신원) | `{9303675E-B66D-4D2E-A722-169F9E8865BC}` — **한번 배포하면 절대 변경 금지**(바꾸면 기존 설치가 업그레이드로 인식되지 않고 나란히 설치된다) | `MCPhoto.iss` `[Setup]` |
+| AppName / Publisher | MCPhoto / MCPhoto | `MCPhoto.iss` `#define` |
+| **AppVersion** | **하드코딩 폐기.** 패키징할 exe의 버전 리소스(`ProductVersion`)를 `GetStringFileInfo`로 읽는다 → `Directory.Build.props`의 `<Version>`이 유일 원천(§1)인 상태가 인스톨러까지 이어진다. `iscc /DAppVersion=x.y.z`로 override 가능 | `MCPhoto.iss` `#ifndef AppVersion` |
+| 설치 경로 | `{autopf}\MCPhoto`(Program Files) | `MCPhoto.iss` `[Setup]` |
+| 산출물 파일명 | `MCPhoto-Setup-{버전}` | `MCPhoto.iss` `OutputBaseFilename` |
+| 설치 파일 버전 리소스 | `VersionInfoVersion`도 같은 값 — setup.exe 파일 속성에서 확인 가능 | `MCPhoto.iss` `[Setup]` |
+| 압축 | lzma2 + SolidCompression | `MCPhoto.iss` `[Setup]` |
+| 아키텍처 | x64compatible | `MCPhoto.iss` `[Setup]` |
+| 언어 | 한국어(Korean.isl) | `MCPhoto.iss` `[Languages]` |
+| 소스(`PublishDir`) | 기본 `..\publish\MCPhoto`(publish.ps1 출력 위치와 일치), `iscc /DPublishDir=...`로 override 가능 | `MCPhoto.iss` `#ifndef PublishDir` |
 
-### 6.1 산출물 구성
+> ⚠️ **버전을 exe에서 읽는 이유**: 종전에는 `#define AppVersion "1.0.0"`이 하드코딩돼 있어 **1.1.19 앱이 1.0.0으로 설치·등록**됐다(제어판 표기·산출물 파일명 모두). 값을 전달하는 방식(`/D`)도 드리프트가 가능하지만, exe에서 직접 읽으면 **인스톨러가 자기가 담는 바이너리와 다른 버전을 말할 수 없다.** exe가 없으면 컴파일이 실패하는데, 이는 publish를 건너뛴 채 인스톨러를 만드는 사고를 막는 **의도된 실패**다.
 
-`[Files]`에서 publish 산출물 전체(`{#PublishDir}\*`)를 `{app}`으로 재귀 복사한다(`MCPhoto.iss:38-39`). 결과적으로 설치본은:
+> ⚠️ **종전 `PublishDir` 기본값이 틀려 있었다**: `..\publish`였는데 `publish.ps1`은 `publish\MCPhoto`에 쓴다. `recursesubdirs`가 `MCPhoto` 폴더째 담아 **`{app}\MCPhoto\MCPhoto.exe`로 설치**됐다(바로가기는 `{app}\MCPhoto.exe`를 가리켜 실행 실패).
 
-- `MCPhoto.exe`(앱 바이너리 — 백엔드 게이트 키 내장)
-- `tools\ffmpeg\ffmpeg.exe`(타임랩스용 번들)
-- `Frame\`(기본 프레임)
-- `branding.ini.sample`
+### 6.1 산출물 구성 — 화이트리스트
+
+`[Files]`는 **담을 것을 명시 열거한다.** 배포 대상은 **3개뿐**이다(사용자 확정, 2026-08-12):
+
+| 담는 것 | 비고 |
+|---|---|
+| `MCPhoto.exe` | 자체 포함 단일 파일. 백엔드 게이트 키 내장(§2.1) |
+| `licenses\` | 오픈소스 고지. **ffmpeg와 반드시 함께** 배포한다 — 한쪽만 담으면 GPLv3 고지 의무를 어긴다 |
+| `tools\ffmpeg\ffmpeg.exe` | 타임랩스 인코딩 |
+
+**담지 않는 것**과 그 이유:
+
+| 제외 | 이유 |
+|---|---|
+| `MCPhoto.ini` | 앱이 최초 실행 시 스스로 만든다. 담지 않으면 `[Test]` 섹션 잔재가 배포물로 새는 경로도 함께 사라진다 |
+| `branding.ini` | 운영자가 필요할 때 배치한다 |
+| `Frame\` | 기본 프레임은 **서버에서 내려받는다**. `FrameCatalogService.BundleFolder`(`{exe}\Frame`)가 없으면 서버 목록·DB 캐시·폴백 렌더러로 대체된다 |
+| `result\` | 촬영 결과물. 배포물에 들어갈 이유가 없다 |
+
+> ⚠️ **왜 블랙리스트(`\*` + `Excludes`)에서 화이트리스트로 바꿨나**: publish 출력 폴더는 **재사용된다**(`publish.ps1`이 `licenses`만 지우고 나머지는 남긴다). 블랙리스트 방식에서는 그 폴더에 쌓인 실행 흔적(`MCPhoto.ini`·`result\`)과 개발용 파일이 **기본으로 포함**됐다. 실제로 `[Test] TestMode=1`이 남은 ini가 출력 폴더에 존재하는 것이 관측됐다(2026-08-12). 화이트리스트면 의도한 것만 들어가고, 새 파일은 `[Files]`에 한 줄을 추가해야 비로소 포함된다.
+
+> ⚠️ **오프라인 첫 실행**: `Frame\`을 담지 않으므로 네트워크가 없는 키오스크의 최초 실행에서는 기본 프레임이 폴백 렌더러 산출물뿐이다. 서버에 한 번 닿으면 캐시된다.
 
 ### 6.2 자격증명 차단 (보안)
 

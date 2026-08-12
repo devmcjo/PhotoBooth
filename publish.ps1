@@ -30,6 +30,11 @@
     - App defaults: UseBackend=true, BackendBaseUrl + GoogleClientId built in.
     - ASCII only on purpose: avoids CP949/UTF-8 console mojibake on Korean Windows.
 #>
+param(
+    # Also build the Inno Setup installer after a successful publish.
+    # Off by default: publish is the fast inner loop, packaging is a release step.
+    [switch]$Installer
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -104,3 +109,53 @@ if (Test-Path -LiteralPath $exe -PathType Leaf) {
 Write-Host "`nDone: $out\MCPhoto.exe" -ForegroundColor Green
 Get-ChildItem $out -Recurse -File |
     ForEach-Object { '{0,8:N2} MB  {1}' -f ($_.Length/1MB), $_.FullName.Substring($out.Length+1) }
+
+# ---- Installer (-Installer) ----
+# The .iss reads AppVersion from the exe's version resource, so it can never disagree with the
+# binary it packages - no version is passed from here on purpose.
+# It also ships ONLY three things (exe / licenses / tools). Everything else that accumulates in
+# this reused output folder (MCPhoto.ini, result\, branding.ini.sample) is left out by the
+# whitelist in [Files], so a stale test setting cannot leak into a shipped installer.
+if (-not $Installer) {
+    Write-Host "`nInstaller: skipped (pass -Installer to build it)." -ForegroundColor DarkGray
+    return
+}
+
+$iss = Join-Path $root 'installer\MCPhoto.iss'
+if (-not (Test-Path -LiteralPath $iss -PathType Leaf)) {
+    Write-Warning "Installer script not found: $iss"
+    return
+}
+
+# ISCC.exe is not on PATH by default. Look in both Program Files trees, then PATH as a fallback.
+$isccCandidates = @(
+    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+    (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
+if (-not $isccCandidates) {
+    $onPath = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if ($onPath) { $isccCandidates = @($onPath.Source) }
+}
+
+if (-not $isccCandidates) {
+    # Not an error: the publish above succeeded and is usable on its own.
+    Write-Warning "Inno Setup 6 not found - installer skipped. Install from https://jrsoftware.org/isdl.php"
+    return
+}
+
+$iscc = $isccCandidates[0]
+Write-Host "`nBuilding installer with: $iscc" -ForegroundColor Cyan
+& $iscc $iss
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "installer build failed (exit $LASTEXITCODE)"
+    return
+}
+
+# OutputBaseFilename is MCPhoto-Setup-<version>; Inno writes to installer\Output by default.
+$setup = Get-ChildItem (Join-Path $root 'installer\Output') -Filter 'MCPhoto-Setup-*.exe' -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($setup) {
+    Write-Host ('Installer: {0}  ({1:N1} MB)' -f $setup.FullName, ($setup.Length/1MB)) -ForegroundColor Green
+} else {
+    Write-Warning "Installer built but the output file was not found under installer\Output."
+}
