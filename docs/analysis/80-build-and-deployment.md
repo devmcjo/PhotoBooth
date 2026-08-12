@@ -4,7 +4,7 @@
 |------|------|
 | 문서 | WPF 앱 빌드/게시(단일 파일 publish)·ffmpeg 번들·인스톨러 구성 분석 |
 | 범위 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`·`publish.bat`, `Directory.Build.props`(버전 원천), `installer/MCPhoto.iss`, `branding.ini.sample`, **백엔드 게이트 키 exe 내장**. 백엔드 계약은 [30](./30-backend-firebase-integration.md), 웹·Functions 배포는 `web/deploy-web.bat` |
-| 최종 업데이트 | 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
+| 최종 업데이트 | 2026-08-12 (.NET 8 → .NET 10 LTS 이관 — TFM·산출물 경로) · 이전 2026-07-30 (it18 — `bldinfo.ini` 폐기, 버전은 `Directory.Build.props`의 `<Version>` 단일 원천) |
 | 관련 소스 | `src/MCPhoto.App/MCPhoto.App.csproj`, `publish.ps1`, `publish.bat`, `Directory.Build.props`, `installer/MCPhoto.iss`, `src/MCPhoto.App/branding.ini.sample`, `tools/ffmpeg/ffmpeg.exe`, `publish/MCPhoto/`(산출물) |
 | 갱신 규칙 | csproj 의 Target·복사 항목, publish 스크립트(게이트 키 주입 포함), iss 파일이 바뀌면 표/근거(`파일:라인`) 갱신. ffmpeg 경로/번들 방식 변경은 [10번](./10-exe-app-architecture.md) §4.5와 동시 갱신 |
 
@@ -21,7 +21,7 @@
 | 요소 | 값 | 근거 |
 |------|-----|------|
 | 앱 프로젝트 | `src/MCPhoto.App/MCPhoto.App.csproj`(WinExe, WPF) | `MCPhoto.App.csproj:4-7` |
-| TargetFramework | `net8.0-windows` | `MCPhoto.App.csproj:5` |
+| TargetFramework | `net10.0-windows` | `MCPhoto.App.csproj:5` |
 | AssemblyName | `MCPhoto`(→ `MCPhoto.exe`) | `MCPhoto.App.csproj:8` |
 | 공통 속성 | `LangVersion 12.0`, `Nullable enable`, `ImplicitUsings enable`, `Deterministic true`, 회사=MCPhoto/**제품=MCPhoto**/`ko-KR` | `Directory.Build.props` |
 | 버전 | `<Version>`이 원천 → `AssemblyVersion`·`FileVersion` = `$(Version).0`. `IncludeSourceRevisionInInformationalVersion=false`로 제품 버전에 git 해시가 붙지 않게 한다 | `Directory.Build.props` |
@@ -35,8 +35,8 @@
 
 | 명령 | 출력 | 근거 |
 |------|------|------|
-| `dotnet build` | `src\MCPhoto.App\bin\Debug\net8.0-windows\` | `publish.ps1:16-17` |
-| `dotnet build -c Release` | `src\MCPhoto.App\bin\Release\net8.0-windows\` | `publish.ps1:17` |
+| `dotnet build` | `src\MCPhoto.App\bin\Debug\net10.0-windows\` | `publish.ps1:16-17` |
+| `dotnet build -c Release` | `src\MCPhoto.App\bin\Release\net10.0-windows\` | `publish.ps1:17` |
 
 일반 빌드에서는 프레임워크 의존(자체 .NET 설치 필요) 산출물이 나오며, ffmpeg·Frame·branding 은 출력 폴더 하위로 복사된다(§3, §4).
 

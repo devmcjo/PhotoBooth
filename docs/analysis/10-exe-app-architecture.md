@@ -3,8 +3,8 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 | 10-exe-app-architecture.md |
-| 범위 | MCPhoto Exe 앱(WPF/.NET 8)의 솔루션 구성·계층·MVVM/DI·상태머신·캡처 파이프라인·전역 예외/데이터 폴더 |
-| 최종 업데이트 | 2026-08-11 (it25 — `IPrinterEnumerator`가 소비자 0 스캐폴드로 강등) · 이전 2026-08-10 (it23 — `MCPhoto.Devices.Nikon` 프로젝트 신설, 외부 카메라·테스트 모드·라이선스 고지 DI 등록) |
+| 범위 | MCPhoto Exe 앱(WPF/.NET 10)의 솔루션 구성·계층·MVVM/DI·상태머신·캡처 파이프라인·전역 예외/데이터 폴더 |
+| 최종 업데이트 | 2026-08-12 (.NET 8 → .NET 10 LTS 이관 — 전 프로젝트 TFM·런타임 연동 패키지) · 이전 2026-08-11 (it25 — `IPrinterEnumerator`가 소비자 0 스캐폴드로 강등) · 이전 2026-08-10 (it23 — `MCPhoto.Devices.Nikon` 프로젝트 신설, 외부 카메라·테스트 모드·라이선스 고지 DI 등록) |
 | 관련 소스 경로 | `src/MCPhoto.App/**`, `src/MCPhoto.Core/Navigation/**`, `src/MCPhoto.Core/Capture/**`, `src/MCPhoto.Capture/**`, `MCPhoto.sln` |
 | 갱신 규칙 | 프로젝트 참조 관계, DI 등록(`ServiceRegistration.cs`), 상태 enum/전이표(`SessionStateMachine.cs`), View↔VM 매핑(`App.xaml`), 캡처 스레딩 모델(`OpenCvCameraService`)이 바뀌면 이 문서를 갱신한다. |
 
@@ -22,11 +22,11 @@
 
 | 프로젝트 | TFM | 종류 | 주요 의존(PackageReference) | 역할 |
 | --- | --- | --- | --- | --- |
-| `MCPhoto.Core` | `net8.0` | 도메인 라이브러리(순수, WPF 비의존) | `Microsoft.Extensions.Logging.Abstractions`, `QRCoder` | 모델·상태머신·설정·프레임·업로드 계약·QR 등 플랫폼 무관 로직 |
-| `MCPhoto.Capture` | `net8.0-windows` (`UseWPF`) | 캡처/합성 구현 | `OpenCvSharp4.Windows`, `OpenCvSharp4.WpfExtensions` | 카메라(OpenCV)·ffmpeg 녹화·타임랩스·합성·필터·폴백 프레임 |
-| `MCPhoto.Http` | `net8.0` | 백엔드 API 클라이언트 | `Microsoft.Extensions.Http`, `Microsoft.Extensions.Logging.Abstractions` | 업로드/계정/프레임/한도의 HTTP 구상 + JWT 세션 홀더. **it15에서 `MCPhoto.Firebase`(Admin SDK 직결)를 대체** |
-| `MCPhoto.Devices.Nikon` | `net8.0-windows` (UI 비의존) | 외부 카메라(DSLR) 어댑터 | `Microsoft.Extensions.Logging.Abstractions` | Nikon MAID 어댑터. **SDK 참조를 이 어셈블리에 격리**한다(it23) — 상태머신·타임아웃·강등은 여기, SDK 원시 호출은 `INikonSdkShim` 구현 1파일뿐. OpenCvSharp·WPF·SDK를 참조하지 않는다(테스트가 csproj로 고정) |
-| `MCPhoto.App` | `net8.0-windows` (`WinExe`, `UseWPF`) | WPF 실행 파일(`AssemblyName=MCPhoto`) | `CommunityToolkit.Mvvm`, `Microsoft.Extensions.Hosting/DI/Logging`, `Serilog(.File)` | UI·ViewModel·셸·DI 부트스트랩·이미징 |
+| `MCPhoto.Core` | `net10.0` | 도메인 라이브러리(순수, WPF 비의존) | `Microsoft.Extensions.Logging.Abstractions`, `QRCoder` | 모델·상태머신·설정·프레임·업로드 계약·QR 등 플랫폼 무관 로직 |
+| `MCPhoto.Capture` | `net10.0-windows` (`UseWPF`) | 캡처/합성 구현 | `OpenCvSharp4.Windows`, `OpenCvSharp4.WpfExtensions` | 카메라(OpenCV)·ffmpeg 녹화·타임랩스·합성·필터·폴백 프레임 |
+| `MCPhoto.Http` | `net10.0` | 백엔드 API 클라이언트 | `Microsoft.Extensions.Http`, `Microsoft.Extensions.Logging.Abstractions` | 업로드/계정/프레임/한도의 HTTP 구상 + JWT 세션 홀더. **it15에서 `MCPhoto.Firebase`(Admin SDK 직결)를 대체** |
+| `MCPhoto.Devices.Nikon` | `net10.0-windows` (UI 비의존) | 외부 카메라(DSLR) 어댑터 | `Microsoft.Extensions.Logging.Abstractions` | Nikon MAID 어댑터. **SDK 참조를 이 어셈블리에 격리**한다(it23) — 상태머신·타임아웃·강등은 여기, SDK 원시 호출은 `INikonSdkShim` 구현 1파일뿐. OpenCvSharp·WPF·SDK를 참조하지 않는다(테스트가 csproj로 고정) |
+| `MCPhoto.App` | `net10.0-windows` (`WinExe`, `UseWPF`) | WPF 실행 파일(`AssemblyName=MCPhoto`) | `CommunityToolkit.Mvvm`, `Microsoft.Extensions.Hosting/DI/Logging`, `Serilog(.File)` | UI·ViewModel·셸·DI 부트스트랩·이미징 |
 | `MCPhoto.Tests` | (tests) | 테스트 | — | 순수 로직·headless XAML 회귀 테스트 |
 
 의존 방향(단방향, 도메인이 최하위):

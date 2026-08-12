@@ -4,7 +4,7 @@
 |------|-----|
 | 문서 | MC포토 시스템 전체 개요·아키텍처(진입 문서) |
 | 범위 | 4계층(Exe 앱 / 백엔드 API / 웹 / Firebase 인프라) 조감, 컴포넌트 맵, end-to-end 데이터 흐름, 문서 지도 |
-| 최종 업데이트 | 2026-07-30 (멀티플랫폼 클라이언트 문서 계층 반영 — §5 문서 지도 갱신) |
+| 최종 업데이트 | 2026-08-12 (.NET 8 → .NET 10 LTS 이관 반영) · 이전 2026-07-30 (멀티플랫폼 클라이언트 문서 계층 반영 — §5 문서 지도 갱신) |
 | 관련 소스 | 저장소 전역(`src/`, `web/`, `docs/`) |
 | 갱신 규칙 | 컴포넌트/흐름/스택이 바뀌면 이 문서와 해당 세부 문서를 함께 갱신 |
 
@@ -20,7 +20,7 @@ MC포토는 **키오스크형 셀프 포토부스**로, 4개 부분으로 구성
 
 | 구성 | 역할 | 기술 |
 |------|------|------|
-| **Exe 앱**(WPF 데스크톱) | 촬영·프레임·합성·필터·타임랩스·QR 표시. 현장 키오스크 본체. | .NET 8, WPF, OpenCvSharp, ffmpeg |
+| **Exe 앱**(WPF 데스크톱) | 촬영·프레임·합성·필터·타임랩스·QR 표시. 현장 키오스크 본체. | .NET 10, WPF, OpenCvSharp, ffmpeg |
 | **백엔드 API**(Cloud Functions) | 앱의 모든 DB/Storage 접근을 대행. 인증(JWT)·권한·업로드 서명 URL·프레임/계정 CRUD·TempUser 한도. **Admin 권한은 여기에만 존재**. | Cloud Functions 2nd gen, TypeScript, Express, Admin SDK(ADC) |
 | **Firebase 인프라** | 결과물 파일(Storage), 세션 메타/프레임/계정(Firestore), 보관/만료(Lifecycle·TTL). | Cloud Firestore, Cloud Storage |
 | **웹 페이지** | QR로 접속해 사진·타임랩스 다운로드. 만료/부재 안내. | Firebase Hosting + Firestore/Storage(바닐라 JS) |
@@ -89,7 +89,7 @@ flowchart TD
 
 | 계층 | 스택 |
 |------|------|
-| Exe 앱 | .NET 8 / WPF / CommunityToolkit.Mvvm / Microsoft.Extensions.Hosting(DI) / Serilog |
+| Exe 앱 | .NET 10 / WPF / CommunityToolkit.Mvvm / Microsoft.Extensions.Hosting(DI) / Serilog |
 | 영상·이미지 | OpenCvSharp4.Windows / ffmpeg(번들) |
 | 앱↔백엔드 | `IHttpClientFactory`(명명 클라이언트 `backend`) / 배포 게이트 키 `X-MCPhoto-Client` + JWT Bearer / QRCoder |
 | 백엔드 API | Cloud Functions 2nd gen(asia-northeast3) / TypeScript / Express / firebase-admin(ADC) / Secret Manager |
