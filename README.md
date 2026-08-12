@@ -45,9 +45,11 @@ photobooth/
 ├─ installer/              # Inno Setup 스크립트 (MCPhoto.iss)
 ├─ tools/ffmpeg/           # 번들 ffmpeg.exe (타임랩스용)
 ├─ docs/                   # PRD·설계·분석 문서  ← 상세는 docs/analysis/ 참고
-├─ publish.bat / publish.ps1  # 단일 EXE 배포 스크립트
-└─ Frame/                  # 기본(번들) 프레임 이미지
+└─ publish.bat / publish.ps1  # 단일 EXE 배포 스크립트
 ```
+
+> 기본 프레임은 리포에 담지 않습니다 — **서버가 유일한 출처**이고 클라이언트는
+> `%ProgramData%\MCPhoto\Frame`에 캐시합니다(it27).
 
 ## 🚀 빠른 시작
 

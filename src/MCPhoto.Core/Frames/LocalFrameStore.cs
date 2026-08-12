@@ -17,12 +17,12 @@ namespace MCPhoto.Core.Frames;
 /// </para>
 /// 이름은 원문 그대로 저장한다(sanitize 없음). 파일시스템 금지문자만 저장 거부.
 /// <para>
-/// it26 §3.4.3 — <b>구 루트(<c>{exe}\Frame</c>)는 읽기 전용 보조 루트</b>다. 캐시 위치를 옮겼지만 파일은
-/// 옮기지 않는다: <c>{app}</c> 하위 삭제엔 승격이 필요해 이동은 대개 "복사만 성공, 원본 잔존"으로 끝나고,
-/// png는 옮겼는데 <c>.slots</c>가 잠겨 실패하면 그 프레임은 <b>양쪽에서 모두 프레임이 아니게</b> 된다
-/// (= 사용자에게는 "프레임이 사라졌다"). 대신 구 루트를 계속 읽어 자산이 화면에서 사라지지 않게 한다.
-/// 쓰기·개인 폴더 생성은 <b>새 루트에만</b> 한다. <c>.slots</c> 서명은 파일 경로를 포함하지 않으므로
-/// 폴더가 달라져도 유효하다.
+/// it27 §3.1 — 루트는 **하나**다. 종전의 읽기 전용 보조 루트({exe}\Frame)는 제거했다:
+/// ① 그 폴백은 "이관 전 설치본이 남긴 캐시"를 위한 것이었는데 이 제품은 그 시점까지 배포된 적이
+///    없어 보호할 대상이 존재하지 않았다 ② 로컬 프레임은 전부 서버에서 재취득 가능한 캐시다
+///    (FrameCatalogService의 SyncPublicCache·SyncUserCache가 서버를 정본으로 다룬다)
+/// ③ 앱 경로를 읽는 표면을 남기면 "앱 경로 완전 제거"가 성립하지 않는다.
+/// 구 위치의 잔재는 인스톨러가 제거 시 정리한다(MCPhoto.iss [UninstallDelete] — 개발·검증 머신용).
 /// </para>
 /// </summary>
 public sealed class LocalFrameStore : ILocalFrameStore
@@ -32,25 +32,10 @@ public sealed class LocalFrameStore : ILocalFrameStore
 
     private readonly string _root;
 
-    /// <summary>읽기 전용 보조 루트(구 위치). 없거나 새 루트와 같으면 null.</summary>
-    private readonly string? _legacyRoot;
-
-    /// <param name="rootFolder">쓰기 가능한 캐시 루트(앱: %ProgramData%\MCPhoto\Frame).</param>
-    /// <param name="legacyReadRoot">
-    /// 구 캐시 루트(앱: {exe}\Frame). <b>읽기·삭제만</b> 미치고 쓰기는 절대 하지 않는다.
-    /// null이면 보조 루트 없음. 폴더가 없으면 열거 자체를 건너뛰므로 신규 설치에서 비용이 0이다.
-    /// </param>
-    public LocalFrameStore(string rootFolder, string? legacyReadRoot = null)
+    /// <param name="rootFolder">쓰기 가능한 캐시 루트(앱: %ProgramData%\MCPhoto\Frame). 읽기·쓰기 모두 이 하나뿐이다.</param>
+    public LocalFrameStore(string rootFolder)
     {
         _root = rootFolder;
-        // 같은 폴더를 두 번 열거하면 dedup이 하는 일이 없어지고 I/O만 2배가 된다(개발 환경에서 실제로 같아질 수 있다).
-        _legacyRoot = string.IsNullOrWhiteSpace(legacyReadRoot)
-                      || string.Equals(
-                          Path.TrimEndingDirectorySeparator(legacyReadRoot),
-                          Path.TrimEndingDirectorySeparator(rootFolder),
-                          StringComparison.OrdinalIgnoreCase)
-            ? null
-            : legacyReadRoot;
     }
 
     // ── 저장 ──
@@ -90,20 +75,20 @@ public sealed class LocalFrameStore : ILocalFrameStore
     // ── 로딩 ──
 
     public IReadOnlyList<FrameTemplate> LoadPublic()
-        => DedupByName(
-            EnumerateRoots(root => root, viewerEmail: null)
-                .Where(x => FrameOwnership.IsDefault(x.owner))
-                .Select(x => x.frame));
+        => Enumerate(_root, viewerEmail: null)
+            .Where(x => FrameOwnership.IsDefault(x.owner))
+            .Select(x => x.frame)
+            .ToList();
 
     public IReadOnlyList<FrameTemplate> LoadUser(string ownerEmail)
     {
         var owner = FrameOwnership.NormalizeEmail(ownerEmail);
         if (owner.Length == 0) return Array.Empty<FrameTemplate>();
 
-        return DedupByName(
-            EnumerateRoots(root => UserFolder(root, owner), viewerEmail: owner)
-                .Where(x => !FrameOwnership.IsDefault(x.owner))   // 개인 폴더의 default 표기는 이상 데이터 → 제외
-                .Select(x => x.frame));
+        return Enumerate(UserFolder(owner), viewerEmail: owner)
+            .Where(x => !FrameOwnership.IsDefault(x.owner))   // 개인 폴더의 default 표기는 이상 데이터 → 제외
+            .Select(x => x.frame)
+            .ToList();
     }
 
     public IReadOnlySet<string> PublicFrameNames()
@@ -115,8 +100,8 @@ public sealed class LocalFrameStore : ILocalFrameStore
     // ── 삭제 ──
 
     /// <remarks>
-    /// 경로 기반이라 <b>구 루트의 캐시도 지운다</b>(it26 §3.4.3) — 서버에서 삭제된 프레임의 정리가
-    /// 새 루트에만 미치면 구 루트 사본이 계속 목록에 오른다.
+    /// ⚠️ <b>경로 기반</b>이다 — <see cref="FrameTemplate.ImageUrl"/>이 가리키는 파일을 지우며 루트에 갇히지
+    /// 않는다. 루트 개념과 무관하므로 단일 루트화(it27 §3.1)에도 한 줄도 바뀌지 않았다.
     /// </remarks>
     public bool DeleteLocal(FrameTemplate frame)
     {
@@ -139,12 +124,8 @@ public sealed class LocalFrameStore : ILocalFrameStore
         var list = new List<LocalFrameEntry>();
         var owner = FrameOwnership.NormalizeEmail(ownerEmail);
 
-        // 진단은 dedup하지 않는다 — 같은 이름이 두 루트에 있다는 사실 자체가 봐야 할 정보다.
-        foreach (var root in Roots())
-        {
-            AppendEntries(list, root);
-            if (owner.Length > 0) AppendEntries(list, UserFolder(root, owner));
-        }
+        AppendEntries(list, _root);
+        if (owner.Length > 0) AppendEntries(list, UserFolder(_root, owner));
 
         return list;
     }
@@ -171,40 +152,11 @@ public sealed class LocalFrameStore : ILocalFrameStore
 
     // ── 내부 ──
 
-    /// <summary>개인 프레임 폴더. ⚠️ <b>쓰기용은 항상 새 루트(<c>_root</c>)</b>다 — 구 루트에 만들지 않는다.</summary>
+    /// <summary>개인 프레임 폴더(읽기·쓰기 모두 <c>_root</c> 하위 — it27 §3.1로 루트가 하나다).</summary>
     private string UserFolder(string normalizedEmail) => UserFolder(_root, normalizedEmail);
 
     private static string UserFolder(string root, string normalizedEmail)
         => Path.Combine(root, UsersFolderName, FrameOwnership.FolderNameFor(normalizedEmail));
-
-    /// <summary>읽기 대상 루트(새 루트 우선 → 구 루트). 이 순서가 이름 충돌 시 "새 루트가 이긴다"를 만든다.</summary>
-    private IEnumerable<string> Roots()
-    {
-        yield return _root;
-        if (_legacyRoot is not null) yield return _legacyRoot;
-    }
-
-    /// <summary>두 루트를 같은 규칙으로 열거(폴더 산출은 호출부가 지정 — 공용은 루트, 개인은 users\{해시}).</summary>
-    private IEnumerable<(FrameTemplate frame, string owner)> EnumerateRoots(
-        Func<string, string> folderOf, string? viewerEmail)
-    {
-        foreach (var root in Roots())
-            foreach (var item in Enumerate(folderOf(root), viewerEmail))
-                yield return item;
-    }
-
-    /// <summary>
-    /// 이름(대소문자 무시) 기준 중복 제거 — <b>먼저 온 것(새 루트)이 이긴다</b>.
-    /// 없으면 이관 직후 부스에서 같은 프레임이 두 벌 보인다.
-    /// </summary>
-    private static List<FrameTemplate> DedupByName(IEnumerable<FrameTemplate> frames)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var list = new List<FrameTemplate>();
-        foreach (var f in frames)
-            if (seen.Add(f.Name)) list.Add(f);
-        return list;
-    }
 
     /// <summary>
     /// 폴더의 프레임을 열거하며 서명 검증 + 노출 판정을 통과한 것만 돌려준다.

@@ -47,7 +47,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 | ViewModel / `*ViewModel` | **화면 로직(Presenter)** | MVVM은 WPF의 선택이지 규격이 아님 |
 | `AppSettings` / `MCPhoto.ini` | **클라이언트 설정(Client Settings)** | 키 이름은 계약, 저장 형식은 플랫폼 자유 ([41](./41-local-data-and-file-formats.md)) |
 | `%ProgramData%\MCPhoto` | **앱 데이터 디렉터리** | 플랫폼별 위치 다름 ([41 §5](./41-local-data-and-file-formats.md)) |
-| `ILocalFrameStore` / `Frame\` 폴더 | **로컬 프레임 저장소** | 파일 포맷은 계약 ([41 §3](./41-local-data-and-file-formats.md)) |
+| `ILocalFrameStore` / `%ProgramData%\MCPhoto\Frame` 폴더 | **로컬 프레임 저장소** | 파일 포맷은 계약 ([41 §3](./41-local-data-and-file-formats.md)) |
 | `ICameraService` / OpenCvSharp | **카메라 소스(Camera Source)** | [14 §2](./14-media-pipeline-spec.md) |
 | `ffmpeg.exe` / `FfmpegRunner` | **비디오 인코더(Video Encoder)** | [14 §6](./14-media-pipeline-spec.md) |
 | `CompositionService` | **합성기(Compositor)** | [14 §5](./14-media-pipeline-spec.md) |
@@ -155,7 +155,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 | `HttpListener` loopback + 시스템 기본 브라우저 | Google 인가 코드 수신 | [61 §3](./61-auth-platform-integration.md) |
 | `branding.ini` 외부 파일 | 고객사별 앱 이름 표기 | [12 §3](./12-exe-app-settings-and-config.md) |
 | `publish.ps1` 단일 EXE + Inno Setup | 배포 | [80](./80-build-and-deployment.md) |
-| 실행 폴더 `Frame\` 단일 디렉터리 + 접두 규칙 | 로컬 프레임 저장·공용/개인 구분 | [41 §3](./41-local-data-and-file-formats.md) |
+| `%ProgramData%\MCPhoto\Frame` 단일 루트 + `users\{이메일 해시}\` 분리 | 로컬 프레임 저장·공용/개인 구분 | [41 §3](./41-local-data-and-file-formats.md) |
 
 ---
 
@@ -208,7 +208,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 | 요구 사항 | Windows(현행) | macOS | iOS/iPadOS | Android | 웹 |
 |-----------|---------------|-------|------------|---------|-----|
 | 클라이언트 설정 영속 | `MCPhoto.ini` 3단 폴백 | `~/Library/Application Support/…` (plist/JSON) | `UserDefaults` 또는 앱 지원 디렉터리 JSON | `DataStore`/SharedPreferences | `localStorage` |
-| 로컬 프레임 저장소 | **`%ProgramData%\MCPhoto\Frame\{이름}.png` + `.slots`**(it26. 실행폴더 `Frame\`은 읽기 전용 번들·구 캐시) | 앱 지원 디렉터리 | 앱 Documents/Library | `filesDir` | IndexedDB(Blob) |
+| 로컬 프레임 저장소 | **`%ProgramData%\MCPhoto\Frame\{이름}.png` + `.slots`**(it26. it27로 루트는 이 **하나**뿐 — 실행폴더 `Frame\`은 읽지 않는다) | 앱 지원 디렉터리 | 앱 Documents/Library | `filesDir` | IndexedDB(Blob) |
 | 세션 임시 작업 폴더 | `%ProgramData%\MCPhoto\sessions\{guid}` | `NSTemporaryDirectory` | `tmp`/캐시 | `cacheDir` | 메모리/OPFS |
 | 결과물 영구 보관 | **`%ProgramData%\MCPhoto\result\mcphoto_YYMMDD_HHMM\`**(it26. 설정 `LocalSavePath` 명시값이 우선) | `~/Pictures` 또는 지정 경로 | Photos 라이브러리 저장(권한 필요) | `MediaStore.Images/Video` | 브라우저 다운로드 |
 | 로그 영속 | Serilog 파일 일 롤링 | `os_log` + 파일 | 파일 + 공유 시트 | 파일 + `logcat` | 콘솔(영속 불가) |
@@ -404,7 +404,7 @@ MC포토는 **서버(백엔드 API) 중심 아키텍처**다. 클라이언트는
 - [ ] 프레임 이름에 `_`를 허용하지 않는다 (M15)
 - [ ] 슬롯 저장 검증: 개수 1~6, 경계 내, 겹침 없음 ([14 §4.4](./14-media-pipeline-spec.md))
 - [ ] 편집 진입·버튼 노출·저장 3곳 모두에 권한 가드가 있다 (M10)
-- [ ] 카탈로그 유래(공용 DB·번들·fallback) 프레임 편집은 **사본으로 분기 저장**하고 원본을 건드리지 않는다
+- [ ] 카탈로그 유래(공용 DB·fallback) 프레임 편집은 **사본으로 분기 저장**하고 원본을 건드리지 않는다
 
 **P4 운영**
 - [ ] 역할 변경 옵션이 서버 `canSetRole` 매트릭스와 1:1로 일치한다 ([60 §1.4](./60-auth-accounts-and-roles.md))

@@ -285,7 +285,7 @@ DI 로깅은 이 Serilog 로거를 유일 provider로 사용한다(`ClearProvide
 | 로그인 | **불가**(오프라인 폴백 없음). 화면 유지 + "네트워크를 확인해 주세요" | [60 §4.5](./60-auth-accounts-and-roles.md) |
 | 게스트 촬영·로컬 저장 | **정상 동작** | §2.2 |
 | 계정 목록 | 예외 전파("사용자 목록을 불러올 수 없습니다.") — 빈 목록 폴백 없음 | `HttpAccountService.cs:75-88` |
-| 프레임 목록 | 공용 프레임은 로컬 캐시·번들·fallback으로 폴백([11 §3](./11-exe-app-features.md)) | `FrameCatalogService` |
+| 프레임 목록 | 공용 프레임은 로컬 캐시·fallback으로 폴백([11 §3](./11-exe-app-features.md)) | `FrameCatalogService` |
 | 업로드/QR | 예외 → QrPopup이 우아 처리(로컬 보존, [재시도]) | `QrPopupViewModel.cs:113-118` |
 | PIN 게이트 | **fail-closed** — 진입 거부 | [60 §4.5](./60-auth-accounts-and-roles.md) |
 | TempUser 한도 조회 | **fail-open** — 앱은 허용, 서버가 업로드에서 최종 거부 | `HttpQrUsageService.cs:37-48` |

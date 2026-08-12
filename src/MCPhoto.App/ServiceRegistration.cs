@@ -138,17 +138,15 @@ internal static class ServiceRegistration
                 : inner;
         });
 
-        // it26 §3.4: 프레임 **캐시**(서버에서 내려받은 공용·개인)는 쓰기 가능한 %ProgramData%\MCPhoto\Frame로 옮겼다.
-        //   종전엔 실행 폴더 Frame\에 썼고, 설치본의 정상 실행(비승격)에서는 그 쓰기가 실패했다 — 캐시 기록에
-        //   실패한 id는 FrameCatalogService._cacheFailedIds에 들어가 **이번 실행 동안 목록에 오르지 않는다**
-        //   (= 기본 프레임이 안 보인다).
-        // ⚠️ {exe}\Frame은 그대로 남는다: ① FrameCatalogService.BundleFolder(운영자가 배치하는 읽기 전용 번들)
-        //   ② 이관 전 설치본이 남긴 캐시의 읽기 소스(legacyReadRoot — 쓰기·생성은 하지 않는다).
-        //   파일을 옮기지 않으므로 자산 유실 경로가 존재하지 않는다.
+        // it27 §3.1: 프레임 캐시 루트는 **%ProgramData%\MCPhoto\Frame 하나**다.
+        //   it26이 읽기 전용 보조 루트로 남겨 둔 {exe}\Frame은 제거했다 — 로컬 프레임은 전부 서버에서
+        //   재취득 가능한 캐시이므로(FrameCatalogService의 Sync*Cache가 서버를 정본으로 다룬다) 앱 경로를
+        //   읽을 이유가 없고, 남기면 "앱 경로 완전 제거"가 성립하지 않는다.
+        //   ⚠️ 그 보조 루트는 "이관 전 설치본이 남긴 캐시"를 위한 것이었는데, 이 제품은 그 시점까지
+        //      배포된 적이 없어 보호할 대상이 존재하지 않았다.
+        //   구 위치의 잔재는 인스톨러가 제거 시 정리한다(MCPhoto.iss [UninstallDelete] — 개발·검증 머신용).
         services.AddSingleton<ILocalFrameStore>(_ =>
-            new LocalFrameStore(
-                System.IO.Path.Combine(App.DataFolder, "Frame"),
-                legacyReadRoot: System.IO.Path.Combine(AppContext.BaseDirectory, "Frame")));
+            new LocalFrameStore(System.IO.Path.Combine(App.DataFolder, "Frame")));
 
         // Step 9: 세션 컨텍스트 + 프레임 카탈로그 + 화면 VM들
         services.AddSingleton<SessionContext>();

@@ -47,9 +47,10 @@ MCPhoto.App  ──▶  MCPhoto.Capture         ──▶  MCPhoto.Core
 
 ### 1.1 번들 자산(App 빌드 산출물)
 
-- `tools/ffmpeg/ffmpeg.exe`가 존재하면 출력·publish에 복사(녹화·타임랩스 필수, `MCPhoto.App.csproj:28-48`). ffprobe는 미사용이라 제외.
-- 루트 `Frame/**`를 출력 `Frame/`으로 복사(번들 기본 프레임, `MCPhoto.App.csproj:50-55`).
-- `branding.ini.sample`을 실행 폴더에 동봉(고객이 `branding.ini`로 리네임해 앱 이름 변경, `MCPhoto.App.csproj`).
+- `tools/ffmpeg/ffmpeg.exe`가 존재하면 출력·publish에 복사(녹화·타임랩스 필수, `MCPhoto.App.csproj:55-75`). ffprobe는 미사용이라 제외.
+- `licenses/**`를 출력·publish의 `licenses\`로 복사(GPLv3 고지 의무, `MCPhoto.App.csproj:78-117`).
+- `branding.ini.sample`을 실행 폴더에 동봉(고객이 `branding.ini`로 리네임해 앱 이름 변경, `MCPhoto.App.csproj:125-127`).
+- ⚠️ **프레임은 담지 않는다**(it27). 리포 루트 `Frame/`은 MVP 시절 번들 프레임 1개(`jport-camp`)를 담고 있었고 **2026-07-23(`694c502`)에 삭제**됐다. 그 뒤 `MCPhoto.App.csproj`의 복사 항목은 0개 파일을 매치했고, it27에서 그 항목도 제거했다. **기본 프레임의 유일한 출처는 서버다.**
 - 버전·빌드 시각 표기는 **동봉 파일이 없다** — 어셈블리 버전 리소스(`Directory.Build.props`의 `<Version>`)와 exe 타임스탬프에서 읽는다(it18, 상세는 [12 §6](./12-exe-app-settings-and-config.md)).
 
 ---
@@ -271,7 +272,7 @@ Settings/Login/Account는 별도 화면이지만 **오버레이성 진입**으�
 - `sessions/{guid}/` — 세션 임시 산출물(`session.mp4`, `timelapse.mp4`, `final.{ext}`). 시작 시·세션 종료(`SessionContext.Reset`)·유휴 시 정리. `result`·`logs`는 정리 제외(`SessionWorkspace`).
 - `cache/fallback_frame.png` — fallback 프레임 캐시(`FrameCatalogService.cs:38`).
 
-설정 INI·브랜딩·로컬 프레임(`Frame/`)·로컬 결과 저장 경로는 별도(상세는 [12 설정/구성](./12-exe-app-settings-and-config.md)).
+설정 INI·브랜딩·로컬 프레임 캐시(`%ProgramData%\MCPhoto\Frame`)·로컬 결과 저장 경로는 별도(상세는 [12 설정/구성](./12-exe-app-settings-and-config.md)).
 
 ---
 
@@ -293,7 +294,7 @@ Settings/Login/Account는 별도 화면이지만 **오버레이성 진입**으�
 | `StartsWithToVisibilityConverter` | 문자열 접두 일치 시 Visible |
 | `FilePathToImageConverter` | 파일 경로→`BitmapImage`(OnLoad+IgnoreImageCache — **파일 잠금 방지**, 프레임 삭제 실패 회피) |
 | `RoleLabelConverter` | `UserRole`→한글 라벨("임시 유저"/"사용자"/"고급 유저"/"매니저"/"관리자") |
-| `FrameDeleteVisibilityConverter`(멀티) | 프레임 삭제 ✕ 노출: 게스트/번들/fallback/빈 Id=숨김, `local:`=본인 노출, 공용/DB=파워만 |
+| `FrameDeleteVisibilityConverter`(멀티) | 프레임 삭제 ✕ 노출: 게스트/`bundle:`(폐기된 출처)/fallback/빈 Id=숨김, `local:`=본인 노출, 공용/DB=파워만 |
 | `RoleActionVisibilityConverter`(멀티) | 사용자 관리 액션 노출: 대상이 행위자와 같거나 낮은 역할일 때만(형식 불일치면 Collapsed) |
 | `AllTrueToVisibilityConverter`(멀티) | 모두 참일 때만 Visible |
 

@@ -3,7 +3,13 @@ using static MCPhoto.Core.Frames.DefaultFrameProvider;
 
 namespace MCPhoto.Tests;
 
-/// <summary>WBS Step 12: 기본 프레임 우선순위(DB→번들→fallback)·fallback 스펙 검증.</summary>
+/// <summary>
+/// WBS Step 12: 기본 프레임 우선순위(DB→번들→fallback)·fallback 스펙 검증.
+/// <para>
+/// ⚠️ ②(번들)는 it27에서 폐기 — 번들 스캔 코드를 제거해 <c>hasBundleFrames</c>가 참이 되는 프로덕션
+/// 경로가 없다(설계 it27 §3.2·§4.5). 순수 함수 열거만 이력으로 남기며, 이 단정들도 함께 남긴다.
+/// </para>
+/// </summary>
 public class DefaultFrameTests
 {
     [Fact]

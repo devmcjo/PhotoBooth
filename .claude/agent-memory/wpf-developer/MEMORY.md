@@ -21,3 +21,4 @@
 - [상태 뒤에 UI 숨기기 = 반려 3회](ui-behind-state-antipattern.md) — Visibility 게이트 대신 Disable+사유 캡션. 게이트 뺀 배치는 위치 단정 테스트로 고정(손님 화면은 예외 — it26)
 - [유휴 팝업 테스트 이음새](idle-warning-test-seam.md) — ShowIdleWarning/HideIdleWarning은 internal. 테스트를 async로 만들면 DispatcherTimer VerifyAccess로 깨진다
 - [인스톨러 컴파일 검증](iscc-compile-verify.md) — ISCC는 Inno Setup **7** 경로에만 있고 PATH에 없다. `/O`로 임시 출력, publish 선행(버전은 exe에서 읽는다)
+- [폐기 주석 vs 소스 스캔](deprecation-comment-vs-source-scan.md) — 폐기 표기는 사라진 심볼명을 일부러 남긴다. 부재 단정 테스트는 주석 줄을 걷어낸 뒤 판정(안 하면 자기 주석에 오탐)

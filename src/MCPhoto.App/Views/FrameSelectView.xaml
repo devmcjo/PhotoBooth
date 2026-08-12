@@ -33,7 +33,7 @@
                         <!-- 카드 본체(이미지+슬롯 미리보기+이름 바)는 공유 템플릿 재사용 — 피커와 시각 동일. -->
                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource FrameCard.Content}" />
                         <!-- A3(정정): 삭제 ✕. 프레임 쓰기 권한(고급 유저 이상)은 본인 로컬 프레임, 파워(manager/admin)는 공용·DB 프레임도.
-                             번들/fallback·게스트·user·temp_user 미노출(it16 E4 — CanDeleteFrames의 의미가 강화되어 자동 반영). -->
+                             bundle:(폐기된 출처)/fallback·게스트·user·temp_user 미노출(it16 E4 — CanDeleteFrames의 의미가 강화되어 자동 반영). -->
                         <Button Content="✕" FontSize="14" Width="28" Height="28"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
                                 Style="{StaticResource Button.Icon}"

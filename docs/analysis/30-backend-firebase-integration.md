@@ -238,7 +238,7 @@ Http 구현 4종(`HttpFirebaseClient`·`HttpFrameRepository`·`HttpAccountServic
 | `DeleteAsync(frameId)` | `DELETE /frames/{id}` | Bearer + 파워 | `{deleted:bool}` 반환 — 없는 문서 삭제를 성공으로 오인하지 않는다 |
 | `DeleteAllByUserAsync` | — | — | **클라 no-op**. 계정 삭제(`DELETE /accounts/{id}`)와 함께 서버가 cascade 수행(`HttpFrameRepository.cs:117-126`, `services/frames.ts:201-211`) |
 
-- 서버는 **공용 기본 프레임만 생성**한다: `userId=null`, `isDefault=true`를 강제하며 클라가 보낸 값을 신뢰하지 않는다(`routes/frames.ts:71-80`). 일반 사용자 커스텀 프레임은 it8 A2로 **로컬 전용**(`ILocalFrameStore`, 실행 폴더 `Frame\`)이다(`ServiceRegistration.cs:85-87`).
+- 서버는 **공용 기본 프레임만 생성**한다: `userId=null`, `isDefault=true`를 강제하며 클라가 보낸 값을 신뢰하지 않는다(`routes/frames.ts:71-80`). 일반 사용자 커스텀 프레임은 it8 A2로 **로컬 전용**(`ILocalFrameStore`, `%ProgramData%\MCPhoto\Frame` — it26 이관, it27로 단일 루트)이다(`ServiceRegistration.cs:141-148`).
 - `PUT /frames/{id}`(메타 갱신 + 선택적 이미지 교체)는 서버에 존재하지만 **앱 호출 코드는 0**이다 — it15 F1-D2/D3에서 "편집은 해당 PC에서만 적용"으로 정리됐다(`HttpFrameRepository.cs:99-100`).
 - 프레임 저작 권한(누가 생성·편집·삭제할 수 있는가)은 [60 §1.2](./60-auth-accounts-and-roles.md)의 `CanWriteFrames()` 축이 담당한다. 서버의 `requirePower()`는 **공용 DB 프레임** 게이트이며 두 축은 별개다.
 

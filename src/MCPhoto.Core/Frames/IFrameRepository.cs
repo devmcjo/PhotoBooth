@@ -29,8 +29,9 @@ public interface IFrameRepository
     Task<FrameTemplate> SaveMineAsync(FrameTemplate frame, byte[] imageBytes, CancellationToken ct = default);
 
     // it15 F1-D2: "기존 프레임 업데이트(PUT /frames/{id})" 계약은 클라이언트에서 폐지했다.
-    // 프레임 편집은 해당 PC에서만 적용되며(로컬 전용), DB/번들 유래 편집은 fork 저장으로 처리한다
-    // (docs/design/wpf-it15-frame-ux-design.md §3.2). 서버 라우트는 운영/관리 전용으로 유지된다.
+    // 프레임 **수정** 기능 자체가 폐지됐고(설계 D-16 — 종전 fork 저장 규칙도 함께 사라졌다), 재활용은
+    // [기존 프레임 불러오기]로 슬롯을 물려받아 **새로 만드는 것**뿐이다(SaveAsync·SaveMineAsync).
+    // 서버 라우트는 운영/관리 전용으로 유지된다.
 
     /// <summary>프레임 삭제(Firestore 문서 + Storage 이미지). 반환=문서가 실제로 존재해 삭제됐는지(없으면 false).</summary>
     Task<bool> DeleteAsync(string frameId, CancellationToken ct = default);

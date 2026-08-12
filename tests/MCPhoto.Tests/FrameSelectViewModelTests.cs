@@ -155,6 +155,8 @@ public class FrameSelectViewModelTests
     public void IsDeletable_Only_Local_Frames()
     {
         Assert.True(FrameSelectViewModel.IsDeletable(new FrameTemplate { Id = "local:x" }));
+        // ⚠️ it27: bundle:은 폐기된 출처(생성 경로 없음)지만 이 단정은 지우지 않는다 — 판정이 사라지면
+        //    그 id가 DbDefault로 떨어져 삭제가 허용되는 fail-open 반전이 일어난다(설계 it27 §4.2·§4.3 ⑤).
         Assert.False(FrameSelectViewModel.IsDeletable(new FrameTemplate { Id = "bundle:x" }));
         Assert.False(FrameSelectViewModel.IsDeletable(new FrameTemplate { Id = "fallback" }));
     }

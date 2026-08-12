@@ -11,7 +11,11 @@ namespace MCPhoto.Core.Frames;
 /// </para>
 /// 프레임 쓰기 권한(생성·삭제)은 AdvancedUser 이상만 갖는다 —
 /// advanced_user=본인 소유분만, power(manager/admin)=본인 소유 + DB 공용 기본,
-/// user·temp_user=**사용만**(읽기 전용, E4), 번들/fallback·게스트=불가.
+/// user·temp_user=**사용만**(읽기 전용, E4), `bundle:`(폐기된 출처)·fallback·게스트=불가.
+/// <para>
+/// ⚠️ <c>bundle:</c>은 it27에서 <b>생성 경로가 제거된</b> 출처지만 판정은 남아 있다 — 지우면 그 id가
+/// <see cref="FrameOriginKind.DbDefault"/>로 오분류되어 power에게 삭제가 허용된다(설계 it27 §4.2).
+/// </para>
 /// </summary>
 public static class FrameEditPolicy
 {
@@ -33,7 +37,7 @@ public static class FrameEditPolicy
         {
             FrameOriginKind.UserLocal => true,                 // 본인 소유(로컬 전용 또는 서버 동기)
             FrameOriginKind.DbDefault => role.Value.IsPower(), // 공용 기본 프레임은 power만
-            _ => false                                         // 번들·fallback·빈 Id
+            _ => false                                         // `bundle:`(폐기된 출처)·fallback·빈 Id
         };
     }
 }

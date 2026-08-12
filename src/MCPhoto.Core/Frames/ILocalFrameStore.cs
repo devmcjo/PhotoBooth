@@ -18,9 +18,11 @@ public sealed record LocalFrameEntry(
     int SlotCount);
 
 /// <summary>
-/// 로컬 프레임 저장소(png + `.slots` v2). 루트 = 실행 폴더 <c>Frame\</c>.
+/// 로컬 프레임 저장소(png + `.slots` v2). 루트 = 쓰기 가능한 프레임 캐시 폴더
+/// (앱: <c>%ProgramData%\MCPhoto\Frame</c> — it26 §3.4). ⚠️ it27 §3.1: <b>루트는 하나</b>이며
+/// 실행 폴더 <c>Frame\</c>은 읽지 않는다.
 /// <para>
-/// <b>레이아웃</b>: 공용(번들·DB default 캐시) = <c>{루트}\{이름}.png</c>,
+/// <b>레이아웃</b>: 공용(서버 default 캐시·power 공용 생성분) = <c>{루트}\{이름}.png</c>,
 /// 개인 = <c>{루트}\users\{이메일 해시}\{이름}.png</c>.
 /// </para>
 /// <para>
@@ -37,7 +39,7 @@ public sealed record LocalFrameEntry(
 public interface ILocalFrameStore
 {
     /// <summary>
-    /// 공용 프레임 저장(루트, <c>#owner=default</c>). 번들 캐시·DB default 캐시·power 공용 생성이 쓴다.
+    /// 공용 프레임 저장(루트, <c>#owner=default</c>). 서버 default 캐시·power 공용 생성이 쓴다.
     /// </summary>
     /// <param name="dbId">서버 문서 id(있으면 기록 — 동기화·삭제 대조 키).</param>
     FrameTemplate SaveDefaultFrame(FrameTemplate frame, byte[] png, string? dbId);

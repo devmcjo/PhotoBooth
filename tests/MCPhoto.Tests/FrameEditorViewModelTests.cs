@@ -442,7 +442,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         var (vm, _, _, _) = MakeVm(UserRole.User);
         var src = new FrameTemplate
         {
-            Id = "bundle:classic", Name = "클래식", IsDefault = true,
+            Id = "srv-classic", Name = "클래식", IsDefault = true,
             ImageUrl = _imagePath,
             ImageSize = new ImageSize { Width = 1200, Height = 1600 },
             Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
@@ -475,7 +475,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
 
         Assert.True(vm.ApplyPickedFrame(new FrameTemplate
         {
-            Id = "bundle:classic", Name = "클래식", IsDefault = true,
+            Id = "srv-classic", Name = "클래식", IsDefault = true,
             ImageUrl = _imagePath,
             ImageSize = new ImageSize { Width = 1200, Height = 1600 },
             Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
@@ -492,7 +492,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         var (vm, _, _, _) = MakeVm(UserRole.User);
         Assert.True(vm.ApplyPickedFrame(new FrameTemplate
         {
-            Id = "bundle:classic", Name = "클래식", IsDefault = true,
+            Id = "srv-classic", Name = "클래식", IsDefault = true,
             ImageUrl = _imagePath,
             ImageSize = new ImageSize { Width = 1200, Height = 1600 },
             Slots = SlotLayout.AutoArrange(4, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
@@ -516,7 +516,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
             var (vm, _, _, _) = MakeVm(UserRole.User);
             var src = new FrameTemplate
             {
-                Id = "bundle:wide", Name = "와이드", IsDefault = true,
+                Id = "srv-wide", Name = "와이드", IsDefault = true,
                 ImageUrl = bigPath,
                 ImageSize = new ImageSize { Width = srcW, Height = srcH },
                 Slots = { new Slot { Index = 0, X = 900, Y = 400, Width = 900, Height = 1200 } }
@@ -540,14 +540,17 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
     [Fact]
     public void ApplyPickedFrame_Accepts_Jpeg_Source()
     {
-        // C9(A7 검증): 번들 프레임은 .jpg일 수 있다 → LoadImage 경유로 PNG 재인코딩이 성공해야 한다.
+        // C9(A7 검증): **파일 열기 대화상자**가 .jpg를 허용한다(FrameEditorView.xaml.cs:59)
+        //   → LoadImage 경유로 PNG 재인코딩이 성공해야 한다.
+        //   ⚠️ it27 이후 카탈로그 프레임은 항상 .png다(LocalFrameStore가 .png만 쓰고 읽는다) —
+        //      .jpg 대응이 여전히 필요한 근거는 번들 폴더가 아니라 이 대화상자다.
         var jpgPath = MakeImageFile(1200, 1600, ".jpg");
         try
         {
             var (vm, _, _, _) = MakeVm(UserRole.User);
             var src = new FrameTemplate
             {
-                Id = "bundle:jpegframe", Name = "제이펙", IsDefault = true,
+                Id = "srv-jpegframe", Name = "제이펙", IsDefault = true,
                 ImageUrl = jpgPath,
                 ImageSize = new ImageSize { Width = 1200, Height = 1600 },
                 Slots = SlotLayout.AutoArrange(2, 1200, 1600, SlotAspect.Ratio3x4.ToRatio())
@@ -627,7 +630,7 @@ public class FrameEditorViewModelTests : IClassFixture<FrameImageFixture>
         Assert.True(vm.IsFramePickerVisible);
         vm.Picker.SelectedFrame = new FrameTemplate
         {
-            Id = "bundle:other", Name = "다른프레임", ImageUrl = _imagePath,
+            Id = "srv-other", Name = "다른프레임", ImageUrl = _imagePath,
             ImageSize = new ImageSize { Width = 1200, Height = 1600 }
         };
 

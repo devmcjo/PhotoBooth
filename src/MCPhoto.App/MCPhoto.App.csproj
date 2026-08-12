@@ -116,12 +116,10 @@
     <Message Importance="high" Text="라이선스 고지 복사 완료 → $(PublishDir)licenses\" />
   </Target>
 
-  <!-- 번들 기본 프레임(Frame/): 출력 Frame/으로 복사(§9 #11 우선순위 ②) -->
-  <ItemGroup>
-    <None Include="$(MSBuildProjectDirectory)\..\..\Frame\**\*.*"
-          Link="Frame\%(RecursiveDir)%(Filename)%(Extension)"
-          CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+  <!-- it27: 번들 기본 프레임(리포 루트 Frame/ → 출력 Frame\) 복사 폐기.
+       기본 프레임은 서버에서 내려받아 %ProgramData%\MCPhoto\Frame에 캐시한다 → 배포물에 담을 프레임이 없다.
+       ⚠️ 리포 루트 Frame/ 폴더 자체는 2026-07-23(694c502)에 이미 삭제되어, 이 글롭은 그때부터
+          0개 파일을 복사하고 있었다(F8·F9) → 이 제거는 빌드 산출물을 바꾸지 않는다. -->
 
   <!-- it9 C3: 브랜딩 샘플. 실행 폴더에 동봉(고객이 branding.ini로 리네임해 앱 이름 변경). -->
   <ItemGroup>

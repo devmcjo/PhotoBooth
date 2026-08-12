@@ -25,7 +25,8 @@ public sealed record FrameSyncDecision(
 /// <item><b>서버 미도달</b> → 삭제 0건. 오프라인을 "서버에 없음"으로 오판하면 전부 지운다</item>
 /// <item><b>서버 목록이 빈 배열</b> → 삭제 0건. 장애로 0개를 받았을 때의 참사를 막는다.
 ///       정말 다 지운 경우라도 다음 동기화에서 정리되므로 늦지 않다</item>
-/// <item><b><c>#dbid</c> 있는 것만 대상</b> → 번들 프레임(앱 동봉, dbid 없음)은 자동으로 보호된다</item>
+/// <item><b><c>#dbid</c> 있는 것만 대상</b> → <c>#dbid</c>가 없는 프레임(서버 미동기 <c>local:</c>)은
+/// 자동으로 보호된다</item>
 /// </list>
 /// </summary>
 public static class FrameSyncPlan

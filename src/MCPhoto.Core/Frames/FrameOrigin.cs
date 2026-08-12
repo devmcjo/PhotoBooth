@@ -11,7 +11,23 @@ public enum FrameOriginKind
     /// <summary>DB 공용 기본 프레임(접두 없는 실 DB id + isDefault=true, 자동 다운로드 캐시).</summary>
     DbDefault,
 
-    /// <summary>설치 번들 자산(`bundle:` 접두).</summary>
+    /// <summary>
+    /// 폐기된 출처: 설치 번들 자산(`bundle:` 접두). (it27 §4.2)
+    /// <para>
+    /// ⚠️ <b>생성 경로는 제거됐다</b>(FrameCatalogService.LoadBundleFrames 폐기) — 이 값을 갖는
+    /// 프레임을 만드는 코드는 이제 없고, 실제로 그런 파일이 존재할 확률도 0에 가깝다.
+    /// <b>그래도 삭제하지 않는다</b>: 이 분기가 사라지면 `bundle:` id가 <see cref="DbDefault"/>로
+    /// 오분류되어 <see cref="FrameEditPolicy.CanDelete"/>가 <b>power에게 삭제를 허용한다</b>
+    /// (fail-closed → fail-open 반전). 같은 반전이 삭제 ✕ 컨버터 · FrameSelectViewModel.IsDeletable ·
+    /// ConfirmDelete의 hasServerDoc · FrameCatalogService.DbIdsOf에서 연쇄로 일어난다.
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>보존 근거는 "그런 파일이 있을 수 있다"가 아니다</b> — 그것은 정적 코드 성질,
+    /// 즉 <b>분기를 지우면 권한 규칙이 느슨해진다</b>는 사실이다(설계 it27 §4.2). 배포·현장 상태와
+    /// 무관하므로 "이제 그런 파일 없으니 지우자"는 논거로는 이 판정을 뒤집을 수 없다.
+    /// UserRole.CreatableRoles와 같은 보존 근거다.
+    /// </para>
+    /// </summary>
     Bundle,
 
     /// <summary>코드 생성 fallback(`fallback` 접두 또는 빈 Id).</summary>
@@ -20,8 +36,9 @@ public enum FrameOriginKind
 
 /// <summary>
 /// FrameTemplate의 출처를 Id 접두·플래그로 판정하는 순수 함수. (item2 §2)
-/// 기존 규약 재사용: `local:`=user 로컬(LocalFrameStore), `bundle:`=번들(FrameCatalogService),
-/// `fallback`=코드 생성(DefaultFrameProvider), 그 외 접두 없는 실 DB id=공용 기본(CacheFromDb의 #dbid 보존).
+/// 기존 규약 재사용: `local:`=user 로컬(LocalFrameStore), `bundle:`=<b>폐기된 출처</b>(it27 §4.2 —
+/// 생성 경로 없음, 판정만 fail-closed로 보존), `fallback`=코드 생성(DefaultFrameProvider),
+/// 그 외 접두 없는 실 DB id=공용 기본(CacheFromDb의 #dbid 보존).
 /// </summary>
 public static class FrameOrigin
 {

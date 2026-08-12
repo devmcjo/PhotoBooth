@@ -378,7 +378,10 @@ public sealed partial class FrameEditorViewModel : ViewModelBase
             return false;
         }
 
-        // 번들 프레임은 .jpg일 수 있다 → 반드시 LoadImage 경유(OpenCV 디코드 → PNG 재인코딩).
+        // 원본이 .jpg일 수 있다 → 반드시 LoadImage 경유(OpenCV 디코드 → PNG 재인코딩).
+        //   ⚠️ it27 이후 카탈로그 프레임은 항상 .png다(LocalFrameStore가 .png로만 쓰고 *.png만 읽는다).
+        //      .jpg 대응이 여전히 필요한 근거는 **파일 열기 대화상자**다(FrameEditorView.xaml.cs:59 —
+        //      필터가 *.png;*.jpg;*.jpeg). 근거가 번들 폴더였다고 오해하면 이 경유를 지우게 된다.
         // 부작용: _imageBytes/FrameWidth·Height 세팅(장변 4000 초과 시 축소) + ArrangeSlots()로 자동 배치.
         if (!LoadImage(src.ImageUrl)) return false;
 

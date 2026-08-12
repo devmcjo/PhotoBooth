@@ -5,6 +5,13 @@ namespace MCPhoto.Core.Frames;
 /// <summary>
 /// 기본 프레임 소스 우선순위: ①DB isDefault → ②설치 Frame/ 번들 → ③fallback(코드 생성). (PRD §F2, §9 #11)
 /// 이 클래스는 우선순위 결정과 fallback 스펙 생성을 담당(실제 이미지 렌더는 Capture/App).
+/// <para>
+/// ⚠️ it27: 우선순위 ②(설치 폴더 Frame/ 번들)는 <b>폐기됐다</b> — 번들 스캔 코드를 제거해
+///    hasBundleFrames가 참이 되는 경로가 없다(설계 it27 §3.2). 프로덕션 호출자는 it20 이후
+///    이미 0이며(우선순위는 FrameCatalogService.ResolveLocalFrames가 직접 구현한다),
+///    UserRole.CreatableRoles와 같은 이유로 열거를 남긴다: 훗날 번들 개념이 되살아날 때
+///    폐기된 규칙이 조용히 부활하는 것을 막는다. <b>삭제 금지.</b>
+/// </para>
 /// </summary>
 public static class DefaultFrameProvider
 {

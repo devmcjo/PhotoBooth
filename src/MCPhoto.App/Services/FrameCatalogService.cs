@@ -8,8 +8,12 @@ using Microsoft.Extensions.Logging;
 namespace MCPhoto.App.Services;
 
 /// <summary>
-/// 사용 가능한 프레임 목록 제공. 우선순위: ①DB isDefault → ②설치 Frame/ 번들 → ③fallback. (§9 #11)
-/// 오프라인/DB 미초기화 시 ②/③로 폴백(게스트+번들 모드). 로그인 시 커스텀 프레임 추가.
+/// 사용 가능한 프레임 목록 제공. 우선순위: ①서버 isDefault → ②로컬 캐시 → ③fallback. (§9 #11)
+/// 오프라인/DB 미초기화 시 ②/③로 폴백(게스트 모드). 로그인 시 커스텀 프레임 추가.
+/// <para>
+/// ⚠️ it27 §3.2: 종전 ②였던 <b>설치 폴더 <c>{exe}\Frame</c> 번들 스캔은 폐기됐다</b> — 앱은 앱 경로를
+/// 읽지 않는다. 기본 프레임의 유일한 출처는 서버이고 로컬은 그 캐시(<c>%ProgramData%\MCPhoto\Frame</c>)다.
+/// </para>
 /// </summary>
 public sealed class FrameCatalogService
 {
@@ -41,9 +45,6 @@ public sealed class FrameCatalogService
     private readonly List<IProgress<FrameCatalogProgress>> _observers = new();
     private FrameCatalogProgress _lastProgress = new(FrameCatalogPhase.ResolvingLocal);
 
-    /// <summary>번들 프레임 폴더(설치 경로/Frame).</summary>
-    public string BundleFolder { get; }
-
     /// <summary>fallback 프레임 이미지 캐시 경로(%ProgramData%\MCPhoto\).</summary>
     public string FallbackImagePath { get; }
 
@@ -57,12 +58,11 @@ public sealed class FrameCatalogService
         _localStore = localStore;
         _logger = logger;
         _downloadImage = downloadImage ?? DefaultDownloadAsync;
-        BundleFolder = Path.Combine(AppContext.BaseDirectory, "Frame");
         FallbackImagePath = Path.Combine(App.DataFolder, "cache", "fallback_frame.png");
     }
 
     /// <summary>
-    /// 공용 프레임(게스트 포함). 로컬 공용(번들+파워캐시) 우선 → DB isDefault 중 로컬에 없는 이름만 캐시·병합
+    /// 공용 프레임(게스트 포함). 로컬 공용 캐시 우선 → DB isDefault 중 로컬에 없는 이름만 캐시·병합
     /// (이름 기준 dedup) → 없으면 fallback. 로컬에 이미 있으면 그 이름은 DB 미다운로드. (it8 §3 정정)
     /// it20: 동시 호출은 **하나의 작업을 공유**한다(단일 비행). <paramref name="progress"/>를 주면 진행
     /// 국면을 받고, 늦게 합류해도 최근 국면이 즉시 1회 replay된다.
@@ -84,7 +84,7 @@ public sealed class FrameCatalogService
             if (_inFlight is null) _lastProgress = new FrameCatalogProgress(FrameCatalogPhase.ResolvingLocal);
             snapshot = _lastProgress;
             // Task.Run으로 시작 → 호출자(UI 스레드)의 동기 구간은 이 lock 뿐이다(설계 §8.1).
-            // 로컬 스캔·번들 디코드·fallback 생성이 UI 스레드를 점유하지 않게 하는 경계이기도 하다.
+            // 로컬 스캔·fallback 생성이 UI 스레드를 점유하지 않게 하는 경계이기도 하다.
             _inFlight ??= Task.Run(RunSharedLoadAsync);
             shared = _inFlight;
         }
@@ -148,7 +148,7 @@ public sealed class FrameCatalogService
     {
         ReportShared(new FrameCatalogProgress(FrameCatalogPhase.ResolvingLocal));
 
-        // ① 로컬 공용(루트 = 번들 + DB default 캐시)
+        // ① 로컬 공용 캐시(루트 = 서버 default 캐시 + power 공용 생성분)
         var local = _localStore.LoadPublic();
 
         // ② DB isDefault와 `#dbid` 기준으로 대조 → 없는 것만 받고, 서버에서 지워진 캐시는 삭제한다.
@@ -179,7 +179,7 @@ public sealed class FrameCatalogService
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "DB 기본 프레임 조회 실패 — 로컬/번들/fallback로 폴백(오프라인 모드)");
+            _logger?.LogWarning(ex, "DB 기본 프레임 조회 실패 — 로컬 캐시/fallback로 폴백(오프라인 모드)");
         }
 
         ReportShared(new FrameCatalogProgress(FrameCatalogPhase.Completed));
@@ -193,7 +193,8 @@ public sealed class FrameCatalogService
     /// 그 잔재를 정리하는 것이 이 함수다.
     /// </para>
     /// <b>안전장치는 <see cref="FrameSyncPlan"/>이 강제한다</b> — 서버 목록이 비었으면 삭제하지 않고
-    /// (장애로 0개를 받았을 때의 참사 방지), <c>#dbid</c>가 없는 번들 프레임은 애초에 대상이 아니다.
+    /// (장애로 0개를 받았을 때의 참사 방지), <c>#dbid</c>가 없는 로컬 전용(<c>local:</c>) 프레임은
+    /// 애초에 대상이 아니다.
     /// </summary>
     private IReadOnlyList<FrameTemplate> SyncPublicCache(
         IReadOnlyList<FrameTemplate> local, IReadOnlyList<FrameTemplate> serverFrames)
@@ -251,7 +252,14 @@ public sealed class FrameCatalogService
             _logger?.LogWarning("프레임 캐시 실패 — 이번 실행에서는 재시도하지 않는다(재다운로드 루프 방지): {Id}", dbId);
     }
 
-    /// <summary>서버 문서 id를 가진 로컬 프레임의 id 집합(`local:` 접두는 서버 미동기라 제외).</summary>
+    /// <summary>
+    /// 서버 문서 id를 가진 로컬 프레임의 id 집합(`local:` 접두는 서버 미동기라 제외).
+    /// <para>
+    /// ⚠️ <c>bundle:</c> 제외는 it27 이후에도 <b>남긴다</b>(fail-safe) — 지우면 그 id가 서버 대조 집합에
+    /// 들어가고 서버 목록엔 없으므로 <see cref="FrameSyncPlan"/>이 <b>삭제 대상으로 잡는다</b>
+    /// (설계 it27 §4.3 ④). 생성 경로가 없다는 사실은 이 제외를 지울 근거가 되지 않는다.
+    /// </para>
+    /// </summary>
     private static IReadOnlySet<string> DbIdsOf(IReadOnlyList<FrameTemplate> frames)
         => new HashSet<string>(
             frames.Where(f => !string.IsNullOrEmpty(f.Id)
@@ -262,7 +270,7 @@ public sealed class FrameCatalogService
             StringComparer.Ordinal);
 
     /// <summary>
-    /// 네트워크를 전혀 쓰지 않는 기본 프레임 해석(로컬 공용 → 번들 → fallback). (it20)
+    /// 네트워크를 전혀 쓰지 않는 기본 프레임 해석(로컬 공용 → fallback). (it20)
     /// 대기 상한 초과·사용자 건너뛰기 후의 축소 진행 경로다. 정상 동작 시 최소 1개를 돌려준다.
     /// ⚠️ 단일 비행에 합류하지 **않는다** — 합류하면 방금 상한을 넘긴 그 작업을 다시 기다려 상한이 무의미해진다(설계 §6.3).
     /// 읽기 안전 근거: LocalFrameStore가 png를 먼저 쓰고 .slots를 나중에 쓰며, 로드는 .slots 없는 항목을
@@ -272,7 +280,7 @@ public sealed class FrameCatalogService
         => Task.Run(() => ResolveLocalFrames(preferLoaded: null), ct);
 
     /// <summary>
-    /// 로컬 우선순위 해석(공용 로컬 → 번들 → fallback). 네트워크를 쓰지 않는다. (it20)
+    /// 로컬 우선순위 해석(공용 로컬 → fallback). 네트워크를 쓰지 않는다. (it20)
     /// preferLoaded가 비어 있지 않으면 그대로 채택 — 호출측이 이미 스캔·병합을 마친 경우다.
     /// 두 경로(공유 작업 종단·로컬 전용 API)가 같은 코드를 쓰게 해 §9 #11 우선순위 규약이 갈라지지 않게 한다.
     /// </summary>
@@ -285,15 +293,7 @@ public sealed class FrameCatalogService
             return local;
         }
 
-        // ③ 번들 폴더에 .slots 없는 이미지가 있으면 자동 격자 배치로 로드(기존 폴백)
-        var bundled = LoadBundleFrames();
-        if (bundled.Count > 0)
-        {
-            _logger?.LogInformation("번들 프레임 {Count}개 사용", bundled.Count);
-            return bundled;
-        }
-
-        // ④ fallback(코드 생성)
+        // ② fallback(코드 생성) — it27 §3.2: 종전 ②였던 번들 폴더({exe}\Frame) 스캔은 폐기됐다.
         _logger?.LogInformation("fallback 프레임 생성");
         return new[] { EnsureFallbackFrame() };
     }
@@ -435,84 +435,10 @@ public sealed class FrameCatalogService
     private static readonly HttpClient _http = new();
     private static async Task<byte[]?> DefaultDownloadAsync(string url, CancellationToken ct)
     {
-        // 로컬 파일 경로(번들/기존 캐시)면 직접 읽기, http면 다운로드.
+        // 로컬 캐시 파일 경로면 직접 읽기, http면 다운로드.
         if (File.Exists(url)) return await File.ReadAllBytesAsync(url, ct);
         if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
         return await _http.GetByteArrayAsync(url, ct);
-    }
-
-    private List<FrameTemplate> LoadBundleFrames()
-    {
-        var list = new List<FrameTemplate>();
-        if (!Directory.Exists(BundleFolder)) return list;
-
-        // 번들 규약: Frame/{name}.png + Frame/{name}.slots(선택). slots 없으면 fallback 격자 배치.
-        foreach (var img in Directory.EnumerateFiles(BundleFolder)
-                     .Where(f => f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-                              || f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
-                              || f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)))
-        {
-            try
-            {
-                var (w, h) = ReadImageSize(img);
-                var name = Path.GetFileNameWithoutExtension(img);
-                var template = new FrameTemplate
-                {
-                    Id = $"bundle:{name}",
-                    Name = name,
-                    IsDefault = true,
-                    ImageUrl = img,
-                    ImageSize = new ImageSize { Width = w, Height = h }
-                };
-                LoadOrGenerateSlots(template, img);
-                list.Add(template);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "번들 프레임 로드 실패: {Path}", img);
-            }
-        }
-        return list;
-    }
-
-    private void LoadOrGenerateSlots(FrameTemplate template, string imagePath)
-    {
-        var slotFile = Path.ChangeExtension(imagePath, ".slots");
-        if (File.Exists(slotFile))
-        {
-            // 규약: 한 줄에 "index,x,y,w,h"
-            foreach (var line in File.ReadAllLines(slotFile))
-            {
-                var parts = line.Split(',');
-                if (parts.Length == 5
-                    && int.TryParse(parts[0], out var idx) && int.TryParse(parts[1], out var x)
-                    && int.TryParse(parts[2], out var y) && int.TryParse(parts[3], out var w)
-                    && int.TryParse(parts[4], out var h))
-                {
-                    template.Slots.Add(new Slot { Index = idx, X = x, Y = y, Width = w, Height = h });
-                }
-            }
-        }
-
-        if (template.Slots.Count == 0)
-        {
-            // slots 파일 없으면 이미지 크기에 맞춰 2×2 격자 자동 배치
-            GenerateGridSlots(template);
-        }
-    }
-
-    private static void GenerateGridSlots(FrameTemplate template)
-    {
-        int fw = template.ImageSize.Width, fh = template.ImageSize.Height;
-        int margin = fw / 15, gap = fw / 20;
-        int cellW = (fw - margin * 2 - gap) / 2;
-        int cellH = (int)(cellW * 4.0 / 3.0);
-        int totalH = cellH * 2 + gap;
-        int top = Math.Max(margin, (fh - totalH) / 2);
-        int[,] o = { { margin, top }, { margin + cellW + gap, top },
-                     { margin, top + cellH + gap }, { margin + cellW + gap, top + cellH + gap } };
-        for (int i = 0; i < 4; i++)
-            template.Slots.Add(new Slot { Index = i, X = o[i, 0], Y = o[i, 1], Width = cellW, Height = cellH });
     }
 
     // it20: fallback PNG는 프로세스 내 여러 경로(공유 작업 종단 · 로컬 전용 API)에서 동시에 요구될 수 있다.
@@ -572,12 +498,5 @@ public sealed class FrameCatalogService
                 System.Threading.Thread.Sleep(30 * i);
             }
         }
-    }
-
-    /// <summary>이미지 헤더에서 크기 읽기(OpenCvSharp 디코드).</summary>
-    private static (int w, int h) ReadImageSize(string path)
-    {
-        using var mat = OpenCvSharp.Cv2.ImRead(path, OpenCvSharp.ImreadModes.Color);
-        return (mat.Width, mat.Height);
     }
 }

@@ -17,7 +17,7 @@ public sealed partial class FramePickerViewModel : ObservableObject
     private readonly FrameCatalogService _catalog;
     private readonly ILogger<FramePickerViewModel>? _logger;
 
-    /// <summary>선택 후보 프레임(공용=번들+DB캐시+DB다운로드, + 로그인 계정 개인 로컬).</summary>
+    /// <summary>선택 후보 프레임(공용=로컬 캐시+서버 다운로드, + 로그인 계정 개인 로컬).</summary>
     public ObservableCollection<FrameTemplate> Frames { get; } = new();
 
     [NotifyPropertyChangedFor(nameof(HasSelection))]
@@ -59,7 +59,7 @@ public sealed partial class FramePickerViewModel : ObservableObject
 
         try
         {
-            // 공용: 번들 + 파워 캐시 + DB isDefault 다운로드(이름 dedup).
+            // 공용: 로컬 캐시(서버 default 캐시 + 파워 공용 생성분) + DB isDefault 다운로드(이름 dedup).
             // it20: FrameCatalogService는 동시 호출을 **공유**한다(단일 비행) — 줄 세우기가 아니라 합류다.
             // 취소는 경계에서 OperationCanceledException으로 전파되고(아래 catch가 흡수) 공유 작업은 계속 진행한다.
             if (includePublic)

@@ -15,7 +15,7 @@ public sealed class FrameTemplate
 
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>프레임 이미지 URL(Storage) 또는 로컬 번들 경로.</summary>
+    /// <summary>프레임 이미지 URL(Storage) 또는 로컬 캐시 경로.</summary>
     public string ImageUrl { get; set; } = string.Empty;
 
     /// <summary>등록 원본 픽셀 크기.</summary>

@@ -152,9 +152,10 @@ Windows 구현은 이 값을 **장치 인덱스(int)** 로 쓴다. 플랫폼마�
 | 무엇 | 서버에 올라가나 |
 |------|-----------------|
 | 공용 기본 프레임(서버에서 내려받은 것) | 서버에 원본 존재 — 로컬은 **캐시** |
-| 번들 자산 프레임 | ✕ (설치물) |
 | **일반 사용자·고급 유저 커스텀 프레임** | **✕ — 로컬 전용** |
 | power가 새로 만든 공용 프레임 | ○ (`POST /frames`) + 로컬 캐시 |
+
+> ⚠️ **it27: "번들 자산 프레임(설치물)" 행은 삭제됐다.** 앱이 설치 폴더 `{exe}\Frame`을 읽던 경로를 제거했고, 리포·인스톨러 어느 쪽도 프레임을 배포물에 담지 않는다 — **기본 프레임의 유일한 출처는 서버다.**
 
 > 정책: 서버 `frameTemplates` 컬렉션에는 **공용 기본 프레임만** 저장된다. 개인 커스텀 프레임은 **기기 로컬 전용**이다. 따라서 기기를 바꾸면 개인 프레임은 따라가지 않는다(현재 의도된 동작, 동기화는 비범위).
 
@@ -195,7 +196,7 @@ Windows 구현은 이 값을 **장치 인덱스(int)** 로 쓴다. 플랫폼마�
 
 ```
 {프레임 저장 루트}/
-  베이직 4컷.png                 ← 공용(번들·DB default 캐시). 루트
+  베이직 4컷.png                 ← 공용(서버 default 캐시·power 공용 생성분). 루트
   베이직 4컷.slots
   users/
     3f9a2c1b8d4e7a05/            ← SHA256(정규화 이메일) 앞 16hex
@@ -249,7 +250,7 @@ UTF-8 텍스트, 줄 단위. 라인 종결자는 `\n`.
 | 개인 스코프 저장 | 없음 | **`local:{파일 base name}`** | "본인 로컬 생성분" |
 | 사본(fork) 저장 | **없음** | `local:{파일 base name}` | 동상 — **서버 문서와 연결이 끊긴다**(의도) |
 
-프레임 id 접두 규약(출처 판정)은 [13 §6.1](./13-client-behavior-spec.md)에 정리돼 있다: `local:` = 본인 로컬, `bundle:` = 번들, `fallback` 또는 빈 id = 코드 생성, 그 외(접두 없는 실 id) = 서버 공용.
+프레임 id 접두 규약(출처 판정)은 [13 §6.1](./13-client-behavior-spec.md)에 정리돼 있다: `local:` = 본인 로컬, `bundle:` = **폐기된 출처**(it27 — 생성 경로 없음, 판정만 fail-closed로 보존), `fallback` 또는 빈 id = 코드 생성, 그 외(접두 없는 실 id) = 서버 공용.
 
 ### 3.4 삭제 규칙
 
@@ -380,7 +381,6 @@ deleteLocal(frame):
 |------|---------------|-------|--------------|---------|-----|
 | 설정 | `MCPhoto.ini`(3단 폴백) | `~/Library/Application Support/MCPhoto/` | `UserDefaults` 또는 앱 지원 디렉터리 | `DataStore` | `localStorage` |
 | 로컬 프레임(캐시, 쓰기) | **`%ProgramData%\MCPhoto\Frame\`**(it26) | `~/Library/Application Support/MCPhoto/Frame/` | `Library/Application Support/Frame/` | `filesDir/frames/` | IndexedDB(Blob + 메타) |
-| 번들 프레임(읽기 전용) | `{실행경로}\Frame\`(운영자 배치 · `FrameCatalogService.BundleFolder`) | 앱 번들 리소스 | 앱 번들 | `assets/` | 정적 자산 |
 | 세션 임시 | `%ProgramData%\MCPhoto\sessions\{id}\` | `NSTemporaryDirectory()/mcphoto/{id}/` | `tmp` 또는 캐시 디렉터리 | `cacheDir/sessions/{id}/` | 메모리 / OPFS |
 | 결과물 영구 | **`%ProgramData%\MCPhoto\result\mcphoto_YYMMDD_HHMM\`**(it26) | `~/Pictures/MCPhoto/` 또는 지정 경로 | Photos 라이브러리(권한) | `MediaStore.Images` / `MediaStore.Video` | 브라우저 다운로드 |
 | 로그 | `%ProgramData%\MCPhoto\logs\` | `~/Library/Logs/MCPhoto/` | `Library/Caches/logs/` + 공유 | `filesDir/logs/` | 콘솔 |
@@ -390,8 +390,8 @@ deleteLocal(frame):
 
 > **공통 원칙**: 실행 파일 폴더가 쓰기 가능한 것은 Windows의 개발/포터블 배포 특성이다. 다른 플랫폼에서는 **앱 전용 쓰기 가능 디렉터리**를 쓰고, 사용자에게 보여야 하는 산출물만 공용 위치(사진 라이브러리 등)로 내보낸다.
 >
-> **it26: Windows도 같은 원칙으로 정리됐다.** 앱이 쓰는 것은 전부 `%ProgramData%\MCPhoto` 아래다(설정 ini는 예외 — 실행경로 1순위 정책 유지, [12 §2.3](./12-exe-app-settings-and-config.md)). 실행 폴더는 읽기 전용 배포물이며, `{실행경로}\Frame`(운영자 배치 번들)·`branding.ini`를 **읽기만** 한다.
-> 이관 전 설치본이 `{실행경로}\Frame`에 남긴 캐시는 **읽기 전용 보조 루트**로 계속 읽는다(쓰기·생성은 새 루트만, 이름 충돌은 새 루트 우선). 파일을 옮기지 않으므로 자산 유실 경로가 없다 — 이동은 승격 권한이 필요해 대개 "복사만 성공, 원본 잔존"으로 끝나고, png는 옮겼는데 `.slots`가 잠기면 그 프레임이 양쪽에서 모두 무효가 된다(= "프레임이 사라졌다").
+> **it26: Windows도 같은 원칙으로 정리됐다.** 앱이 쓰는 것은 전부 `%ProgramData%\MCPhoto` 아래다(설정 ini는 예외 — 실행경로 1순위 정책 유지, [12 §2.3](./12-exe-app-settings-and-config.md)). 실행 폴더는 읽기 전용 배포물이며, `branding.ini`·`licenses\`·`tools\`·`Assets\`를 **읽기만** 한다.
+> **it27: 실행 폴더 `Frame\`은 더 이상 읽지 않는다(번들 개념 폐기).** it26이 "이관 전 설치본이 남긴 캐시"를 위해 남겨 둔 읽기 전용 보조 루트도 제거했다 — 이 제품은 그 시점까지 **배포된 적이 없어 보호할 대상이 존재하지 않았고**, 로컬 프레임은 전부 서버에서 재취득 가능한 캐시다. 남은 고아 폴더는 인스톨러 제거가 정리한다(`MCPhoto.iss [UninstallDelete]` — 실제 대상은 인스톨러를 돌려 본 개발·검증 머신이다).
 
 ---
 

@@ -7,7 +7,7 @@ namespace MCPhoto.Capture;
 
 /// <summary>
 /// fallback 기본 프레임 이미지(하양 배경·3:4·4슬롯)를 코드로 렌더링. (PRD §9 #11, architecture §3.2)
-/// DB/번들 프레임이 모두 없을 때 사용.
+/// 서버·로컬 캐시 프레임이 모두 없을 때 사용.
 /// </summary>
 public static class FallbackFrameRenderer
 {

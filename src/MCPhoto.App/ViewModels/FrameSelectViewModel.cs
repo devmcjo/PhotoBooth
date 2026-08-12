@@ -106,7 +106,12 @@ public sealed partial class FrameSelectViewModel : ViewModelBase
     private readonly Func<TimeSpan, TimeSpan> _loadDeadline;
 
     /// <summary>
-    /// 이 프레임이 삭제 가능한지. 번들(설치 자산)·fallback은 불가, 그 외 로컬 저장분(user·파워 생성/캐시)은 가능. (it8 §4 A3 정정)
+    /// 이 프레임이 삭제 가능한지. <c>bundle:</c>(폐기된 출처)·fallback은 불가, 그 외 로컬 저장분(user·파워
+    /// 생성/캐시)은 가능. (it8 §4 A3 정정)
+    /// <para>
+    /// ⚠️ it27: <c>bundle:</c>은 생성 경로가 사라졌지만 <b>판정은 남긴다</b> — 지우면 그 id가 로컬 저장분으로
+    /// 떨어져 삭제 흐름에 진입한다(fail-closed → fail-open 반전, 설계 it27 §4.2·§4.3 ⑤).
+    /// </para>
     /// user=local: 접두(로컬 전용), 파워 생성/캐시=실 DB id(접두 없음) — 둘 다 삭제 가능.
     /// </summary>
     public static bool IsDeletable(FrameTemplate frame)

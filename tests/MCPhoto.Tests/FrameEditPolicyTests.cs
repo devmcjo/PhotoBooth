@@ -16,6 +16,11 @@ public class FrameEditPolicyTests
         { Id = $"local:{userId}_myframe", UserId = userId, IsDefault = false };
     private static FrameTemplate DbDefault() => new()
         { Id = "a1b2c3-guid", UserId = null, IsDefault = true };
+    /// <summary>
+    /// ⚠️ it27: <c>bundle:</c>은 <b>폐기된 출처</b>다 — 생성 경로 없음(설계 it27 §3.2).
+    /// 이 헬퍼를 쓰는 단정들은 <b>fail-closed 방어 계약</b>이므로 "이제 안 쓰는 출처니까"로 지우지 않는다:
+    /// 판정이 사라지면 그 id가 <c>DbDefault</c>로 떨어져 power에게 삭제가 허용된다(§4.2).
+    /// </summary>
     private static FrameTemplate Bundle() => new() { Id = "bundle:classic", IsDefault = true };
     private static FrameTemplate Fallback() => new() { Id = "fallback", IsDefault = true };
     /// <summary>power가 fork·저장한 **공용** 로컬 프레임: 디스크에서 다시 읽으면 UserId=null이다(F18).</summary>

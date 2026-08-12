@@ -183,6 +183,35 @@ public class LocalFrameStoreTests : IDisposable
     public void Delete_Returns_False_When_Missing()
         => Assert.False(_store.DeleteLocal(new FrameTemplate { ImageUrl = Path.Combine(_root, "없음.png") }));
 
+    /// <summary>
+    /// it27 §7.3 T8 — <c>DeleteLocal</c>은 <b>경로 기반</b>이며 루트에 갇히지 않는다.
+    /// <para>
+    /// 종전 <c>LocalFrameStoreLegacyRootTests.DeleteLocal_Removes_Legacy_Cache_File</c>이 보조 루트를
+    /// 소재로 검증하던 계약을 여기로 옮겼다(보조 루트는 it27에서 사라졌지만 <b>이 계약은 그대로다</b>).
+    /// 이것이 깨지면 서버에서 삭제된 프레임의 캐시 정리가 조용히 실패한다 — 캐시 파일이 어느 폴더에
+    /// 있는지는 <see cref="FrameTemplate.ImageUrl"/>만 알기 때문이다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Delete_Removes_Files_Outside_Root()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), $"mcphoto_outside_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var pngPath = Path.Combine(outside, "루트밖.png");
+            var slotsPath = Path.Combine(outside, "루트밖.slots");
+            File.WriteAllBytes(pngPath, Png);
+            File.WriteAllText(slotsPath, "무엇이든");   // 내용은 보지 않는다 — 확장자만으로 짝을 찾는다
+
+            Assert.True(_store.DeleteLocal(new FrameTemplate { Name = "루트밖", ImageUrl = pngPath }));
+
+            Assert.False(File.Exists(pngPath));
+            Assert.False(File.Exists(slotsPath));
+        }
+        finally { try { Directory.Delete(outside, recursive: true); } catch { /* 무시 */ } }
+    }
+
     // ── 이름 집합(충돌 검사용) ──
 
     [Fact]

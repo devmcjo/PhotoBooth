@@ -175,8 +175,8 @@ CanResetPin(acting, target) = IsPower(acting) && ManageRank(target) < ManageRank
 | 기본(공용) 프레임 사용 | ○ | ○ | ○ | ○ | ○ | ○ | `FrameSelectViewModel.OnEnterAsync`가 항상 기본 프레임 로드 |
 | 커스텀(본인) 프레임 사용 | × | ○ | ○ | ○ | ○ | ○ | 로그인 사용자만 본인 프레임 추가 로드(`GetUserFramesAsync(user.Id)`). **it16 E4**: 프레임 권한을 잃은 T·U의 기존 프레임도 **목록에 그대로 노출되고 촬영에 쓸 수 있다**(편집·삭제만 불가) |
 | 프레임 생성(편집기 진입) | × | × | × | **○** | ○ | ○ | `CanCreateFrame = Role.CanWriteFrames()`(`src/MCPhoto.App/ViewModels/FrameSelectViewModel.cs:80`) + `CreateFrame` 커맨드 가드(`:218`) + XAML `Visibility`(`Views/FrameSelectView.xaml:88`). A는 개인 로컬만, M·D는 신규 생성분을 공용 DB에 등록 |
-| 프레임 편집("선택 편집") | × | × | × | **○**(본인 로컬) | ○ | ○ | `FrameEditPolicy.CanEdit(frame, role, userId)` — `CanWriteFrames` 먼저 확인 후 출처 판정(`UserLocal`=본인 것, `DbDefault`=power만, 번들·fallback=불가). 저장 경로에도 fail-closed 가드(`FrameEditorViewModel.Save`) |
-| 프레임 삭제 — 로컬(파일 제거) | × | × | × | **○** | ○ | ○ | `FrameEditPolicy.CanDelete(frame, role)`(it16 신설) — 로컬 저장분 ○, DB 공용은 power만, 번들·fallback·빈 Id ×. `CanDeleteFrames = Role.CanWriteFrames()`(`:81`) + 컨버터 + `RequestDelete` 가드 |
+| ~~프레임 편집("선택 편집")~~ **폐지(D-16)** | — | — | — | — | — | — | ⚠️ **프레임 수정 기능 자체가 사라졌다** — `FrameEditPolicy.CanEdit`·`RequiresFork`는 코드에서 삭제됐다. 재활용은 [기존 프레임 불러오기]로 **새로 만드는 것**뿐이고, 그 진입 게이트는 위의 "프레임 생성" 행이 규율한다 |
+| 프레임 삭제 — 로컬(파일 제거) | × | × | × | **○** | ○ | ○ | `FrameEditPolicy.CanDelete(frame, role)`(it16 신설) — 로컬 저장분 ○, DB 공용은 power만, `bundle:`(폐기)·fallback·빈 Id ×. `CanDeleteFrames = Role.CanWriteFrames()`(`:81`) + 컨버터 + `RequestDelete` 가드 |
 | 프레임 삭제 — 서버(공용·DB 문서+Storage) | × | × | × | × | ○ | ○ | "서버에서도 제거" 체크는 `IsPower`에서만 노출·유효(`alsoServer = DeleteAlsoServer && IsPower`, `FrameSelectViewModel.cs:123`). 서버 `DELETE /frames/:id`는 `requirePower()` |
 | 계정 관리 페이지(내 정보 · PIN 변경) | × | ○ | ○ | ○ | ○ | ○ | 팝오버 "계정 관리"는 로그인 전원(`src/MCPhoto.App/MainWindow.xaml:62-64`). 진입 시 **PIN 게이트**(`AppShellViewModel.EnsurePinGateAsync` — 미설정이면 최초 설정 강제) |
 | 관리자 도구(사용자 관리 진입) | × | × | × | **×** | ○ | ○ | 팝오버 "관리자 도구"는 `IsPower`에서만 노출(`MainWindow.xaml:65-69`); `OpenUserManagement`도 `IsPower` 가드(`ViewModels/AccountViewModel.cs:222`). **A는 계정 관리 권한 없음** |

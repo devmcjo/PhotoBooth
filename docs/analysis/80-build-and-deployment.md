@@ -67,7 +67,9 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 | `-p:BackendApiKeyDefault=<키>` | 키를 찾았을 때만 추가(§2.1) | `publish.ps1:64-65` |
 
 - 출력은 항상 `publish\MCPhoto\MCPhoto.exe`(`publish.ps1:22,36`).
-- 산출 파일 목록(확인됨): `MCPhoto.exe`, `tools\ffmpeg\ffmpeg.exe`, `Frame\*`(png·slots), `branding.ini.sample`. (it18: `bldinfo.ini` 제거 — 버전 정보는 exe 자신이 갖는다)
+- 산출 파일 목록(확인됨): `MCPhoto.exe`, `tools\ffmpeg\ffmpeg.exe`, `licenses\*`, `branding.ini.sample`. (it18: `bldinfo.ini` 제거 — 버전 정보는 exe 자신이 갖는다)
+  - ⚠️ 종전 이 목록에 있던 `Frame\*`(png·slots)는 **거짓이었다** — 리포 루트 `Frame/`이 2026-07-23(`694c502`)에 삭제되어 복사 글롭이 0개 파일을 매치하고 있었다. it27에서 그 복사 항목도 제거했다(§4).
+  - ⚠️ **`publish\` 스테이징은 재사용된다** — `dotnet publish`는 사라진 파일을 지우지 않으므로, 예전 실행이 남긴 `Frame\`·`result\`·`MCPhoto.ini`가 그 폴더에 있으면 그대로 인스톨러 검증에 섞인다(그것들은 **실행 흔적**이고 산출물이 아니다. `[Files]` 화이트리스트가 담지 않는다 — §7).
 
 ### 2.1 백엔드 게이트 키 exe 내장 (it15)
 
@@ -129,15 +131,14 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 
 ---
 
-## 4. 부가 리소스 복사 (Frame / branding)
+## 4. 부가 리소스 복사 (branding)
 
 | 리소스 | 소스 | 출력 | 근거 |
 |--------|------|------|------|
-| 기본 프레임 | `..\..\Frame\**\*.*`(리포 루트 `Frame/`) | 출력 `Frame\`(재귀 유지) | `MCPhoto.App.csproj:67-71` |
-| 브랜딩 샘플 | `branding.ini.sample` | 출력 루트 | `MCPhoto.App.csproj:76` |
+| 브랜딩 샘플 | `branding.ini.sample` | 출력 루트 | `MCPhoto.App.csproj:125-127` |
 | 빌드 정보 | **동봉 파일 없음** (it18) | — | `Directory.Build.props`(`<Version>`), `AssemblyBuildInfoService.cs` |
 
-- 프레임 복사는 프레임 소스 우선순위 ②(번들 기본 프레임)에 해당한다. publish 산출물 `Frame\`에 `jport-camp.png`·`jport-camp.slots`·테스트 프레임 등이 포함됨(확인됨).
+- ⚠️ **기본 프레임 복사 항목은 it27에서 제거됐다.** 리포 루트 `Frame/`은 MVP 시절 번들 프레임 1개(`jport-camp`)를 담고 있었고 **2026-07-23(`694c502`)에 삭제**됐다. 그 뒤 `MCPhoto.App.csproj`의 복사 항목은 0개 파일을 매치했고, it27에서 그 항목도 제거했다. **기본 프레임의 유일한 출처는 서버다.**
 - `branding.ini.sample`(it9 C3): 고객이 `branding.ini`로 리네임해 앱 표시 이름을 변경한다. UTF-8 저장 필수, 적용 지점은 창 제목·홈 화면 타이틀·홈 소제목, 미존재/빈 값이면 기본 **"MCPhoto" / "self custom photobooth"**. 샘플 내용은 `[Branding]`·`AppName`·`Subtitle` 3줄이다([12 §3](./12-exe-app-settings-and-config.md)).
 - **버전 표기(it18)**: 동봉 파일이 없다. 앱 하단 버전은 **어셈블리 버전 리소스**에서, 진단 화면의 빌드 시각은 **exe `LastWriteTime`** 에서 읽는다. 릴리스 시 `Directory.Build.props`의 `<Version>` 한 줄만 올리면 exe 파일 속성의 버전과 앱 표기가 함께 바뀐다([12 §6](./12-exe-app-settings-and-config.md)).
 
@@ -212,7 +213,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 |---|---|
 | `MCPhoto.ini` | 앱이 최초 실행 시 스스로 만든다. 담지 않으면 `[Test]` 섹션 잔재가 배포물로 새는 경로도 함께 사라진다 |
 | `branding.ini` | 운영자가 필요할 때 배치한다 |
-| `Frame\` | 기본 프레임은 **서버에서 내려받는다**. `FrameCatalogService.BundleFolder`(`{exe}\Frame`)가 없으면 서버 목록·DB 캐시·폴백 렌더러로 대체된다 |
+| `Frame\` | 기본 프레임은 **서버에서 내려받는다**. 서버 미도달이면 로컬 캐시(`%ProgramData%\MCPhoto\Frame`), 그것도 없으면 폴백 렌더러가 대체한다. ⚠️ **it27 이후 앱은 `{exe}\Frame`을 읽지도 않는다** — 담아도 아무도 보지 않는다 |
 | `result\` | 촬영 결과물. 배포물에 들어갈 이유가 없다 |
 
 > ⚠️ **왜 블랙리스트(`\*` + `Excludes`)에서 화이트리스트로 바꿨나**: publish 출력 폴더는 **재사용된다**(`publish.ps1`이 `licenses`만 지우고 나머지는 남긴다). 블랙리스트 방식에서는 그 폴더에 쌓인 실행 흔적(`MCPhoto.ini`·`result\`)과 개발용 파일이 **기본으로 포함**됐다. 실제로 `[Test] TestMode=1`이 남은 ini가 출력 폴더에 존재하는 것이 관측됐다(2026-08-12). 화이트리스트면 의도한 것만 들어가고, 새 파일은 `[Files]`에 한 줄을 추가해야 비로소 포함된다.
@@ -235,7 +236,7 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
 | `[Run]` | 설치 후 앱 실행(nowait, skipifsilent) | `MCPhoto.iss` `[Run]` |
 | `[UninstallDelete]` | cache·logs·sessions·**프레임 캐시(구·신 위치)** 정리, 사용자 설정/**결과물은 보존**(두 루트 모두 `dirifempty`) | `MCPhoto.iss` `[UninstallDelete]` |
 
-> **it26 — 앱은 설치 폴더에 쓰지 않는다(규약).** 앱이 쓰는 것은 전부 `%ProgramData%\MCPhoto` 아래다: 설정·로그·캐시·세션 임시물 + **촬영 결과물(`result\`)**·**프레임 캐시(`Frame\`)**. 설치 폴더에서 앱이 접촉하는 것은 읽기뿐이다(`{app}\Frame` = 운영자 배치 번들, `{app}\branding.ini`, `licenses\`, `tools\ffmpeg\`, `Assets\`).
+> **it26 — 앱은 설치 폴더에 쓰지 않는다(규약).** 앱이 쓰는 것은 전부 `%ProgramData%\MCPhoto` 아래다: 설정·로그·캐시·세션 임시물 + **촬영 결과물(`result\`)**·**프레임 캐시(`Frame\`)**. 설치 폴더에서 앱이 접촉하는 것은 읽기뿐이다(`{app}\branding.ini`, `licenses\`, `tools\ffmpeg\`, `Assets\`). ⚠️ **it27: `{app}\Frame`은 목록에서 빠졌다** — 번들 개념을 폐기해 앱이 그 폴더를 읽지 않는다.
 > **예외 1건**: ini 경로 정책은 실행경로 1순위를 유지하므로, **승격 실행**으로 띄우면 `{app}\MCPhoto.ini`가 생길 수 있다(기존 설치의 설정 유실·개발/설치본 ini 공유를 막기 위한 의도적 유지 — [12 §2.3](./12-exe-app-settings-and-config.md)). 시작 시 Warning 로그로 그 사실을 알린다.
 > **⛔ 제거가 지우지 않는 것**: `{app}\result`(구 버전이 남긴 손님 사진)와 `{commonappdata}\MCPhoto\result`(현 저장 위치). 로컬 사본은 QR 전송과 독립이라 **서버에 없을 수도 있어 유일 사본일 수 있다.** 두 경로는 `[UninstallDelete]`에 **행 자체가 없어야** 하며 `tests/MCPhoto.Tests/InstallerScriptTests.cs`가 그 부재를 정적으로 잠근다(주석 줄은 제외하고 지시 줄만 검사한다). 프레임 캐시는 서버에서 재취득 가능하므로 반대로 삭제 대상이다.
 > `[Dirs]`에 `result`·`Frame`을 **명시 생성**하는 이유: 상속에만 의존하면 비승격 첫 실행이 폴더 생성부터 실패할 수 있고, 그때 `LocalSaveService`는 예외 대신 `null`을 반환해 **손님 사진이 조용히 저장되지 않는다**.

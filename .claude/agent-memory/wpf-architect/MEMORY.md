@@ -18,3 +18,4 @@
 - [it25 인식·시뮬레이션](it25-recognition-and-simulation.md) — 노출기준="지원+인식"(설치나열 반려)·합성행 (미인식)·Clamp/Resolve 비대칭·[Test] 장치시뮬 DI분기(반쪽금지)·모델추가 3지점
 - [XAML 회귀 커버리지 실체](xaml-regression-coverage-truth.md) — Window도 소스스캔으로 검증됨(UserControl 우위 아님)·전체파싱은 Themes만·표면형태는 소유권으로 판정
 - [it26 쓰기위치·유휴팝업 링크](it26-writable-paths-and-completion-popup.md) — 자산등급별 이관(파일 무접촉=유실0)·ini 정책 불변 이유·손님 앞 무인팝업 기능은 기본off·세션폴더는 반환값만·"그 팝업 이미 있는지" 먼저 확인
+- [폐기 분기와 fail-closed](deprecated-branch-fail-closed.md) — 도달불가 분기 삭제가 권한 완화로 뒤집힌다(bundle:→DbDefault→power 삭제 허용)·생성경로만 제거하고 판정은 보존·"어느 분기로 떨어지나" 추적 필수

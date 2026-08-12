@@ -229,8 +229,13 @@ public sealed class StartsWithToVisibilityConverter : IValueConverter
 
 /// <summary>
 /// 프레임 삭제 ✕ 노출 판정. values=[CanDeleteFrames(bool), IsPower(bool), Id(string)]. (it9 후속 — A3 정정)
-/// 규칙: 비로그인/게스트=미노출, 번들·fallback·빈 Id=삭제 불가.
+/// 규칙: 비로그인/게스트=미노출, <c>bundle:</c>(폐기된 출처)·fallback·빈 Id=삭제 불가.
 /// user 로컬(local: 접두)=본인 것이라 로그인 사용자면 노출, 공용/DB 프레임(접두 없음)=파워만 노출.
+/// <para>
+/// ⚠️ <c>bundle:</c>은 it27에서 <b>생성 경로가 제거된</b> 출처다. 그래도 아래 판정을 지우지 않는다 —
+/// 지우면 그 id가 "접두 없음"으로 떨어져 <b>power에게 ✕가 노출된다</b>(fail-closed → fail-open 반전,
+/// 설계 it27 §4.2·§4.3 ③). <c>FrameOrigin.Classify</c>·<c>FrameEditPolicy.CanDelete</c>와 짝을 이룬다.
+/// </para>
 /// </summary>
 public sealed class FrameDeleteVisibilityConverter : IMultiValueConverter
 {

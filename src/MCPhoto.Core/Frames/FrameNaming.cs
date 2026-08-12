@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace MCPhoto.Core.Frames;
 
 /// <summary>
-/// 프레임 사본 이름 생성(순수). DB/번들 프레임을 로컬 편집·복사할 때 원본과 이름을 구분해
+/// 프레임 사본 이름 생성(순수). 서버 프레임을 불러와 새로 만들 때 원본과 이름을 구분해
 /// 원본 파일을 보존하고 FrameCatalogService의 이름 기준 dedup(재다운로드 방지)을 유지한다. (it15 F1-D4)
 /// </summary>
 public static partial class FrameNaming

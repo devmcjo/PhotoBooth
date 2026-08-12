@@ -4,7 +4,14 @@ using Xunit;
 
 namespace MCPhoto.Tests;
 
-/// <summary>item2 Step 1: 프레임 출처 판정 순수 함수(Id 접두·IsDefault·UserId 경계) 회귀.</summary>
+/// <summary>
+/// item2 Step 1: 프레임 출처 판정 순수 함수(Id 접두·IsDefault·UserId 경계) 회귀.
+/// <para>
+/// ⚠️ it27: <c>bundle:</c>은 <b>폐기된 출처</b>이며 그 프레임을 만드는 생성 경로가 없다(설계 it27 §3.2).
+/// 이 단정들은 <b>그 id를 만나도 읽기 전용으로 판정한다</b>는 방어 계약이므로 지우지 않는다 —
+/// 판정이 사라지면 <c>bundle:</c>이 <c>DbDefault</c>로 오분류되어 power에게 삭제가 허용된다(§4.2).
+/// </para>
+/// </summary>
 public class FrameOriginTests
 {
     private static FrameTemplate F(string id, bool isDefault = false, string? userId = null)
