@@ -1,6 +1,6 @@
 # MC포토 (MCPhoto)
 
-**키오스크형 셀프 포토부스** — WPF/.NET 8 데스크톱 앱에서 촬영·합성·타임랩스를 만들고, Firebase로 업로드해 **QR 코드**로 모바일에서 사진·영상을 내려받는 시스템입니다.
+**키오스크형 셀프 포토부스** — WPF/.NET 10 데스크톱 앱에서 촬영·합성·타임랩스를 만들고, Firebase로 업로드해 **QR 코드**로 모바일에서 사진·영상을 내려받는 시스템입니다.
 
 > 앱 표시명은 `branding.ini`로 바꿀 수 있습니다(기본값 "MCPhoto"). 아래 [설정](#-설정) 참고.
 
@@ -19,7 +19,7 @@
 
 ## 🧱 기술 스택
 
-- **데스크톱**: .NET 8, WPF, MVVM([CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet)), DI(`Microsoft.Extensions.Hosting`), 로깅([Serilog](https://serilog.net/))
+- **데스크톱**: .NET 10, WPF, MVVM([CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet)), DI(`Microsoft.Extensions.Hosting`), 로깅([Serilog](https://serilog.net/))
 - **영상/이미지**: [OpenCvSharp4](https://github.com/shimat/opencvsharp)(카메라·필터·합성), [ffmpeg](https://ffmpeg.org/)(세션 녹화·타임랩스)
 - **백엔드**: Firebase — Cloud Firestore, Cloud Storage. 앱은 **Cloud Functions(2nd gen, TypeScript) HTTPS API를 경유**하며, Admin 자격증명은 서버에만 둡니다(앱에 서비스 계정 키 없음). QR: [QRCoder](https://github.com/codebude/QRCoder)
 - **인증**: Google SSO(시스템 브라우저 + loopback + PKCE) → 서버가 발급한 JWT로 API 호출
@@ -52,13 +52,13 @@ photobooth/
 ## 🚀 빠른 시작
 
 ```bash
-# 요구: .NET 8 SDK (Windows)
+# 요구: .NET 10 SDK (Windows)
 dotnet build MCPhoto.sln -c Debug        # 빌드
 dotnet test  MCPhoto.sln                 # 테스트 (1006개)
 dotnet run  --project src/MCPhoto.App    # 실행
 ```
 
-- 일반 빌드 산출물: `src/MCPhoto.App/bin/Debug/net8.0-windows/`
+- 일반 빌드 산출물: `src/MCPhoto.App/bin/Debug/net10.0-windows/`
 - **웹캠**이 없어도 앱은 실행됩니다(카메라 미연결 처리).
 - **백엔드에 도달할 수 없으면**(오프라인 / 게이트 키 미설정) 로그인·업로드·QR은 실패하지만 **게스트 촬영과 로컬 저장은 계속 동작**합니다. 오프라인 로그인 폴백은 없습니다. 프레임은 서버가 정본이라 **오프라인에서 새로 만들 수 없지만**, 이미 받아 둔 프레임으로 촬영하는 것은 됩니다.
 - 웹/백엔드 테스트: `web/functions`에서 `npm test`(Jest 350개), `web`에서 `npm run test:rules`(Firestore·Storage 규칙 Emulator 테스트), `webclient`에서 `npx vitest run`.
@@ -131,4 +131,4 @@ publish.bat  더블클릭    (또는)  powershell -ExecutionPolicy Bypass -File 
 
 ---
 
-_MC포토 · WPF(.NET 8) 셀프 포토부스 · 내부 프로젝트_
+_MC포토 · WPF(.NET 10) 셀프 포토부스 · 내부 프로젝트_

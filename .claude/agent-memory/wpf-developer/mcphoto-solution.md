@@ -5,15 +5,15 @@ metadata:
   type: project
 ---
 
-MCPhoto = WPF(.NET 8) 포토부스 앱. 솔루션 루트 `C:\STUDY\PROJECT\PhotoBooth\MCPhoto.sln`
+MCPhoto = WPF(.NET 10) 포토부스 앱. 솔루션 루트 `C:\STUDY\PROJECT\PhotoBooth\MCPhoto.sln`
 (구 경로 `E:\Study\photobooth`는 폐기 — 문서에 남아 있어도 무시할 것).
 
 ## 프로젝트 구성
-- `MCPhoto.Core` (net8.0): 인터페이스·모델·`UploadContract`(순수)·`AppSettings`·`IniSettingsService`·`UploadService`. 계약의 진실.
-- `MCPhoto.Http` (net8.0): **백엔드 HTTPS API 구현(유일한 서버 접근 경로)**. `Http{AccountService,FrameRepository,FirebaseClient}` + `IBackendSession`(JWT 홀더) + `HttpBackendClient`(공통 기반) + `Dto/`. HttpClient는 `IHttpClientFactory` 명명 클라이언트 "backend".
-- `MCPhoto.Capture` (net8.0-windows): 카메라·ffmpeg.
-- `MCPhoto.App` (net8.0-windows, WPF): 셸·VM·View·`ServiceRegistration`(DI, `internal static class`). `AssemblyName=MCPhoto`.
-- `tests/MCPhoto.Tests` (net8.0-windows, xUnit): 전 계층 단위 테스트. `[Using Include="Xunit"]` 전역.
+- `MCPhoto.Core` (net10.0): 인터페이스·모델·`UploadContract`(순수)·`AppSettings`·`IniSettingsService`·`UploadService`. 계약의 진실.
+- `MCPhoto.Http` (net10.0): **백엔드 HTTPS API 구현(유일한 서버 접근 경로)**. `Http{AccountService,FrameRepository,FirebaseClient}` + `IBackendSession`(JWT 홀더) + `HttpBackendClient`(공통 기반) + `Dto/`. HttpClient는 `IHttpClientFactory` 명명 클라이언트 "backend".
+- `MCPhoto.Capture` (net10.0-windows): 카메라·ffmpeg.
+- `MCPhoto.App` (net10.0-windows, WPF): 셸·VM·View·`ServiceRegistration`(DI, `internal static class`). `AssemblyName=MCPhoto`.
+- `tests/MCPhoto.Tests` (net10.0-windows, xUnit): 전 계층 단위 테스트. `[Using Include="Xunit"]` 전역.
 
 > ⚠️ **`MCPhoto.Firebase`(Admin SDK 직결)는 it15에서 프로젝트째 삭제됐다.** `AppSettings.UseBackend` feature flag와
 > `serviceAccountKey.json`도 함께 사라졌다. 앱은 **백엔드 전용**이며 DI에 이중 경로 분기가 없다

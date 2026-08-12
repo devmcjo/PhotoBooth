@@ -30,6 +30,10 @@
     - App defaults: UseBackend=true, BackendBaseUrl + GoogleClientId built in.
     - ASCII only on purpose: avoids CP949/UTF-8 console mojibake on Korean Windows.
 #>
+# NOTE: this script only publishes - it never builds the installer.
+# Packaging lives in package.ps1 / package.bat on purpose: publish is the fast inner loop used
+# for testing, packaging is a release step. Keeping them apart means a test publish can never
+# accidentally produce something that looks like a shippable installer.
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path

@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-MCPhoto(WPF/.NET 8)에서 `AppSettings`에 설정 필드를 추가할 때는 반드시 **4곳**에 동시 반영해야 하며, 한 곳이라도 누락 시 저장/복원/편집취소 중 하나가 조용히 깨진다. 리뷰어는 신규 설정 필드가 나오면 항상 이 4곳을 1건씩 대조한다:
+MCPhoto(WPF/.NET 10)에서 `AppSettings`에 설정 필드를 추가할 때는 반드시 **4곳**에 동시 반영해야 하며, 한 곳이라도 누락 시 저장/복원/편집취소 중 하나가 조용히 깨진다. 리뷰어는 신규 설정 필드가 나오면 항상 이 4곳을 1건씩 대조한다:
 
 1. `AppSettings.cs` 필드 선언 (+ 옵션 배열은 `static readonly int[] AllowedXxx` 관례)
 2. `AppSettings.Clamp()` — 범위 밖 값 보정 (`ClosestFrom(value, allowed, fallback)` = 절댓값 최소 거리, 동거리 시 배열 앞쪽 우선)
